@@ -654,6 +654,15 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
 
     return Scaffold(
+      floatingActionButton: _isAdmin && !isDesktop
+        ? FloatingActionButton.extended(
+            onPressed: () => _showUserForm(),
+            backgroundColor: theme.colorScheme.secondary,
+            foregroundColor: Colors.white,
+            icon: const Icon(Icons.add),
+            label: const Text('NUEVO'),
+          )
+        : null,
       body: Column(
               children: [
                 PageHeader(
@@ -873,6 +882,19 @@ class _AdminDashboardState extends State<AdminDashboard> {
               ),
               child: PaginatedDataTable(
                 header: const Text('Directorio de Usuarios', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                actions: [
+                  if (_isAdmin)
+                    ElevatedButton.icon(
+                      onPressed: () => _showUserForm(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: theme.colorScheme.secondary,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(120, 48),
+                      ),
+                      icon: const Icon(Icons.add),
+                      label: const Text('NUEVO'),
+                    ),
+                ],
                 columns: const [
                   DataColumn(label: Text('Num. Empleado', style: TextStyle(fontWeight: FontWeight.bold))),
                   DataColumn(label: Text('Nombre Completo', style: TextStyle(fontWeight: FontWeight.bold))),

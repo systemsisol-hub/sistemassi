@@ -799,6 +799,7 @@ class _CssiPageState extends State<CssiPage> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: theme.colorScheme.secondary,
                           foregroundColor: Colors.white,
+                          minimumSize: const Size(120, 48),
                         ),
                         icon: const Icon(Icons.add),
                         label: const Text('NUEVO'),
