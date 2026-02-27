@@ -340,13 +340,16 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        OutlinedButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('CANCELAR'),
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('CANCELAR'),
+                          ),
                         ),
                         const SizedBox(width: 16),
-                        ElevatedButton(
-                          onPressed: () async {
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () async {
                             // Requisitos mínimos solo al CREAR o CONCEDER ACCESO inicial
                             if (!isEditing || isGrantingAccess) {
                               if (emailController.text.trim().isEmpty || passwordController.text.trim().isEmpty) {
