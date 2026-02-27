@@ -784,48 +784,60 @@ class _CssiPageState extends State<CssiPage> {
         child: Card(
           elevation: 0,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey[200]!)),
-          child: Theme(
-            data: theme.copyWith(
-              cardTheme: const CardThemeData(elevation: 0, margin: EdgeInsets.zero),
-              cardColor: Colors.transparent,
-            ),
-            child: PaginatedDataTable(
-              header: const Text('Directorio de Colaboradores', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              actions: [
-                if (widget.role == 'admin')
-                  ElevatedButton.icon(
-                    onPressed: () => _showForm(),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: theme.colorScheme.secondary,
-                      foregroundColor: Colors.white,
-                    ),
-                    icon: const Icon(Icons.add),
-                    label: const Text('NUEVO'),
-                  ),
-              ],
-              columns: const [
-                DataColumn(label: Text('Número', style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('Status RH', style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('Nombre', style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('Puesto', style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('Ubicación', style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('Correo', style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(label: Text('Acciones', style: TextStyle(fontWeight: FontWeight.bold))),
-              ],
-              source: _CssiDataSource(
-                items: filtered,
-                theme: theme,
-                isAdmin: widget.role == 'admin',
-                onEdit: (item) => _showForm(item: item),
-                onDelete: (id) => _deleteItem(id),
-                buildStatusChip: _buildStatusChip,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Directorio de Colaboradores', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    if (widget.role == 'admin')
+                      ElevatedButton.icon(
+                        onPressed: () => _showForm(),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: theme.colorScheme.secondary,
+                          foregroundColor: Colors.white,
+                        ),
+                        icon: const Icon(Icons.add),
+                        label: const Text('NUEVO'),
+                      ),
+                  ],
+                ),
               ),
-              rowsPerPage: filtered.isEmpty ? 1 : (filtered.length > 10 ? 10 : filtered.length),
-              showCheckboxColumn: false,
-              horizontalMargin: 16,
-              columnSpacing: 16,
-              dataRowMinHeight: 40,
-            ),
+              const Divider(height: 1),
+              Theme(
+                data: theme.copyWith(
+                  cardTheme: const CardThemeData(elevation: 0, margin: EdgeInsets.zero),
+                  cardColor: Colors.transparent,
+                ),
+                child: PaginatedDataTable(
+                  columns: const [
+                    DataColumn(label: Text('Número', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Status RH', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Nombre', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Puesto', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Ubicación', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Correo', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Acciones', style: TextStyle(fontWeight: FontWeight.bold))),
+                  ],
+                  source: _CssiDataSource(
+                    items: filtered,
+                    theme: theme,
+                    isAdmin: widget.role == 'admin',
+                    onEdit: (item) => _showForm(item: item),
+                    onDelete: (id) => _deleteItem(id),
+                    buildStatusChip: _buildStatusChip,
+                  ),
+                  rowsPerPage: filtered.isEmpty ? 1 : (filtered.length > 10 ? 10 : filtered.length),
+                  showCheckboxColumn: false,
+                  horizontalMargin: 16,
+                  columnSpacing: 16,
+                  dataRowMinHeight: 40,
+                ),
+              ),
+            ],
           ),
         ),
       ),
