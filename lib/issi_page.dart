@@ -19,7 +19,7 @@ class _IssiPageState extends State<IssiPage> {
   String? _filterTipo;
   String? _filterCondicion;
   int _currentPage = 0;
-  static const int _itemsPerPage = 20;
+  static const int _itemsPerPage = 10;
   bool _isAdmin = false;
 
   static const List<String> _tipos = [
@@ -499,74 +499,229 @@ class _IssiPageState extends State<IssiPage> {
     return result;
   }
 
-  List<Map<String, dynamic>> get _paginatedItems {
-    final filtered = _filteredItems;
-    final start = _currentPage * _itemsPerPage;
-    if (start >= filtered.length) return [];
-    final end = (start + _itemsPerPage).clamp(0, filtered.length);
-    return filtered.sublist(start, end);
-  }
-
-  int get _totalPages => (_filteredItems.length / _itemsPerPage).ceil().clamp(1, 9999);
-
-  void _exportCsv() {
-    final filtered = _filteredItems;
-    if (filtered.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No hay datos para exportar')),
-      );
-      return;
-    }
-
-    final headers = ['Ubicación', 'Tipo', 'Marca', 'Modelo', 'N/S', 'IMEI', 'CPU', 'SSD', 'RAM', 'GPU', 'Fecha Actualización', 'Valor', 'Condición', 'Observaciones', 'Usuario'];
-    final rows = filtered.map((item) => [
-      item['ubicacion'] ?? '',
-      item['tipo'] ?? '',
-      item['marca'] ?? '',
-      item['modelo'] ?? '',
-      item['n_s'] ?? '',
-      item['imei'] ?? '',
-      item['cpu'] ?? '',
-      item['ssd'] ?? '',
-      item['ram'] ?? '',
-      item['gpu'] ?? '',
-      item['fecha_actualizacion'] ?? '',
-      item['valor']?.toString() ?? '',
-      item['condicion'] ?? '',
-      item['observaciones'] ?? '',
-      item['usuario_nombre'] ?? '',
-    ].map((field) => '"${field.toString().replaceAll('"', '""')}"').join(',')).toList();
-
-    final csvContent = [headers.join(','), ...rows].join('\n');
-    debugPrint('CSV Export: ${rows.length} registros generados');
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('CSV generado: ${rows.length} registros exportados'),
-        backgroundColor: const Color(0xFFB1CB34),
-        duration: const Duration(seconds: 3),
+  Widget _buildShimmerLoading() {
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: 8,
+      itemBuilder: (context, index) => Card(
+        margin: const EdgeInsets.only(bottom: 12),
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey[200]!)),
+        child: Container(
+          height: 80,
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              CircleAvatar(backgroundColor: Colors.grey[100]),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(height: 12, width: 150, color: Colors.grey[100]),
+                    const SizedBox(height: 8),
+                    Container(height: 10, width: 100, color: Colors.grey[100]),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildShimmerItem() {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.grey[200]!),
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-        leading: CircleAvatar(backgroundColor: Colors.grey[200]),
-        title: Container(height: 14, width: 150, decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(4))),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Row(
+  Widget _buildMobileLayout(List<Map<String, dynamic>> items, ThemeData theme) {
+    return ListView.separated(
+      padding: const EdgeInsets.all(16),
+      itemCount: items.length,
+      separatorBuilder: (context, index) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        final item = items[index];
+        return Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: Colors.grey[200]!),
+          ),
+          child: ExpansionTile(
+            tilePadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            childrenPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+            leading: CircleAvatar(
+              backgroundColor: theme.colorScheme.primary.withOpacity(0.1),
+              child: Icon(
+                _getIconForType(item['tipo']?.toString() ?? ''),
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            title: Text(
+              '${item['marca']} ${item['modelo']}',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: Padding(
+              padding: const EdgeInsets.only(top: 4.0),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      item['usuario_nombre']?.toString().toUpperCase() ?? 'SIN USUARIO',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: _getColorForCondition(item['condicion']?.toString() ?? '').withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      (item['condicion'] ?? '').toString().toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: _getColorForCondition(item['condicion']?.toString() ?? ''),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            trailing: _isAdmin 
+              ? PopupMenuButton<String>(
+                  onSelected: (value) {
+                    if (value == 'edit') {
+                      _showItemForm(item: item);
+                    } else if (value == 'delete') {
+                      _deleteItem(item['id']);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: ListTile(
+                        leading: Icon(Icons.edit, color: Colors.blue),
+                        title: Text('Editar'),
+                        dense: true,
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: ListTile(
+                        leading: Icon(Icons.delete, color: Colors.red),
+                        title: Text('Eliminar', style: TextStyle(color: Colors.red)),
+                        dense: true,
+                      ),
+                    ),
+                  ],
+                )
+              : null,
             children: [
-              Container(height: 10, width: 50, decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(4))),
-              const SizedBox(width: 8),
-              Container(height: 10, width: 40, decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(4))),
+              _buildDetailRow('Ubicación', item['ubicacion'] ?? '---'),
+              if (item['n_s'] != null) _buildDetailRow('N/S', item['n_s']),
+              if (item['imei'] != null) _buildDetailRow('IMEI', item['imei']),
+              if (item['cpu'] != null) _buildDetailRow('CPU', item['cpu']),
+              if (item['ssd'] != null) _buildDetailRow('SSD', item['ssd']),
+              if (item['ram'] != null) _buildDetailRow('RAM', item['ram']),
+              if (item['gpu'] != null) _buildDetailRow('GPU', item['gpu']),
+              if (item['fecha_actualizacion'] != null) _buildDetailRow('Fecha Actualización', item['fecha_actualizacion']),
+              if (item['valor'] != null) _buildDetailRow('Valor', '\$${item['valor']}'),
+              if (item['observaciones'] != null) _buildDetailRow('Observaciones', item['observaciones']),
+              _buildDetailRow('Registrado por', item['usuario_nombre'] ?? 'Usuario'),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDesktopLayout(List<Map<String, dynamic>> filtered, ThemeData theme) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: SizedBox(
+        width: double.infinity,
+        child: Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey[200]!)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('ISSI - Inventario', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    if (_isAdmin)
+                      ElevatedButton.icon(
+                        onPressed: () => _showItemForm(),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: theme.colorScheme.secondary,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(120, 48),
+                        ),
+                        icon: const Icon(Icons.add),
+                        label: const Text('NUEVO'),
+                      ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Theme(
+                data: theme.copyWith(
+                  cardTheme: const CardThemeData(elevation: 0, margin: EdgeInsets.zero),
+                  cardColor: Colors.transparent,
+                ),
+                child: PaginatedDataTable(
+                  columns: const [
+                    DataColumn(label: Text('Tipo', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Marca/Modelo', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Ubicación', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('N/S', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Usuario', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Condición', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Acciones', style: TextStyle(fontWeight: FontWeight.bold))),
+                  ],
+                  source: _IssiDataSource(
+                    items: filtered,
+                    theme: theme,
+                    isAdmin: _isAdmin,
+                    onEdit: (item) => _showItemForm(item: item),
+                    onDelete: (id) => _deleteItem(id),
+                    buildConditionChip: (condicion) {
+                      final c = condicion ?? '';
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: _getColorForCondition(c).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: _getColorForCondition(c).withOpacity(0.5)),
+                        ),
+                        child: Text(
+                          c.toUpperCase(),
+                          style: TextStyle(color: _getColorForCondition(c), fontSize: 10, fontWeight: FontWeight.bold),
+                        ),
+                      );
+                    },
+                    getIconForType: _getIconForType,
+                  ),
+                  rowsPerPage: filtered.isEmpty ? 1 : (filtered.length > 10 ? 10 : filtered.length),
+                  showCheckboxColumn: false,
+                  horizontalMargin: 16,
+                  columnSpacing: 16,
+                  dataRowMinHeight: 40,
+                ),
+              ),
             ],
           ),
         ),
@@ -577,11 +732,11 @@ class _IssiPageState extends State<IssiPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final items = _paginatedItems;
-    final totalFiltered = _filteredItems.length;
+    final filtered = _filteredItems;
+    final isDesktopWidth = MediaQuery.of(context).size.width > 800;
 
     return Scaffold(
-      floatingActionButton: _isAdmin 
+      floatingActionButton: _isAdmin && !isDesktopWidth
         ? FloatingActionButton.extended(
             onPressed: () => _showItemForm(),
             backgroundColor: theme.colorScheme.secondary,
@@ -592,32 +747,37 @@ class _IssiPageState extends State<IssiPage> {
         : null,
       body: Column(
         children: [
-          PageHeader(
-            title: 'ISSI - Inventario',
-            bottom: [
-              TextField(
-                controller: _searchController,
-                decoration: InputDecoration(
-                  hintText: 'Buscar por marca, modelo, N/S, ubicación...',
-                  prefixIcon: const Icon(Icons.search),
-                  suffixIcon: _searchQuery.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear),
-                          onPressed: () {
-                            _searchController.clear();
-                            setState(() { _searchQuery = ''; _currentPage = 0; });
-                          },
-                        )
-                      : null,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  filled: true,
-                  fillColor: Colors.white,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isDesktop = constraints.maxWidth > 800;
+              
+              final searchWidget = SizedBox(
+                width: isDesktop ? 250 : double.infinity,
+                height: 40,
+                child: TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'Buscar...',
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, size: 20),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() { _searchQuery = ''; _currentPage = 0; });
+                            },
+                          )
+                        : null,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                    filled: true,
+                    fillColor: Colors.white,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+                  ),
+                  onChanged: (v) => setState(() { _searchQuery = v; _currentPage = 0; }),
                 ),
-                onChanged: (value) => setState(() { _searchQuery = value; _currentPage = 0; }),
-              ),
-              const SizedBox(height: 12),
-              SingleChildScrollView(
+              );
+
+              final filterWidgets = SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
@@ -650,18 +810,19 @@ class _IssiPageState extends State<IssiPage> {
                     ],
                   ],
                 ),
-              ),
-            ],
+              );
+
+              return PageHeader(
+                title: 'ISSI - Inventario',
+                trailing: isDesktop ? searchWidget : null,
+                bottom: isDesktop ? [filterWidgets] : [searchWidget, const SizedBox(height: 8), filterWidgets],
+              );
+            },
           ),
           Expanded(
             child: _isLoading
-                ? ListView.separated(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: 6,
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
-                    itemBuilder: (_, __) => _buildShimmerItem(),
-                  )
-                : items.isEmpty
+                ? _buildShimmerLoading()
+                : filtered.isEmpty
                     ? Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -677,122 +838,14 @@ class _IssiPageState extends State<IssiPage> {
                           ],
                         ),
                       )
-                    : RefreshIndicator(
-                        onRefresh: _fetchItems,
-                        child: ListView.separated(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: items.length + (_totalPages > 1 ? 1 : 0),
-                          separatorBuilder: (context, index) => const SizedBox(height: 12),
-                          itemBuilder: (context, index) {
-                            if (index == items.length && _totalPages > 1) {
-                              return _buildPaginationControls();
-                            }
-                            final item = items[index];
-                            
-                            return Card(
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                side: BorderSide(color: Colors.grey[200]!),
-                              ),
-                              child: ExpansionTile(
-                                tilePadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                                childrenPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                                leading: CircleAvatar(
-                                  backgroundColor: theme.colorScheme.primary.withOpacity(0.1),
-                                  child: Icon(
-                                    _getIconForType(item['tipo']),
-                                    color: theme.colorScheme.primary,
-                                  ),
-                                ),
-                                title: Text(
-                                  '${item['marca']} ${item['modelo']}',
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                                subtitle: Padding(
-                                  padding: const EdgeInsets.only(top: 4.0),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: theme.colorScheme.primary.withOpacity(0.1),
-                                          borderRadius: BorderRadius.circular(8),
-                                        ),
-                                        child: Text(
-                                          item['usuario_nombre']?.toString().toUpperCase() ?? 'SIN USUARIO',
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                            color: theme.colorScheme.primary,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: _getColorForCondition(item['condicion']).withOpacity(0.1),
-                                          borderRadius: BorderRadius.circular(8),
-                                        ),
-                                        child: Text(
-                                          item['condicion'].toString().toUpperCase(),
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                            color: _getColorForCondition(item['condicion']),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                trailing: _isAdmin 
-                                  ? PopupMenuButton<String>(
-                                      onSelected: (value) {
-                                        if (value == 'edit') {
-                                          _showItemForm(item: item);
-                                        } else if (value == 'delete') {
-                                          _deleteItem(item['id']);
-                                        }
-                                      },
-                                      itemBuilder: (context) => [
-                                        const PopupMenuItem(
-                                          value: 'edit',
-                                          child: ListTile(
-                                            leading: Icon(Icons.edit),
-                                            title: Text('Editar'),
-                                            dense: true,
-                                          ),
-                                        ),
-                                        const PopupMenuItem(
-                                          value: 'delete',
-                                          child: ListTile(
-                                            leading: Icon(Icons.delete, color: Colors.red),
-                                            title: Text('Eliminar', style: TextStyle(color: Colors.red)),
-                                            dense: true,
-                                          ),
-                                        ),
-                                      ],
-                                    )
-                                  : null,
-                                children: [
-                                  _buildDetailRow('Ubicación', item['ubicacion']),
-                                  if (item['n_s'] != null) _buildDetailRow('N/S', item['n_s']),
-                                  if (item['imei'] != null) _buildDetailRow('IMEI', item['imei']),
-                                  if (item['cpu'] != null) _buildDetailRow('CPU', item['cpu']),
-                                  if (item['ssd'] != null) _buildDetailRow('SSD', item['ssd']),
-                                  if (item['ram'] != null) _buildDetailRow('RAM', item['ram']),
-                                  if (item['gpu'] != null) _buildDetailRow('GPU', item['gpu']),
-                                  if (item['fecha_actualizacion'] != null) _buildDetailRow('Fecha Actualización', item['fecha_actualizacion']),
-                                  if (item['valor'] != null) _buildDetailRow('Valor', '\$${item['valor']}'),
-                                  if (item['observaciones'] != null) _buildDetailRow('Observaciones', item['observaciones']),
-                                  _buildDetailRow('Registrado por', item['usuario_nombre'] ?? 'Usuario'),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
+                    : LayoutBuilder(
+                        builder: (context, constraints) {
+                          if (constraints.maxWidth > 800) {
+                            return _buildDesktopLayout(filtered, theme);
+                          } else {
+                            return _buildMobileLayout(filtered, theme);
+                          }
+                        },
                       ),
           ),
         ],
@@ -832,31 +885,6 @@ class _IssiPageState extends State<IssiPage> {
     );
   }
 
-  Widget _buildPaginationControls() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          IconButton(
-            icon: const Icon(Icons.chevron_left),
-            onPressed: _currentPage > 0 ? () => setState(() => _currentPage--) : null,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            'Página ${_currentPage + 1} de $_totalPages',
-            style: const TextStyle(fontWeight: FontWeight.w500),
-          ),
-          const SizedBox(width: 8),
-          IconButton(
-            icon: const Icon(Icons.chevron_right),
-            onPressed: _currentPage < _totalPages - 1 ? () => setState(() => _currentPage++) : null,
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildDetailRow(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -886,40 +914,96 @@ class _IssiPageState extends State<IssiPage> {
   }
 
   IconData _getIconForType(String tipo) {
-    switch (tipo) {
-      case 'Laptop':
-        return Icons.laptop_mac;
-      case 'PC':
-        return Icons.desktop_mac;
-      case 'Impresora':
-        return Icons.print;
-      case 'Celular':
-        return Icons.smartphone;
-      case 'Telefono':
-        return Icons.phone;
-      case 'Disco Duro':
-        return Icons.storage;
-      case 'Monitor':
-        return Icons.monitor;
-      case 'Mouse':
-        return Icons.mouse;
-      default:
-        return Icons.devices_other;
+    switch (tipo.toUpperCase()) {
+      case 'LAPTOP': return Icons.laptop_mac;
+      case 'PC': return Icons.desktop_mac;
+      case 'IMPRESORA': return Icons.print;
+      case 'CELULAR': return Icons.smartphone;
+      case 'TELEFONO': return Icons.phone;
+      case 'DISCO DURO': return Icons.storage;
+      case 'MONITOR': return Icons.monitor;
+      case 'MOUSE': return Icons.mouse;
+      default: return Icons.devices_other;
     }
   }
 
   Color _getColorForCondition(String condicion) {
-    switch (condicion) {
-      case 'Nuevo':
-        return Colors.green;
-      case 'Usado':
-        return Colors.orange;
-      case 'Dañado':
-        return Colors.red;
-      case 'Sin Reparacion':
-        return Colors.grey;
-      default:
-        return Colors.blueGrey;
+    switch (condicion.toUpperCase()) {
+      case 'NUEVO': return Colors.green;
+      case 'USADO': return Colors.orange;
+      case 'DAÑADO': return Colors.red;
+      case 'SIN REPARACION': return Colors.grey;
+      default: return Colors.blueGrey;
     }
   }
+}
+
+class _IssiDataSource extends DataTableSource {
+  final List<Map<String, dynamic>> items;
+  final ThemeData theme;
+  final bool isAdmin;
+  final Function(Map<String, dynamic>) onEdit;
+  final Function(String) onDelete;
+  final Widget Function(String) buildConditionChip;
+  final IconData Function(String) getIconForType;
+
+  _IssiDataSource({
+    required this.items,
+    required this.theme,
+    required this.isAdmin,
+    required this.onEdit,
+    required this.onDelete,
+    required this.buildConditionChip,
+    required this.getIconForType,
+  });
+
+  @override
+  DataRow? getRow(int index) {
+    if (index >= items.length) return null;
+    final item = items[index];
+
+    return DataRow.byIndex(
+      index: index,
+      cells: [
+        DataCell(
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(getIconForType(item['tipo']?.toString() ?? ''), size: 20, color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              Text(item['tipo']?.toString() ?? '---'),
+            ],
+          ),
+        ),
+        DataCell(Text('${item['marca'] ?? ''} ${item['modelo'] ?? ''}'.trim())),
+        DataCell(Text(item['ubicacion']?.toString() ?? '---')),
+        DataCell(Text(item['n_s']?.toString() ?? '---')),
+        DataCell(Text(item['usuario_nombre']?.toString() ?? '---')),
+        DataCell(buildConditionChip(item['condicion']?.toString() ?? '')),
+        DataCell(
+          isAdmin
+              ? PopupMenuButton<String>(
+                  onSelected: (value) {
+                    if (value == 'edit') onEdit(item);
+                    if (value == 'delete') onDelete(item['id']);
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(value: 'edit', child: ListTile(leading: Icon(Icons.edit, color: Colors.blue), title: Text('Editar'), dense: true)),
+                    const PopupMenuItem(value: 'delete', child: ListTile(leading: Icon(Icons.delete, color: Colors.red), title: Text('Eliminar', style: TextStyle(color: Colors.red)), dense: true)),
+                  ],
+                )
+              : const SizedBox.shrink(),
+        ),
+      ],
+    );
+  }
+
+  @override
+  bool get isRowCountApproximate => false;
+
+  @override
+  int get rowCount => items.length;
+
+  @override
+  int get selectedRowCount => 0;
 }
