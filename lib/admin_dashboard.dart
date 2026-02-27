@@ -546,9 +546,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final users = _filteredUsers;
+    final isDesktop = MediaQuery.of(context).size.width > 800;
 
     return Scaffold(
-      floatingActionButton: _isAdmin 
+      floatingActionButton: (_isAdmin && !isDesktop)
         ? FloatingActionButton.extended(
             onPressed: () => _showUserForm(),
             backgroundColor: theme.colorScheme.secondary,
@@ -562,7 +563,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 PageHeader(
                   title: 'Panel de Control',
                   subtitle: 'Total: ${_users.length} usuarios registrados',
-                  bottom: [
+                  bottom: isDesktop ? null : [
                     TextField(
                       controller: _searchController,
                       decoration: InputDecoration(
@@ -771,6 +772,48 @@ class _AdminDashboardState extends State<AdminDashboard> {
               Expanded(child: _buildKpiCard('Administradores', totalAdmins.toString(), Icons.admin_panel_settings, theme.colorScheme.tertiary)),
               const SizedBox(width: 16),
               Expanded(child: _buildKpiCard('Bloqueados', totalBlocked.toString(), Icons.block, Colors.red)),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'Buscar por nombre o rol...',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _searchQuery = '');
+                            },
+                          )
+                        : null,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    filled: true,
+                    fillColor: Colors.white,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  ),
+                  onChanged: (value) => setState(() => _searchQuery = value),
+                ),
+              ),
+              if (_isAdmin) ...[
+                const SizedBox(width: 16),
+                ElevatedButton.icon(
+                  onPressed: () => _showUserForm(),
+                  icon: const Icon(Icons.add),
+                  label: const Text('NUEVO USUARIO'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: theme.colorScheme.secondary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 24),
