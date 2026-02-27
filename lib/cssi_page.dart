@@ -779,9 +779,11 @@ class _CssiPageState extends State<CssiPage> {
   Widget _buildDesktopLayout(List<Map<String, dynamic>> filtered, ThemeData theme) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
-      child: Card(
-        elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey[200]!)),
+      child: SizedBox(
+        width: double.infinity,
+        child: Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey[200]!)),
         child: Theme(
           data: theme.copyWith(
             cardTheme: const CardThemeData(elevation: 0, margin: EdgeInsets.zero),
