@@ -20,7 +20,7 @@ class _CssiPageState extends State<CssiPage> {
   final _searchController = TextEditingController();
   String _searchQuery = '';
   int _currentPage = 0;
-  static const int _itemsPerPage = 20;
+  static const int _itemsPerPage = 10;
 
   @override
   void initState() {
@@ -76,31 +76,6 @@ class _CssiPageState extends State<CssiPage> {
   }
 
   int get _totalPages => (_filteredItems.length / _itemsPerPage).ceil().clamp(1, 9999);
-
-  void _exportCsv() {
-    final filtered = _filteredItems;
-    if (filtered.isEmpty) return;
-
-    final headers = ['Num. Empleado', 'Nombre', 'Paterno', 'Materno', 'CURP', 'RFC', 'Puesto', 'Área', 'Ubicación', 'Correo'];
-    final rows = filtered.map((item) => [
-      item['numero_empleado'] ?? '',
-      item['nombre'] ?? '',
-      item['paterno'] ?? '',
-      item['materno'] ?? '',
-      item['curp'] ?? '',
-      item['rfc'] ?? '',
-      item['puesto'] ?? '',
-      item['area'] ?? '',
-      item['ubicacion'] ?? '',
-      item['correo_personal'] ?? '',
-    ].map((f) => '"${f.toString().replaceAll('"', '""')}"').join(',')).toList();
-
-    final csv = [headers.join(','), ...rows].join('\n');
-    debugPrint('CSV Export CSSI: ${rows.length} records');
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('CSV generado con ${rows.length} colaboradores'), backgroundColor: const Color(0xFFB1CB34)),
-    );
-  }
 
   void _deleteItem(String id) async {
     final confirmed = await showDialog<bool>(
@@ -802,81 +777,107 @@ class _CssiPageState extends State<CssiPage> {
   }
 
   Widget _buildDesktopLayout(List<Map<String, dynamic>> filtered) {
-    return SingleChildScrollView(
-      child: Container(
-        padding: const EdgeInsets.all(24),
-        width: double.infinity,
-        child: Card(
-          elevation: 0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey[200]!)),
+    if (_currentPage >= _totalPages) _currentPage = 0;
+    
+    final startIndex = _currentPage * _itemsPerPage;
+    final endIndex = (startIndex + _itemsPerPage).clamp(0, filtered.length);
+    final paginatedItems = filtered.sublist(startIndex, endIndex);
+
+    return Column(
+      children: [
+        Expanded(
           child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: DataTable(
-              headingTextStyle: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF344092)),
-              columns: const [
-                DataColumn(label: Text('Número')),
-                DataColumn(label: Text('Nombre Completo')),
-                DataColumn(label: Text('CURP')),
-                DataColumn(label: Text('RFC')),
-                DataColumn(label: Text('Puesto')),
-                DataColumn(label: Text('Área')),
-                DataColumn(label: Text('RH')),
-                DataColumn(label: Text('SYS')),
-                DataColumn(label: Text('Acciones')),
-              ],
-              rows: filtered.map((item) {
-                return DataRow(
-                  cells: [
-                    DataCell(Text(item['numero_empleado']?.toString() ?? '---')),
-                    DataCell(
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          CircleAvatar(
-                            radius: 16,
-                            backgroundColor: const Color(0xFF344092).withOpacity(0.1),
-                            backgroundImage: item['foto_url'] != null ? NetworkImage(item['foto_url']) : null,
-                            child: item['foto_url'] == null 
-                              ? Text((item['nombre'] ?? '?')[0], style: const TextStyle(color: Color(0xFF344092), fontWeight: FontWeight.bold, fontSize: 12))
-                              : null,
-                          ),
-                          const SizedBox(width: 8),
-                          Text('${item['nombre']} ${item['paterno']} ${item['materno'] ?? ''}'.trim()),
-                        ],
-                      ),
-                    ),
-                    DataCell(Text(item['curp'] ?? '---')),
-                    DataCell(Text(item['rfc'] ?? '---')),
-                    DataCell(Text(item['puesto'] ?? '---')),
-                    DataCell(Text(item['area'] ?? '---')),
-                    DataCell(_buildStatusChip(item['status_rh'] ?? 'ACTIVO', 'RH')),
-                    DataCell(_buildStatusChip(item['status_sys'] ?? 'ACTIVO', 'SYS')),
-                    DataCell(
-                      widget.role == 'admin'
-                          ? Row(
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              width: double.infinity,
+              child: Card(
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey[200]!)),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: DataTable(
+                    headingTextStyle: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF344092)),
+                    columns: const [
+                      DataColumn(label: Text('Número')),
+                      DataColumn(label: Text('Status RH')),
+                      DataColumn(label: Text('Nombre')),
+                      DataColumn(label: Text('Puesto')),
+                      DataColumn(label: Text('Ubicación')),
+                      DataColumn(label: Text('Correo')),
+                      DataColumn(label: Text('Acciones')),
+                    ],
+                    rows: paginatedItems.map((item) {
+                      return DataRow(
+                        cells: [
+                          DataCell(Text(item['numero_empleado']?.toString() ?? '---')),
+                          DataCell(_buildStatusChip(item['status_rh'] ?? 'ACTIVO', 'RH')),
+                          DataCell(
+                            Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                IconButton(
-                                  icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
-                                  onPressed: () => _showForm(item: item),
-                                  tooltip: 'Editar',
+                                CircleAvatar(
+                                  radius: 16,
+                                  backgroundColor: const Color(0xFF344092).withOpacity(0.1),
+                                  backgroundImage: item['foto_url'] != null ? NetworkImage(item['foto_url']) : null,
+                                  child: item['foto_url'] == null 
+                                    ? Text((item['nombre'] ?? '?')[0], style: const TextStyle(color: Color(0xFF344092), fontWeight: FontWeight.bold, fontSize: 12))
+                                    : null,
                                 ),
-                                IconButton(
-                                  icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                                  onPressed: () => _deleteItem(item['id']),
-                                  tooltip: 'Eliminar',
-                                ),
+                                const SizedBox(width: 8),
+                                Text('${item['nombre']} ${item['paterno']} ${item['materno'] ?? ''}'.trim()),
                               ],
-                            )
-                          : const SizedBox.shrink(),
-                    ),
-                  ],
-                );
-              }).toList(),
+                            ),
+                          ),
+                          DataCell(Text(item['puesto'] ?? '---')),
+                          DataCell(Text(item['ubicacion'] ?? '---')),
+                          DataCell(Text(item['correo_personal'] ?? '---')),
+                          DataCell(
+                            widget.role == 'admin'
+                                ? Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
+                                        onPressed: () => _showForm(item: item),
+                                        tooltip: 'Editar',
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                                        onPressed: () => _deleteItem(item['id']),
+                                        tooltip: 'Eliminar',
+                                      ),
+                                    ],
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
+                        ],
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
             ),
           ),
         ),
-      ),
+        if (filtered.isNotEmpty)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.chevron_left),
+                  onPressed: _currentPage > 0 ? () => setState(() => _currentPage--) : null,
+                ),
+                Text('Página ${_currentPage + 1} de $_totalPages'),
+                IconButton(
+                  icon: const Icon(Icons.chevron_right),
+                  onPressed: _currentPage < _totalPages - 1 ? () => setState(() => _currentPage++) : null,
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 
@@ -899,42 +900,31 @@ class _CssiPageState extends State<CssiPage> {
         children: [
           PageHeader(
             title: 'Colaboradores SSI',
-            subtitle: 'Total: ${_items.length} colaboradores${filtered.length != _items.length ? ' (mostrando ${filtered.length})' : ''}',
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  width: 250,
-                  height: 40,
-                  child: TextField(
-                    controller: _searchController,
-                    decoration: InputDecoration(
-                      hintText: 'Buscar...',
-                      prefixIcon: const Icon(Icons.search, size: 20),
-                      suffixIcon: _searchQuery.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear, size: 20),
-                              onPressed: () {
-                                _searchController.clear();
-                                setState(() { _searchQuery = ''; });
-                              },
-                            )
-                          : null,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                      filled: true,
-                      fillColor: Colors.white,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                    ),
-                    onChanged: (v) => setState(() => _searchQuery = v),
-                  ),
+            subtitle: null,
+            trailing: SizedBox(
+              width: 250,
+              height: 40,
+              child: TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: 'Buscar...',
+                  prefixIcon: const Icon(Icons.search, size: 20),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 20),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() { _searchQuery = ''; _currentPage = 0; });
+                          },
+                        )
+                      : null,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  filled: true,
+                  fillColor: Colors.white,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
                 ),
-                const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(Icons.download_outlined, color: Colors.white),
-                  tooltip: 'Exportar CSV',
-                  onPressed: _exportCsv,
-                ),
-              ],
+                onChanged: (v) => setState(() { _searchQuery = v; _currentPage = 0; }),
+              ),
             ),
           ),
           Expanded(
