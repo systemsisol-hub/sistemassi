@@ -54,7 +54,7 @@ class _CssiPageState extends State<CssiPage> {
   }
 
   List<Map<String, dynamic>> get _filteredItems {
-    var result = _items;
+    var result = List<Map<String, dynamic>>.from(_items);
     if (_searchQuery.isNotEmpty) {
       final query = _searchQuery.toLowerCase();
       result = result.where((item) {
@@ -67,6 +67,11 @@ class _CssiPageState extends State<CssiPage> {
         return name.contains(query) || curp.contains(query) || rfc.contains(query) || area.contains(query) || puesto.contains(query) || numEmp.contains(query);
       }).toList();
     }
+    result.sort((a, b) {
+      final numA = int.tryParse(a['numero_empleado']?.toString() ?? '0') ?? 0;
+      final numB = int.tryParse(b['numero_empleado']?.toString() ?? '0') ?? 0;
+      return numB.compareTo(numA); // descending
+    });
     return result;
   }
 
@@ -192,306 +197,349 @@ class _CssiPageState extends State<CssiPage> {
         child: StatefulBuilder(
           builder: (context, setDialogState) {
             final theme = Theme.of(context);
-            return Container(
-              width: double.maxFinite,
-              constraints: const BoxConstraints(maxWidth: 600),
-              child: Column(
-                children: [
-                Padding(
-                  padding: const EdgeInsets.only(left: 24, right: 24, top: 24),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        isEditing ? 'Editar Colaborador' : 'Nuevo Colaborador',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+            final isDesktop = MediaQuery.of(context).size.width > 900;
+
+            final Widget col1 = Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _sectionTitle('SI Colaborador'),
+                Center(
+                  child: GestureDetector(
+                    onTap: () async {
+                      final picker = ImagePicker();
+                      final image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 50);
+                      if (image != null) setDialogState(() => pickedFile = image);
+                    },
+                    child: Stack(
                       children: [
-                        _sectionTitle('SI Colaborador'),
-                        Center(
-                          child: GestureDetector(
-                            onTap: () async {
-                              final picker = ImagePicker();
-                              final image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 50);
-                              if (image != null) setDialogState(() => pickedFile = image);
-                            },
-                            child: Stack(
-                              children: [
-                                CircleAvatar(
-                                  radius: 50,
-                                  backgroundColor: Colors.grey[200],
-                                  backgroundImage: pickedFile != null 
-                                    ? null 
-                                    : (currentFotoUrl != null ? NetworkImage(currentFotoUrl) : null),
-                                  child: pickedFile != null 
-                                    ? ClipOval(child: Image.file(File(pickedFile!.path), fit: BoxFit.cover, width: 100, height: 100))
-                                    : (currentFotoUrl == null ? const Icon(Icons.person, size: 50, color: Colors.grey) : null),
-                                ),
-                                Positioned(
-                                  bottom: 0,
-                                  right: 0,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(4),
-                                    decoration: BoxDecoration(color: theme.colorScheme.primary, shape: BoxShape.circle),
-                                    child: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
-                                  ),
-                                ),
-                              ],
-                            ),
+                        CircleAvatar(
+                          radius: 50,
+                          backgroundColor: Colors.grey[200],
+                          backgroundImage: pickedFile != null 
+                            ? null 
+                            : (currentFotoUrl != null ? NetworkImage(currentFotoUrl) : null),
+                          child: pickedFile != null 
+                            ? ClipOval(child: Image.file(File(pickedFile!.path), fit: BoxFit.cover, width: 100, height: 100))
+                            : (currentFotoUrl == null ? const Icon(Icons.person, size: 50, color: Colors.grey) : null),
+                        ),
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(color: theme.colorScheme.primary, shape: BoxShape.circle),
+                            child: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
                           ),
                         ),
-                        const SizedBox(height: 20),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: DropdownButtonFormField<String>(
-                                value: statusSys,
-                                decoration: const InputDecoration(labelText: 'Status Sys'),
-                                items: ['ACTIVO', 'BAJA', 'CAMBIO', 'ELIMINAR'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-                                onChanged: (v) => setDialogState(() => statusSys = v),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: DropdownButtonFormField<String>(
-                                value: statusRh,
-                                decoration: const InputDecoration(labelText: 'Status RH'),
-                                items: ['ACTIVO', 'BAJA', 'CAMBIO', 'REINGRESO'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-                                onChanged: (v) => setDialogState(() => statusRh = v),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: numeroEmpleadoCtrl,
-                          decoration: const InputDecoration(labelText: 'Número de Empleado *', hintText: '4 dígitos'),
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                            LengthLimitingTextInputFormatter(4),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(controller: nombreCtrl, decoration: const InputDecoration(labelText: 'Nombre *')),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(child: TextField(controller: paternoCtrl, decoration: const InputDecoration(labelText: 'Paterno *'))),
-                            const SizedBox(width: 8),
-                            Expanded(child: TextField(controller: maternoCtrl, decoration: const InputDecoration(labelText: 'Materno'))),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(child: TextField(controller: curpCtrl, decoration: const InputDecoration(labelText: 'CURP'))),
-                            const SizedBox(width: 8),
-                            Expanded(child: TextField(controller: rfcCtrl, decoration: const InputDecoration(labelText: 'RFC'))),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(controller: imssCtrl, decoration: const InputDecoration(labelText: 'IMSS')),
-                        const SizedBox(height: 12),
-                        DropdownButtonFormField<String>(
-                          value: credito,
-                          decoration: const InputDecoration(labelText: 'Crédito'),
-                          items: ['FOVISTE', 'INFONAVIT', 'OTRO'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-                          onChanged: (v) => setDialogState(() => credito = v),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                controller: fechaNacCtrl,
-                                decoration: const InputDecoration(labelText: 'Fecha Nacimiento', suffixIcon: Icon(Icons.calendar_today)),
-                                readOnly: true,
-                                onTap: () async {
-                                  final d = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(1950), lastDate: DateTime.now());
-                                  if (d != null) setDialogState(() => fechaNacCtrl.text = d.toString().split(' ').first);
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(child: TextField(controller: tallaCtrl, decoration: const InputDecoration(labelText: 'Talla'))),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: DropdownButtonFormField<String>(
-                                value: genero,
-                                decoration: const InputDecoration(labelText: 'Género'),
-                                items: ['HOMBRE', 'MUJER'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-                                onChanged: (v) => setDialogState(() => genero = v),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: DropdownButtonFormField<String>(
-                                value: estadoCivil,
-                                decoration: const InputDecoration(labelText: 'Estado Civil'),
-                                items: ['CASADO', 'SOLTERO', 'UNION LIBRE'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-                                onChanged: (v) => setDialogState(() => estadoCivil = v),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        DropdownButtonFormField<String>(
-                          value: escolaridad,
-                          decoration: const InputDecoration(labelText: 'Escolaridad'),
-                          items: ['PRIMARIA', 'SECUNDARIA', 'BACHILLERATO', 'CARRERA TECNICA', 'TSU', 'LICENCIATURA TRUNCA', 'LICENCIATURA PASANTE', 'LICENCIATURA TITULADO', 'POSGRADO', 'OTROS']
-                              .map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-                          onChanged: (v) => setDialogState(() => escolaridad = v),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(controller: detalleEscolCtrl, decoration: const InputDecoration(labelText: 'Detalle Escolaridad'), maxLines: 2),
-
-                        const SizedBox(height: 24),
-                        _sectionTitle('Domicilio'),
-                        Row(
-                          children: [
-                            Expanded(flex: 3, child: TextField(controller: calleCtrl, decoration: const InputDecoration(labelText: 'Calle'))),
-                            const SizedBox(width: 8),
-                            Expanded(child: TextField(controller: noCalleCtrl, decoration: const InputDecoration(labelText: 'No. Calle'))),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(controller: coloniaCtrl, decoration: const InputDecoration(labelText: 'Colonia')),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(child: TextField(controller: municipioCtrl, decoration: const InputDecoration(labelText: 'Municipio/Alcaldía'))),
-                            const SizedBox(width: 8),
-                            Expanded(child: TextField(controller: cpCtrl, decoration: const InputDecoration(labelText: 'C.P.'))),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(controller: estadoFedCtrl, decoration: const InputDecoration(labelText: 'Estado Federal')),
-
-                        const SizedBox(height: 24),
-                        _sectionTitle('Contacto Personal'),
-                        Row(
-                          children: [
-                            Expanded(child: TextField(controller: telCtrl, decoration: const InputDecoration(labelText: 'Teléfono'))),
-                            const SizedBox(width: 8),
-                            Expanded(child: TextField(controller: celCtrl, decoration: const InputDecoration(labelText: 'Celular'))),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(controller: correoCtrl, decoration: const InputDecoration(labelText: 'Correo Personal')),
-
-                        const SizedBox(height: 24),
-                        _sectionTitle('Datos Bancarios'),
-                        TextField(controller: bancoCtrl, decoration: const InputDecoration(labelText: 'Banco')),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(child: TextField(controller: cuentaCtrl, decoration: const InputDecoration(labelText: 'Cuenta'))),
-                            const SizedBox(width: 8),
-                            Expanded(child: TextField(controller: clabeCtrl, decoration: const InputDecoration(labelText: 'Clabe'))),
-                          ],
-                        ),
-
-                        const SizedBox(height: 24),
-                        _sectionTitle('Datos Empresa'),
-                        TextField(controller: empresaCtrl, decoration: const InputDecoration(labelText: 'Empresa')),
-                        const SizedBox(height: 12),
-                        TextField(controller: areaCtrl, decoration: const InputDecoration(labelText: 'Área')),
-                        const SizedBox(height: 12),
-                        TextField(controller: puestoCtrl, decoration: const InputDecoration(labelText: 'Puesto')),
-                        const SizedBox(height: 12),
-                        TextField(controller: ubicacionCtrl, decoration: const InputDecoration(labelText: 'Ubicación')),
-                        const SizedBox(height: 12),
-                        TextField(controller: jefeCtrl, decoration: const InputDecoration(labelText: 'Jefe Inmediato')),
-                        const SizedBox(height: 12),
-                        TextField(controller: liderCtrl, decoration: const InputDecoration(labelText: 'Líder')),
-                        const SizedBox(height: 12),
-                        TextField(controller: gerenteCtrl, decoration: const InputDecoration(labelText: 'Gerente Regional')),
-                        const SizedBox(height: 12),
-                        TextField(controller: directorCtrl, decoration: const InputDecoration(labelText: 'Director')),
-
-                        const SizedBox(height: 24),
-                        _sectionTitle('Area RH'),
-                        TextField(controller: reclutaCtrl, decoration: const InputDecoration(labelText: 'Recluta')),
-                        const SizedBox(height: 12),
-                        TextField(controller: reclutadorCtrl, decoration: const InputDecoration(labelText: 'Reclutador')),
-                        const SizedBox(height: 12),
-                        TextField(controller: fuenteCtrl, decoration: const InputDecoration(labelText: 'Fuente de reclutamiento')),
-                        const SizedBox(height: 12),
-                        TextField(controller: fuenteEspecCtrl, decoration: const InputDecoration(labelText: 'Fuente espec.')),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                controller: fechaIngresoCtrl,
-                                decoration: const InputDecoration(labelText: 'Fecha Ingreso', suffixIcon: Icon(Icons.calendar_today)),
-                                readOnly: true,
-                                onTap: () async {
-                                  final d = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2000), lastDate: DateTime(2101));
-                                  if (d != null) setDialogState(() => fechaIngresoCtrl.text = d.toString().split(' ').first);
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: TextField(
-                                controller: fechaReingresoCtrl,
-                                decoration: const InputDecoration(labelText: 'Fecha Reingreso', suffixIcon: Icon(Icons.calendar_today)),
-                                readOnly: true,
-                                onTap: () async {
-                                  final d = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2000), lastDate: DateTime(2101));
-                                  if (d != null) setDialogState(() => fechaReingresoCtrl.text = d.toString().split(' ').first);
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: fechaCambioCtrl,
-                          decoration: const InputDecoration(labelText: 'Fecha Cambio', suffixIcon: Icon(Icons.calendar_today)),
-                          readOnly: true,
-                          onTap: () async {
-                            final d = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2000), lastDate: DateTime(2101));
-                            if (d != null) setDialogState(() => fechaCambioCtrl.text = d.toString().split(' ').first);
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(controller: obsCtrl, decoration: const InputDecoration(labelText: 'Observaciones'), maxLines: 2),
-
-                        const SizedBox(height: 24),
-                        _sectionTitle('Referencia'),
-                        TextField(controller: refNombreCtrl, decoration: const InputDecoration(labelText: 'Nombre Referencia')),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(child: TextField(controller: refTelCtrl, decoration: const InputDecoration(labelText: 'Teléfono Ref.'))),
-                            const SizedBox(width: 8),
-                            Expanded(child: TextField(controller: refRelacionCtrl, decoration: const InputDecoration(labelText: 'Relación'))),
-                          ],
-                        ),
-                        const SizedBox(height: 40),
                       ],
                     ),
                   ),
                 ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value: statusSys,
+                        decoration: const InputDecoration(labelText: 'Status Sys'),
+                        items: ['ACTIVO', 'BAJA', 'CAMBIO', 'ELIMINAR'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                        onChanged: (v) => setDialogState(() => statusSys = v),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value: statusRh,
+                        decoration: const InputDecoration(labelText: 'Status RH'),
+                        items: ['ACTIVO', 'BAJA', 'CAMBIO', 'REINGRESO'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                        onChanged: (v) => setDialogState(() => statusRh = v),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: numeroEmpleadoCtrl,
+                  decoration: const InputDecoration(labelText: 'Número de Empleado *', hintText: '4 dígitos'),
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(4),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextField(controller: nombreCtrl, decoration: const InputDecoration(labelText: 'Nombre *')),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(child: TextField(controller: paternoCtrl, decoration: const InputDecoration(labelText: 'Paterno *'))),
+                    const SizedBox(width: 8),
+                    Expanded(child: TextField(controller: maternoCtrl, decoration: const InputDecoration(labelText: 'Materno'))),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(child: TextField(controller: curpCtrl, decoration: const InputDecoration(labelText: 'CURP'))),
+                    const SizedBox(width: 8),
+                    Expanded(child: TextField(controller: rfcCtrl, decoration: const InputDecoration(labelText: 'RFC'))),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextField(controller: imssCtrl, decoration: const InputDecoration(labelText: 'IMSS')),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: credito,
+                  decoration: const InputDecoration(labelText: 'Crédito'),
+                  items: ['FOVISTE', 'INFONAVIT', 'OTRO'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                  onChanged: (v) => setDialogState(() => credito = v),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: fechaNacCtrl,
+                        decoration: const InputDecoration(labelText: 'Fecha Nacimiento', suffixIcon: Icon(Icons.calendar_today)),
+                        readOnly: true,
+                        onTap: () async {
+                          final d = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(1950), lastDate: DateTime.now());
+                          if (d != null) setDialogState(() => fechaNacCtrl.text = d.toString().split(' ').first);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(child: TextField(controller: tallaCtrl, decoration: const InputDecoration(labelText: 'Talla'))),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value: genero,
+                        decoration: const InputDecoration(labelText: 'Género'),
+                        items: ['HOMBRE', 'MUJER'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                        onChanged: (v) => setDialogState(() => genero = v),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value: estadoCivil,
+                        decoration: const InputDecoration(labelText: 'Estado Civil'),
+                        items: ['CASADO', 'SOLTERO', 'UNION LIBRE'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                        onChanged: (v) => setDialogState(() => estadoCivil = v),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: escolaridad,
+                  decoration: const InputDecoration(labelText: 'Escolaridad'),
+                  items: ['PRIMARIA', 'SECUNDARIA', 'BACHILLERATO', 'CARRERA TECNICA', 'TSU', 'LICENCIATURA TRUNCA', 'LICENCIATURA PASANTE', 'LICENCIATURA TITULADO', 'POSGRADO', 'OTROS']
+                      .map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                  onChanged: (v) => setDialogState(() => escolaridad = v),
+                ),
+                const SizedBox(height: 12),
+                TextField(controller: detalleEscolCtrl, decoration: const InputDecoration(labelText: 'Detalle Escolaridad'), maxLines: 2),
+              ],
+            );
+
+            final Widget col2 = Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _sectionTitle('Domicilio'),
+                Row(
+                  children: [
+                    Expanded(flex: 3, child: TextField(controller: calleCtrl, decoration: const InputDecoration(labelText: 'Calle'))),
+                    const SizedBox(width: 8),
+                    Expanded(child: TextField(controller: noCalleCtrl, decoration: const InputDecoration(labelText: 'No. Calle'))),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextField(controller: coloniaCtrl, decoration: const InputDecoration(labelText: 'Colonia')),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(child: TextField(controller: municipioCtrl, decoration: const InputDecoration(labelText: 'Municipio/Alcaldía'))),
+                    const SizedBox(width: 8),
+                    Expanded(child: TextField(controller: cpCtrl, decoration: const InputDecoration(labelText: 'C.P.'))),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextField(controller: estadoFedCtrl, decoration: const InputDecoration(labelText: 'Estado Federal')),
+
+                const SizedBox(height: 24),
+                _sectionTitle('Contacto Personal'),
+                Row(
+                  children: [
+                    Expanded(child: TextField(controller: telCtrl, decoration: const InputDecoration(labelText: 'Teléfono'))),
+                    const SizedBox(width: 8),
+                    Expanded(child: TextField(controller: celCtrl, decoration: const InputDecoration(labelText: 'Celular'))),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextField(controller: correoCtrl, decoration: const InputDecoration(labelText: 'Correo Personal')),
+
+                const SizedBox(height: 24),
+                _sectionTitle('Datos Bancarios'),
+                TextField(controller: bancoCtrl, decoration: const InputDecoration(labelText: 'Banco')),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(child: TextField(controller: cuentaCtrl, decoration: const InputDecoration(labelText: 'Cuenta'))),
+                    const SizedBox(width: 8),
+                    Expanded(child: TextField(controller: clabeCtrl, decoration: const InputDecoration(labelText: 'Clabe'))),
+                  ],
+                ),
+              ],
+            );
+
+            final Widget col3 = Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _sectionTitle('Datos Empresa'),
+                TextField(controller: empresaCtrl, decoration: const InputDecoration(labelText: 'Empresa')),
+                const SizedBox(height: 12),
+                TextField(controller: areaCtrl, decoration: const InputDecoration(labelText: 'Área')),
+                const SizedBox(height: 12),
+                TextField(controller: puestoCtrl, decoration: const InputDecoration(labelText: 'Puesto')),
+                const SizedBox(height: 12),
+                TextField(controller: ubicacionCtrl, decoration: const InputDecoration(labelText: 'Ubicación')),
+                const SizedBox(height: 12),
+                TextField(controller: jefeCtrl, decoration: const InputDecoration(labelText: 'Jefe Inmediato')),
+                const SizedBox(height: 12),
+                TextField(controller: liderCtrl, decoration: const InputDecoration(labelText: 'Líder')),
+                const SizedBox(height: 12),
+                TextField(controller: gerenteCtrl, decoration: const InputDecoration(labelText: 'Gerente Regional')),
+                const SizedBox(height: 12),
+                TextField(controller: directorCtrl, decoration: const InputDecoration(labelText: 'Director')),
+
+                const SizedBox(height: 24),
+                _sectionTitle('Area RH'),
+                TextField(controller: reclutaCtrl, decoration: const InputDecoration(labelText: 'Recluta')),
+                const SizedBox(height: 12),
+                TextField(controller: reclutadorCtrl, decoration: const InputDecoration(labelText: 'Reclutador')),
+                const SizedBox(height: 12),
+                TextField(controller: fuenteCtrl, decoration: const InputDecoration(labelText: 'Fuente de reclutamiento')),
+                const SizedBox(height: 12),
+                TextField(controller: fuenteEspecCtrl, decoration: const InputDecoration(labelText: 'Fuente espec.')),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: fechaIngresoCtrl,
+                        decoration: const InputDecoration(labelText: 'Fecha Ingreso', suffixIcon: Icon(Icons.calendar_today)),
+                        readOnly: true,
+                        onTap: () async {
+                          final d = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2000), lastDate: DateTime(2101));
+                          if (d != null) setDialogState(() => fechaIngresoCtrl.text = d.toString().split(' ').first);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: fechaReingresoCtrl,
+                        decoration: const InputDecoration(labelText: 'Fecha Reingreso', suffixIcon: Icon(Icons.calendar_today)),
+                        readOnly: true,
+                        onTap: () async {
+                          final d = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2000), lastDate: DateTime(2101));
+                          if (d != null) setDialogState(() => fechaReingresoCtrl.text = d.toString().split(' ').first);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: fechaCambioCtrl,
+                  decoration: const InputDecoration(labelText: 'Fecha Cambio', suffixIcon: Icon(Icons.calendar_today)),
+                  readOnly: true,
+                  onTap: () async {
+                    final d = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2000), lastDate: DateTime(2101));
+                    if (d != null) setDialogState(() => fechaCambioCtrl.text = d.toString().split(' ').first);
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextField(controller: obsCtrl, decoration: const InputDecoration(labelText: 'Observaciones'), maxLines: 2),
+
+                const SizedBox(height: 24),
+                _sectionTitle('Referencia'),
+                TextField(controller: refNombreCtrl, decoration: const InputDecoration(labelText: 'Nombre Referencia')),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(child: TextField(controller: refTelCtrl, decoration: const InputDecoration(labelText: 'Teléfono Ref.'))),
+                    const SizedBox(width: 8),
+                    Expanded(child: TextField(controller: refRelacionCtrl, decoration: const InputDecoration(labelText: 'Relación'))),
+                  ],
+                ),
+                const SizedBox(height: 40),
+              ],
+            );
+
+            return Container(
+              width: double.maxFinite,
+              constraints: BoxConstraints(
+                maxWidth: isDesktop ? 1200 : 500,
+                maxHeight: MediaQuery.of(context).size.height * 0.9,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(left: 24, top: 24, right: 24, bottom: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          isEditing ? 'Editar Colaborador' : 'Nuevo Colaborador',
+                          style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: isDesktop
+                          ? Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(child: col1),
+                                const SizedBox(width: 32),
+                                Expanded(child: col2),
+                                const SizedBox(width: 32),
+                                Expanded(child: col3),
+                              ],
+                            )
+                          : Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                col1,
+                                const SizedBox(height: 24),
+                                const Divider(),
+                                const SizedBox(height: 24),
+                                col2,
+                                const SizedBox(height: 24),
+                                const Divider(),
+                                const SizedBox(height: 24),
+                                col3,
+                              ],
+                            ),
+                      ),
+                    ),
+                  ),
                 Padding(
                   padding: const EdgeInsets.all(24),
                   child: Row(
@@ -688,6 +736,150 @@ class _CssiPageState extends State<CssiPage> {
     );
   }
 
+  Widget _buildMobileLayout(List<Map<String, dynamic>> filtered) {
+    return RefreshIndicator(
+      onRefresh: _fetchItems,
+      child: ListView.separated(
+        padding: const EdgeInsets.all(16),
+        itemCount: filtered.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (context, index) {
+          final item = filtered[index];
+          return Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey[200]!)),
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              leading: CircleAvatar(
+                backgroundColor: const Color(0xFF344092).withOpacity(0.1),
+                backgroundImage: item['foto_url'] != null ? NetworkImage(item['foto_url']) : null,
+                child: item['foto_url'] == null 
+                  ? Text((item['nombre'] ?? '?')[0], style: const TextStyle(color: Color(0xFF344092), fontWeight: FontWeight.bold))
+                  : null,
+              ),
+              title: Text('${item['numero_empleado'] ?? '---'} | ${item['nombre']} ${item['paterno']}', style: const TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: Row(
+                children: [
+                  _buildStatusChip(item['status_rh'] ?? 'ACTIVO', 'RH'),
+                  const SizedBox(width: 8),
+                  _buildStatusChip(item['status_sys'] ?? 'ACTIVO', 'SYS'),
+                ],
+              ),
+              trailing: widget.role == 'admin' 
+                ? PopupMenuButton<String>(
+                    onSelected: (value) {
+                      if (value == 'edit') {
+                        _showForm(item: item);
+                      } else if (value == 'delete') {
+                        _deleteItem(item['id']);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'edit',
+                        child: ListTile(
+                          leading: Icon(Icons.edit),
+                          title: Text('Editar'),
+                          dense: true,
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: ListTile(
+                          leading: Icon(Icons.delete, color: Colors.red),
+                          title: Text('Eliminar', style: TextStyle(color: Colors.red)),
+                          dense: true,
+                        ),
+                      ),
+                    ],
+                  )
+                : null,
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildDesktopLayout(List<Map<String, dynamic>> filtered) {
+    return SingleChildScrollView(
+      child: Container(
+        padding: const EdgeInsets.all(24),
+        width: double.infinity,
+        child: Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey[200]!)),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              headingTextStyle: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF344092)),
+              columns: const [
+                DataColumn(label: Text('Número')),
+                DataColumn(label: Text('Nombre Completo')),
+                DataColumn(label: Text('CURP')),
+                DataColumn(label: Text('RFC')),
+                DataColumn(label: Text('Puesto')),
+                DataColumn(label: Text('Área')),
+                DataColumn(label: Text('RH')),
+                DataColumn(label: Text('SYS')),
+                DataColumn(label: Text('Acciones')),
+              ],
+              rows: filtered.map((item) {
+                return DataRow(
+                  cells: [
+                    DataCell(Text(item['numero_empleado']?.toString() ?? '---')),
+                    DataCell(
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircleAvatar(
+                            radius: 16,
+                            backgroundColor: const Color(0xFF344092).withOpacity(0.1),
+                            backgroundImage: item['foto_url'] != null ? NetworkImage(item['foto_url']) : null,
+                            child: item['foto_url'] == null 
+                              ? Text((item['nombre'] ?? '?')[0], style: const TextStyle(color: Color(0xFF344092), fontWeight: FontWeight.bold, fontSize: 12))
+                              : null,
+                          ),
+                          const SizedBox(width: 8),
+                          Text('${item['nombre']} ${item['paterno']} ${item['materno'] ?? ''}'.trim()),
+                        ],
+                      ),
+                    ),
+                    DataCell(Text(item['curp'] ?? '---')),
+                    DataCell(Text(item['rfc'] ?? '---')),
+                    DataCell(Text(item['puesto'] ?? '---')),
+                    DataCell(Text(item['area'] ?? '---')),
+                    DataCell(_buildStatusChip(item['status_rh'] ?? 'ACTIVO', 'RH')),
+                    DataCell(_buildStatusChip(item['status_sys'] ?? 'ACTIVO', 'SYS')),
+                    DataCell(
+                      widget.role == 'admin'
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.edit, color: Colors.blue, size: 20),
+                                  onPressed: () => _showForm(item: item),
+                                  tooltip: 'Editar',
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                                  onPressed: () => _deleteItem(item['id']),
+                                  tooltip: 'Eliminar',
+                                ),
+                              ],
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                  ],
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -708,33 +900,42 @@ class _CssiPageState extends State<CssiPage> {
           PageHeader(
             title: 'Colaboradores SSI',
             subtitle: 'Total: ${_items.length} colaboradores${filtered.length != _items.length ? ' (mostrando ${filtered.length})' : ''}',
-            trailing: IconButton(
-              icon: const Icon(Icons.download_outlined, color: Colors.white),
-              tooltip: 'Exportar CSV',
-              onPressed: _exportCsv,
-            ),
-            bottom: [
-              TextField(
-                controller: _searchController,
-                decoration: InputDecoration(
-                  hintText: 'Buscar por nombre, CURP, RFC...',
-                  prefixIcon: const Icon(Icons.search),
-                  suffixIcon: _searchQuery.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear),
-                          onPressed: () {
-                            _searchController.clear();
-                            setState(() { _searchQuery = ''; });
-                          },
-                        )
-                      : null,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  filled: true,
-                  fillColor: Colors.white,
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 250,
+                  height: 40,
+                  child: TextField(
+                    controller: _searchController,
+                    decoration: InputDecoration(
+                      hintText: 'Buscar...',
+                      prefixIcon: const Icon(Icons.search, size: 20),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, size: 20),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() { _searchQuery = ''; });
+                              },
+                            )
+                          : null,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                      filled: true,
+                      fillColor: Colors.white,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+                    ),
+                    onChanged: (v) => setState(() => _searchQuery = v),
+                  ),
                 ),
-                onChanged: (v) => setState(() => _searchQuery = v),
-              ),
-            ],
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.download_outlined, color: Colors.white),
+                  tooltip: 'Exportar CSV',
+                  onPressed: _exportCsv,
+                ),
+              ],
+            ),
           ),
           Expanded(
             child: _isLoading
@@ -750,67 +951,14 @@ class _CssiPageState extends State<CssiPage> {
                           ],
                         ),
                       )
-                    : RefreshIndicator(
-                        onRefresh: _fetchItems,
-                        child: ListView.separated(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: filtered.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 12),
-                          itemBuilder: (context, index) {
-                            final item = filtered[index];
-                            return Card(
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey[200]!)),
-                              child: ListTile(
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                                leading: CircleAvatar(
-                                  backgroundColor: const Color(0xFF344092).withOpacity(0.1),
-                                  backgroundImage: item['foto_url'] != null ? NetworkImage(item['foto_url']) : null,
-                                  child: item['foto_url'] == null 
-                                    ? Text(item['nombre'][0], style: const TextStyle(color: Color(0xFF344092), fontWeight: FontWeight.bold))
-                                    : null,
-                                ),
-                                title: Text('${item['numero_empleado'] ?? '---'} | ${item['nombre']} ${item['paterno']}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                                subtitle: Row(
-                                  children: [
-                                    _buildStatusChip(item['status_rh'] ?? 'ACTIVO', 'RH'),
-                                    const SizedBox(width: 8),
-                                    _buildStatusChip(item['status_sys'] ?? 'ACTIVO', 'SYS'),
-                                  ],
-                                ),
-                                trailing: widget.role == 'admin' 
-                                  ? PopupMenuButton<String>(
-                                      onSelected: (value) {
-                                        if (value == 'edit') {
-                                          _showForm(item: item);
-                                        } else if (value == 'delete') {
-                                          _deleteItem(item['id']);
-                                        }
-                                      },
-                                      itemBuilder: (context) => [
-                                        const PopupMenuItem(
-                                          value: 'edit',
-                                          child: ListTile(
-                                            leading: Icon(Icons.edit),
-                                            title: Text('Editar'),
-                                            dense: true,
-                                          ),
-                                        ),
-                                        const PopupMenuItem(
-                                          value: 'delete',
-                                          child: ListTile(
-                                            leading: Icon(Icons.delete, color: Colors.red),
-                                            title: Text('Eliminar', style: TextStyle(color: Colors.red)),
-                                            dense: true,
-                                          ),
-                                        ),
-                                      ],
-                                    )
-                                  : null,
-                              ),
-                            );
-                          },
-                        ),
+                    : LayoutBuilder(
+                        builder: (context, constraints) {
+                          if (constraints.maxWidth > 800) {
+                            return _buildDesktopLayout(filtered);
+                          } else {
+                            return _buildMobileLayout(filtered);
+                          }
+                        },
                       ),
           ),
         ],
