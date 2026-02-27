@@ -857,10 +857,12 @@ class _CssiPageState extends State<CssiPage> {
                     }).toList(),
                   ),
                 ),
-              ),
+              ],
             ),
           ),
         ),
+      ),
+    ),
         if (filtered.isNotEmpty)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
