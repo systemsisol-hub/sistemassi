@@ -784,11 +784,6 @@ class _CssiPageState extends State<CssiPage> {
         child: Card(
           elevation: 0,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey[200]!)),
-        child: Theme(
-          data: theme.copyWith(
-            cardTheme: const CardThemeData(elevation: 0, margin: EdgeInsets.zero),
-            cardColor: Colors.transparent,
-          ),
           child: PaginatedDataTable(
             header: const Text('Directorio de Colaboradores', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             actions: [
@@ -825,16 +820,13 @@ class _CssiPageState extends State<CssiPage> {
             horizontalMargin: 16,
             columnSpacing: 16,
             dataRowMinHeight: 40,
-            dataRowMaxHeight: 56,
-            headingRowHeight: 48,
           ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
-@override
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final filtered = _filteredItems;
