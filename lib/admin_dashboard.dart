@@ -186,110 +186,152 @@ class _AdminDashboardState extends State<AdminDashboard> {
       builder: (context) => Dialog(
         insetPadding: const EdgeInsets.all(16),
         child: StatefulBuilder(
-          builder: (context, setDialogState) => Container(
-            width: double.maxFinite,
-            constraints: const BoxConstraints(maxWidth: 500),
-            child: SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          isGrantingAccess 
-                            ? 'Conceder Acceso' 
-                            : (isEditing 
-                                ? 'Editar ${user['nombre'] ?? ''} ${user['paterno'] ?? ''}' 
-                                : 'Crear Nuevo Usuario'),
-                          style: theme.textTheme.titleLarge,
+          builder: (context, setDialogState) {
+            final isDesktop = MediaQuery.of(context).size.width > 800;
+
+            final Widget generalSection = Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                DropdownButtonFormField<String>(
+                  value: statusSys,
+                  decoration: const InputDecoration(
+                    labelText: 'System Sys',
+                    prefixIcon: Icon(Icons.settings_suggest_outlined),
+                    filled: true,
+                  ),
+                  items: ['ACTIVO', 'BAJA', 'CAMBIO', 'ELIMINAR'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                  onChanged: (val) => setDialogState(() => statusSys = val),
+                ),
+                const SizedBox(height: 24),
+                TextField(
+                  controller: emailController,
+                  decoration: const InputDecoration(labelText: 'Correo Electrónico', prefixIcon: Icon(Icons.email)),
+                  keyboardType: TextInputType.emailAddress,
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: passwordController,
+                  decoration: const InputDecoration(labelText: 'Contraseña (Dejar vacío para no cambiar)', prefixIcon: Icon(Icons.lock)),
+                  obscureText: true,
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: role,
+                  decoration: const InputDecoration(labelText: 'Rol del Sistema', prefixIcon: Icon(Icons.admin_panel_settings)),
+                  isExpanded: true,
+                  items: const [
+                    DropdownMenuItem(value: 'usuario', child: Text('Usuario')),
+                    DropdownMenuItem(value: 'admin', child: Text('Administrador')),
+                  ],
+                  onChanged: (val) => setDialogState(() => role = val!),
+                ),
+                const SizedBox(height: 16),
+                SwitchListTile(
+                  title: const Text('Estado de la Cuenta'),
+                  subtitle: Text(isBlocked ? 'BLOQUEADA' : 'ACTIVA'),
+                  secondary: Icon(isBlocked ? Icons.block : Icons.check_circle, color: isBlocked ? Colors.red : Colors.green),
+                  value: !isBlocked,
+                  onChanged: (val) => setDialogState(() => isBlocked = !val),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ],
+            );
+
+            final Widget permissionsSection = Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('ACCESOS (VISIBILIDAD)', style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
+                const SizedBox(height: 16),
+                _buildPermissionSwitch('Gestión de Usuarios', 'show_users', Icons.group, permissions, setDialogState),
+                _buildPermissionSwitch('Inventario ISSI', 'show_issi', Icons.inventory_2, permissions, setDialogState),
+                _buildPermissionSwitch('Colaboradores CSSI', 'show_cssi', Icons.badge, permissions, setDialogState),
+                _buildPermissionSwitch('Incidencias', 'show_incidencias', Icons.description, permissions, setDialogState),
+                _buildPermissionSwitch('Logs del Sistema', 'show_logs', Icons.assignment, permissions, setDialogState),
+              ],
+            );
+
+            final Widget credentialsSection = Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('CREDENCIALES DE SISTEMAS', style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
+                const SizedBox(height: 16),
+                _buildCredentialRow('DRP', drpUser, drpPass, 'drp', obscureStatus, setDialogState),
+                _buildCredentialRow('GP', gpUser, gpPass, 'gp', obscureStatus, setDialogState),
+                _buildCredentialRow('BITRIX', bitrixUser, bitrixPass, 'bitrix', obscureStatus, setDialogState),
+                _buildCredentialRow('ENKONTROL', ekUser, ekPass, 'ek', obscureStatus, setDialogState),
+                _buildCredentialRow('OTRO', otroUser, otroPass, 'otro', obscureStatus, setDialogState),
+              ],
+            );
+
+            return Container(
+              width: double.maxFinite,
+              constraints: BoxConstraints(maxWidth: isDesktop ? 1200 : 500),
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            isGrantingAccess 
+                              ? 'Conceder Acceso' 
+                              : (isEditing 
+                                  ? 'Editar ${user['nombre'] ?? ''} ${user['paterno'] ?? ''}' 
+                                  : 'Crear Nuevo Usuario'),
+                            style: theme.textTheme.titleLarge,
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: () => Navigator.pop(context),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                      if (isDesktop)
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(child: generalSection),
+                            const SizedBox(width: 32),
+                            Expanded(child: permissionsSection),
+                            const SizedBox(width: 32),
+                            Expanded(child: credentialsSection),
+                          ],
+                        )
+                      else
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            generalSection,
+                            const SizedBox(height: 24),
+                            const Divider(),
+                            const SizedBox(height: 24),
+                            permissionsSection,
+                            const SizedBox(height: 24),
+                            const Divider(),
+                            const SizedBox(height: 24),
+                            credentialsSection,
+                          ],
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.close),
-                          onPressed: () => Navigator.pop(context),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                    DropdownButtonFormField<String>(
-                      value: statusSys,
-                      decoration: const InputDecoration(
-                        labelText: 'System Sys',
-                        prefixIcon: Icon(Icons.settings_suggest_outlined),
-                        filled: true,
-                      ),
-                      items: ['ACTIVO', 'BAJA', 'CAMBIO', 'ELIMINAR'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-                      onChanged: (val) => setDialogState(() => statusSys = val),
-                    ),
-                    const SizedBox(height: 24),
-                    TextField(
-                      controller: emailController,
-                        decoration: const InputDecoration(labelText: 'Correo Electrónico', prefixIcon: Icon(Icons.email)),
-                        keyboardType: TextInputType.emailAddress,
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: passwordController,
-                        decoration: const InputDecoration(labelText: 'Contraseña (Dejar vacío para no cambiar)', prefixIcon: Icon(Icons.lock)),
-                        obscureText: true,
-                      ),
-                      const SizedBox(height: 16),
-                      // Removed link logic as it is now one single table
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      value: role,
-                      decoration: const InputDecoration(labelText: 'Rol del Sistema', prefixIcon: Icon(Icons.admin_panel_settings)),
-                      isExpanded: true,
-                      items: const [
-                        DropdownMenuItem(value: 'usuario', child: Text('Usuario')),
-                        DropdownMenuItem(value: 'admin', child: Text('Administrador')),
-                      ],
-                      onChanged: (val) => setDialogState(() => role = val!),
-                    ),
-                    const SizedBox(height: 16),
-                    SwitchListTile(
-                      title: const Text('Estado de la Cuenta'),
-                      subtitle: Text(isBlocked ? 'BLOQUEADA' : 'ACTIVA'),
-                      secondary: Icon(isBlocked ? Icons.block : Icons.check_circle, color: isBlocked ? Colors.red : Colors.green),
-                      value: !isBlocked,
-                      onChanged: (val) => setDialogState(() => isBlocked = !val),
-                    ),
-                    const SizedBox(height: 24),
-                    const Divider(),
-                    const SizedBox(height: 8),
-                    Text('ACCESOS (VISIBILIDAD)', style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
-                    const SizedBox(height: 16),
-                    _buildPermissionSwitch('Gestión de Usuarios', 'show_users', Icons.group, permissions, setDialogState),
-                    _buildPermissionSwitch('Inventario ISSI', 'show_issi', Icons.inventory_2, permissions, setDialogState),
-                    _buildPermissionSwitch('Colaboradores CSSI', 'show_cssi', Icons.badge, permissions, setDialogState),
-                    _buildPermissionSwitch('Peticiones de Incidencias', 'show_incidencias', Icons.description, permissions, setDialogState),
-                    _buildPermissionSwitch('Logs del Sistema', 'show_logs', Icons.assignment, permissions, setDialogState),
-                    const SizedBox(height: 24),
-                    const Divider(),
-                    const SizedBox(height: 8),
-                    Text('CREDENCIALES DE SISTEMAS', style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
-                    const SizedBox(height: 16),
-                    _buildCredentialRow('DRP', drpUser, drpPass, 'drp', obscureStatus, setDialogState),
-                    _buildCredentialRow('GP', gpUser, gpPass, 'gp', obscureStatus, setDialogState),
-                    _buildCredentialRow('BITRIX', bitrixUser, bitrixPass, 'bitrix', obscureStatus, setDialogState),
-                    _buildCredentialRow('ENKONTROL', ekUser, ekPass, 'ek', obscureStatus, setDialogState),
-                    _buildCredentialRow('OTRO', otroUser, otroPass, 'otro', obscureStatus, setDialogState),
-                    const SizedBox(height: 24),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
+                      const SizedBox(height: 32),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          OutlinedButton(
                             onPressed: () => Navigator.pop(context),
                             child: const Text('CANCELAR'),
                           ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: ElevatedButton(
-                             onPressed: () async {
+                          const SizedBox(width: 16),
+                          ElevatedButton(
+                            onPressed: () async {
                               // Requisitos mínimos solo al CREAR o CONCEDER ACCESO inicial
                               if (!isEditing || isGrantingAccess) {
                                 if (emailController.text.trim().isEmpty || passwordController.text.trim().isEmpty) {
@@ -436,25 +478,25 @@ class _AdminDashboardState extends State<AdminDashboard> {
                             },
                             child: Text(isGrantingAccess ? 'CONCEDER ACCESO' : (isEditing ? 'GUARDAR' : 'CREAR')),
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ),
+            );
+          },
         ),
       ),
     );
   }
 
   Widget _buildPermissionSwitch(String title, String key, IconData icon, Map<String, bool> permissions, StateSetter setDialogState) {
-    return CheckboxListTile(
+    return SwitchListTile(
       title: Text(title, style: const TextStyle(fontSize: 14)),
       secondary: Icon(icon, size: 20),
       value: permissions[key] ?? false,
-      onChanged: (val) => setDialogState(() => permissions[key] = val ?? false),
+      onChanged: (val) => setDialogState(() => permissions[key] = val),
       dense: true,
       contentPadding: EdgeInsets.zero,
     );
