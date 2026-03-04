@@ -596,6 +596,116 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
     );
   }
 
+  Widget _buildMobileList(ThemeData theme) {
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(16),
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemCount: _incidencias.length,
+      itemBuilder: (context, index) {
+        final inc = _incidencias[index];
+        return Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: Colors.grey[200]!),
+          ),
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            title: Text(
+              inc['nombre_usuario'] ?? 'Usuario',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: Text('Días: ${inc['dias']} | Creado: ${_formatDate(inc['created_at'])}'),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: _getStatusColor(inc['status']).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    inc['status'],
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: _getStatusColor(inc['status']),
+                    ),
+                  ),
+                ),
+                if (_userRole == 'admin')
+                  PopupMenuButton<String>(
+                    onSelected: (val) async {
+                      if (val == 'EDIT') {
+                        _showIncidenciaForm(incidencia: inc);
+                      } else {
+                        await Supabase.instance.client.from('incidencias').update({'status': val}).eq('id', inc['id']);
+                        await NotificationService.send(
+                          title: 'Tu incidencia fue $val',
+                          message: 'El estado de tu petición ha cambiado a $val.',
+                          userId: inc['usuario_id'],
+                          type: 'incidencia_status',
+                        );
+                        _fetchIncidencias();
+                      }
+                    },
+                    itemBuilder: (ctx) => [
+                      const PopupMenuItem(value: 'EDIT', child: ListTile(leading: Icon(Icons.edit_outlined), title: Text('Editar'), dense: true)),
+                      const PopupMenuDivider(),
+                      const PopupMenuItem(value: 'APROBADA', child: Text('Aprobar')),
+                      const PopupMenuItem(value: 'CANCELADA', child: Text('Cancelar')),
+                      const PopupMenuItem(value: 'PENDIENTE', child: Text('Pendiente')),
+                    ],
+                  )
+                else if (inc['status'] == 'PENDIENTE')
+                  IconButton(icon: const Icon(Icons.edit_outlined, size: 20), onPressed: () => _showIncidenciaForm(incidencia: inc)),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDesktopTable(ThemeData theme) {
+    return Theme(
+      data: theme.copyWith(cardColor: Colors.transparent),
+      child: PaginatedDataTable(
+        columns: const [
+          DataColumn(label: Text('Funcionario', style: TextStyle(fontWeight: FontWeight.bold))),
+          DataColumn(label: Text('Detalle', style: TextStyle(fontWeight: FontWeight.bold))),
+          DataColumn(label: Text('Estatus', style: TextStyle(fontWeight: FontWeight.bold))),
+        ],
+        source: _IncidenciasDataSource(
+          items: _incidencias,
+          theme: theme,
+          isAdmin: _userRole == 'admin',
+          formatDate: _formatDate,
+          getStatusColor: _getStatusColor,
+          onEdit: (item) => _showIncidenciaForm(incidencia: item),
+          onStatusChange: (item, val) async {
+            await Supabase.instance.client.from('incidencias').update({'status': val}).eq('id', item['id']);
+            await NotificationService.send(
+              title: 'Tu incidencia fue $val',
+              message: 'El estado de tu petición ha cambiado a $val.',
+              userId: item['usuario_id'],
+              type: 'incidencia_status',
+            );
+            _fetchIncidencias();
+          },
+        ),
+        rowsPerPage: _incidencias.isEmpty ? 1 : (_incidencias.length > 10 ? 10 : _incidencias.length),
+        showCheckboxColumn: false,
+        horizontalMargin: 16,
+        columnSpacing: 16,
+        dataRowMinHeight: 48,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -660,75 +770,12 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
               child: Center(
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 1000),
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    padding: const EdgeInsets.all(16),
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
-                    itemCount: _incidencias.length,
-                    itemBuilder: (context, index) {
-                      final inc = _incidencias[index];
-                      return Card(
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          side: BorderSide(color: Colors.grey[200]!),
-                        ),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                          title: Text(
-                            inc['nombre_usuario'] ?? 'Usuario',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          subtitle: Text('Días: ${inc['dias']} | Creado: ${_formatDate(inc['created_at'])}'),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: _getStatusColor(inc['status']).withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  inc['status'],
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                    color: _getStatusColor(inc['status']),
-                                  ),
-                                ),
-                              ),
-                              if (_userRole == 'admin')
-                                PopupMenuButton<String>(
-                                  onSelected: (val) async {
-                                    if (val == 'EDIT') {
-                                      _showIncidenciaForm(incidencia: inc);
-                                    } else {
-                                      await Supabase.instance.client.from('incidencias').update({'status': val}).eq('id', inc['id']);
-                                      await NotificationService.send(
-                                        title: 'Tu incidencia fue $val',
-                                        message: 'El estado de tu petición ha cambiado a $val.',
-                                        userId: inc['usuario_id'],
-                                        type: 'incidencia_status',
-                                      );
-                                      _fetchIncidencias();
-                                    }
-                                  },
-                                  itemBuilder: (ctx) => [
-                                    const PopupMenuItem(value: 'EDIT', child: ListTile(leading: Icon(Icons.edit_outlined), title: Text('Editar'), dense: true)),
-                                    const PopupMenuDivider(),
-                                    const PopupMenuItem(value: 'APROBADA', child: Text('Aprobar')),
-                                    const PopupMenuItem(value: 'CANCELADA', child: Text('Cancelar')),
-                                    const PopupMenuItem(value: 'PENDIENTE', child: Text('Pendiente')),
-                                  ],
-                                )
-                              else if (inc['status'] == 'PENDIENTE')
-                                IconButton(icon: const Icon(Icons.edit_outlined, size: 20), onPressed: () => _showIncidenciaForm(incidencia: inc)),
-                            ],
-                          ),
-                        ),
-                      );
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      if (constraints.maxWidth > 800) {
+                        return _buildDesktopTable(theme);
+                      }
+                      return _buildMobileList(theme);
                     },
                   ),
                 ),
@@ -764,4 +811,93 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
     final d = DateTime.parse(iso);
     return '${d.day}/${d.month}/${d.year}';
   }
+}
+
+class _IncidenciasDataSource extends DataTableSource {
+  final List<Map<String, dynamic>> items;
+  final ThemeData theme;
+  final bool isAdmin;
+  final String Function(String) formatDate;
+  final Color Function(String) getStatusColor;
+  final Function(Map<String, dynamic>) onEdit;
+  final Function(Map<String, dynamic>, String) onStatusChange;
+
+  _IncidenciasDataSource({
+    required this.items,
+    required this.theme,
+    required this.isAdmin,
+    required this.formatDate,
+    required this.getStatusColor,
+    required this.onEdit,
+    required this.onStatusChange,
+  });
+
+  @override
+  DataRow? getRow(int index) {
+    if (index >= items.length) return null;
+    final inc = items[index];
+
+    return DataRow.byIndex(
+      index: index,
+      cells: [
+        DataCell(
+          Text(inc['nombre_usuario'] ?? 'Usuario', style: const TextStyle(fontWeight: FontWeight.bold)),
+        ),
+        DataCell(
+          Text('Días: ${inc['dias']} (${inc['periodo'] ?? ''}) | Creado: ${formatDate(inc['created_at'])}'),
+        ),
+        DataCell(
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: getStatusColor(inc['status']).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  inc['status'],
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: getStatusColor(inc['status']),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              if (isAdmin)
+                PopupMenuButton<String>(
+                  onSelected: (val) {
+                    if (val == 'EDIT') {
+                      onEdit(inc);
+                    } else {
+                      onStatusChange(inc, val);
+                    }
+                  },
+                  itemBuilder: (ctx) => [
+                    const PopupMenuItem(value: 'EDIT', child: ListTile(leading: Icon(Icons.edit_outlined), title: Text('Editar'), dense: true)),
+                    const PopupMenuDivider(),
+                    const PopupMenuItem(value: 'APROBADA', child: Text('Aprobar')),
+                    const PopupMenuItem(value: 'CANCELADA', child: Text('Cancelar')),
+                    const PopupMenuItem(value: 'PENDIENTE', child: Text('Pendiente')),
+                  ],
+                )
+              else if (inc['status'] == 'PENDIENTE')
+                IconButton(icon: const Icon(Icons.edit_outlined, size: 20), onPressed: () => onEdit(inc)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  bool get isRowCountApproximate => false;
+
+  @override
+  int get rowCount => items.length;
+
+  @override
+  int get selectedRowCount => 0;
 }
