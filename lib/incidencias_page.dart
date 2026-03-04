@@ -103,9 +103,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
     return 10; // 31-35+
   }
 
-  void _showVacacionesTable() {
-    final years = _calcYears();
-    final highlightIdx = _getRowIndex(years);
+  Widget _buildLeyesVacacionesTable() {
     final theme = Theme.of(context);
     const rows = [
       ['1 año', '12'],
@@ -120,120 +118,152 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
       ['26 a 30 años', '30'],
       ['31 a 35 años', '32'],
     ];
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.beach_access_outlined, color: theme.colorScheme.secondary),
-            const SizedBox(width: 8),
-            const Text('Días de Vacaciones'),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Table(
-            border: TableBorder.all(color: Colors.grey[300]!, width: 0.8),
-            columnWidths: const {
-              0: FlexColumnWidth(2),
-              1: FlexColumnWidth(1),
-            },
-            children: [
-              // Header
-              TableRow(
-                decoration: BoxDecoration(color: Colors.grey[200]),
-                children: const [
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    child: Text('Antigüedad', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                  ),
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    child: Text('Días', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                  ),
-                ],
+    
+    final years = _calcYears();
+    final highlightIdx = _getRowIndex(years);
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey[300]!),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      clipBehavior: Clip.hardEdge,
+      child: Table(
+        columnWidths: const {
+          0: FlexColumnWidth(2),
+          1: FlexColumnWidth(1),
+        },
+        children: [
+          // Header
+          TableRow(
+            decoration: BoxDecoration(color: Colors.grey[200]),
+            children: const [
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Text('Antigüedad', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
               ),
-              // Data rows
-              for (var i = 0; i < rows.length; i++)
-                TableRow(
-                  decoration: BoxDecoration(
-                    color: i == highlightIdx
-                        ? theme.colorScheme.secondary.withOpacity(0.18)
-                        : (i.isEven ? Colors.white : Colors.grey[50]),
-                  ),
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      child: Text(
-                        rows[i][0],
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: i == highlightIdx ? FontWeight.bold : FontWeight.normal,
-                          color: i == highlightIdx ? theme.colorScheme.secondary : null,
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      child: Text(
-                        rows[i][1],
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: i == highlightIdx ? FontWeight.bold : FontWeight.normal,
-                          color: i == highlightIdx ? theme.colorScheme.secondary : null,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Text('Días', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              ),
             ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cerrar'),
-          ),
+          // Data rows
+          for (var i = 0; i < rows.length; i++)
+            TableRow(
+              decoration: BoxDecoration(
+                color: i == highlightIdx
+                    ? theme.colorScheme.secondary.withOpacity(0.18)
+                    : (i.isEven ? Colors.white : Colors.grey[50]),
+              ),
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Text(
+                    rows[i][0],
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: i == highlightIdx ? FontWeight.bold : FontWeight.normal,
+                      color: i == highlightIdx ? theme.colorScheme.secondary : null,
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Text(
+                    rows[i][1],
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: i == highlightIdx ? FontWeight.bold : FontWeight.normal,
+                      color: i == highlightIdx ? theme.colorScheme.secondary : null,
+                    ),
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
     );
   }
 
-  /// Tarjeta de antigüedad
-  Widget _buildAntiguedadCard() {
+  /// Tarjeta de antigüedad (Contenido interno)
+  Widget _buildAntiguedadCardContent({required ThemeData theme, required String label, required String dateStr, bool isDesktop = false}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.secondary.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: theme.colorScheme.secondary.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.workspace_premium_outlined, color: theme.colorScheme.secondary, size: 28),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                Text(_calcAntiguedad(),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: theme.colorScheme.secondary)),
+                Text('Desde: $dateStr', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+              ],
+            ),
+          ),
+          if (!isDesktop) Icon(Icons.expand_more, color: theme.colorScheme.secondary.withOpacity(0.6)),
+        ],
+      ),
+    );
+  }
+
+  /// Antigüedad para Móvil (Hamburguesa/ExpansionTile)
+  Widget _buildAntiguedadMobile() {
     final base = _fechaReingreso ?? _fechaIngreso;
     if (base == null) return const SizedBox.shrink();
     final theme = Theme.of(context);
     final label = _fechaReingreso != null ? 'Antigüedad (Reingreso)' : 'Antigüedad';
     final dateStr = '${base.day.toString().padLeft(2, '0')}/${base.month.toString().padLeft(2, '0')}/${base.year}';
-    return GestureDetector(
-      onTap: _showVacacionesTable,
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.secondary.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: theme.colorScheme.secondary.withOpacity(0.3)),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.workspace_premium_outlined, color: theme.colorScheme.secondary, size: 28),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                  Text(_calcAntiguedad(),
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: theme.colorScheme.secondary)),
-                  Text('Desde: $dateStr', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                ],
-              ),
-            ),
-            Icon(Icons.chevron_right, color: theme.colorScheme.secondary.withOpacity(0.6)),
-          ],
+    
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Card(
+        elevation: 0,
+        color: Colors.transparent,
+        margin: EdgeInsets.zero,
+        clipBehavior: Clip.hardEdge,
+        child: Theme(
+          data: theme.copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: _buildAntiguedadCardContent(theme: theme, label: label, dateStr: dateStr, isDesktop: false),
+            iconColor: Colors.transparent,
+            collapsedIconColor: Colors.transparent,
+            trailing: const SizedBox.shrink(), // Ocultamos el icono nativo
+            children: [
+              const SizedBox(height: 8),
+              _buildLeyesVacacionesTable(),
+            ],
+          ),
         ),
       ),
+    );
+  }
+
+  /// Antigüedad para Escritorio (Inline)
+  Widget _buildAntiguedadDesktop() {
+    final base = _fechaReingreso ?? _fechaIngreso;
+    if (base == null) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    final label = _fechaReingreso != null ? 'Antigüedad (Reingreso)' : 'Antigüedad';
+    final dateStr = '${base.day.toString().padLeft(2, '0')}/${base.month.toString().padLeft(2, '0')}/${base.year}';
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildAntiguedadCardContent(theme: theme, label: label, dateStr: dateStr, isDesktop: true),
+        const SizedBox(height: 12),
+        _buildLeyesVacacionesTable(),
+      ],
     );
   }
 
@@ -288,7 +318,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
     if (tableRows.isEmpty) return const SizedBox.shrink();
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      margin: const EdgeInsets.only(top: 12),
       decoration: BoxDecoration(
         border: Border.all(color: Colors.grey[300]!),
         borderRadius: BorderRadius.circular(12),
@@ -777,13 +807,22 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
-                          flex: 1,
-                          child: _buildAntiguedadCard(),
+                          flex: 2,
+                          child: _buildAntiguedadDesktop(),
                         ),
-                        const SizedBox(width: 24),
+                        const SizedBox(width: 16),
                         Expanded(
-                          flex: 1,
+                          flex: 2,
                           child: _buildHistorialVacaciones(),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          flex: 5,
+                          child: _isLoading
+                              ? const Center(child: CircularProgressIndicator())
+                              : _incidencias.isEmpty
+                                  ? const Center(child: Padding(padding: EdgeInsets.all(40), child: Text('Sin incidencias registradas')))
+                                  : _buildDesktopTable(theme),
                         ),
                       ],
                     ),
@@ -795,8 +834,17 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                     constraints: const BoxConstraints(maxWidth: 1000),
                     child: Column(
                       children: [
-                        _buildAntiguedadCard(),
-                        _buildHistorialVacaciones(),
+                        _buildAntiguedadMobile(),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: _buildHistorialVacaciones(),
+                        ),
+                        if (_isLoading)
+                          const Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator())
+                        else if (_incidencias.isEmpty)
+                          const Padding(padding: EdgeInsets.all(40), child: Text('Sin incidencias registradas'))
+                        else
+                          _buildMobileList(theme),
                       ],
                     ),
                   ),
@@ -804,30 +852,6 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
               },
             ),
           ),
-          if (_isLoading)
-            const SliverFillRemaining(child: Center(child: CircularProgressIndicator()))
-          else if (_incidencias.isEmpty)
-            const SliverFillRemaining(child: Center(child: Text('Sin incidencias registradas')))
-          else
-            SliverToBoxAdapter(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final isDesktop = constraints.maxWidth > 800;
-                  if (isDesktop) {
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                      child: _buildDesktopTable(theme),
-                    );
-                  }
-                  return Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 1000),
-                      child: _buildMobileList(theme),
-                    ),
-                  );
-                },
-              ),
-            ),
           const SliverToBoxAdapter(child: SizedBox(height: 80)), // FAB clearance
         ],
       ),
