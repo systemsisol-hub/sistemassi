@@ -947,7 +947,116 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
     );
   }
 
+  /// Admin-only: shows all PENDIENTE records from all users.
+  Widget _buildPendingTable(ThemeData theme) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.orange.withOpacity(0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            child: Row(
+              children: [
+                Icon(Icons.pending_actions, color: Colors.orange[700], size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Solicitudes Pendientes (${_allIncidencias.length})',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          if (_allIncidencias.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(32),
+              child: Center(
+                child: Text('Sin solicitudes pendientes', style: TextStyle(color: Colors.grey)),
+              ),
+            )
+          else
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                headingRowColor: WidgetStateProperty.all(Colors.orange.withOpacity(0.07)),
+                columnSpacing: 20,
+                horizontalMargin: 16,
+                dataRowMinHeight: 40,
+                dataRowMaxHeight: 48,
+                columns: const [
+                  DataColumn(label: Text('Nombre', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Periodo', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Días', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Fecha Inicio', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Fecha Final', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Fecha Regreso', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Estatus', style: TextStyle(fontWeight: FontWeight.bold))),
+                ],
+                rows: _allIncidencias.map((inc) {
+                  final profile = inc['profiles'] as Map<String, dynamic>? ?? {};
+                  final nombre = '${profile['nombre'] ?? ''} ${profile['paterno'] ?? ''}'.trim();
+                  return DataRow(cells: [
+                    DataCell(Text(nombre.isEmpty ? inc['usuario_id']?.toString().substring(0, 8) ?? '---' : nombre)),
+                    DataCell(Text(inc['periodo']?.toString() ?? '---')),
+                    DataCell(Text(inc['dias']?.toString() ?? '---')),
+                    DataCell(Text(inc['fecha_inicio'] != null ? _formatDate(inc['fecha_inicio']) : '---')),
+                    DataCell(Text(inc['fecha_fin'] != null ? _formatDate(inc['fecha_fin']) : '---')),
+                    DataCell(Text(inc['fecha_regreso'] != null ? _formatDate(inc['fecha_regreso']) : '---')),
+                    DataCell(
+                      PopupMenuButton<String>(
+                        tooltip: 'Cambiar estatus',
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: Colors.orange.withOpacity(0.4), width: 0.8),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text('PENDIENTE',
+                                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.orange[800])),
+                              const SizedBox(width: 4),
+                              Icon(Icons.arrow_drop_down, size: 14, color: Colors.orange[800]),
+                            ],
+                          ),
+                        ),
+                        onSelected: (val) async {
+                          await Supabase.instance.client
+                              .from('incidencias')
+                              .update({'status': val})
+                              .eq('id', inc['id']);
+                          await NotificationService.send(
+                            title: 'Tu incidencia fue $val',
+                            message: 'El estado de tu petición ha cambiado a $val.',
+                            userId: inc['usuario_id'],
+                            type: 'incidencia_status',
+                          );
+                          _fetchIncidencias();
+                        },
+                        itemBuilder: (_) => const [
+                          PopupMenuItem(value: 'APROBADA', child: Text('APROBADA')),
+                          PopupMenuItem(value: 'RECHAZADA', child: Text('RECHAZADA')),
+                        ],
+                      ),
+                    ),
+                  ]);
+                }).toList(),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDesktopTable(ThemeData theme) {
+
 
     return SizedBox(
       width: double.infinity,
@@ -1079,6 +1188,11 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        // Admin-only pending table at top
+                        if (_userRole == 'admin') ...[
+                          _buildPendingTable(theme),
+                          const SizedBox(height: 24),
+                        ],
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -1100,10 +1214,6 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                             ),
                           ],
                         ),
-                        if (_userRole == 'admin') ...[
-                          const SizedBox(height: 24),
-                          _buildPendingTable(theme),
-                        ],
                       ],
                     ),
                   );
