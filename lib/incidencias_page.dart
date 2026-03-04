@@ -18,6 +18,9 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
   DateTime? _fechaIngreso;
   DateTime? _fechaReingreso;
 
+  List<Map<String, dynamic>> _adminUserList = [];
+  String? _selectedUserId;
+
   @override
   void initState() {
     super.initState();
@@ -51,13 +54,58 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
             _fechaReingreso = profile['fecha_reingreso'] != null
                 ? DateTime.tryParse(profile['fecha_reingreso'])
                 : null;
+            _selectedUserId = user.id;
           });
+          
+          if (_userRole == 'admin') {
+            await _fetchAdminUserList();
+          }
         }
       }
       _fetchIncidencias();
     } catch (e) {
       debugPrint('Error fetching profile: $e');
     }
+  }
+
+  Future<void> _fetchAdminUserList() async {
+    try {
+      final response = await Supabase.instance.client
+          .from('profiles')
+          .select('id, nombre, paterno, materno, role, fecha_ingreso, fecha_reingreso')
+          .order('nombre', ascending: true);
+      
+      if (mounted) {
+        setState(() {
+          _adminUserList = List<Map<String, dynamic>>.from(response);
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching user list: $e');
+    }
+  }
+
+  void _onUserSelected(String? newUserId) {
+    if (newUserId == null || newUserId == _selectedUserId) return;
+    
+    final selectedProfile = _adminUserList.firstWhere((p) => p['id'] == newUserId, orElse: () => {});
+    if (selectedProfile.isEmpty) return;
+
+    setState(() {
+      _selectedUserId = newUserId;
+      _userFullName = (selectedProfile['nombre'] != null)
+          ? '${selectedProfile['nombre']} ${selectedProfile['paterno']} ${selectedProfile['materno'] ?? ''}'.trim()
+          : 'Usuario';
+      _fechaIngreso = selectedProfile['fecha_ingreso'] != null
+          ? DateTime.tryParse(selectedProfile['fecha_ingreso'])
+          : null;
+      _fechaReingreso = selectedProfile['fecha_reingreso'] != null
+          ? DateTime.tryParse(selectedProfile['fecha_reingreso'])
+          : null;
+      _isLoading = true; // Show loading while fetching their incidencias
+    });
+    
+    _fetchIncidencias();
   }
 
   /// Calcula la antigüedad a partir de la fecha efectiva (reingreso si existe, sino ingreso)
@@ -216,10 +264,34 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
     );
   }
 
+  Widget _buildMissingDateFallback({bool isDesktop = false}) {
+    return Container(
+      margin: !isDesktop ? const EdgeInsets.fromLTRB(16, 12, 16, 4) : EdgeInsets.zero,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.orange.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.orange.withOpacity(0.3)),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.info_outline, color: Colors.orange, size: 28),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Fecha de ingreso no registrada. Contacta a un administrador para configurar tu perfil.',
+              style: TextStyle(fontSize: 13, color: Colors.orange),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Antigüedad para Móvil (Hamburguesa/ExpansionTile)
   Widget _buildAntiguedadMobile() {
     final base = _fechaReingreso ?? _fechaIngreso;
-    if (base == null) return const SizedBox.shrink();
+    if (base == null) return _buildMissingDateFallback(isDesktop: false);
     final theme = Theme.of(context);
     final label = _fechaReingreso != null ? 'Antigüedad (Reingreso)' : 'Antigüedad';
     final dateStr = '${base.day.toString().padLeft(2, '0')}/${base.month.toString().padLeft(2, '0')}/${base.year}';
@@ -252,7 +324,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
   /// Antigüedad para Escritorio (Inline)
   Widget _buildAntiguedadDesktop() {
     final base = _fechaReingreso ?? _fechaIngreso;
-    if (base == null) return const SizedBox.shrink();
+    if (base == null) return _buildMissingDateFallback(isDesktop: true);
     final theme = Theme.of(context);
     final label = _fechaReingreso != null ? 'Antigüedad (Reingreso)' : 'Antigüedad';
     final dateStr = '${base.day.toString().padLeft(2, '0')}/${base.month.toString().padLeft(2, '0')}/${base.year}';
@@ -285,19 +357,19 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
   /// Tabla de historial de vacaciones por periodo
   Widget _buildHistorialVacaciones() {
     final base = _fechaReingreso ?? _fechaIngreso;
-    if (base == null) return const SizedBox.shrink();
+    if (base == null) return const SizedBox.shrink(); // Fallback UI already handled in Antiguedad logic
 
     final now = DateTime.now();
     final theme = Theme.of(context);
     final completedYears = _calcYears();
 
     // Map to accumulate requested days per period
-    final String currentUserId = Supabase.instance.client.auth.currentUser?.id ?? '';
+    final String targetUserId = _selectedUserId ?? '';
     String normalizePeriod(String? p) => (p ?? '').replaceAll(RegExp(r'\D'), '');
     
     final usedDaysMap = <String, int>{};
     for (final inc in _incidencias) {
-      if (inc['usuario_id'] == currentUserId && inc['status'] != 'CANCELADA') {
+      if (inc['usuario_id'] == targetUserId && inc['status'] != 'CANCELADA') {
         final normP = normalizePeriod(inc['periodo'] as String?);
         final dias = inc['dias'] as int? ?? 0;
         usedDaysMap[normP] = (usedDaysMap[normP] ?? 0) + dias;
@@ -442,6 +514,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
       final response = await Supabase.instance.client
           .from('incidencias')
           .select()
+          .eq('usuario_id', _selectedUserId ?? Supabase.instance.client.auth.currentUser!.id)
           .order('created_at', ascending: false);
       
       if (mounted) {
@@ -823,8 +896,40 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
         slivers: [
           // Header
           SliverToBoxAdapter(
-            child: PageHeader(
-              title: 'Incidencias y Peticiones',
+            child: Row(
+              children: [
+                const Expanded(
+                  child: PageHeader(
+                    title: 'Incidencias y Peticiones',
+                  ),
+                ),
+                if (_userRole == 'admin' && _adminUserList.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 24.0, top: 16.0),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey[300]!),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _selectedUserId,
+                          icon: Icon(Icons.keyboard_arrow_down, color: theme.colorScheme.secondary),
+                          items: _adminUserList.map((user) {
+                            final name = '${user['nombre']} ${user['paterno']} ${user['materno'] ?? ''}'.trim();
+                            return DropdownMenuItem(
+                              value: user['id'] as String,
+                              child: Text(name.isEmpty ? 'Usuario' : name, style: const TextStyle(fontSize: 14)),
+                            );
+                          }).toList(),
+                          onChanged: _onUserSelected,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
           // Main content (Responsive layout)
