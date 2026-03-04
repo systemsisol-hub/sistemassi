@@ -400,17 +400,23 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
       }
     }
 
-    // Helper: proportional days for the current in-progress period
+    // Formula: (días_ley / 365) × días_laborados
     int _calcProporcional(int y, int days, DateTime anniversary) {
-      if (anniversary.isAfter(now)) return days; // future — show full entitlement
-      // Check if anniversary for this period has passed to get the NEXT anniversary
-      final nextAnniversary = DateTime(base.year + y + 1, base.month, base.day);
-      if (nextAnniversary.isBefore(now)) return days; // past — full days earned
-      // Current period: proportion = days * elapsed / total period length
-      final periodStart = anniversary;
-      final totalDays = nextAnniversary.difference(periodStart).inDays;
-      final elapsed = now.difference(periodStart).inDays;
-      return ((days * elapsed) / totalDays).floor();
+      int diasLaborados;
+      if (anniversary.isAfter(now)) {
+        // Future period not yet started → show full entitlement (365 days)
+        diasLaborados = 365;
+      } else {
+        final nextAnniversary = DateTime(base.year + y + 1, base.month, base.day);
+        if (nextAnniversary.isBefore(now)) {
+          // Past completed period → full year
+          diasLaborados = 365;
+        } else {
+          // Current in-progress period → days elapsed since anniversary
+          diasLaborados = now.difference(anniversary).inDays;
+        }
+      }
+      return ((days / 365) * diasLaborados).floor();
     }
 
     final tableRows = <Map<String, dynamic>>[];
