@@ -462,7 +462,6 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
     }
 
     return Container(
-      margin: const EdgeInsets.only(top: 12),
       decoration: BoxDecoration(
         border: Border.all(color: Colors.grey[300]!),
         borderRadius: BorderRadius.circular(12),
