@@ -738,11 +738,11 @@ class _IssiPageState extends State<IssiPage> {
                 ),
                 child: PaginatedDataTable(
                   columns: const [
-                    DataColumn(label: Text('Tipo', style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(label: Text('Marca/Modelo', style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(label: Text('Ubicación', style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(label: Text('N/S', style: TextStyle(fontWeight: FontWeight.bold))),
                     DataColumn(label: Text('Usuario', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Ubicación', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Tipo', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Marca', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Serie', style: TextStyle(fontWeight: FontWeight.bold))),
                     DataColumn(label: Text('Condición', style: TextStyle(fontWeight: FontWeight.bold))),
                     DataColumn(label: Text('Acciones', style: TextStyle(fontWeight: FontWeight.bold))),
                   ],
@@ -984,6 +984,8 @@ class _IssiDataSource extends DataTableSource {
     return DataRow.byIndex(
       index: index,
       cells: [
+        DataCell(Text(item['usuario_nombre']?.toString() ?? '---')),
+        DataCell(Text(item['ubicacion']?.toString() ?? '---')),
         DataCell(
           Row(
             mainAxisSize: MainAxisSize.min,
@@ -994,10 +996,8 @@ class _IssiDataSource extends DataTableSource {
             ],
           ),
         ),
-        DataCell(Text('${item['marca'] ?? ''} ${item['modelo'] ?? ''}'.trim())),
-        DataCell(Text(item['ubicacion']?.toString() ?? '---')),
+        DataCell(Text(item['marca']?.toString() ?? '---')),
         DataCell(Text(item['n_s']?.toString() ?? '---')),
-        DataCell(Text(item['usuario_nombre']?.toString() ?? '---')),
         DataCell(buildConditionChip(item['condicion']?.toString() ?? '')),
         DataCell(
           isAdmin
