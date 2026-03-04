@@ -35,6 +35,7 @@ class _SocialPageState extends State<SocialPage> {
           .select('nombre, paterno, materno, fecha_nacimiento, foto_url, ubicacion')
           .not('fecha_nacimiento', 'is', null)
           .neq('status_rh', 'BAJA')
+          .eq('status_sys', 'ACTIVO')
           .order('nombre');
 
       if (mounted) {
