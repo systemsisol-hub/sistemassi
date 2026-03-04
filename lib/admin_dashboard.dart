@@ -40,12 +40,27 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   Future<void> _fetchCollaborators() async {
     try {
-      final data = await Supabase.instance.client
-          .from('profiles')
-          .select('id, nombre, paterno, materno, numero_empleado, status_sys')
-          .not('nombre', 'is', null)
-          .order('nombre');
-      setState(() => _collaborators = List<Map<String, dynamic>>.from(data));
+      List<Map<String, dynamic>> allData = [];
+      int offset = 0;
+      const int limit = 1000;
+      
+      while (true) {
+        final data = await Supabase.instance.client
+            .from('profiles')
+            .select('id, nombre, paterno, materno, numero_empleado, status_sys')
+            .not('nombre', 'is', null)
+            .order('nombre')
+            .range(offset, offset + limit - 1);
+            
+        allData.addAll(List<Map<String, dynamic>>.from(data));
+        
+        if (data.length < limit) break;
+        offset += limit;
+      }
+      
+      if (mounted) {
+        setState(() => _collaborators = allData);
+      }
     } catch (e) {
       debugPrint('Error fetching collaborators: $e');
     }
@@ -54,11 +69,26 @@ class _AdminDashboardState extends State<AdminDashboard> {
   Future<void> _fetchUsers() async {
     setState(() => _isLoading = true);
     try {
-      final data = await Supabase.instance.client
-          .from('profiles')
-          .select('*')
-          .order('created_at', ascending: false);
-      setState(() => _users = List<Map<String, dynamic>>.from(data));
+      List<Map<String, dynamic>> allData = [];
+      int offset = 0;
+      const int limit = 1000;
+      
+      while (true) {
+        final data = await Supabase.instance.client
+            .from('profiles')
+            .select('*')
+            .order('created_at', ascending: false)
+            .range(offset, offset + limit - 1);
+            
+        allData.addAll(List<Map<String, dynamic>>.from(data));
+        
+        if (data.length < limit) break;
+        offset += limit;
+      }
+      
+      if (mounted) {
+        setState(() => _users = allData);
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -66,7 +96,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
         );
       }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
