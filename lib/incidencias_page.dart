@@ -515,23 +515,13 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
   Future<void> _fetchIncidencias() async {
     setState(() => _isLoading = true);
     try {
+      // Fetch incidencias for the selected (or current) user
       final response = await Supabase.instance.client
           .from('incidencias')
           .select()
           .eq('usuario_id', _selectedUserId ?? Supabase.instance.client.auth.currentUser!.id)
           .order('created_at', ascending: false);
 
-      // For admin view: fetch ALL pending incidencias with profile data
-      List<Map<String, dynamic>> allPendingData = [];
-      if (_userRole == 'admin') {
-        final pendingResp = await Supabase.instance.client
-            .from('incidencias')
-            .select('*, profiles(nombre, paterno)')
-            .eq('status', 'PENDIENTE')
-            .order('created_at', ascending: false);
-        allPendingData = List<Map<String, dynamic>>.from(pendingResp);
-      }
-      
       if (mounted) {
         setState(() {
           _incidencias = List<Map<String, dynamic>>.from(response)
@@ -542,7 +532,6 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
               if (aOrder != bOrder) return aOrder.compareTo(bOrder);
               return (b['created_at'] as String).compareTo(a['created_at'] as String);
             });
-          _allIncidencias = allPendingData;
           _isLoading = false;
         });
       }
@@ -550,7 +539,35 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
       debugPrint('Error fetching incidencias: $e');
       if (mounted) setState(() => _isLoading = false);
     }
+
+    // Separately fetch ALL pending incidencias for admin view (independent query)
+    if (_userRole == 'admin') {
+      try {
+        final pendingResp = await Supabase.instance.client
+            .from('incidencias')
+            .select()
+            .eq('status', 'PENDIENTE')
+            .order('created_at', ascending: false);
+
+        final pending = List<Map<String, dynamic>>.from(pendingResp);
+
+        // Enrich with profile names from the already-loaded _adminUserList
+        for (final inc in pending) {
+          final uid = inc['usuario_id'] as String?;
+          final profile = _adminUserList.firstWhere(
+            (u) => u['id'] == uid,
+            orElse: () => {},
+          );
+          inc['profiles'] = profile.isNotEmpty ? profile : null;
+        }
+
+        if (mounted) setState(() => _allIncidencias = pending);
+      } catch (e) {
+        debugPrint('Error fetching pending incidencias: $e');
+      }
+    }
   }
+
 
   void _showIncidenciaForm({Map<String, dynamic>? incidencia}) {
     final isEditing = incidencia != null;
