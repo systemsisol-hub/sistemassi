@@ -31,14 +31,27 @@ class _CssiPageState extends State<CssiPage> {
   Future<void> _fetchItems() async {
     setState(() => _isLoading = true);
     try {
-      final data = await Supabase.instance.client
-          .from('profiles')
-          .select()
-          .or('nombre.not.is.null,full_name.not.is.null')
-          .order('created_at', ascending: false);
+      List<Map<String, dynamic>> allData = [];
+      int offset = 0;
+      const int limit = 1000;
+      
+      while (true) {
+        final data = await Supabase.instance.client
+            .from('profiles')
+            .select()
+            .or('nombre.not.is.null,full_name.not.is.null')
+            .order('created_at', ascending: false)
+            .range(offset, offset + limit - 1);
+            
+        allData.addAll(List<Map<String, dynamic>>.from(data));
+        
+        if (data.length < limit) break;
+        offset += limit;
+      }
+
       if (mounted) {
         setState(() {
-          _items = List<Map<String, dynamic>>.from(data);
+          _items = allData;
           _isLoading = false;
         });
       }

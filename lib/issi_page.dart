@@ -62,13 +62,25 @@ class _IssiPageState extends State<IssiPage> {
 
   Future<void> _fetchUsuarios() async {
     try {
-      final data = await Supabase.instance.client
-          .from('profiles')
-          .select('id, full_name')
-          .order('full_name');
+      List<Map<String, dynamic>> allUsuarios = [];
+      int offset = 0;
+      const int limit = 1000;
+      
+      while (true) {
+        final data = await Supabase.instance.client
+            .from('profiles')
+            .select('id, full_name')
+            .order('full_name')
+            .range(offset, offset + limit - 1);
+            
+        allUsuarios.addAll(List<Map<String, dynamic>>.from(data));
+        
+        if (data.length < limit) break;
+        offset += limit;
+      }
       if (mounted) {
         setState(() {
-          _usuarios = List<Map<String, dynamic>>.from(data);
+          _usuarios = allUsuarios;
         });
       }
     } catch (e) {
@@ -79,14 +91,29 @@ class _IssiPageState extends State<IssiPage> {
   Future<void> _fetchItems() async {
     setState(() => _isLoading = true);
     try {
-      final data = await Supabase.instance.client
-          .from('issi_inventory')
-          .select()
-          .order('created_at', ascending: false);
-      setState(() {
-        _items = List<Map<String, dynamic>>.from(data);
-        _isLoading = false;
-      });
+      List<Map<String, dynamic>> allData = [];
+      int offset = 0;
+      const int limit = 1000;
+      
+      while (true) {
+        final data = await Supabase.instance.client
+            .from('issi_inventory')
+            .select()
+            .order('created_at', ascending: false)
+            .range(offset, offset + limit - 1);
+            
+        allData.addAll(List<Map<String, dynamic>>.from(data));
+        
+        if (data.length < limit) break;
+        offset += limit;
+      }
+      
+      if (mounted) {
+        setState(() {
+          _items = allData;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
       debugPrint('Error fetching items: $e');
       if (mounted) {
