@@ -500,12 +500,13 @@ class _IssiPageState extends State<IssiPage> {
                   ],
                 ),
               ),
-            );
-          },
-        ),
+            ),
+          );
+        },
       ),
-    );
-  }
+    ),
+  );
+}
 
   List<Map<String, dynamic>> get _filteredItems {
     var result = _items;
