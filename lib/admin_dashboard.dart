@@ -370,7 +370,57 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.only(left: 24, bottom: 24, right: 24, top: 8),
+                    padding: const EdgeInsets.only(left: 24, bottom: 8, right: 24, top: 4),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: isGrantingAccess
+                            ? Colors.green.withOpacity(0.08)
+                            : (isEditing
+                                ? Colors.blue.withOpacity(0.08)
+                                : Colors.orange.withOpacity(0.08)),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isGrantingAccess
+                              ? Colors.green.withOpacity(0.3)
+                              : (isEditing
+                                  ? Colors.blue.withOpacity(0.3)
+                                  : Colors.orange.withOpacity(0.3)),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            isGrantingAccess
+                                ? Icons.key_rounded
+                                : (isEditing ? Icons.edit_rounded : Icons.person_add_rounded),
+                            size: 18,
+                            color: isGrantingAccess
+                                ? Colors.green
+                                : (isEditing ? Colors.blue : Colors.orange),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              isGrantingAccess
+                                  ? 'Se creará una cuenta de acceso al sistema para este colaborador.'
+                                  : (isEditing
+                                      ? 'Se actualizarán los datos y permisos del usuario.'
+                                      : 'Se creará un nuevo usuario con acceso al sistema.'),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isGrantingAccess
+                                    ? Colors.green.shade700
+                                    : (isEditing ? Colors.blue.shade700 : Colors.orange.shade700),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 24, bottom: 24, right: 24, top: 4),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
