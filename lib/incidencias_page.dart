@@ -400,40 +400,38 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
       }
     }
 
-    // Formula: (días_ley / 365) × días_laborados
-    int _calcProporcional(int y, int days, DateTime anniversary) {
-      int diasLaborados;
-      if (anniversary.isAfter(now)) {
-        // Future period not yet started → show full entitlement (365 days)
-        diasLaborados = 365;
+    // Fórmula: (días_ley / 365) × (fecha_actual − inicio_periodo + 1)
+    // periodEnd = anniversary date (when year y completes)
+    // periodStart = one year before = DateTime(base.year + y - 1, ...)
+    double _calcProporcionalDouble(int days, DateTime periodStart, DateTime periodEnd) {
+      if (periodStart.isAfter(now)) {
+        // Future period: show full entitlement
+        return days.toDouble();
+      } else if (periodEnd.isBefore(now) || periodEnd.isAtSameMomentAs(now)) {
+        // Past completed period: 365 elapsed
+        return (days / 365) * 365;
       } else {
-        final nextAnniversary = DateTime(base.year + y + 1, base.month, base.day);
-        if (nextAnniversary.isBefore(now)) {
-          // Past completed period → full year
-          diasLaborados = 365;
-        } else {
-          // Current in-progress period → days elapsed since anniversary
-          diasLaborados = now.difference(anniversary).inDays;
-        }
+        // Current in-progress: (fecha_actual - inicio_periodo + 1)
+        final elapsed = now.difference(periodStart).inDays + 1;
+        return (days / 365) * elapsed;
       }
-      return ((days / 365) * diasLaborados).floor();
     }
 
     final tableRows = <Map<String, dynamic>>[];
     for (int y = 1; y <= completedYears + 1; y++) {
-      final anniversary = DateTime(base.year + y, base.month, base.day);
-      final periodStart = anniversary.year - 1;
-      final periodLabel = '$periodStart - ${anniversary.year}';
+      final periodEnd   = DateTime(base.year + y,     base.month, base.day); // anniversary end
+      final periodStart = DateTime(base.year + y - 1, base.month, base.day); // anniversary start
+      final periodLabel = '${periodStart.year} - ${periodEnd.year}';
       final normLabel = normalizePeriod(periodLabel);
 
-      final int days = periodStart >= 2023
+      final int days = periodStart.year >= 2023
           ? _getDaysByYears(y)
           : (6 + (y - 1) * 2).clamp(0, 14);
 
       final isCurrent = y == completedYears;
-      final isUpcoming = anniversary.isAfter(now);
+      final isUpcoming = periodEnd.isAfter(now) && periodStart.isAfter(now);
       final daysRequested = usedDaysMap[normLabel] ?? 0;
-      final proporcional = _calcProporcional(y - 1, days, anniversary);
+      final proporcional = _calcProporcionalDouble(days, periodStart, periodEnd);
       final saldo = proporcional - daysRequested;
 
       tableRows.add({
@@ -450,9 +448,9 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
     if (tableRows.isEmpty) return const SizedBox.shrink();
 
     // Grand totals
-    final totalProp  = tableRows.fold<int>(0, (s, r) => s + (r['proporcional'] as int));
+    final totalProp  = tableRows.fold<double>(0, (s, r) => s + (r['proporcional'] as double));
     final totalReq   = tableRows.fold<int>(0, (s, r) => s + (r['requested'] as int));
-    final totalSaldo = tableRows.fold<int>(0, (s, r) => s + (r['saldo'] as int));
+    final totalSaldo = tableRows.fold<double>(0, (s, r) => s + (r['saldo'] as double));
 
     // Column widths
     const double wProp = 72;
@@ -506,9 +504,10 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
             final row = entry.value;
             final isCurrent = row['isCurrent'] as bool;
             final isUpcoming = row['isUpcoming'] as bool;
-            final saldo = row['saldo'] as int;
 
             final Color? textColor = isCurrent ? theme.colorScheme.secondary : (isUpcoming ? Colors.orange[700] : null);
+            final double saldo = row['saldo'] as double;
+            final double proporcional = row['proporcional'] as double;
             final FontWeight? weight = isCurrent ? FontWeight.bold : null;
             final Color saldoColor = saldo < 0 ? Colors.red : (saldo == 0 ? Colors.grey : Colors.green[700]!);
 
@@ -522,9 +521,9 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
               child: Row(children: [
                 _cell(row['periodo'] as String, color: textColor, weight: weight, align: TextAlign.left),
                 _cell('${row['days']}', color: textColor, weight: weight, width: wLey),
-                _cell('${row['proporcional']}', color: textColor, weight: weight, width: wProp),
+                _cell(proporcional.toStringAsFixed(2), color: textColor, weight: weight, width: wProp),
                 _cell(row['requested'] > 0 ? '${row['requested']}' : '', color: textColor, weight: weight, width: wPedidos),
-                _cell(row['proporcional'] == 0 && row['requested'] == 0 ? '' : '$saldo',
+                _cell(proporcional == 0 && row['requested'] == 0 ? '' : saldo.toStringAsFixed(2),
                     color: saldoColor, weight: FontWeight.bold, width: wSaldo),
               ]),
             );
@@ -537,7 +536,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
               _cell('', width: wLey),
               _cell('', width: wProp),
               _cell('', width: wPedidos),
-              _cell('$totalSaldo días.', weight: FontWeight.bold,
+              _cell('${totalSaldo.toStringAsFixed(2)} días.', weight: FontWeight.bold,
                   color: totalSaldo < 0 ? Colors.red : Colors.green[700], width: wSaldo),
             ]),
           ),
