@@ -615,85 +615,123 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
               title: 'Incidencias y Peticiones',
             ),
           ),
-          // Antigüedad
-          SliverToBoxAdapter(child: _buildAntiguedadCard()),
-          // Historial de vacaciones
-          SliverToBoxAdapter(child: _buildHistorialVacaciones()),
-          // Lista de incidencias
+          // Main content (Responsive layout)
+          SliverToBoxAdapter(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1000),
+                child: Builder(
+                  builder: (context) {
+                    final isDesktop = MediaQuery.of(context).size.width > 800;
+
+                    if (isDesktop) {
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            flex: 1,
+                            child: _buildAntiguedadCard(),
+                          ),
+                          Expanded(
+                            flex: 1,
+                            child: _buildHistorialVacaciones(),
+                          ),
+                        ],
+                      );
+                    }
+
+                    return Column(
+                      children: [
+                        _buildAntiguedadCard(),
+                        _buildHistorialVacaciones(),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
           if (_isLoading)
             const SliverFillRemaining(child: Center(child: CircularProgressIndicator()))
           else if (_incidencias.isEmpty)
             const SliverFillRemaining(child: Center(child: Text('Sin incidencias registradas')))
           else
-            SliverPadding(
-              padding: const EdgeInsets.all(16),
-              sliver: SliverList.separated(
-                separatorBuilder: (_, __) => const SizedBox(height: 12),
-                itemCount: _incidencias.length,
-                itemBuilder: (context, index) {
-                  final inc = _incidencias[index];
-                  return Card(
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      side: BorderSide(color: Colors.grey[200]!),
-                    ),
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                      title: Text(
-                        inc['nombre_usuario'] ?? 'Usuario',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      subtitle: Text('Días: ${inc['dias']} | Creado: ${_formatDate(inc['created_at'])}'),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: _getStatusColor(inc['status']).withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              inc['status'],
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: _getStatusColor(inc['status']),
-                              ),
-                            ),
+            SliverToBoxAdapter(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1000),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(16),
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemCount: _incidencias.length,
+                    itemBuilder: (context, index) {
+                      final inc = _incidencias[index];
+                      return Card(
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          side: BorderSide(color: Colors.grey[200]!),
+                        ),
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                          title: Text(
+                            inc['nombre_usuario'] ?? 'Usuario',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
-                          if (_userRole == 'admin')
-                            PopupMenuButton<String>(
-                              onSelected: (val) async {
-                                if (val == 'EDIT') {
-                                  _showIncidenciaForm(incidencia: inc);
-                                } else {
-                                  await Supabase.instance.client.from('incidencias').update({'status': val}).eq('id', inc['id']);
-                                  await NotificationService.send(
-                                    title: 'Tu incidencia fue $val',
-                                    message: 'El estado de tu petición ha cambiado a $val.',
-                                    userId: inc['usuario_id'],
-                                    type: 'incidencia_status',
-                                  );
-                                  _fetchIncidencias();
-                                }
-                              },
-                              itemBuilder: (ctx) => [
-                                const PopupMenuItem(value: 'EDIT', child: ListTile(leading: Icon(Icons.edit_outlined), title: Text('Editar'), dense: true)),
-                                const PopupMenuDivider(),
-                                const PopupMenuItem(value: 'APROBADA', child: Text('Aprobar')),
-                                const PopupMenuItem(value: 'CANCELADA', child: Text('Cancelar')),
-                                const PopupMenuItem(value: 'PENDIENTE', child: Text('Pendiente')),
-                              ],
-                            )
-                          else if (inc['status'] == 'PENDIENTE')
-                            IconButton(icon: const Icon(Icons.edit_outlined, size: 20), onPressed: () => _showIncidenciaForm(incidencia: inc)),
-                        ],
-                      ),
-                    ),
-                  );
-                },
+                          subtitle: Text('Días: ${inc['dias']} | Creado: ${_formatDate(inc['created_at'])}'),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: _getStatusColor(inc['status']).withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  inc['status'],
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: _getStatusColor(inc['status']),
+                                  ),
+                                ),
+                              ),
+                              if (_userRole == 'admin')
+                                PopupMenuButton<String>(
+                                  onSelected: (val) async {
+                                    if (val == 'EDIT') {
+                                      _showIncidenciaForm(incidencia: inc);
+                                    } else {
+                                      await Supabase.instance.client.from('incidencias').update({'status': val}).eq('id', inc['id']);
+                                      await NotificationService.send(
+                                        title: 'Tu incidencia fue $val',
+                                        message: 'El estado de tu petición ha cambiado a $val.',
+                                        userId: inc['usuario_id'],
+                                        type: 'incidencia_status',
+                                      );
+                                      _fetchIncidencias();
+                                    }
+                                  },
+                                  itemBuilder: (ctx) => [
+                                    const PopupMenuItem(value: 'EDIT', child: ListTile(leading: Icon(Icons.edit_outlined), title: Text('Editar'), dense: true)),
+                                    const PopupMenuDivider(),
+                                    const PopupMenuItem(value: 'APROBADA', child: Text('Aprobar')),
+                                    const PopupMenuItem(value: 'CANCELADA', child: Text('Cancelar')),
+                                    const PopupMenuItem(value: 'PENDIENTE', child: Text('Pendiente')),
+                                  ],
+                                )
+                              else if (inc['status'] == 'PENDIENTE')
+                                IconButton(icon: const Icon(Icons.edit_outlined, size: 20), onPressed: () => _showIncidenciaForm(incidencia: inc)),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
               ),
             ),
           const SliverToBoxAdapter(child: SizedBox(height: 80)), // FAB clearance

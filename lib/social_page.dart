@@ -109,11 +109,16 @@ class _SocialPageState extends State<SocialPage> {
             ),
           ),
           Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : upcoming.isEmpty
-                    ? _buildEmptyState()
-                    : _buildBirthdayList(upcoming, theme),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 800),
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : upcoming.isEmpty
+                        ? _buildEmptyState()
+                        : _buildBirthdayList(upcoming, theme),
+              ),
+            ),
           ),
         ],
       ),
