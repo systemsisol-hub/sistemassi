@@ -250,15 +250,42 @@ class _IssiPageState extends State<IssiPage> {
     showDialog(
       context: context,
       builder: (context) => Dialog(
-        insetPadding: const EdgeInsets.all(16),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
         child: StatefulBuilder(
-          builder: (context, setDialogState) => Container(
-            width: double.maxFinite,
-            constraints: const BoxConstraints(maxWidth: 500),
-            child: SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
+          builder: (context, setDialogState) {
+            final screenWidth = MediaQuery.of(context).size.width;
+            final isWide = screenWidth > 700;
+            final maxW = isWide ? 920.0 : 500.0;
+
+            // Helper: builds a field wrapped for the grid
+            Widget field(Widget child) => isWide
+                ? SizedBox(width: (maxW - 48 - 32) / 3, child: child)  // 48 padding + 2×16 gaps
+                : child;
+
+            Widget row3(Widget a, Widget b, Widget c) => isWide
+                ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Expanded(child: a), const SizedBox(width: 16),
+                    Expanded(child: b), const SizedBox(width: 16),
+                    Expanded(child: c),
+                  ])
+                : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                    a, const SizedBox(height: 16),
+                    b, const SizedBox(height: 16),
+                    c,
+                  ]);
+
+            Widget row2(Widget a, Widget b) => Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [Expanded(child: a), const SizedBox(width: 16), Expanded(child: b)],
+            );
+
+            return Container(
+              width: double.maxFinite,
+              constraints: BoxConstraints(maxWidth: maxW),
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -276,174 +303,128 @@ class _IssiPageState extends State<IssiPage> {
                       ],
                     ),
                     const SizedBox(height: 24),
-                    DropdownButtonFormField<String>(
-                      value: selectedUsuarioId,
-                      decoration: const InputDecoration(
-                        labelText: 'Usuario *',
-                        prefixIcon: Icon(Icons.person_outline),
+                    // Row 1: Usuario · Ubicación · Tipo
+                    row3(
+                      DropdownButtonFormField<String>(
+                        value: selectedUsuarioId,
+                        decoration: const InputDecoration(labelText: 'Usuario *', prefixIcon: Icon(Icons.person_outline)),
+                        isExpanded: true,
+                        items: _usuarios.map((u) => DropdownMenuItem(value: u['id'] as String, child: Text(u['full_name'] ?? 'Usuario'))).toList(),
+                        onChanged: (val) {
+                          final usuario = _usuarios.firstWhere((u) => u['id'] == val);
+                          setDialogState(() { selectedUsuarioId = val; selectedUsuarioNombre = usuario['full_name']; });
+                        },
                       ),
-                      isExpanded: true,
-                      items: _usuarios.map((u) => DropdownMenuItem(
-                        value: u['id'] as String,
-                        child: Text(u['full_name'] ?? 'Usuario'),
-                      )).toList(),
-                      onChanged: (val) {
-                        final usuario = _usuarios.firstWhere((u) => u['id'] == val);
-                        setDialogState(() {
-                          selectedUsuarioId = val;
-                          selectedUsuarioNombre = usuario['full_name'];
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: ubicacionController,
-                      decoration: const InputDecoration(
-                        labelText: 'Ubicación *',
-                        prefixIcon: Icon(Icons.location_on_outlined),
+                      TextField(
+                        controller: ubicacionController,
+                        decoration: const InputDecoration(labelText: 'Ubicación *', prefixIcon: Icon(Icons.location_on_outlined)),
+                      ),
+                      DropdownButtonFormField<String>(
+                        value: tipo,
+                        decoration: const InputDecoration(labelText: 'Tipo *', prefixIcon: Icon(Icons.devices_outlined)),
+                        isExpanded: true,
+                        items: _tipos.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+                        onChanged: (val) => setDialogState(() => tipo = val!),
                       ),
                     ),
                     const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      value: tipo,
-                      decoration: const InputDecoration(
-                        labelText: 'Tipo *',
-                        prefixIcon: Icon(Icons.devices_outlined),
+                    // Row 2: Marca · Modelo · N/S
+                    row3(
+                      DropdownButtonFormField<String>(
+                        value: marca,
+                        decoration: const InputDecoration(labelText: 'Marca *', prefixIcon: Icon(Icons.business_outlined)),
+                        isExpanded: true,
+                        items: _marcas.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+                        onChanged: (val) => setDialogState(() => marca = val!),
                       ),
-                      isExpanded: true,
-                      items: _tipos.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
-                      onChanged: (val) => setDialogState(() => tipo = val!),
-                    ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      value: marca,
-                      decoration: const InputDecoration(
-                        labelText: 'Marca *',
-                        prefixIcon: Icon(Icons.business_outlined),
+                      TextField(
+                        controller: modeloController,
+                        decoration: const InputDecoration(labelText: 'Modelo *', prefixIcon: Icon(Icons.label_outlined)),
                       ),
-                      isExpanded: true,
-                      items: _marcas.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
-                      onChanged: (val) => setDialogState(() => marca = val!),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: modeloController,
-                      decoration: const InputDecoration(
-                        labelText: 'Modelo *',
-                        prefixIcon: Icon(Icons.label_outlined),
+                      TextField(
+                        controller: nsController,
+                        decoration: const InputDecoration(labelText: 'N/S', prefixIcon: Icon(Icons.numbers)),
                       ),
                     ),
                     const SizedBox(height: 16),
-                    TextField(
-                      controller: nsController,
-                      decoration: const InputDecoration(
-                        labelText: 'N/S',
-                        prefixIcon: Icon(Icons.numbers),
+                    // Row 3: IMEI · CPU · SSD
+                    row3(
+                      TextField(
+                        controller: imeiController,
+                        decoration: const InputDecoration(labelText: 'IMEI', prefixIcon: Icon(Icons.sim_card_outlined)),
+                      ),
+                      TextField(
+                        controller: cpuController,
+                        decoration: const InputDecoration(labelText: 'CPU', prefixIcon: Icon(Icons.memory)),
+                      ),
+                      TextField(
+                        controller: ssdController,
+                        decoration: const InputDecoration(labelText: 'SSD', prefixIcon: Icon(Icons.storage)),
                       ),
                     ),
                     const SizedBox(height: 16),
-                    TextField(
-                      controller: imeiController,
-                      decoration: const InputDecoration(
-                        labelText: 'IMEI',
-                        prefixIcon: Icon(Icons.sim_card_outlined),
+                    // Row 4: RAM · GPU · Valor
+                    row3(
+                      TextField(
+                        controller: ramController,
+                        decoration: const InputDecoration(labelText: 'RAM', prefixIcon: Icon(Icons.sd_card)),
+                      ),
+                      TextField(
+                        controller: gpuController,
+                        decoration: const InputDecoration(labelText: 'GPU', prefixIcon: Icon(Icons.videogame_asset_outlined)),
+                      ),
+                      TextField(
+                        controller: valorController,
+                        decoration: const InputDecoration(labelText: 'Valor', prefixIcon: Icon(Icons.attach_money)),
+                        keyboardType: TextInputType.number,
                       ),
                     ),
                     const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: cpuController,
-                            decoration: const InputDecoration(
-                              labelText: 'CPU',
-                              prefixIcon: Icon(Icons.memory),
-                            ),
+                    // Row 5: Fecha · Condición (2-col or 3-col with spacer)
+                    isWide
+                      ? row3(
+                          TextField(
+                            controller: fechaActController,
+                            decoration: const InputDecoration(labelText: 'Fecha Actualización', prefixIcon: Icon(Icons.calendar_today_outlined)),
+                            readOnly: true,
+                            onTap: () async {
+                              final d = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime(2101));
+                              if (d != null) setDialogState(() => fechaActController.text = d.toString().split(' ').first);
+                            },
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: TextField(
-                            controller: ssdController,
-                            decoration: const InputDecoration(
-                              labelText: 'SSD',
-                              prefixIcon: Icon(Icons.storage),
-                            ),
+                          DropdownButtonFormField<String>(
+                            value: condicion,
+                            decoration: const InputDecoration(labelText: 'Condición *', prefixIcon: Icon(Icons.health_and_safety_outlined)),
+                            isExpanded: true,
+                            items: _condiciones.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                            onChanged: (val) => setDialogState(() => condicion = val!),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: ramController,
-                            decoration: const InputDecoration(
-                              labelText: 'RAM',
-                              prefixIcon: Icon(Icons.sd_card),
-                            ),
+                          const SizedBox.shrink(),
+                        )
+                      : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                          TextField(
+                            controller: fechaActController,
+                            decoration: const InputDecoration(labelText: 'Fecha Actualización', prefixIcon: Icon(Icons.calendar_today_outlined)),
+                            readOnly: true,
+                            onTap: () async {
+                              final d = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime(2101));
+                              if (d != null) setDialogState(() => fechaActController.text = d.toString().split(' ').first);
+                            },
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: TextField(
-                            controller: valorController,
-                            decoration: const InputDecoration(
-                              labelText: 'Valor',
-                              prefixIcon: Icon(Icons.attach_money),
-                            ),
-                            keyboardType: TextInputType.number,
+                          const SizedBox(height: 16),
+                          DropdownButtonFormField<String>(
+                            value: condicion,
+                            decoration: const InputDecoration(labelText: 'Condición *', prefixIcon: Icon(Icons.health_and_safety_outlined)),
+                            isExpanded: true,
+                            items: _condiciones.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                            onChanged: (val) => setDialogState(() => condicion = val!),
                           ),
-                        ),
-                      ],
-                    ),
+                        ]),
                     const SizedBox(height: 16),
-                    TextField(
-                      controller: gpuController,
-                      decoration: const InputDecoration(
-                        labelText: 'GPU',
-                        prefixIcon: Icon(Icons.videogame_asset_outlined),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: fechaActController,
-                      decoration: const InputDecoration(
-                        labelText: 'Fecha de Actualización',
-                        prefixIcon: Icon(Icons.calendar_today_outlined),
-                      ),
-                      readOnly: true,
-                      onTap: () async {
-                        final d = await showDatePicker(
-                          context: context,
-                          initialDate: DateTime.now(),
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime(2101),
-                        );
-                        if (d != null) {
-                          setDialogState(() => fechaActController.text = d.toString().split(' ').first);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      value: condicion,
-                      decoration: const InputDecoration(
-                        labelText: 'Condición *',
-                        prefixIcon: Icon(Icons.health_and_safety_outlined),
-                      ),
-                      isExpanded: true,
-                      items: _condiciones.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-                      onChanged: (val) => setDialogState(() => condicion = val!),
-                    ),
-                    const SizedBox(height: 16),
+                    // Observaciones — full width always
                     TextField(
                       controller: observacionesController,
-                      decoration: const InputDecoration(
-                        labelText: 'Observaciones',
-                        prefixIcon: Icon(Icons.notes_outlined),
-                      ),
+                      decoration: const InputDecoration(labelText: 'Observaciones', prefixIcon: Icon(Icons.notes_outlined)),
                       maxLines: 2,
                     ),
                     const SizedBox(height: 24),
@@ -519,8 +500,8 @@ class _IssiPageState extends State<IssiPage> {
                   ],
                 ),
               ),
-            ),
-          ),
+            );
+          },
         ),
       ),
     );
