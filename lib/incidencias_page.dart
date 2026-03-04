@@ -1038,35 +1038,48 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
           : null,
       body: CustomScrollView(
         slivers: [
-          // Header — the admin selector goes inside PageHeader trailing so it
-          // stays within the blue background strip.
           SliverToBoxAdapter(
-            child: PageHeader(
-              title: 'Incidencias y Peticiones',
-              trailing: (_userRole == 'admin' && _adminUserList.isNotEmpty)
-                ? Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.grey[300]!),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: _selectedUserId,
-                        icon: Icon(Icons.keyboard_arrow_down, color: theme.colorScheme.secondary),
-                        items: _adminUserList.map((user) {
-                          final name = '${user['nombre']} ${user['paterno']} ${user['materno'] ?? ''}'.trim();
-                          return DropdownMenuItem(
-                            value: user['id'] as String,
-                            child: Text(name.isEmpty ? 'Usuario' : name, style: const TextStyle(fontSize: 14)),
-                          );
-                        }).toList(),
-                        onChanged: _onUserSelected,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final isMobile = constraints.maxWidth <= 800;
+                final hasSelector = _userRole == 'admin' && _adminUserList.isNotEmpty;
+
+                Widget? selectorWidget = hasSelector
+                  ? Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey[300]!),
                       ),
-                    ),
-                  )
-                : null,
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _selectedUserId,
+                          isDense: true,
+                          icon: Icon(Icons.keyboard_arrow_down, color: theme.colorScheme.secondary),
+                          items: _adminUserList.map((user) {
+                            final name = '${user['nombre']} ${user['paterno']} ${user['materno'] ?? ''}'.trim();
+                            return DropdownMenuItem(
+                              value: user['id'] as String,
+                              child: Text(name.isEmpty ? 'Usuario' : name, style: const TextStyle(fontSize: 14)),
+                            );
+                          }).toList(),
+                          onChanged: _onUserSelected,
+                        ),
+                      ),
+                    )
+                  : null;
+
+                return PageHeader(
+                  title: 'Incidencias y Peticiones',
+                  // On desktop: selector is inline (trailing)
+                  // On mobile: selector goes below the title (bottom) to avoid compressing it
+                  trailing: (!isMobile && selectorWidget != null) ? selectorWidget : null,
+                  bottom: (isMobile && selectorWidget != null)
+                    ? [SizedBox(width: double.infinity, child: selectorWidget)]
+                    : null,
+                );
+              },
             ),
           ),
           // Main content (Responsive layout)
@@ -1117,16 +1130,17 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                     constraints: const BoxConstraints(maxWidth: 1000),
                     child: Column(
                       children: [
+                        // Admin-only pending table at top on mobile too
+                        if (_userRole == 'admin')
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                            child: _buildPendingTable(theme),
+                          ),
                         _buildAntiguedadMobile(),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           child: _buildHistorialVacaciones(),
                         ),
-                        if (_userRole == 'admin')
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            child: _buildPendingTable(theme),
-                          ),
                         if (_isLoading)
                           const Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator())
                         else if (_incidencias.isEmpty)
