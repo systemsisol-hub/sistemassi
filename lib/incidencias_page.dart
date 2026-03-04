@@ -1021,8 +1021,11 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
               data: theme.copyWith(cardColor: Colors.transparent),
               child: PaginatedDataTable(
                 columns: const [
-                  DataColumn(label: Text('Funcionario', style: TextStyle(fontWeight: FontWeight.bold))),
-                  DataColumn(label: Text('Detalle', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Nombre', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Días', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Creado', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Fecha Inicio', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Fecha Fin', style: TextStyle(fontWeight: FontWeight.bold))),
                   DataColumn(label: Text('Estatus', style: TextStyle(fontWeight: FontWeight.bold))),
                 ],
                 source: _IncidenciasDataSource(
@@ -1249,11 +1252,12 @@ class _IncidenciasDataSource extends DataTableSource {
       index: index,
       cells: [
         DataCell(
-          Text(inc['nombre_usuario'] ?? 'Usuario', style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text(inc['nombre_usuario'] ?? 'Usuario', style: const TextStyle(fontWeight: FontWeight.w500)),
         ),
-        DataCell(
-          Text('Días: ${inc['dias']} (${inc['periodo'] ?? ''}) | Creado: ${formatDate(inc['created_at'])}'),
-        ),
+        DataCell(Text('${inc['dias'] ?? '-'}')),
+        DataCell(Text(formatDate(inc['created_at']))),
+        DataCell(Text(inc['fecha_inicio'] != null ? formatDate(inc['fecha_inicio']) : '-')),
+        DataCell(Text(inc['fecha_fin'] != null ? formatDate(inc['fecha_fin']) : '-')),
         DataCell(
           Row(
             mainAxisSize: MainAxisSize.min,
