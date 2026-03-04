@@ -380,16 +380,15 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
   /// Tabla de historial de vacaciones por periodo
   Widget _buildHistorialVacaciones() {
     final base = _fechaReingreso ?? _fechaIngreso;
-    if (base == null) return const SizedBox.shrink(); // Fallback UI already handled in Antiguedad logic
+    if (base == null) return const SizedBox.shrink();
 
     final now = DateTime.now();
     final theme = Theme.of(context);
     final completedYears = _calcYears();
 
-    // Map to accumulate requested days per period
     final String targetUserId = _selectedUserId ?? '';
     String normalizePeriod(String? p) => (p ?? '').replaceAll(RegExp(r'\D'), '');
-    
+
     final usedDaysMap = <String, int>{};
     for (final inc in _incidencias) {
       if (inc['usuario_id'] == targetUserId && inc['status'] == 'APROBADA') {
@@ -401,34 +400,66 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
       }
     }
 
-    // Build rows: from year 1 to completedYears + 1 (one future period)
+    // Helper: proportional days for the current in-progress period
+    int _calcProporcional(int y, int days, DateTime anniversary) {
+      if (anniversary.isAfter(now)) return 0; // future — not started yet
+      // Check if anniversary for this period has passed to get the NEXT anniversary
+      final nextAnniversary = DateTime(base.year + y + 1, base.month, base.day);
+      if (nextAnniversary.isBefore(now)) return days; // past — full days earned
+      // Current period: proportion = days * elapsed / total period length
+      final periodStart = anniversary;
+      final totalDays = nextAnniversary.difference(periodStart).inDays;
+      final elapsed = now.difference(periodStart).inDays;
+      return ((days * elapsed) / totalDays).floor();
+    }
+
     final tableRows = <Map<String, dynamic>>[];
     for (int y = 1; y <= completedYears + 1; y++) {
-      // Anniversary date for this year of service
       final anniversary = DateTime(base.year + y, base.month, base.day);
       final periodStart = anniversary.year - 1;
       final periodLabel = '$periodStart - ${anniversary.year}';
       final normLabel = normalizePeriod(periodLabel);
 
-      // Days: old law if periodStart < 2023, new law otherwise
       final int days = periodStart >= 2023
           ? _getDaysByYears(y)
           : (6 + (y - 1) * 2).clamp(0, 14);
 
-      final isCurrent = y == completedYears;       // last completed year
-      final isUpcoming = anniversary.isAfter(now); // anniversary not yet passed
+      final isCurrent = y == completedYears;
+      final isUpcoming = anniversary.isAfter(now);
       final daysRequested = usedDaysMap[normLabel] ?? 0;
+      final proporcional = _calcProporcional(y - 1, days, anniversary);
+      final saldo = proporcional - daysRequested;
 
       tableRows.add({
         'periodo': periodLabel,
         'days': days,
+        'proporcional': proporcional,
         'requested': daysRequested,
+        'saldo': saldo,
         'isCurrent': isCurrent,
         'isUpcoming': isUpcoming,
       });
     }
 
     if (tableRows.isEmpty) return const SizedBox.shrink();
+
+    // Grand totals
+    final totalProp  = tableRows.fold<int>(0, (s, r) => s + (r['proporcional'] as int));
+    final totalReq   = tableRows.fold<int>(0, (s, r) => s + (r['requested'] as int));
+    final totalSaldo = tableRows.fold<int>(0, (s, r) => s + (r['saldo'] as int));
+
+    // Column widths
+    const double wProp = 72;
+    const double wPedidos = 72;
+    const double wSaldo = 72;
+    const double wLey = 52;
+
+    Widget _cell(String text, {Color? color, FontWeight? weight, TextAlign align = TextAlign.center, double? width}) {
+      final w = Text(text, textAlign: align, style: TextStyle(fontSize: 12, fontWeight: weight, color: color));
+      return width != null
+        ? SizedBox(width: width, child: Padding(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8), child: w))
+        : Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), child: w));
+    }
 
     return Container(
       margin: const EdgeInsets.only(top: 12),
@@ -457,18 +488,11 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
           Container(
             color: Colors.grey[200],
             child: Row(children: [
-              Expanded(child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Text('Período', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-              )),
-              SizedBox(width: 60, child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                child: Text('Ley', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.center),
-              )),
-              SizedBox(width: 70, child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                child: Text('Pedidos', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12), textAlign: TextAlign.center),
-              )),
+              _cell('Período', weight: FontWeight.bold, align: TextAlign.left),
+              _cell('Días', weight: FontWeight.bold, width: wLey),
+              _cell('Proporcional', weight: FontWeight.bold, width: wProp),
+              _cell('Solicitados', weight: FontWeight.bold, width: wPedidos),
+              _cell('Saldo Actual', weight: FontWeight.bold, width: wSaldo),
             ]),
           ),
           // Data rows
@@ -477,57 +501,40 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
             final row = entry.value;
             final isCurrent = row['isCurrent'] as bool;
             final isUpcoming = row['isUpcoming'] as bool;
+            final saldo = row['saldo'] as int;
+
+            final Color? textColor = isCurrent ? theme.colorScheme.secondary : (isUpcoming ? Colors.orange[700] : null);
+            final FontWeight? weight = isCurrent ? FontWeight.bold : null;
+            final Color saldoColor = saldo < 0 ? Colors.red : (saldo == 0 ? Colors.grey : Colors.green[700]!);
 
             Color bgColor;
-            if (isCurrent) {
-              bgColor = theme.colorScheme.secondary.withOpacity(0.15);
-            } else if (isUpcoming) {
-              bgColor = Colors.orange.withOpacity(0.07);
-            } else {
-              bgColor = i.isEven ? Colors.white : Colors.grey[50]!;
-            }
+            if (isCurrent) bgColor = theme.colorScheme.secondary.withOpacity(0.15);
+            else if (isUpcoming) bgColor = Colors.orange.withOpacity(0.07);
+            else bgColor = i.isEven ? Colors.white : Colors.grey[50]!;
 
             return Container(
               color: bgColor,
               child: Row(children: [
-                Expanded(child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Text(
-                    row['periodo'] as String,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
-                      color: isCurrent ? theme.colorScheme.secondary : (isUpcoming ? Colors.orange[700] : null),
-                    ),
-                  ),
-                )),
-                SizedBox(width: 60, child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                  child: Text(
-                    '${row['days']}',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
-                      color: isCurrent ? theme.colorScheme.secondary : (isUpcoming ? Colors.orange[700] : null),
-                    ),
-                  ),
-                )),
-                SizedBox(width: 70, child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                  child: Text(
-                    '${row['requested']}',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
-                      color: isCurrent ? theme.colorScheme.secondary : (isUpcoming ? Colors.orange[700] : null),
-                    ),
-                  ),
-                )),
+                _cell(row['periodo'] as String, color: textColor, weight: weight, align: TextAlign.left),
+                _cell('${row['days']}', color: textColor, weight: weight, width: wLey),
+                _cell('${row['proporcional']}', color: textColor, weight: weight, width: wProp),
+                _cell(row['requested'] > 0 ? '${row['requested']}' : '', color: textColor, weight: weight, width: wPedidos),
+                _cell(row['proporcional'] == 0 && row['requested'] == 0 ? '' : '$saldo',
+                    color: saldoColor, weight: FontWeight.bold, width: wSaldo),
               ]),
             );
           }),
+          // Grand Total row
+          Container(
+            color: Colors.grey[200],
+            child: Row(children: [
+              _cell('Gran Total', weight: FontWeight.bold, align: TextAlign.left),
+              _cell('$totalProp días.', weight: FontWeight.bold, width: wLey + wProp - 20),
+              _cell('$totalReq días.', weight: FontWeight.bold, width: wPedidos + 20),
+              _cell('$totalSaldo días.', weight: FontWeight.bold,
+                  color: totalSaldo < 0 ? Colors.red : Colors.green[700], width: wSaldo),
+            ]),
+          ),
         ],
       ),
     );
