@@ -91,6 +91,7 @@ class _IssiPageState extends State<IssiPage> {
         final data = await Supabase.instance.client
             .from('profiles')
             .select('id, full_name')
+            .eq('status_sys', 'ACTIVO')
             .order('full_name')
             .range(offset, offset + limit - 1);
             
