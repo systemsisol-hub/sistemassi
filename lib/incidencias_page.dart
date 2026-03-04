@@ -14,6 +14,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
   List<Map<String, dynamic>> _incidencias = [];
   List<Map<String, dynamic>> _allIncidencias = []; // all PENDIENTE for admin view
   bool _isLoading = true;
+  bool _antiguedadExpanded = false; // manual expand state for mobile card
   String? _userRole;
   String? _userFullName;
   DateTime? _fechaIngreso;
@@ -237,30 +238,52 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
   }
 
   /// Tarjeta de antigüedad (Contenido interno)
-  Widget _buildAntiguedadCardContent({required ThemeData theme, required String label, required String dateStr, bool isDesktop = false}) {
+  Widget _buildAntiguedadCardContent({
+    required ThemeData theme,
+    required String label,
+    required String dateStr,
+    bool isDesktop = false,
+    bool expanded = false,
+    Widget? table,
+  }) {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: theme.colorScheme.secondary.withOpacity(0.08),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: theme.colorScheme.secondary.withOpacity(0.3)),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.workspace_premium_outlined, color: theme.colorScheme.secondary, size: 28),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                Text(_calcAntiguedad(),
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: theme.colorScheme.secondary)),
-                Text('Desde: $dateStr', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-              ],
-            ),
+          Row(
+            children: [
+              Icon(Icons.workspace_premium_outlined, color: theme.colorScheme.secondary, size: 28),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                    Text(_calcAntiguedad(),
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: theme.colorScheme.secondary)),
+                    Text('Desde: $dateStr', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                  ],
+                ),
+              ),
+              if (!isDesktop)
+                AnimatedRotation(
+                  turns: expanded ? 0.5 : 0,
+                  duration: const Duration(milliseconds: 250),
+                  child: Icon(Icons.expand_more, color: theme.colorScheme.secondary.withOpacity(0.6)),
+                ),
+            ],
           ),
-          if (!isDesktop) Icon(Icons.expand_more, color: theme.colorScheme.secondary.withOpacity(0.6)),
+          if (!isDesktop && expanded && table != null) ...[
+            const SizedBox(height: 8),
+            table,
+          ],
         ],
       ),
     );
@@ -297,25 +320,24 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
     final theme = Theme.of(context);
     final label = _fechaReingreso != null ? 'Antigüedad (Reingreso)' : 'Antigüedad';
     final dateStr = '${base.day.toString().padLeft(2, '0')}/${base.month.toString().padLeft(2, '0')}/${base.year}';
-    
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-      child: SizedBox(
-        width: double.infinity,
-        child: Theme(
-          data: theme.copyWith(dividerColor: Colors.transparent),
-          child: ExpansionTile(
-            tilePadding: EdgeInsets.zero,
-            childrenPadding: EdgeInsets.zero,
-            expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
-            title: _buildAntiguedadCardContent(theme: theme, label: label, dateStr: dateStr, isDesktop: false),
-            iconColor: Colors.transparent,
-            collapsedIconColor: Colors.transparent,
-            trailing: const SizedBox.shrink(),
-            children: [
-              const SizedBox(height: 8),
-              _buildLeyesVacacionesTable(),
-            ],
+      child: GestureDetector(
+        onTap: () => setState(() => _antiguedadExpanded = !_antiguedadExpanded),
+        child: AnimatedSize(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeInOut,
+          child: SizedBox(
+            width: double.infinity,
+            child: _buildAntiguedadCardContent(
+              theme: theme,
+              label: label,
+              dateStr: dateStr,
+              isDesktop: false,
+              expanded: _antiguedadExpanded,
+              table: _buildLeyesVacacionesTable(),
+            ),
           ),
         ),
       ),
@@ -872,9 +894,13 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
               ),
             )
           else
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: DataTable(
+            LayoutBuilder(
+              builder: (context, constraints) {
+                return SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                    child: DataTable(
                 headingRowColor: WidgetStateProperty.all(Colors.orange.withOpacity(0.07)),
                 columnSpacing: 20,
                 horizontalMargin: 16,
@@ -940,7 +966,10 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                     ),
                   ]);
                 }).toList(),
-              ),
+                    ),
+                  ),
+                );
+              },
             ),
         ],
       ),
