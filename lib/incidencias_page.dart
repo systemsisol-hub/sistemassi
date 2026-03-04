@@ -300,19 +300,18 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
     
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-      child: Card(
-        elevation: 0,
-        color: Colors.transparent,
-        margin: EdgeInsets.zero,
-        clipBehavior: Clip.hardEdge,
+      child: SizedBox(
+        width: double.infinity,
         child: Theme(
           data: theme.copyWith(dividerColor: Colors.transparent),
           child: ExpansionTile(
             tilePadding: EdgeInsets.zero,
+            childrenPadding: EdgeInsets.zero,
+            expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
             title: _buildAntiguedadCardContent(theme: theme, label: label, dateStr: dateStr, isDesktop: false),
             iconColor: Colors.transparent,
             collapsedIconColor: Colors.transparent,
-            trailing: const SizedBox.shrink(), // Ocultamos el icono nativo
+            trailing: const SizedBox.shrink(),
             children: [
               const SizedBox(height: 8),
               _buildLeyesVacacionesTable(),
