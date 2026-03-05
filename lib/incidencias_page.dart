@@ -1157,8 +1157,16 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                             const SizedBox(width: 16),
                             Expanded(
                               flex: 5,
-                              child: _isLoading
-                                  ? const Center(child: CircularProgressIndicator())
+                               child: _isLoading
+                                  ? Center(
+                                      child: Image.asset(
+                                        'assets/sisol_loader.gif',
+                                        width: 150,
+                                        errorBuilder: (context, error, stackTrace) => const CircularProgressIndicator(),
+                                        frameBuilder: (context, child, frame, wasSynchronouslyLoaded) =>
+                                            frame == null ? const CircularProgressIndicator() : child,
+                                      ),
+                                    )
                                   : _buildDesktopTable(theme),
                             ),
                           ],
@@ -1185,7 +1193,18 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                           child: _buildHistorialVacaciones(),
                         ),
                         if (_isLoading)
-                          const Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator())
+                          Padding(
+                            padding: const EdgeInsets.all(32),
+                            child: Center(
+                              child: Image.asset(
+                                'assets/sisol_loader.gif',
+                                width: 150,
+                                errorBuilder: (context, error, stackTrace) => const CircularProgressIndicator(),
+                                frameBuilder: (context, child, frame, wasSynchronouslyLoaded) =>
+                                    frame == null ? const CircularProgressIndicator() : child,
+                              ),
+                            ),
+                          )
                         else if (_incidencias.isEmpty)
                           const Padding(padding: EdgeInsets.all(40), child: Text('Sin incidencias registradas'))
                         else

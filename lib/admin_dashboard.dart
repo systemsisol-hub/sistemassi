@@ -707,24 +707,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
     return result;
   }
 
-  Widget _buildShimmerItem() {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.grey[200]!),
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-        leading: CircleAvatar(backgroundColor: Colors.grey[200]),
-        title: Container(height: 14, width: 120, decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(4))),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Container(height: 10, width: 60, decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(4))),
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -782,11 +764,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 ),
                 Expanded(
                   child: _isLoading
-                      ? ListView.separated(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: 6,
-                          separatorBuilder: (_, __) => const SizedBox(height: 12),
-                          itemBuilder: (_, __) => _buildShimmerItem(),
+                      ? Center(
+                          child: Image.asset(
+                            'assets/sisol_loader.gif',
+                            width: 150,
+                            errorBuilder: (context, error, stackTrace) => const CircularProgressIndicator(),
+                            frameBuilder: (context, child, frame, wasSynchronouslyLoaded) =>
+                                frame == null ? const CircularProgressIndicator() : child,
+                          ),
                         )
                       : LayoutBuilder(
                           builder: (context, constraints) {
