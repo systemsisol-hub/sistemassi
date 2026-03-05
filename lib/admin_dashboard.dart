@@ -207,6 +207,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       'show_cssi': false,
       'show_incidencias': false,
       'show_logs': false,
+      'show_external_contacts': false,
     });
 
     // Credential Controllers
@@ -300,6 +301,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 _buildPermissionSwitch('Colaboradores CSSI', 'show_cssi', Icons.badge, permissions, setDialogState),
                 _buildPermissionSwitch('Incidencias', 'show_incidencias', Icons.description, permissions, setDialogState),
                 _buildPermissionSwitch('Logs del Sistema', 'show_logs', Icons.assignment, permissions, setDialogState),
+                _buildPermissionSwitch('Contactos Externos', 'show_external_contacts', Icons.contact_phone, permissions, setDialogState),
               ],
             );
 

@@ -7,6 +7,7 @@ import 'issi_page.dart';
 import 'cssi_page.dart';
 import 'incidencias_page.dart';
 import 'social_page.dart';
+import 'external_contacts_page.dart';
 import 'widgets/notification_bell.dart';
 
 class MainNavigation extends StatefulWidget {
@@ -83,6 +84,15 @@ class _MainNavigationState extends State<MainNavigation> {
         'icon': Icons.assignment_outlined,
         'activeIcon': Icons.assignment,
         'widget': const SystemLogsPage(),
+      });
+    }
+
+    if (widget.permissions['show_external_contacts'] == true) {
+      pages.add({
+        'title': 'Contactos',
+        'icon': Icons.contact_phone_outlined,
+        'activeIcon': Icons.contact_phone,
+        'widget': const ExternalContactsPage(),
       });
     }
 
