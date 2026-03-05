@@ -169,7 +169,15 @@ class _SystemLogsPageState extends State<SystemLogsPage> {
         ),
         Expanded(
           child: _isLoading 
-            ? const Center(child: CircularProgressIndicator())
+            ? Center(
+                child: Image.asset(
+                  'assets/sisol_loader.gif',
+                  width: 150,
+                  errorBuilder: (context, error, stackTrace) => const CircularProgressIndicator(),
+                  frameBuilder: (context, child, frame, wasSynchronouslyLoaded) =>
+                      frame == null ? const CircularProgressIndicator() : child,
+                ),
+              )
             : _logs.isEmpty 
               ? Center(
                   child: Column(
