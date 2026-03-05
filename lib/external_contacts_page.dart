@@ -415,9 +415,7 @@ class _ContactsDataSource extends DataTableSource {
                 IconButton(
                   icon: const Icon(Icons.copy, size: 16, color: Colors.grey),
                   onPressed: () {
-                    Clipboard.setData(ClipboardData(text: c['correo']));
-                    // We don't have access to context here easily to show a snackbar via ScaffoldMessenger
-                    // But we can use an overlay if needed, or better, pass the onCopy callback.
+                    Clipboard.setData(ClipboardData(text: (c['correo'] ?? '').toString().trim()));
                   },
                   tooltip: 'Copiar correo',
                 ),
