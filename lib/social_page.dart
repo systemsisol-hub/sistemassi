@@ -239,9 +239,7 @@ class _SocialPageState extends State<SocialPage> {
               );
             }),
           ),
-        ),
-      ],
-    );
+        );
   }
 
   Widget _buildEmptyState() {
