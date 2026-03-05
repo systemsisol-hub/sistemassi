@@ -51,8 +51,9 @@ class _ExternalContactsPageState extends State<ExternalContactsPage> {
     return _contacts.where((c) {
       final nombre = (c['nombre'] ?? '').toString().toLowerCase();
       final empresa = (c['empresa'] ?? '').toString().toLowerCase();
+      final correo = (c['correo'] ?? '').toString().toLowerCase();
       final query = _searchQuery.toLowerCase();
-      return nombre.contains(query) || empresa.contains(query);
+      return nombre.contains(query) || empresa.contains(query) || correo.contains(query);
     }).toList();
   }
 
@@ -102,81 +103,114 @@ class _ExternalContactsPageState extends State<ExternalContactsPage> {
         insetPadding: const EdgeInsets.all(16),
         child: StatefulBuilder(
           builder: (context, setDialogState) {
-            final isWeb = MediaQuery.of(context).size.width > 800;
+            final isDesktop = MediaQuery.of(context).size.width > 800;
             
             Widget buildFields() {
               final fields = [
                 TextField(controller: nombreController, decoration: const InputDecoration(labelText: 'Nombre *', prefixIcon: Icon(Icons.person))),
-                const SizedBox(height: 16),
                 TextField(controller: empresaController, decoration: const InputDecoration(labelText: 'Empresa', prefixIcon: Icon(Icons.business))),
-                const SizedBox(height: 16),
                 TextField(controller: correoController, decoration: const InputDecoration(labelText: 'Correo', prefixIcon: Icon(Icons.email))),
-                const SizedBox(height: 16),
                 TextField(controller: telefonoController, decoration: const InputDecoration(labelText: 'Teléfono', prefixIcon: Icon(Icons.phone))),
-                const SizedBox(height: 16),
                 TextField(controller: otroController, decoration: const InputDecoration(labelText: 'Otro', prefixIcon: Icon(Icons.more_horiz))),
               ];
 
-              if (isWeb) {
-                return Wrap(
-                  spacing: 16,
-                  runSpacing: 16,
-                  children: fields.map((f) => SizedBox(width: (1200 - 64 - 32) / 3, child: f)).toList(),
+              if (isDesktop) {
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: fields[0]),
+                        const SizedBox(width: 16),
+                        Expanded(child: fields[1]),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(child: fields[2]),
+                        const SizedBox(width: 16),
+                        Expanded(child: fields[3]),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(child: fields[4]),
+                        const SizedBox(width: 16),
+                        const Spacer(),
+                      ],
+                    ),
+                  ],
                 );
               }
-              return Column(children: fields);
+              return Column(
+                children: fields.map((f) => Padding(padding: const EdgeInsets.only(bottom: 16), child: f)).toList(),
+              );
             }
 
             return Container(
               width: double.maxFinite,
-              constraints: BoxConstraints(maxWidth: isWeb ? 1200 : 500),
+              constraints: BoxConstraints(maxWidth: isDesktop ? 800 : 500),
               padding: const EdgeInsets.all(24),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(isEditing ? 'Editar Contacto' : 'Nuevo Contacto', style: Theme.of(context).textTheme.titleLarge),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(isEditing ? 'Editar Contacto' : 'Nuevo Contacto', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                      IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+                    ],
+                  ),
                   const SizedBox(height: 24),
                   Flexible(child: SingleChildScrollView(child: buildFields())),
                   const SizedBox(height: 24),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCELAR')),
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('CANCELAR'),
+                        ),
+                      ),
                       const SizedBox(width: 16),
-                      ElevatedButton(
-                        onPressed: () async {
-                          if (nombreController.text.trim().isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('El nombre es obligatorio')));
-                            return;
-                          }
-                          try {
-                            final data = {
-                              'nombre': nombreController.text.trim(),
-                              'empresa': empresaController.text.trim(),
-                              'correo': correoController.text.trim(),
-                              'telefono': telefonoController.text.trim(),
-                              'otro': otroController.text.trim(),
-                              'created_by': Supabase.instance.client.auth.currentUser?.id,
-                            };
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            if (nombreController.text.trim().isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('El nombre es obligatorio')));
+                              return;
+                            }
+                            try {
+                              final data = {
+                                'nombre': nombreController.text.trim().toUpperCase(),
+                                'empresa': empresaController.text.trim().toUpperCase(),
+                                'correo': correoController.text.trim(),
+                                'telefono': telefonoController.text.trim(),
+                                'otro': otroController.text.trim(),
+                                'created_by': Supabase.instance.client.auth.currentUser?.id,
+                              };
 
-                            if (isEditing) {
-                              await Supabase.instance.client.from('external_contacts').update(data).eq('id', contact['id']);
-                            } else {
-                              await Supabase.instance.client.from('external_contacts').insert(data);
-                            }
+                              if (isEditing) {
+                                await Supabase.instance.client.from('external_contacts').update(data).eq('id', contact['id']);
+                              } else {
+                                await Supabase.instance.client.from('external_contacts').insert(data);
+                              }
 
-                            if (mounted) {
-                              Navigator.pop(context);
-                              _fetchContacts();
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEditing ? 'Contacto actualizado' : 'Contacto creado')));
+                              if (mounted) {
+                                Navigator.pop(context);
+                                _fetchContacts();
+                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEditing ? 'Contacto actualizado' : 'Contacto creado')));
+                              }
+                            } catch (e) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+                              }
                             }
-                          } catch (e) {
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
-                            }
-                          }
-                        },
-                        child: Text(isEditing ? 'GUARDAR' : 'CREAR'),
+                          },
+                          child: Text(isEditing ? 'GUARDAR' : 'CREAR'),
+                        ),
                       ),
                     ],
                   ),
@@ -191,186 +225,209 @@ class _ExternalContactsPageState extends State<ExternalContactsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final isWeb = MediaQuery.of(context).size.width > 800;
+    final theme = Theme.of(context);
+    final isDesktop = MediaQuery.of(context).size.width > 800;
     final filtered = _filteredContacts;
 
+    final searchWidget = SizedBox(
+      width: isDesktop ? 250 : double.infinity,
+      height: 40,
+      child: TextField(
+        controller: _searchController,
+        decoration: InputDecoration(
+          hintText: 'Buscar...',
+          prefixIcon: const Icon(Icons.search, size: 20),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+          filled: true,
+          fillColor: Colors.white,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+        ),
+        onChanged: (v) => setState(() => _searchQuery = v),
+      ),
+    );
+
     return Scaffold(
-      body: _isLoading
-          ? Center(
-              child: Image.asset(
-                'assets/sisol_loader.gif',
-                width: 150,
-                errorBuilder: (context, error, stackTrace) => const CircularProgressIndicator(),
-              ),
-            )
-          : Column(
-              children: [
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(24),
-                    child: Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 1400),
+      body: Column(
+        children: [
+          PageHeader(
+            title: 'Contactos Externos',
+            subtitle: null,
+            trailing: isDesktop ? searchWidget : null,
+            bottom: isDesktop ? null : [searchWidget],
+          ),
+          Expanded(
+            child: _isLoading
+                ? Center(
+                    child: Image.asset(
+                      'assets/sisol_loader.gif',
+                      width: 150,
+                      errorBuilder: (context, error, stackTrace) => const CircularProgressIndicator(),
+                    ),
+                  )
+                : filtered.isEmpty
+                    ? Center(
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            if (isWeb) _buildWebHeader() else _buildMobileHeader(),
-                            const SizedBox(height: 24),
-                            if (isWeb) _buildWebTable(filtered) else _buildMobileList(filtered),
+                            Icon(Icons.contact_phone_outlined, size: 64, color: Colors.grey[300]),
+                            const SizedBox(height: 16),
+                            const Text('No hay contactos registrados', style: TextStyle(color: Colors.grey)),
                           ],
                         ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-      floatingActionButton: !isWeb ? FloatingActionButton(
+                      )
+                    : isDesktop ? _buildDesktopLayout(filtered, theme) : _buildMobileLayout(filtered),
+          ),
+        ],
+      ),
+      floatingActionButton: !isDesktop ? FloatingActionButton.extended(
         onPressed: () => _showContactForm(),
-        backgroundColor: const Color(0xFF344092),
-        child: const Icon(Icons.add, color: Colors.white),
+        backgroundColor: theme.colorScheme.secondary,
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.add),
+        label: const Text('NUEVO'),
       ) : null,
     );
   }
 
-  Widget _buildWebHeader() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        const Text(
-          'Contactos Externos',
-          style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF344092)),
-        ),
-        Row(
-          children: [
-            SizedBox(
-              width: 300,
-              child: TextField(
-                controller: _searchController,
-                decoration: InputDecoration(
-                  hintText: 'Buscar contacto...',
-                  prefixIcon: const Icon(Icons.search),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+  Widget _buildDesktopLayout(List<Map<String, dynamic>> items, ThemeData theme) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1400),
+          child: Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey[200]!)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Lista de Contactos', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      ElevatedButton.icon(
+                        onPressed: () => _showContactForm(),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: theme.colorScheme.secondary,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(120, 48),
+                        ),
+                        icon: const Icon(Icons.add),
+                        label: const Text('NUEVO'),
+                      ),
+                    ],
+                  ),
                 ),
-                onChanged: (val) => setState(() => _searchQuery = val),
-              ),
-            ),
-            const SizedBox(width: 16),
-            ElevatedButton.icon(
-              onPressed: () => _showContactForm(),
-              icon: const Icon(Icons.add),
-              label: const Text('NUEVO CONTACTO'),
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(200, 50),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildMobileHeader() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Contactos Externos',
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF344092)),
-        ),
-        const SizedBox(height: 16),
-        TextField(
-          controller: _searchController,
-          decoration: InputDecoration(
-            hintText: 'Buscar contacto...',
-            prefixIcon: const Icon(Icons.search),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-          onChanged: (val) => setState(() => _searchQuery = val),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildWebTable(List<Map<String, dynamic>> items) {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.grey[200]!),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: DataTable(
-          headingRowColor: WidgetStateProperty.all(const Color(0xFF344092).withOpacity(0.05)),
-          columns: const [
-            DataColumn(label: Text('Nombre', style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text('Empresa', style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text('Correo', style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text('Teléfono', style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text('Otro', style: TextStyle(fontWeight: FontWeight.bold))),
-            DataColumn(label: Text('Acciones', style: TextStyle(fontWeight: FontWeight.bold))),
-          ],
-          rows: items.map((c) => DataRow(cells: [
-            DataCell(Text(c['nombre'] ?? '')),
-            DataCell(Text(c['empresa'] ?? '')),
-            DataCell(Text(c['correo'] ?? '')),
-            DataCell(Text(c['telefono'] ?? '')),
-            DataCell(Text(c['otro'] ?? '')),
-            DataCell(Row(
-              children: [
-                IconButton(icon: const Icon(Icons.edit, color: Colors.blue), onPressed: () => _showContactForm(contact: c)),
-                IconButton(icon: const Icon(Icons.delete, color: Colors.red), onPressed: () => _deleteContact(c['id'])),
+                const Divider(height: 1),
+                PaginatedDataTable(
+                  columns: const [
+                    DataColumn(label: Text('Nombre', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Empresa', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Correo', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Teléfono', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Otro', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Acciones', style: TextStyle(fontWeight: FontWeight.bold))),
+                  ],
+                  source: _ContactsDataSource(
+                    items: items,
+                    onEdit: (c) => _showContactForm(contact: c),
+                    onDelete: (id) => _deleteContact(id),
+                  ),
+                  rowsPerPage: items.isEmpty ? 1 : (items.length > 10 ? 10 : items.length),
+                  showCheckboxColumn: false,
+                  horizontalMargin: 24,
+                  columnSpacing: 24,
+                ),
               ],
-            )),
-          ])).toList(),
+            ),
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildMobileList(List<Map<String, dynamic>> items) {
-    if (items.isEmpty) {
-      return const Center(child: Padding(padding: EdgeInsets.all(40), child: Text('No hay contactos cubriendo los filtros')));
-    }
-    return ListView.separated(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: items.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 12),
-      itemBuilder: (context, index) {
-        final c = items[index];
-        return Card(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: Colors.grey[200]!),
-          ),
-          child: ListTile(
-            title: Text(c['nombre'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (c['empresa'] != null && c['empresa'].toString().isNotEmpty)
-                  Text('🏢 ${c['empresa']}'),
-                if (c['telefono'] != null && c['telefono'].toString().isNotEmpty)
-                  Text('📞 ${c['telefono']}'),
-              ],
+  Widget _buildMobileLayout(List<Map<String, dynamic>> items) {
+    return RefreshIndicator(
+      onRefresh: _fetchContacts,
+      child: ListView.separated(
+        padding: const EdgeInsets.all(16),
+        itemCount: items.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (context, index) {
+          final c = items[index];
+          return Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey[200]!)),
+            child: ListTile(
+              title: Text(c['nombre'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (c['empresa'] != null && c['empresa'].toString().isNotEmpty)
+                    Text('🏢 ${c['empresa']}'),
+                  if (c['telefono'] != null && c['telefono'].toString().isNotEmpty)
+                    Text('📞 ${c['telefono']}'),
+                ],
+              ),
+              trailing: PopupMenuButton<String>(
+                onSelected: (value) {
+                  if (value == 'edit') _showContactForm(contact: c);
+                  if (value == 'delete') _deleteContact(c['id']);
+                },
+                itemBuilder: (context) => [
+                  const PopupMenuItem(value: 'edit', child: ListTile(leading: Icon(Icons.edit), title: Text('Editar'), dense: true)),
+                  const PopupMenuItem(value: 'delete', child: ListTile(leading: Icon(Icons.delete, color: Colors.red), title: Text('Eliminar', style: TextStyle(color: Colors.red)), dense: true)),
+                ],
+              ),
             ),
-            trailing: PopupMenuButton(
-              itemBuilder: (context) => [
-                const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, size: 20), SizedBox(width: 8), Text('Editar')])),
-                const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, size: 20, color: Colors.red), SizedBox(width: 8), Text('Eliminar', style: TextStyle(color: Colors.red))])),
-              ],
-              onSelected: (val) {
-                if (val == 'edit') _showContactForm(contact: c);
-                if (val == 'delete') _deleteContact(c['id']);
-              },
-            ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
+}
+
+class _ContactsDataSource extends DataTableSource {
+  final List<Map<String, dynamic>> items;
+  final Function(Map<String, dynamic>) onEdit;
+  final Function(String) onDelete;
+
+  _ContactsDataSource({required this.items, required this.onEdit, required this.onDelete});
+
+  @override
+  DataRow? getRow(int index) {
+    if (index >= items.length) return null;
+    final c = items[index];
+    return DataRow.byIndex(
+      index: index,
+      cells: [
+        DataCell(Text(c['nombre'] ?? '')),
+        DataCell(Text(c['empresa'] ?? '')),
+        DataCell(Text(c['correo'] ?? '')),
+        DataCell(Text(c['telefono'] ?? '')),
+        DataCell(Text(c['otro'] ?? '')),
+        DataCell(
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'edit') onEdit(c);
+              if (value == 'delete') onDelete(c['id']);
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(value: 'edit', child: ListTile(leading: Icon(Icons.edit, color: Colors.blue), title: Text('Editar'), dense: true)),
+              const PopupMenuItem(value: 'delete', child: ListTile(leading: Icon(Icons.delete, color: Colors.red), title: Text('Eliminar', style: TextStyle(color: Colors.red)), dense: true)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  bool get isRowCountApproximate => false;
+  @override
+  int get rowCount => items.length;
+  @override
+  int get selectedRowCount => 0;
 }
