@@ -15,6 +15,7 @@ class _SystemLogsPageState extends State<SystemLogsPage> {
   DateTime? _startDate;
   DateTime? _endDate;
   Map<DateTime, int> _dailyLogins = {};
+  Map<String, Map<String, dynamic>> _emailProfiles = {};
 
   @override
   void initState() {
@@ -65,7 +66,7 @@ class _SystemLogsPageState extends State<SystemLogsPage> {
     try {
       var query = Supabase.instance.client
           .from('system_logs')
-          .select('*, profiles:actor_id(nombre, paterno, email)');
+          .select();
 
       if (_startDate != null) {
         query = query.gte('created_at', _startDate!.toIso8601String());
@@ -83,6 +84,30 @@ class _SystemLogsPageState extends State<SystemLogsPage> {
         _logs = List<Map<String, dynamic>>.from(data);
         _isLoading = false;
       });
+
+      // Extract unique emails from target_info and fetch profiles
+      final emails = <String>{};
+      for (final log in _logs) {
+        final target = (log['target_info'] ?? '') as String;
+        final email = _extractEmail(target);
+        if (email.isNotEmpty) emails.add(email);
+      }
+      if (emails.isNotEmpty) {
+        try {
+          final profiles = await Supabase.instance.client
+              .from('profiles')
+              .select('nombre, paterno, email')
+              .inFilter('email', emails.toList());
+          final map = <String, Map<String, dynamic>>{};
+          for (final p in profiles) {
+            final e = p['email'] as String?;
+            if (e != null) map[e.toLowerCase()] = Map<String, dynamic>.from(p);
+          }
+          if (mounted) setState(() => _emailProfiles = map);
+        } catch (e) {
+          debugPrint('Error fetching profiles for logs: $e');
+        }
+      }
     } catch (e) {
       debugPrint('Error fetching logs: $e');
       if (mounted) {
@@ -381,17 +406,26 @@ class _SystemLogsPageState extends State<SystemLogsPage> {
     );
   }
 
+  String _extractEmail(String targetInfo) {
+    // target_info format: "Usuario: email@domain.com"
+    if (targetInfo.startsWith('Usuario: ')) {
+      return targetInfo.substring(9).trim().toLowerCase();
+    }
+    return '';
+  }
+
   String _getProfileName(Map<String, dynamic> log) {
-    final profile = log['profiles'];
+    final email = _extractEmail((log['target_info'] ?? '') as String);
+    if (email.isEmpty) return '---';
+    final profile = _emailProfiles[email];
     if (profile == null) return '---';
     final nombre = '${profile['nombre'] ?? ''} ${profile['paterno'] ?? ''}'.trim();
     return nombre.isEmpty ? '---' : nombre;
   }
 
   String _getProfileEmail(Map<String, dynamic> log) {
-    final profile = log['profiles'];
-    if (profile == null) return '---';
-    return profile['email'] ?? '---';
+    final email = _extractEmail((log['target_info'] ?? '') as String);
+    return email.isEmpty ? '---' : email;
   }
 
   Widget _buildMobileList(ThemeData theme) {
