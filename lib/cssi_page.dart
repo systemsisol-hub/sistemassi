@@ -16,6 +16,7 @@ class CssiPage extends StatefulWidget {
 
 class _CssiPageState extends State<CssiPage> {
   List<Map<String, dynamic>> _items = [];
+  Map<String, List<String>> _userDevices = {};
   bool _isLoading = true;
   final _searchController = TextEditingController();
   String _searchQuery = '';
@@ -52,6 +53,27 @@ class _CssiPageState extends State<CssiPage> {
       if (mounted) {
         setState(() {
           _items = allData;
+        });
+      }
+
+      // Fetch assigned devices from issi_inventory
+      final inventoryData = await Supabase.instance.client
+          .from('issi_inventory')
+          .select('usuario_id, tipo')
+          .not('usuario_id', 'is', null);
+      
+      final deviceMap = <String, List<String>>{};
+      for (final inv in inventoryData) {
+        final uid = inv['usuario_id'] as String;
+        final tipo = inv['tipo'] as String?;
+        if (tipo != null) {
+          deviceMap.putIfAbsent(uid, () => []).add(tipo);
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _userDevices = deviceMap;
           _isLoading = false;
         });
       }
@@ -725,10 +747,21 @@ class _CssiPageState extends State<CssiPage> {
                   : null,
               ),
               title: Text('${item['numero_empleado'] ?? '---'} | ${item['nombre']} ${item['paterno']}', style: const TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Row(
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildStatusChip(item['status_rh'] ?? 'ACTIVO', 'RH'),
-                  const SizedBox(width: 8),
+                  Row(
+                    children: [
+                      _buildStatusChip(item['status_rh'] ?? 'ACTIVO', 'RH'),
+                      if (_userDevices.containsKey(item['id'])) ...[
+                        const SizedBox(width: 8),
+                        ..._userDevices[item['id']]!
+                            .take(3)
+                            .map((tipo) => _buildMiniIcon(_getIconForType(tipo))),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 4),
                   _buildStatusChip(item['status_sys'] ?? 'ACTIVO', 'SYS'),
                 ],
               ),
@@ -821,6 +854,7 @@ class _CssiPageState extends State<CssiPage> {
                     onEdit: (item) => _showForm(item: item),
                     onDelete: (id) => _deleteItem(id),
                     buildStatusChip: _buildStatusChip,
+                    userDevices: _userDevices,
                   ),
                   rowsPerPage: filtered.isEmpty ? 1 : (filtered.length > 10 ? 10 : filtered.length),
                   showCheckboxColumn: false,
@@ -919,6 +953,30 @@ class _CssiPageState extends State<CssiPage> {
       ),
     );
   }
+  Widget _buildMiniIcon(IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 4),
+      child: Icon(
+        icon,
+        size: 14,
+        color: const Color(0xFF344092),
+      ),
+    );
+  }
+
+  IconData _getIconForType(String tipo) {
+    switch (tipo.toUpperCase()) {
+      case 'LAPTOP': return Icons.laptop_mac;
+      case 'PC': return Icons.desktop_mac;
+      case 'IMPRESORA': return Icons.print;
+      case 'CELULAR': return Icons.smartphone;
+      case 'TELEFONO': return Icons.phone;
+      case 'DISCO DURO': return Icons.storage;
+      case 'MONITOR': return Icons.monitor;
+      case 'MOUSE': return Icons.mouse;
+      default: return Icons.devices_other;
+    }
+  }
 }
 
 class _CssiDataSource extends DataTableSource {
@@ -928,6 +986,7 @@ class _CssiDataSource extends DataTableSource {
   final Function(Map<String, dynamic>) onEdit;
   final Function(String) onDelete;
   final Widget Function(String, String) buildStatusChip;
+  final Map<String, List<String>> userDevices;
 
   _CssiDataSource({
     required this.items,
@@ -936,6 +995,7 @@ class _CssiDataSource extends DataTableSource {
     required this.onEdit,
     required this.onDelete,
     required this.buildStatusChip,
+    required this.userDevices,
   });
 
   @override
@@ -947,7 +1007,20 @@ class _CssiDataSource extends DataTableSource {
       index: index,
       cells: [
         DataCell(Text(item['numero_empleado']?.toString() ?? '---')),
-        DataCell(buildStatusChip(item['status_rh'] ?? 'ACTIVO', 'RH')),
+        DataCell(
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              buildStatusChip(item['status_rh'] ?? 'ACTIVO', 'RH'),
+              if (userDevices.containsKey(item['id'])) ...[
+                const SizedBox(width: 8),
+                ...userDevices[item['id']]!
+                    .take(3) // Show max 3 icons to avoid overflow
+                    .map((tipo) => _buildMiniIcon(_getIconForType(tipo))),
+              ],
+            ],
+          ),
+        ),
         DataCell(
           Row(
             mainAxisSize: MainAxisSize.min,
@@ -994,4 +1067,29 @@ class _CssiDataSource extends DataTableSource {
 
   @override
   int get selectedRowCount => 0;
+
+  Widget _buildMiniIcon(IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 4),
+      child: Icon(
+        icon,
+        size: 14,
+        color: const Color(0xFF344092),
+      ),
+    );
+  }
+
+  IconData _getIconForType(String tipo) {
+    switch (tipo.toUpperCase()) {
+      case 'LAPTOP': return Icons.laptop_mac;
+      case 'PC': return Icons.desktop_mac;
+      case 'IMPRESORA': return Icons.print;
+      case 'CELULAR': return Icons.smartphone;
+      case 'TELEFONO': return Icons.phone;
+      case 'DISCO DURO': return Icons.storage;
+      case 'MONITOR': return Icons.monitor;
+      case 'MOUSE': return Icons.mouse;
+      default: return Icons.devices_other;
+    }
+  }
 }
