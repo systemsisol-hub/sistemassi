@@ -816,7 +816,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
           child: ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             title: Text(
-              inc['nombre_usuario'] ?? 'Usuario',
+              inc['periodo'] ?? '---',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             subtitle: Text('Días: ${inc['dias']} | Creado: ${_formatDate(inc['created_at'])}'),
@@ -1007,7 +1007,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Historial de Solicitudes', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text('Historial de ${_userFullName ?? "Solicitudes"}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   ElevatedButton.icon(
                     onPressed: () => _showIncidenciaForm(),
                     style: ElevatedButton.styleFrom(
@@ -1026,7 +1026,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
               data: theme.copyWith(cardColor: Colors.transparent),
               child: PaginatedDataTable(
                 columns: const [
-                  DataColumn(label: Text('Nombre', style: TextStyle(fontWeight: FontWeight.bold))),
+                  DataColumn(label: Text('Periodo', style: TextStyle(fontWeight: FontWeight.bold))),
                   DataColumn(label: Text('Días', style: TextStyle(fontWeight: FontWeight.bold))),
                   DataColumn(label: Text('Creado', style: TextStyle(fontWeight: FontWeight.bold))),
                   DataColumn(label: Text('Fecha Inicio', style: TextStyle(fontWeight: FontWeight.bold))),
@@ -1146,7 +1146,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Expanded(
-                              flex: 2,
+                              flex: 1,
                               child: _buildAntiguedadDesktop(),
                             ),
                             const SizedBox(width: 16),
@@ -1156,7 +1156,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                             ),
                             const SizedBox(width: 16),
                             Expanded(
-                              flex: 5,
+                              flex: 6,
                                child: _isLoading
                                   ? Center(
                                       child: Image.asset(
@@ -1276,7 +1276,7 @@ class _IncidenciasDataSource extends DataTableSource {
       index: index,
       cells: [
         DataCell(
-          Text(inc['nombre_usuario'] ?? 'Usuario', style: const TextStyle(fontWeight: FontWeight.w500)),
+          Text(inc['periodo'] ?? '---', style: const TextStyle(fontWeight: FontWeight.w500)),
         ),
         DataCell(Text('${inc['dias'] ?? '-'}')),
         DataCell(Text(formatDate(inc['created_at']))),
