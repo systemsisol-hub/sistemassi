@@ -65,7 +65,7 @@ class _SystemLogsPageState extends State<SystemLogsPage> {
     try {
       var query = Supabase.instance.client
           .from('system_logs')
-          .select();
+          .select('*, profiles:actor_id(nombre, paterno, email)');
 
       if (_startDate != null) {
         query = query.gte('created_at', _startDate!.toIso8601String());
@@ -95,6 +95,8 @@ class _SystemLogsPageState extends State<SystemLogsPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     
+    final isDesktop = MediaQuery.of(context).size.width > 800;
+
     return Column(
       children: [
         PageHeader(
@@ -187,36 +189,9 @@ class _SystemLogsPageState extends State<SystemLogsPage> {
                     ],
                   ),
                 )
-              : RefreshIndicator(
-                  onRefresh: _fetchLogs,
-                  child: ListView.separated(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: _logs.length,
-                    separatorBuilder: (context, index) => const Divider(),
-                    itemBuilder: (context, index) {
-                      final log = _logs[index];
-                      final action = log['action_type'] ?? 'ACCIÓN';
-                      final target = log['target_info'] ?? '---';
-                      final date = DateTime.parse(log['created_at']).toLocal();
-                      
-                      return ListTile(
-                        leading: _getIconForAction(action, theme),
-                        title: Text(
-                          action,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                        ),
-                        subtitle: Text(
-                          target,
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                        trailing: Text(
-                          _formatTime(date),
-                          style: TextStyle(fontSize: 11, color: Colors.grey[500]),
-                        ),
-                      );
-                    },
-                  ),
-                ),
+              : isDesktop
+                ? _buildDesktopTable(theme)
+                : _buildMobileList(theme),
         ),
       ],
     );
@@ -405,4 +380,189 @@ class _SystemLogsPageState extends State<SystemLogsPage> {
       ),
     );
   }
+
+  String _getProfileName(Map<String, dynamic> log) {
+    final profile = log['profiles'];
+    if (profile == null) return '---';
+    final nombre = '${profile['nombre'] ?? ''} ${profile['paterno'] ?? ''}'.trim();
+    return nombre.isEmpty ? '---' : nombre;
+  }
+
+  String _getProfileEmail(Map<String, dynamic> log) {
+    final profile = log['profiles'];
+    if (profile == null) return '---';
+    return profile['email'] ?? '---';
+  }
+
+  Widget _buildMobileList(ThemeData theme) {
+    return RefreshIndicator(
+      onRefresh: _fetchLogs,
+      child: ListView.separated(
+        padding: const EdgeInsets.all(16),
+        itemCount: _logs.length,
+        separatorBuilder: (context, index) => const Divider(),
+        itemBuilder: (context, index) {
+          final log = _logs[index];
+          final action = log['action_type'] ?? 'ACCIÓN';
+          final target = log['target_info'] ?? '---';
+          final date = DateTime.parse(log['created_at']).toLocal();
+          
+          return ListTile(
+            leading: _getIconForAction(action, theme),
+            title: Text(
+              action,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+            subtitle: Text(
+              target,
+              style: const TextStyle(fontSize: 12),
+            ),
+            trailing: Text(
+              _formatTime(date),
+              style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildDesktopTable(ThemeData theme) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: SizedBox(
+        width: double.infinity,
+        child: Card(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: Colors.grey[200]!),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                child: Row(
+                  children: [
+                    const Text('Registros de Actividad', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const Spacer(),
+                    Text('${_logs.length} registros', style: TextStyle(fontSize: 13, color: Colors.grey[500])),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Theme(
+                data: theme.copyWith(cardColor: Colors.transparent),
+                child: PaginatedDataTable(
+                  columns: const [
+                    DataColumn(label: Text('Nombre', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Email', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Acción', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Detalle', style: TextStyle(fontWeight: FontWeight.bold))),
+                    DataColumn(label: Text('Fecha', style: TextStyle(fontWeight: FontWeight.bold))),
+                  ],
+                  source: _LogsDataSource(
+                    items: _logs,
+                    theme: theme,
+                    formatTime: _formatTime,
+                    getStatusColor: _getStatusColor,
+                    getIconForAction: _getIconForAction,
+                    getProfileName: _getProfileName,
+                    getProfileEmail: _getProfileEmail,
+                  ),
+                  rowsPerPage: _logs.isEmpty ? 1 : (_logs.length > 10 ? 10 : _logs.length),
+                  showCheckboxColumn: false,
+                  horizontalMargin: 16,
+                  columnSpacing: 16,
+                  dataRowMinHeight: 48,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'APROBADA': return Colors.green;
+      case 'CANCELADA': return Colors.red;
+      default: return Colors.orange;
+    }
+  }
+}
+
+class _LogsDataSource extends DataTableSource {
+  final List<Map<String, dynamic>> items;
+  final ThemeData theme;
+  final String Function(DateTime) formatTime;
+  final Color Function(String) getStatusColor;
+  final Icon Function(String, ThemeData) getIconForAction;
+  final String Function(Map<String, dynamic>) getProfileName;
+  final String Function(Map<String, dynamic>) getProfileEmail;
+
+  _LogsDataSource({
+    required this.items,
+    required this.theme,
+    required this.formatTime,
+    required this.getStatusColor,
+    required this.getIconForAction,
+    required this.getProfileName,
+    required this.getProfileEmail,
+  });
+
+  @override
+  DataRow? getRow(int index) {
+    if (index >= items.length) return null;
+    final log = items[index];
+    final action = log['action_type'] ?? 'ACCIÓN';
+    final target = log['target_info'] ?? '---';
+    final date = DateTime.parse(log['created_at']).toLocal();
+    final nombre = getProfileName(log);
+    final email = getProfileEmail(log);
+
+    Color actionColor;
+    switch (action) {
+      case 'INICIO DE SESIÓN': actionColor = Colors.green; break;
+      case 'CIERRE DE SESIÓN': actionColor = Colors.orange; break;
+      case 'CREACIÓN': actionColor = theme.colorScheme.secondary; break;
+      case 'ELIMINACIÓN': actionColor = Colors.redAccent; break;
+      case 'REGISTRO': actionColor = theme.colorScheme.primary; break;
+      default: actionColor = Colors.blueGrey;
+    }
+
+    return DataRow.byIndex(
+      index: index,
+      cells: [
+        DataCell(Text(nombre, style: const TextStyle(fontWeight: FontWeight.w500))),
+        DataCell(Text(email, style: TextStyle(fontSize: 12, color: Colors.grey[600]))),
+        DataCell(
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: actionColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              action,
+              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: actionColor),
+            ),
+          ),
+        ),
+        DataCell(Text(target, style: const TextStyle(fontSize: 12))),
+        DataCell(Text(formatTime(date), style: TextStyle(fontSize: 12, color: Colors.grey[500]))),
+      ],
+    );
+  }
+
+  @override
+  bool get isRowCountApproximate => false;
+
+  @override
+  int get rowCount => items.length;
+
+  @override
+  int get selectedRowCount => 0;
 }
