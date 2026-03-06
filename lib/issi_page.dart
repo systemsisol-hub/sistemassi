@@ -664,7 +664,11 @@ class _IssiPageState extends State<IssiPage> {
   Widget _buildDesktopLayout(List<Map<String, dynamic>> filtered, ThemeData theme) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
-      child: SizedBox(
+      child: Column(
+        children: [
+          _buildDashboardCards(theme),
+          const SizedBox(height: 16),
+          SizedBox(
         width: double.infinity,
         child: Card(
           elevation: 0,
@@ -741,6 +745,8 @@ class _IssiPageState extends State<IssiPage> {
           ),
         ),
       ),
+        ],
+      ),
     );
   }
 
@@ -799,14 +805,7 @@ class _IssiPageState extends State<IssiPage> {
               );
             },
           ),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              if (constraints.maxWidth > 800 && !_isLoading && _items.isNotEmpty) {
-                return _buildDashboardCards(Theme.of(context));
-              }
-              return const SizedBox.shrink();
-            },
-          ),
+
           Expanded(
             child: _isLoading
                 ? _buildShimmerLoading()
@@ -864,9 +863,7 @@ class _IssiPageState extends State<IssiPage> {
     final condSorted = condCounts.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
     final ubiSorted = ubiCounts.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-      child: Row(
+    return Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(child: _buildTipoCard(tipoSorted, theme)),
@@ -875,8 +872,7 @@ class _IssiPageState extends State<IssiPage> {
           const SizedBox(width: 16),
           Expanded(child: _buildUbicacionCard(ubiSorted, theme)),
         ],
-      ),
-    );
+      );
   }
 
   Widget _cardShell({required String title, required IconData icon, required Color accent, required Widget child}) {
@@ -911,10 +907,7 @@ class _IssiPageState extends State<IssiPage> {
               ],
             ),
             const SizedBox(height: 14),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 200),
-              child: SingleChildScrollView(child: child),
-            ),
+            child,
           ],
         ),
       ),
