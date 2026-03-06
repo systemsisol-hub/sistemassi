@@ -62,7 +62,7 @@ class _MainNavigationState extends State<MainNavigation> {
 
     if (widget.permissions['show_issi'] == true) {
       pages.add({
-        'title': 'ISSI',
+        'title': 'Inventario',
         'icon': Icons.inventory_2_outlined,
         'activeIcon': Icons.inventory_2,
         'widget': const IssiPage(),
@@ -71,7 +71,7 @@ class _MainNavigationState extends State<MainNavigation> {
 
     if (widget.permissions['show_cssi'] == true) {
       pages.add({
-        'title': 'CSSI',
+        'title': 'Colaborador',
         'icon': Icons.badge_outlined,
         'activeIcon': Icons.badge,
         'widget': CssiPage(role: widget.role),
