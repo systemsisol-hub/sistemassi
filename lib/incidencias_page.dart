@@ -408,8 +408,8 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
         // Future period: show full entitlement
         return days.toDouble();
       } else if (periodEnd.isBefore(now) || periodEnd.isAtSameMomentAs(now)) {
-        // Past completed period: 365 elapsed
-        return (days / 365) * 365;
+        // Past completed period: full entitlement
+        return days.toDouble();
       } else {
         // Current in-progress: (fecha_actual - inicio_periodo + 1)
         final elapsed = now.difference(periodStart).inDays + 1;
