@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs grep *)",
+      "Bash(grep -v \"^\\\\s*//.*in\")",
+      "Bash(cp -r \"D:\\\\Documents\\\\GitHub\\\\sistemassi\\\\.claude\\\\worktrees\\\\zealous-solomon-bc3714\\\\.github\" \"D:\\\\Documents\\\\GitHub\\\\sistemassi\\\\.github\")",
+      "Bash(cp \"D:\\\\Documents\\\\GitHub\\\\sistemassi\\\\.claude\\\\worktrees\\\\zealous-solomon-bc3714\\\\web\\\\_redirects\" \"D:\\\\Documents\\\\GitHub\\\\sistemassi\\\\web\\\\_redirects\")",
+      "Read(//d/Documents/GitHub/sistemassi/**)",
+      "Bash(gh auth *)"
+    ]
+  }
+}
