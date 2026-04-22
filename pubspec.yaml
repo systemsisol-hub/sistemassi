@@ -1,0 +1,59 @@
+name: appsi
+description: A new Flutter project for Supabase and Dokploy.
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  supabase_flutter: ^2.12.2
+  flutter_dotenv: ^5.1.0
+  image_picker: ^1.0.7
+  geolocator: ^13.0.1
+  flutter_localizations:
+    sdk: flutter
+  intl: any
+  flutter_web_plugins: 
+    sdk: flutter
+  csv: ^6.0.0
+  syncfusion_flutter_calendar: any
+  syncfusion_localizations: any
+  url_launcher: ^6.3.0
+  http: ^1.2.0
+  webviewx_plus: ^0.5.1
+  app_links: ^7.0.0
+  camera: ^0.11.0+2
+  pdf: ^3.12.0
+  printing: ^5.14.3
+  path_provider: ^2.1.2
+  screenshot: ^3.0.0
+  font_awesome_flutter: ^10.7.0
+  share_plus: ^7.2.2
+  google_fonts: ^8.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.13.1
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/
+    - assets/firmcred/
+    - .env
+
+dependency_overrides:
+
+flutter_launcher_icons:
+  image_path: "assets/sisolok.png"
+  android: true
+  ios: false
+  web:
+    generate: true
+    image_path: "assets/sisolok.png"
+    background_color: "#ffffff"
+    theme_color: "#ffffff"
