@@ -23,18 +23,19 @@ Future<void> _init() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('es_MX', null);
 
+  // Start with dart-define values (used in CI/CD), then override with .env if available
+  var supabaseUrl = const String.fromEnvironment('SB_URL');
+  var supabaseAnonKey = const String.fromEnvironment('SB_TOKEN');
+
   try {
     await dotenv.load(fileName: ".env");
+    supabaseUrl = dotenv.maybeGet('SB_URL')?.trim() ?? supabaseUrl;
+    supabaseAnonKey = dotenv.maybeGet('SB_TOKEN')?.trim() ?? supabaseAnonKey;
   } catch (e) {
-    debugPrint("Warning: .env file not found, falling back to environment variables");
+    debugPrint("Warning: .env not loaded, using dart-define values");
   }
 
-  final supabaseUrl =
-      (dotenv.maybeGet('SB_URL') ?? const String.fromEnvironment('SB_URL')).trim();
-  final supabaseAnonKey =
-      (dotenv.maybeGet('SB_TOKEN') ?? const String.fromEnvironment('SB_TOKEN')).trim();
-
-  debugPrint('SB_URL length: ${supabaseUrl.length}, starts: ${supabaseUrl.substring(0, supabaseUrl.length.clamp(0, 15))}');
+  debugPrint('SB_URL length: ${supabaseUrl.length}');
 
   if (supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty) {
     try {
