@@ -73,3 +73,7 @@ ios/DerivedData/
 *.zip
 f l u t t e r . z i p
 .env
+
+# Claude Code
+.claude/worktrees/
+.claude/settings.local.json
