@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
@@ -10,23 +11,30 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:syncfusion_localizations/syncfusion_localizations.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-void main() async {
+void main() {
+  runZonedGuarded(_init, (error, stack) {
+    debugPrint('ZONE ERROR: $error');
+    debugPrint('STACK: $stack');
+  });
+}
+
+Future<void> _init() async {
   usePathUrlStrategy();
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('es_MX', null);
 
-
   try {
     await dotenv.load(fileName: ".env");
   } catch (e) {
-    debugPrint(
-        "Warning: .env file not found, falling back to environment variables");
+    debugPrint("Warning: .env file not found, falling back to environment variables");
   }
 
   final supabaseUrl =
-      dotenv.maybeGet('SB_URL') ?? const String.fromEnvironment('SB_URL');
+      (dotenv.maybeGet('SB_URL') ?? const String.fromEnvironment('SB_URL')).trim();
   final supabaseAnonKey =
-      dotenv.maybeGet('SB_TOKEN') ?? const String.fromEnvironment('SB_TOKEN');
+      (dotenv.maybeGet('SB_TOKEN') ?? const String.fromEnvironment('SB_TOKEN')).trim();
+
+  debugPrint('SB_URL length: ${supabaseUrl.length}, starts: ${supabaseUrl.substring(0, supabaseUrl.length.clamp(0, 15))}');
 
   if (supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty) {
     try {
@@ -36,7 +44,7 @@ void main() async {
       );
       debugPrint('Supabase initialized successfully');
     } catch (e) {
-      debugPrint('ERROR initializing Supabase: $e | URL starts with: ${supabaseUrl.substring(0, supabaseUrl.length.clamp(0, 20))}');
+      debugPrint('ERROR initializing Supabase: $e');
     }
   } else {
     debugPrint('ERROR: Supabase URL or token empty');
