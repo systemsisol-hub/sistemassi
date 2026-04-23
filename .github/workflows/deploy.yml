@@ -28,8 +28,8 @@ jobs:
       - name: Build Flutter Web
         run: |
           flutter build web --release \
-            --dart-define=SB_URL=${{ secrets.SB_URL }} \
-            --dart-define=SB_TOKEN=${{ secrets.SB_TOKEN }}
+            "--dart-define=SB_URL=${{ secrets.SB_URL }}" \
+            "--dart-define=SB_TOKEN=${{ secrets.SB_TOKEN }}"
 
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3

@@ -123,21 +123,26 @@ class _AuthRouterState extends State<AuthRouter> {
   }
 
   void _listenToAuth() {
-    Supabase.instance.client.auth.onAuthStateChange.listen((data) {
-      final session = data.session;
-      if (mounted) {
-        setState(() {
-          _user = session?.user;
-          if (_user == null) {
-            _role = null;
-            _permissions = null;
-            _isLoading = false;
-          } else {
-            _fetchData();
-          }
-        });
-      }
-    });
+    try {
+      Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+        final session = data.session;
+        if (mounted) {
+          setState(() {
+            _user = session?.user;
+            if (_user == null) {
+              _role = null;
+              _permissions = null;
+              _isLoading = false;
+            } else {
+              _fetchData();
+            }
+          });
+        }
+      });
+    } catch (e) {
+      debugPrint('Supabase no inicializado: $e');
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   Future<void> _fetchData() async {
