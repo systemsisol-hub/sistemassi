@@ -29,13 +29,17 @@ void main() async {
       dotenv.maybeGet('SB_TOKEN') ?? const String.fromEnvironment('SB_TOKEN');
 
   if (supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty) {
-    await Supabase.initialize(
-      url: supabaseUrl,
-      anonKey: supabaseAnonKey,
-    );
-    debugPrint('Supabase initialized successfully');
+    try {
+      await Supabase.initialize(
+        url: supabaseUrl,
+        anonKey: supabaseAnonKey,
+      );
+      debugPrint('Supabase initialized successfully');
+    } catch (e) {
+      debugPrint('ERROR initializing Supabase: $e | URL starts with: ${supabaseUrl.substring(0, supabaseUrl.length.clamp(0, 20))}');
+    }
   } else {
-    debugPrint('ERROR: Supabase URL or token is empty. URL: $supabaseUrl, Token: ${supabaseAnonKey.isNotEmpty ? "present" : "missing"}');
+    debugPrint('ERROR: Supabase URL or token empty');
   }
 
   runApp(const MyApp());
