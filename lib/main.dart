@@ -13,8 +13,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 void main() {
   runZonedGuarded(_init, (error, stack) {
-    debugPrint('ZONE ERROR: $error');
-    debugPrint('STACK: $stack');
+    debugPrint('Unhandled error: $error');
   });
 }
 
@@ -23,7 +22,7 @@ Future<void> _init() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('es_MX', null);
 
-  // Start with dart-define values (used in CI/CD), then override with .env if available
+  // dart-define values (CI/CD), overridden by .env in local dev
   var supabaseUrl = const String.fromEnvironment('SB_URL');
   var supabaseAnonKey = const String.fromEnvironment('SB_TOKEN');
 
@@ -31,24 +30,10 @@ Future<void> _init() async {
     await dotenv.load(fileName: ".env");
     supabaseUrl = dotenv.maybeGet('SB_URL')?.trim() ?? supabaseUrl;
     supabaseAnonKey = dotenv.maybeGet('SB_TOKEN')?.trim() ?? supabaseAnonKey;
-  } catch (e) {
-    debugPrint("Warning: .env not loaded, using dart-define values");
-  }
-
-  debugPrint('SB_URL length: ${supabaseUrl.length}');
+  } catch (_) {}
 
   if (supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty) {
-    try {
-      await Supabase.initialize(
-        url: supabaseUrl,
-        anonKey: supabaseAnonKey,
-      );
-      debugPrint('Supabase initialized successfully');
-    } catch (e) {
-      debugPrint('ERROR initializing Supabase: $e');
-    }
-  } else {
-    debugPrint('ERROR: Supabase URL or token empty');
+    await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
   }
 
   runApp(const MyApp());
