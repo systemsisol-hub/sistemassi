@@ -25,6 +25,14 @@ jobs:
       - name: Create .env placeholder
         run: touch .env
 
+      - name: Verify secrets
+        run: |
+          echo "SB_URL length: ${#SB_URL}"
+          echo "SB_TOKEN length: ${#SB_TOKEN}"
+        env:
+          SB_URL: ${{ secrets.SB_URL }}
+          SB_TOKEN: ${{ secrets.SB_TOKEN }}
+
       - name: Build Flutter Web
         run: |
           flutter build web --release \
