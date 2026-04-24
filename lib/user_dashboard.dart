@@ -360,9 +360,16 @@ class _UserDashboardState extends State<UserDashboard> {
                         Container(
                           height: 150,
                           width: double.infinity,
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.primary,
-                            borderRadius: const BorderRadius.only(
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                Color(0xFF1A2466),
+                                Color(0xFF344092),
+                              ],
+                            ),
+                            borderRadius: BorderRadius.only(
                               bottomLeft: Radius.circular(32),
                               bottomRight: Radius.circular(32),
                             ),

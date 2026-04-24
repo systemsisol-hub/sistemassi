@@ -190,6 +190,7 @@ class _MainNavigationState extends State<MainNavigation> {
           NavigationRail(
             backgroundColor: const Color(0xFF344092),
             selectedIndex: _selectedIndex,
+            minWidth: 76,
             onDestinationSelected: (index) {
               setState(() {
                 _selectedIndex = index;
@@ -197,24 +198,56 @@ class _MainNavigationState extends State<MainNavigation> {
               });
             },
             labelType: NavigationRailLabelType.all,
-            // Indicador (pill) blanco al seleccionar
             indicatorColor: Colors.white,
-            // Ícono seleccionado: azul sobre fondo blanco
             selectedIconTheme:
                 const IconThemeData(color: Color(0xFF344092), size: 22),
-            // Ícono no seleccionado: blanco semi-transparente
             unselectedIconTheme:
                 const IconThemeData(color: Colors.white70, size: 22),
-            // Label seleccionado: blanco y negrita
             selectedLabelTextStyle: const TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.bold,
               fontSize: 11,
             ),
-            // Label no seleccionado: blanco semi-transparente
             unselectedLabelTextStyle: const TextStyle(
               color: Colors.white70,
               fontSize: 11,
+            ),
+            leading: Padding(
+              padding: const EdgeInsets.fromLTRB(8, 16, 8, 8),
+              child: Image.asset(
+                'assets/logo.png',
+                height: 38,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const Icon(
+                  Icons.apps,
+                  color: Colors.white,
+                  size: 32,
+                ),
+              ),
+            ),
+            trailing: Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Divider(color: Colors.white.withOpacity(0.15), height: 1),
+                  const SizedBox(height: 8),
+                  IconButton(
+                    icon: const Icon(Icons.logout, color: Colors.white70, size: 22),
+                    tooltip: 'Cerrar sesión',
+                    onPressed: () async {
+                      try {
+                        final user = Supabase.instance.client.auth.currentUser;
+                        await Supabase.instance.client.rpc('log_event', params: {
+                          'action_type_param': 'CIERRE DE SESIÓN',
+                          'target_info_param': 'Usuario: ${user?.email ?? '---'}',
+                        });
+                      } catch (_) {}
+                      await Supabase.instance.client.auth.signOut();
+                    },
+                  ),
+                ],
+              ),
             ),
             destinations: pages
                 .map(
