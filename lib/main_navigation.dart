@@ -15,6 +15,14 @@ import 'bi_page.dart';
 import 'signature_generator_page.dart';
 import 'theme/si_theme.dart';
 
+// Visual-only nav group definitions — order here is render order.
+final _navGroups = <(String, List<String>)>[
+  ('GENERAL',        ['Mi Perfil', 'Social', 'Firmas', 'Calendario']),
+  ('OPERACIÓN',      ['Incidencias', 'Inventario', 'Colaborador', 'Asistencia', 'Contactos']),
+  ('ANÁLISIS',       ['BI', 'Logs']),
+  ('ADMINISTRACIÓN', ['Usuarios']),
+];
+
 class MainNavigation extends StatefulWidget {
   final String role;
   final Map<String, dynamic> permissions;
@@ -177,7 +185,7 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 }
 
-// ── Desktop shell: expandable rail ──────────────────────────────────────────
+// ── Desktop shell ────────────────────────────────────────────────────────────
 
 class _DesktopShell extends StatefulWidget {
   final List<Map<String, dynamic>> pages;
@@ -220,6 +228,46 @@ class _DesktopShellState extends State<_DesktopShell>
     super.dispose();
   }
 
+  List<Widget> _buildGroupedItems(bool labelVisible, double labelOpacity) {
+    final items = <Widget>[];
+    bool firstNonEmpty = true;
+
+    for (final (label, titles) in _navGroups) {
+      // Collect pages that belong to this group (preserving flat index)
+      final groupEntries = <(int, Map<String, dynamic>)>[];
+      for (var i = 0; i < widget.pages.length; i++) {
+        if (titles.contains(widget.pages[i]['title'])) {
+          groupEntries.add((i, widget.pages[i]));
+        }
+      }
+      if (groupEntries.isEmpty) continue;
+
+      if (labelVisible) {
+        items.add(_SectionHeader(
+            label: label, visible: true, opacity: labelOpacity));
+      } else if (!firstNonEmpty) {
+        items.add(_SectionHeader(
+            label: label, visible: false, opacity: 0));
+      }
+      firstNonEmpty = false;
+
+      for (final (i, page) in groupEntries) {
+        final isActive = widget.selectedIndex == i;
+        items.add(_RailItem(
+          icon: isActive ? page['activeIcon'] : page['icon'],
+          label: page['title'],
+          isActive: isActive,
+          showLabel: labelVisible,
+          labelOpacity: labelOpacity,
+          onTap: () => widget.onSelect(i),
+          onDark: true,
+        ));
+      }
+    }
+
+    return items;
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = SiColors.of(context);
@@ -232,7 +280,7 @@ class _DesktopShellState extends State<_DesktopShell>
       backgroundColor: c.bg,
       body: Row(
         children: [
-          // Sidebar
+          // ── Sidebar ──────────────────────────────────────────
           MouseRegion(
             onEnter: (_) => _railCtrl.forward(),
             onExit: (_) => _railCtrl.reverse(),
@@ -250,9 +298,13 @@ class _DesktopShellState extends State<_DesktopShell>
                   width: w,
                   height: double.infinity,
                   decoration: BoxDecoration(
-                    color: c.panel,
+                    color: c.brand,
                     border: Border(
-                        right: BorderSide(color: c.line, width: 1)),
+                      right: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.08),
+                        width: 1,
+                      ),
+                    ),
                   ),
                   child: Column(
                     children: [
@@ -267,13 +319,14 @@ class _DesktopShellState extends State<_DesktopShell>
                               Container(
                                 width: 28,
                                 height: 28,
-                                decoration: BoxDecoration(
-                                    color: c.brand,
-                                    borderRadius: SiRadius.rSm),
+                                decoration: const BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: SiRadius.rSm,
+                                ),
                                 alignment: Alignment.center,
-                                child: const Text('S',
+                                child: Text('S',
                                     style: TextStyle(
-                                        color: Colors.white,
+                                        color: c.brand,
                                         fontSize: 13,
                                         fontWeight: FontWeight.w700,
                                         height: 1)),
@@ -282,11 +335,11 @@ class _DesktopShellState extends State<_DesktopShell>
                                 const SizedBox(width: SiSpace.x2),
                                 Opacity(
                                   opacity: labelOpacity,
-                                  child: Text('Sistemassi',
+                                  child: const Text('Sistemassi',
                                       style: TextStyle(
                                           fontSize: 14,
                                           fontWeight: FontWeight.w600,
-                                          color: c.ink,
+                                          color: Colors.white,
                                           letterSpacing: -0.14)),
                                 ),
                               ],
@@ -294,37 +347,25 @@ class _DesktopShellState extends State<_DesktopShell>
                           ),
                         ),
                       ),
-                      Divider(color: c.line, height: 1),
+                      Container(
+                          height: 1,
+                          color: Colors.white.withValues(alpha: 0.08)),
 
-                      // Nav items
+                      // Nav items (grouped)
                       Expanded(
                         child: ListView(
                           padding: const EdgeInsets.symmetric(
                               vertical: SiSpace.x2,
                               horizontal: SiSpace.x1),
-                          children: List.generate(
-                            widget.pages.length,
-                            (i) {
-                              final page = widget.pages[i];
-                              final isActive =
-                                  widget.selectedIndex == i;
-                              return _RailItem(
-                                icon: isActive
-                                    ? page['activeIcon']
-                                    : page['icon'],
-                                label: page['title'],
-                                isActive: isActive,
-                                showLabel: labelVisible,
-                                labelOpacity: labelOpacity,
-                                onTap: () => widget.onSelect(i),
-                              );
-                            },
-                          ),
+                          children:
+                              _buildGroupedItems(labelVisible, labelOpacity),
                         ),
                       ),
 
                       // User footer
-                      Divider(color: c.line, height: 1),
+                      Container(
+                          height: 1,
+                          color: Colors.white.withValues(alpha: 0.10)),
                       Padding(
                         padding: const EdgeInsets.symmetric(
                             horizontal: SiSpace.x2,
@@ -334,7 +375,8 @@ class _DesktopShellState extends State<_DesktopShell>
                             _Avatar(
                                 initials: initials,
                                 size: 28,
-                                c: c),
+                                c: c,
+                                onDark: true),
                             if (labelVisible) ...[
                               const SizedBox(width: SiSpace.x2),
                               Expanded(
@@ -347,17 +389,17 @@ class _DesktopShellState extends State<_DesktopShell>
                                     children: [
                                       Text(userEmail,
                                           maxLines: 1,
-                                          overflow:
-                                              TextOverflow.ellipsis,
-                                          style: TextStyle(
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
                                               fontSize: 12,
-                                              color: c.ink,
+                                              color: Colors.white,
                                               fontWeight:
                                                   FontWeight.w500)),
                                       Text(widget.role.toUpperCase(),
                                           style: TextStyle(
-                                              fontSize: 10,
-                                              color: c.ink3,
+                                              fontSize: 11,
+                                              color: Colors.white
+                                                  .withValues(alpha: 0.55),
                                               letterSpacing: 0.5)),
                                     ],
                                   ),
@@ -386,7 +428,9 @@ class _DesktopShellState extends State<_DesktopShell>
                                     padding:
                                         const EdgeInsets.all(SiSpace.x1),
                                     child: Icon(Icons.logout,
-                                        size: 16, color: c.ink3),
+                                        size: 16,
+                                        color: Colors.white
+                                            .withValues(alpha: 0.70)),
                                   ),
                                 ),
                               ),
@@ -401,7 +445,7 @@ class _DesktopShellState extends State<_DesktopShell>
             ),
           ),
 
-          // Main content
+          // ── Main content ──────────────────────────────────────
           Expanded(
             child: Column(
               children: [
@@ -410,6 +454,7 @@ class _DesktopShellState extends State<_DesktopShell>
                   role: widget.role,
                   permissions: widget.permissions,
                   onNavigateToCalendar: widget.onNavigateToCalendar,
+                  onSelectHome: () => widget.onSelect(0),
                 ),
                 Expanded(child: currentPage['widget']),
               ],
@@ -421,7 +466,7 @@ class _DesktopShellState extends State<_DesktopShell>
   }
 }
 
-// ── Mobile shell: Drawer ────────────────────────────────────────────────────
+// ── Mobile shell ─────────────────────────────────────────────────────────────
 
 class _MobileShell extends StatelessWidget {
   final List<Map<String, dynamic>> pages;
@@ -550,19 +595,21 @@ class _MobileShell extends StatelessWidget {
   }
 }
 
-// ── Header bar ──────────────────────────────────────────────────────────────
+// ── Header bar ───────────────────────────────────────────────────────────────
 
 class _Header extends StatelessWidget {
   final String pageTitle;
   final String role;
   final Map<String, dynamic> permissions;
   final ValueChanged<String?> onNavigateToCalendar;
+  final VoidCallback onSelectHome;
 
   const _Header({
     required this.pageTitle,
     required this.role,
     required this.permissions,
     required this.onNavigateToCalendar,
+    required this.onSelectHome,
   });
 
   @override
@@ -578,16 +625,31 @@ class _Header extends StatelessWidget {
         color: c.panel,
         border: Border(bottom: BorderSide(color: c.line, width: 1)),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: SiSpace.x4),
       child: Row(
         children: [
+          const SizedBox(width: 20),
+          // Breadcrumb
+          GestureDetector(
+            onTap: onSelectHome,
+            child: Text('Sistemassi',
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: c.ink3)),
+          ),
+          Text(' / ',
+              style: TextStyle(fontSize: 13, color: c.ink4)),
           Text(pageTitle,
               style: TextStyle(
-                  fontSize: 14,
+                  fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: c.ink,
-                  letterSpacing: -0.07)),
-          const Spacer(),
+                  color: c.ink)),
+          const SizedBox(width: 16),
+          // Search bar — absorbs remaining space, centered
+          Expanded(
+            child: Center(child: _SearchBar()),
+          ),
+          const SizedBox(width: 8),
           NotificationBell(
             role: role,
             permissions: permissions,
@@ -604,7 +666,107 @@ class _Header extends StatelessWidget {
   }
 }
 
-// ── Rail nav item ────────────────────────────────────────────────────────────
+// ── Search bar ────────────────────────────────────────────────────────────────
+
+class _SearchBar extends StatelessWidget {
+  const _SearchBar();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = SiColors.of(context);
+    final isMac = Theme.of(context).platform == TargetPlatform.macOS;
+    final shortcut = isMac ? '⌘K' : 'Ctrl K';
+
+    return Container(
+      height: 32,
+      constraints: const BoxConstraints(maxWidth: 420),
+      decoration: BoxDecoration(
+        color: c.hover,
+        border: Border.all(color: c.line, width: 1),
+        borderRadius: SiRadius.rMd,
+      ),
+      child: Row(
+        children: [
+          const SizedBox(width: 10),
+          Icon(Icons.search, size: 14, color: c.ink3),
+          const SizedBox(width: 6),
+          Expanded(
+            child: TextField(
+              style: TextStyle(fontSize: 13, color: c.ink),
+              decoration: InputDecoration(
+                hintText: 'Buscar colaborador, evento, activo...',
+                hintStyle: TextStyle(fontSize: 13, color: c.ink4),
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                isDense: true,
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+          ),
+          // Keyboard shortcut chip
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            margin: const EdgeInsets.only(right: 6),
+            decoration: BoxDecoration(
+              color: c.panel,
+              border: Border.all(color: c.line, width: 1),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(shortcut,
+                style: SiType.mono(size: 10, color: c.ink3)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Section header ────────────────────────────────────────────────────────────
+
+class _SectionHeader extends StatelessWidget {
+  final String label;
+  final bool visible; // true = expanded (show text), false = collapsed (show separator)
+  final double opacity;
+
+  const _SectionHeader({
+    required this.label,
+    required this.visible,
+    required this.opacity,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (!visible) {
+      return Container(
+        height: 1,
+        margin: const EdgeInsets.symmetric(
+            vertical: SiSpace.x2, horizontal: SiSpace.x2),
+        color: Colors.white.withValues(alpha: 0.08),
+      );
+    }
+    return Opacity(
+      opacity: opacity,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 16, 8, 6),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontFamily: SiType.fontFamily,
+            fontSize: 10.5,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 10.5 * 0.08,
+            color: Colors.white.withValues(alpha: 0.45),
+            height: 1,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Rail nav item ─────────────────────────────────────────────────────────────
 
 class _RailItem extends StatefulWidget {
   final IconData icon;
@@ -613,6 +775,7 @@ class _RailItem extends StatefulWidget {
   final bool showLabel;
   final double labelOpacity;
   final VoidCallback onTap;
+  final bool onDark;
 
   const _RailItem({
     required this.icon,
@@ -621,6 +784,7 @@ class _RailItem extends StatefulWidget {
     required this.showLabel,
     required this.labelOpacity,
     required this.onTap,
+    this.onDark = false,
   });
 
   @override
@@ -633,13 +797,32 @@ class _RailItemState extends State<_RailItem> {
   @override
   Widget build(BuildContext context) {
     final c = SiColors.of(context);
-    final bg = widget.isActive
-        ? c.brandTint
-        : _hovered
-            ? c.hover
-            : Colors.transparent;
-    final iconColor = widget.isActive ? c.brand : c.ink3;
-    final textColor = widget.isActive ? c.brand : c.ink2;
+
+    final Color bg;
+    final Color iconColor;
+    final Color textColor;
+
+    if (widget.onDark) {
+      bg = widget.isActive
+          ? Colors.white.withValues(alpha: 0.14)
+          : _hovered
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.transparent;
+      iconColor = widget.isActive
+          ? Colors.white
+          : Colors.white.withValues(alpha: 0.65);
+      textColor = widget.isActive
+          ? Colors.white
+          : Colors.white.withValues(alpha: 0.75);
+    } else {
+      bg = widget.isActive
+          ? c.brandTint
+          : _hovered
+              ? c.hover
+              : Colors.transparent;
+      iconColor = widget.isActive ? c.brand : c.ink3;
+      textColor = widget.isActive ? c.brand : c.ink2;
+    }
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -655,7 +838,12 @@ class _RailItemState extends State<_RailItem> {
             color: bg,
             borderRadius: SiRadius.rMd,
             border: widget.isActive
-                ? Border(left: BorderSide(color: c.brand, width: 2))
+                ? Border(
+                    left: BorderSide(
+                      color: widget.onDark ? Colors.white : c.brand,
+                      width: 2,
+                    ),
+                  )
                 : null,
           ),
           padding: EdgeInsets.only(
@@ -669,14 +857,16 @@ class _RailItemState extends State<_RailItem> {
                 const SizedBox(width: SiSpace.x2),
                 Opacity(
                   opacity: widget.labelOpacity,
-                  child: Text(widget.label,
-                      style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: widget.isActive
-                              ? FontWeight.w500
-                              : FontWeight.w400,
-                          color: textColor),
-                      overflow: TextOverflow.ellipsis),
+                  child: Text(
+                    widget.label,
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: widget.isActive
+                            ? FontWeight.w600
+                            : FontWeight.w500,
+                        color: textColor),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ],
@@ -687,29 +877,38 @@ class _RailItemState extends State<_RailItem> {
   }
 }
 
-// ── Shared helpers ───────────────────────────────────────────────────────────
+// ── Shared helpers ────────────────────────────────────────────────────────────
 
 class _Avatar extends StatelessWidget {
   final String initials;
   final double size;
   final SiColors c;
+  final bool onDark;
 
-  const _Avatar(
-      {required this.initials, required this.size, required this.c});
+  const _Avatar({
+    required this.initials,
+    required this.size,
+    required this.c,
+    this.onDark = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: size,
       height: size,
-      decoration:
-          BoxDecoration(color: c.brandTint, shape: BoxShape.circle),
+      decoration: BoxDecoration(
+        color: onDark
+            ? Colors.white.withValues(alpha: 0.18)
+            : c.brandTint,
+        shape: BoxShape.circle,
+      ),
       alignment: Alignment.center,
       child: Text(initials,
           style: TextStyle(
               fontSize: size * 0.4,
               fontWeight: FontWeight.w600,
-              color: c.brand,
+              color: onDark ? Colors.white : c.brand,
               height: 1)),
     );
   }
