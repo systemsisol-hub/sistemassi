@@ -60,7 +60,7 @@ class MyApp extends StatelessWidget {
       locale: const Locale('es', 'MX'),
       theme: SiTheme.light,
       darkTheme: SiTheme.dark,
-      themeMode: ThemeMode.system,
+      themeMode: ThemeMode.light,
       home: const AuthRouter(),
     );
   }

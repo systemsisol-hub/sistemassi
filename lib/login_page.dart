@@ -92,7 +92,7 @@ class _LoginPageState extends State<LoginPage>
   @override
   Widget build(BuildContext context) {
     final c = SiColors.of(context);
-    final isWide = MediaQuery.of(context).size.width >= 900;
+    final isWide = MediaQuery.of(context).size.width >= 1024;
 
     return Scaffold(
       backgroundColor: c.bg,
