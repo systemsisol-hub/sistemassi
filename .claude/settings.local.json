@@ -9,7 +9,24 @@
       "Bash(gh auth *)",
       "Bash(git add *)",
       "Bash(git commit *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(curl -fL https://github.com/vercel/geist-font/raw/main/packages/next/src/fonts/geist-sans/Geist-Regular.ttf -o d:/Documents/GitHub/sistemassi/assets/fonts/Geist-Regular.ttf)",
+      "Bash(curl -fL https://github.com/vercel/geist-font/raw/main/packages/next/src/fonts/geist-sans/Geist-Medium.ttf -o d:/Documents/GitHub/sistemassi/assets/fonts/Geist-Medium.ttf)",
+      "Bash(curl -fL https://github.com/vercel/geist-font/raw/main/packages/next/src/fonts/geist-sans/Geist-SemiBold.ttf -o d:/Documents/GitHub/sistemassi/assets/fonts/Geist-SemiBold.ttf)",
+      "Bash(curl -fL https://github.com/vercel/geist-font/raw/main/packages/next/src/fonts/geist-sans/Geist-Bold.ttf -o d:/Documents/GitHub/sistemassi/assets/fonts/Geist-Bold.ttf)",
+      "Bash(curl -fL https://github.com/vercel/geist-font/raw/main/packages/next/src/fonts/geist-mono/GeistMono-Regular.ttf -o d:/Documents/GitHub/sistemassi/assets/fonts/GeistMono-Regular.ttf)",
+      "Bash(curl -fL \"https://api.github.com/repos/vercel/geist-font/contents\")",
+      "Bash(python3 -c \"import json,sys; [print\\(x['name'], x['type']\\) for x in json.load\\(sys.stdin\\)]\")",
+      "Bash(curl -fL \"https://api.github.com/repos/vercel/geist-font/contents/fonts\")",
+      "Bash(curl -fL \"https://api.github.com/repos/vercel/geist-font/contents/fonts/Geist\")",
+      "Bash(python3 -c \"import json,sys; [print\\(x['name']\\) for x in json.load\\(sys.stdin\\)]\")",
+      "Bash(curl -fL \"https://api.github.com/repos/vercel/geist-font/contents/fonts/Geist/ttf\")",
+      "Bash(curl -fL https://github.com/vercel/geist-font/raw/main/fonts/Geist/ttf/Geist-Regular.ttf -o d:/Documents/GitHub/sistemassi/assets/fonts/Geist-Regular.ttf)",
+      "Bash(curl -fL https://github.com/vercel/geist-font/raw/main/fonts/Geist/ttf/Geist-Medium.ttf -o d:/Documents/GitHub/sistemassi/assets/fonts/Geist-Medium.ttf)",
+      "Bash(curl -fL https://github.com/vercel/geist-font/raw/main/fonts/Geist/ttf/Geist-SemiBold.ttf -o d:/Documents/GitHub/sistemassi/assets/fonts/Geist-SemiBold.ttf)",
+      "Bash(curl -fL https://github.com/vercel/geist-font/raw/main/fonts/Geist/ttf/Geist-Bold.ttf -o d:/Documents/GitHub/sistemassi/assets/fonts/Geist-Bold.ttf)",
+      "Bash(curl -fL https://github.com/vercel/geist-font/raw/main/fonts/GeistMono/ttf/GeistMono-Regular.ttf -o d:/Documents/GitHub/sistemassi/assets/fonts/GeistMono-Regular.ttf)",
+      "Bash(python3 -)"
     ]
   }
 }
