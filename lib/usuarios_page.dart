@@ -174,9 +174,24 @@ class _AdminDashboardState extends State<AdminDashboard> {
   Future<void> _fetchUsers() async {
     setState(() => _isLoading = true);
     try {
-      final response = await Supabase.instance.client.from('profiles').select('*').order('created_at', ascending: false);
+      List<Map<String, dynamic>> allData = [];
+      int offset = 0;
+      const int limit = 1000;
+
+      while (true) {
+        final data = await Supabase.instance.client
+            .from('profiles')
+            .select('*')
+            .order('created_at', ascending: false)
+            .range(offset, offset + limit - 1);
+
+        allData.addAll(List<Map<String, dynamic>>.from(data));
+
+        if (data.length < limit) break;
+        offset += limit;
+      }
+
       if (mounted) {
-        final allData = List<Map<String, dynamic>>.from(response);
         allData.sort((a, b) {
           final aIsCambio = (a['status_sys'] == 'CAMBIO') ? 0 : 1;
           final bIsCambio = (b['status_sys'] == 'CAMBIO') ? 0 : 1;
@@ -635,14 +650,19 @@ class _AdminDashboardState extends State<AdminDashboard> {
       body: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  _buildControls(theme),
-                ],
-              ),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                if (constraints.maxWidth > 800) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      _buildControls(theme),
+                    ],
+                  ),
+                );
+              },
             ),
           ),
           _isLoading
@@ -857,38 +877,66 @@ class _AdminDashboardState extends State<AdminDashboard> {
   Widget _buildDesktopLayout(ThemeData theme, List<Map<String, dynamic>> users) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                  child: _buildKpiCard('Total Usuarios',
-                      _users.length.toString(), Icons.people, Colors.blue)),
-              const SizedBox(width: 16),
-              Expanded(child: _buildKpiCard('Activos', users.where((u) => u['status_sys'] == 'ACTIVO').length.toString(), Icons.check_circle, Colors.green)),
-            ],
-          ),
-          const SizedBox(height: 24),
-          Card(
-            elevation: 0,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey[200]!)),
-            child: PaginatedDataTable(
-              header: const Text('Directorio de Usuarios', style: TextStyle(fontWeight: FontWeight.bold)),
-              columns: const [
-                DataColumn(label: Text('ID')),
-                DataColumn(label: Text('Status')),
-                DataColumn(label: Text('Nombre')),
-                DataColumn(label: Text('Email')),
-                DataColumn(label: Text('Rol')),
-                DataColumn(label: Text('Acciones')),
-              ],
-              source: _UserDataSource(users: users, theme: theme, isAdmin: _isAdmin, onEdit: (u) => _showUserForm(user: u), onDelete: (id) => _deleteUser(id)),
-              rowsPerPage: users.isEmpty ? 1 : (users.length > 10 ? 10 : users.length),
-              showCheckboxColumn: false,
+      child: Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey[200]!)),
+        child: PaginatedDataTable(
+          dataRowMaxHeight: 64,
+          dataRowMinHeight: 64,
+          header: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 350),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Buscar por nombre, correo, ID...',
+                hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                prefixIcon: const Icon(Icons.search, size: 20),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, size: 20),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _searchQuery = '');
+                        },
+                      )
+                    : null,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: theme.colorScheme.primary)),
+                filled: true,
+                fillColor: Colors.white,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                isDense: true,
+              ),
+              style: const TextStyle(fontSize: 14),
+              onChanged: (value) => setState(() => _searchQuery = value),
             ),
           ),
-        ],
+          actions: [
+            if (_isAdmin)
+              OutlinedButton.icon(
+                onPressed: () => _showUserForm(),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Agregar Usuario'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: theme.colorScheme.primary,
+                  side: BorderSide(color: theme.colorScheme.primary),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                ),
+              ),
+          ],
+          columns: [
+            DataColumn(label: Text('USUARIO', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
+            DataColumn(label: Text('ID', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
+            DataColumn(label: Text('ROL', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
+            DataColumn(label: Text('ESTADO', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
+            const DataColumn(label: SizedBox()), // Acciones
+          ],
+          source: _UserDataSource(users: users, theme: theme, isAdmin: _isAdmin, onEdit: (u) => _showUserForm(user: u), onDelete: (id) => _deleteUser(id)),
+          rowsPerPage: users.isEmpty ? 1 : (users.length > 10 ? 10 : users.length),
+          showCheckboxColumn: false,
+        ),
       ),
     );
   }
@@ -951,21 +999,94 @@ class _UserDataSource extends DataTableSource {
     if (index >= users.length) return null;
     final user = users[index];
     final role = user['role'] ?? 'usuario';
+    final nombre = '${user['nombre'] ?? ''} ${user['paterno'] ?? ''}'.trim();
+    final parts = nombre.split(' ').where((e) => e.isNotEmpty).toList();
+    final initials = parts.length > 1 ? '${parts[0][0]}${parts[1][0]}'.toUpperCase() : (parts.isNotEmpty ? parts[0][0].toUpperCase() : '?');
+
+    // Role styling
+    Color roleColor = Colors.grey;
+    if (role == 'admin') roleColor = theme.colorScheme.primary;
+    if (role == 'director') roleColor = Colors.orange;
+    if (role == 'manager') roleColor = Colors.purple;
+
+    // Status styling
+    final isBlocked = user['is_blocked'] ?? false;
+    final status = isBlocked ? 'Inactivo' : (user['status_sys'] == 'ACTIVO' ? 'Activo' : (user['status_sys'] ?? '---'));
+    Color statusColor = status == 'Activo' ? Colors.green : (status == 'Inactivo' ? Colors.grey : Colors.orange);
+
     return DataRow.byIndex(
       index: index,
       cells: [
-        DataCell(Text(user['numero_empleado'] ?? '----')),
-        DataCell(Text(user['status_sys'] ?? '---')),
-        DataCell(SizedBox(width: 150, child: Text('${user['nombre'] ?? ''} ${user['paterno'] ?? ''}', overflow: TextOverflow.ellipsis))),
-        DataCell(SizedBox(width: 150, child: Text(user['email'] ?? '', overflow: TextOverflow.ellipsis))),
-        DataCell(Text(role.toString().toUpperCase())),
-        DataCell(isAdmin ? PopupMenuButton<String>(
-          onSelected: (v) => v == 'edit' ? onEdit(user) : onDelete(user['id']),
-          itemBuilder: (_) => [
-            const PopupMenuItem(value: 'edit', child: Text('Editar')),
-            const PopupMenuItem(value: 'delete', child: Text('Eliminar', style: TextStyle(color: Colors.red))),
-          ],
-        ) : const SizedBox()),
+        DataCell(
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: roleColor.withOpacity(0.15),
+                child: Text(initials, style: TextStyle(color: roleColor, fontSize: 13, fontWeight: FontWeight.bold)),
+              ),
+              const SizedBox(width: 14),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(nombre.isEmpty ? 'Sin Nombre' : nombre, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  const SizedBox(height: 2),
+                  Text(user['email'] ?? '', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                ],
+              ),
+            ],
+          ),
+        ),
+        DataCell(Text(user['numero_empleado'] ?? '----', style: const TextStyle(fontSize: 13, color: Colors.black87))),
+        DataCell(
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border.all(color: Colors.grey.shade300),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(width: 6, height: 6, decoration: BoxDecoration(color: roleColor, shape: BoxShape.circle)),
+                const SizedBox(width: 6),
+                Text(role.toString().toLowerCase(), style: const TextStyle(fontSize: 12, color: Colors.black87)),
+              ],
+            ),
+          )
+        ),
+        DataCell(
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: statusColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(width: 6, height: 6, decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle)),
+                const SizedBox(width: 6),
+                Text(status, style: TextStyle(fontSize: 12, color: statusColor, fontWeight: FontWeight.w600)),
+              ],
+            ),
+          )
+        ),
+        DataCell(
+          Align(
+            alignment: Alignment.centerRight,
+            child: isAdmin ? PopupMenuButton<String>(
+              icon: const Icon(Icons.more_horiz, color: Colors.grey),
+              onSelected: (v) => v == 'edit' ? onEdit(user) : onDelete(user['id']),
+              itemBuilder: (_) => [
+                const PopupMenuItem(value: 'edit', child: Text('Editar')),
+                const PopupMenuItem(value: 'delete', child: Text('Eliminar', style: TextStyle(color: Colors.red))),
+              ],
+            ) : const SizedBox(),
+          )
+        ),
       ],
     );
   }
