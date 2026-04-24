@@ -1,7 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class NotificationService {
-  static final client = Supabase.instance.client;
+  static SupabaseClient get client => Supabase.instance.client;
 
   /// Stream de notificaciones del usuario actual para filtrado en tiempo real
   static Stream<List<Map<String, dynamic>>> get allNotificationsStream {

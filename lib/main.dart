@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
@@ -10,32 +11,29 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:syncfusion_localizations/syncfusion_localizations.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-void main() async {
+void main() {
+  runZonedGuarded(_init, (error, stack) {
+    debugPrint('Unhandled error: $error');
+  });
+}
+
+Future<void> _init() async {
   usePathUrlStrategy();
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('es_MX', null);
 
+  // dart-define values (CI/CD), overridden by .env in local dev
+  var supabaseUrl = const String.fromEnvironment('SB_URL');
+  var supabaseAnonKey = const String.fromEnvironment('SB_TOKEN');
 
   try {
     await dotenv.load(fileName: ".env");
-  } catch (e) {
-    debugPrint(
-        "Warning: .env file not found, falling back to environment variables");
-  }
-
-  final supabaseUrl =
-      dotenv.maybeGet('SB_URL') ?? const String.fromEnvironment('SB_URL');
-  final supabaseAnonKey =
-      dotenv.maybeGet('SB_TOKEN') ?? const String.fromEnvironment('SB_TOKEN');
+    supabaseUrl = dotenv.maybeGet('SB_URL')?.trim() ?? supabaseUrl;
+    supabaseAnonKey = dotenv.maybeGet('SB_TOKEN')?.trim() ?? supabaseAnonKey;
+  } catch (_) {}
 
   if (supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty) {
-    await Supabase.initialize(
-      url: supabaseUrl,
-      anonKey: supabaseAnonKey,
-    );
-    debugPrint('Supabase initialized successfully');
-  } else {
-    debugPrint('ERROR: Supabase URL or token is empty. URL: $supabaseUrl, Token: ${supabaseAnonKey.isNotEmpty ? "present" : "missing"}');
+    await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
   }
 
   runApp(const MyApp());
@@ -123,21 +121,26 @@ class _AuthRouterState extends State<AuthRouter> {
   }
 
   void _listenToAuth() {
-    Supabase.instance.client.auth.onAuthStateChange.listen((data) {
-      final session = data.session;
-      if (mounted) {
-        setState(() {
-          _user = session?.user;
-          if (_user == null) {
-            _role = null;
-            _permissions = null;
-            _isLoading = false;
-          } else {
-            _fetchData();
-          }
-        });
-      }
-    });
+    try {
+      Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+        final session = data.session;
+        if (mounted) {
+          setState(() {
+            _user = session?.user;
+            if (_user == null) {
+              _role = null;
+              _permissions = null;
+              _isLoading = false;
+            } else {
+              _fetchData();
+            }
+          });
+        }
+      });
+    } catch (e) {
+      debugPrint('Supabase no inicializado: $e');
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   Future<void> _fetchData() async {

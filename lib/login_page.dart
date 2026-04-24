@@ -68,20 +68,61 @@ class _LoginPageState extends State<LoginPage> {
     final theme = Theme.of(context);
     
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              theme.colorScheme.primary,
-              theme.colorScheme.primary.withBlue(180),
-            ],
+      body: Stack(
+        children: [
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                stops: [0.0, 0.55, 1.0],
+                colors: [
+                  Color(0xFF1A2466),
+                  Color(0xFF344092),
+                  Color(0xFF2D3A8C),
+                ],
+              ),
+            ),
           ),
-        ),
-        child: Center(
-          child: SingleChildScrollView(
+          Positioned(
+            top: -90,
+            right: -70,
             child: Container(
+              width: 340,
+              height: 340,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withOpacity(0.06),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: -120,
+            left: -90,
+            child: Container(
+              width: 420,
+              height: 420,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFFB1CB34).withOpacity(0.09),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 80,
+            right: -50,
+            child: Container(
+              width: 160,
+              height: 160,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withOpacity(0.04),
+              ),
+            ),
+          ),
+          Center(
+            child: SingleChildScrollView(
+              child: Container(
               constraints: const BoxConstraints(maxWidth: 450),
               margin: const EdgeInsets.all(24),
               padding: const EdgeInsets.all(32),
@@ -165,6 +206,7 @@ class _LoginPageState extends State<LoginPage> {
             ),
           ),
         ),
+        ],
       ),
     );
   }
