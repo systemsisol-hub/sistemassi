@@ -123,42 +123,9 @@ class _LoginPageState extends State<LoginPage>
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Brand mark
-          Row(
-            children: [
-              Container(
-                width: 28,
-                height: 28,
-                decoration:
-                    BoxDecoration(color: c.brand, borderRadius: SiRadius.rSm),
-                alignment: Alignment.center,
-                child: const Text(
-                  'S',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      height: 1),
-                ),
-              ),
-              const SizedBox(width: SiSpace.x2),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Sistemassi',
-                      style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: c.ink,
-                          letterSpacing: -0.14)),
-                  Text('SISOL · INTRANET',
-                      style: TextStyle(
-                          fontSize: 11,
-                          color: c.ink3,
-                          letterSpacing: 1.1)),
-                ],
-              ),
-            ],
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Image.asset('assets/logo.png', height: 36),
           ),
 
           const SizedBox(height: SiSpace.x8),
@@ -264,94 +231,149 @@ class _LoginPageState extends State<LoginPage>
     return Container(
       height: double.infinity,
       decoration: BoxDecoration(
-        color: c.brand,
         border: Border(left: BorderSide(color: c.brandHover, width: 1)),
       ),
-      padding: const EdgeInsets.all(SiSpace.x8),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.end,
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.12),
-              borderRadius: SiRadius.rPill,
+          // Capa 1 — gradiente base
+          const Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topRight,
+                  end: Alignment.bottomLeft,
+                  colors: [Color(0xFF1A2466), Color(0xFF0F1640)],
+                ),
+              ),
             ),
-            child: Text('Sistema interno · Release 2026.Q2',
-                style: TextStyle(
-                    fontSize: 11, color: Colors.white.withOpacity(0.7))),
           ),
-          const SizedBox(height: SiSpace.x4),
-          RichText(
-            text: TextSpan(
-              style: const TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                  height: 1.25,
-                  letterSpacing: -0.56),
+          // Capa 2 — grid de líneas 48×48
+          Positioned.fill(
+            child: CustomPaint(
+              painter: _GridPainter(
+                color: Colors.white.withValues(alpha: 0.06),
+                step: 48,
+              ),
+            ),
+          ),
+          // Capa 3 — contenido
+          Padding(
+            padding: const EdgeInsets.all(SiSpace.x8),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const TextSpan(text: 'Opera tu día desde\nun solo lugar '),
-                TextSpan(
-                    text: 'ordenado',
-                    style: TextStyle(
-                        color: Colors.white.withOpacity(0.6),
-                        fontStyle: FontStyle.italic)),
-                const TextSpan(text: '.'),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.12),
+                    borderRadius: SiRadius.rPill,
+                  ),
+                  child: Text('Sistema interno · Release 2026.Q2',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.white.withValues(alpha: 0.7))),
+                ),
+                const SizedBox(height: SiSpace.x4),
+                RichText(
+                  text: TextSpan(
+                    style: const TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                        height: 1.25,
+                        letterSpacing: -0.56),
+                    children: [
+                      const TextSpan(text: 'Opera tu día desde\nun solo lugar '),
+                      TextSpan(
+                          text: 'ordenado',
+                          style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.6),
+                              fontStyle: FontStyle.italic)),
+                      const TextSpan(text: '.'),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: SiSpace.x6),
+                Wrap(
+                  spacing: SiSpace.x1,
+                  runSpacing: SiSpace.x1,
+                  children: modules
+                      .map((m) => Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: SiSpace.x2, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.10),
+                              borderRadius: SiRadius.rSm,
+                              border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.15),
+                                  width: 1),
+                            ),
+                            child: Text(m,
+                                style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.white.withValues(alpha: 0.8),
+                                    letterSpacing: 0.5)),
+                          ))
+                      .toList(),
+                ),
+                const SizedBox(height: SiSpace.x5),
+                Row(
+                  children: stats
+                      .map((s) => Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(s.$1,
+                                    style: const TextStyle(
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.white,
+                                        height: 1.1)),
+                                Text(s.$2,
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.white
+                                            .withValues(alpha: 0.55))),
+                              ],
+                            ),
+                          ))
+                      .toList(),
+                ),
+                const SizedBox(height: SiSpace.x8),
               ],
             ),
           ),
-          const SizedBox(height: SiSpace.x6),
-          Wrap(
-            spacing: SiSpace.x1,
-            runSpacing: SiSpace.x1,
-            children: modules
-                .map((m) => Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: SiSpace.x2, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
-                        borderRadius: SiRadius.rSm,
-                        border: Border.all(
-                            color: Colors.white.withOpacity(0.15), width: 1),
-                      ),
-                      child: Text(m,
-                          style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.white.withOpacity(0.8),
-                              letterSpacing: 0.5)),
-                    ))
-                .toList(),
-          ),
-          const SizedBox(height: SiSpace.x5),
-          Row(
-            children: stats
-                .map((s) => Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(s.$1,
-                              style: const TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                  height: 1.1)),
-                          Text(s.$2,
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.white.withOpacity(0.55))),
-                        ],
-                      ),
-                    ))
-                .toList(),
-          ),
-          const SizedBox(height: SiSpace.x8),
         ],
       ),
     );
   }
+}
+
+// ── Grid painter para el panel azul ──────────────────────────────────────────
+
+class _GridPainter extends CustomPainter {
+  final Color color;
+  final double step;
+  _GridPainter({required this.color, required this.step});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1;
+    for (double x = 0; x <= size.width; x += step) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+    }
+    for (double y = 0; y <= size.height; y += step) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 // ── Sub-widgets ──────────────────────────────────────────────────────────────
@@ -399,21 +421,27 @@ class _SiTextField extends StatelessWidget {
       onSubmitted: onSubmitted,
       autocorrect: false,
       enableSuggestions: false,
-      style: TextStyle(fontSize: 13, color: c.ink),
+      style: TextStyle(fontSize: 14, color: c.ink),
       decoration: InputDecoration(
         hintText: hint,
         prefixIcon: Padding(
-          padding: const EdgeInsets.only(left: 12, right: 8),
+          padding: const EdgeInsets.only(left: 14, right: 10),
           child: Icon(icon, size: 16, color: c.ink3),
         ),
-        prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+        prefixIconConstraints: const BoxConstraints(
+          minWidth: 40, minHeight: 44,
+        ),
         suffixIcon: suffixIcon,
+        suffixIconConstraints: const BoxConstraints(
+          minWidth: 44, minHeight: 44,
+        ),
         isDense: true,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: SiSpace.x3, vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14, vertical: 12,
+        ),
         filled: true,
         fillColor: c.panel,
-        hintStyle: TextStyle(color: c.ink4, fontSize: 13),
+        hintStyle: TextStyle(color: c.ink4, fontSize: 14),
         enabledBorder: OutlineInputBorder(
           borderRadius: SiRadius.rMd,
           borderSide: BorderSide(color: c.line, width: 1),
