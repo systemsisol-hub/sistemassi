@@ -267,20 +267,19 @@ class SiShadows {
 
 class SiType {
   static TextTheme textTheme(Color ink, Color ink2) {
-    final base = GoogleFonts.geistTextTheme();
-    return base.copyWith(
-      displayLarge:  _t(base.displayLarge,  size: 40, weight: FontWeight.w600, color: ink, letter: -0.02),
-      displayMedium: _t(base.displayMedium, size: 32, weight: FontWeight.w600, color: ink, letter: -0.02),
-      headlineLarge: _t(base.headlineLarge, size: 24, weight: FontWeight.w600, color: ink, letter: -0.015),
-      headlineMedium:_t(base.headlineMedium,size: 20, weight: FontWeight.w600, color: ink, letter: -0.01),
-      titleLarge:    _t(base.titleLarge,    size: 16, weight: FontWeight.w600, color: ink, letter: -0.005),
-      titleMedium:   _t(base.titleMedium,   size: 14, weight: FontWeight.w500, color: ink),
-      bodyLarge:     _t(base.bodyLarge,     size: 14, weight: FontWeight.w400, color: ink),
-      bodyMedium:    _t(base.bodyMedium,    size: 13, weight: FontWeight.w400, color: ink2),
-      bodySmall:     _t(base.bodySmall,     size: 12, weight: FontWeight.w400, color: ink2),
-      labelLarge:    _t(base.labelLarge,    size: 13, weight: FontWeight.w500, color: ink),
-      labelMedium:   _t(base.labelMedium,   size: 12, weight: FontWeight.w500, color: ink2),
-      labelSmall:    _t(base.labelSmall,    size: 11, weight: FontWeight.w500, color: ink2, letter: 0.02),
+    return TextTheme(
+      displayLarge:   _g(size: 40, weight: FontWeight.w600, color: ink,  letter: -0.02),
+      displayMedium:  _g(size: 32, weight: FontWeight.w600, color: ink,  letter: -0.02),
+      headlineLarge:  _g(size: 24, weight: FontWeight.w600, color: ink,  letter: -0.015),
+      headlineMedium: _g(size: 20, weight: FontWeight.w600, color: ink,  letter: -0.01),
+      titleLarge:     _g(size: 16, weight: FontWeight.w600, color: ink,  letter: -0.005),
+      titleMedium:    _g(size: 14, weight: FontWeight.w500, color: ink),
+      bodyLarge:      _g(size: 14, weight: FontWeight.w400, color: ink),
+      bodyMedium:     _g(size: 13, weight: FontWeight.w400, color: ink2),
+      bodySmall:      _g(size: 12, weight: FontWeight.w400, color: ink2),
+      labelLarge:     _g(size: 13, weight: FontWeight.w500, color: ink),
+      labelMedium:    _g(size: 12, weight: FontWeight.w500, color: ink2),
+      labelSmall:     _g(size: 11, weight: FontWeight.w500, color: ink2, letter: 0.02),
     );
   }
 
@@ -294,16 +293,17 @@ class SiType {
       fontWeight: weight,
       color: color,
       letterSpacing: 0,
+      height: 1.5,
     );
   }
 
-  static TextStyle _t(TextStyle? b, {
+  static TextStyle _g({
     required double size,
     required FontWeight weight,
     required Color color,
     double letter = 0,
   }) {
-    return (b ?? const TextStyle()).copyWith(
+    return GoogleFonts.geist(
       fontSize: size,
       fontWeight: weight,
       color: color,
