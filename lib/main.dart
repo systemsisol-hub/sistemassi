@@ -9,7 +9,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:syncfusion_localizations/syncfusion_localizations.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'theme/si_theme.dart';
 
 void main() {
   runZonedGuarded(_init, (error, stack) {
@@ -58,45 +58,9 @@ class MyApp extends StatelessWidget {
         Locale('en', 'US'),
       ],
       locale: const Locale('es', 'MX'),
-      theme: ThemeData(
-        useMaterial3: true,
-        textTheme: GoogleFonts.interTextTheme(ThemeData().textTheme),
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF344092),
-          primary: const Color(0xFF344092),
-          secondary: const Color(0xFFB1CB34),
-          tertiary: const Color(0xFFEA54A4),
-          surface: Colors.grey[50] ?? Colors.white,
-        ),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF344092),
-          foregroundColor: Colors.white,
-          elevation: 0,
-          centerTitle: true,
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF344092),
-            foregroundColor: Colors.white,
-            minimumSize: const Size(double.infinity, 50),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: Colors.white,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.grey[300] ?? Colors.grey),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFF344092), width: 2),
-          ),
-        ),
-      ),
+      theme: SiTheme.light,
+      darkTheme: SiTheme.dark,
+      themeMode: ThemeMode.system,
       home: const AuthRouter(),
     );
   }
@@ -178,7 +142,15 @@ class _AuthRouterState extends State<AuthRouter> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return Scaffold(
+        backgroundColor: SiColors.light.bg,
+        body: Center(
+          child: CircularProgressIndicator(
+            color: SiColors.light.brand,
+            strokeWidth: 2,
+          ),
+        ),
+      );
     }
 
     if (_user == null) {

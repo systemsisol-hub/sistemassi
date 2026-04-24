@@ -13,6 +13,7 @@ import 'calendar_page.dart';
 import 'attendance_hub_page.dart';
 import 'bi_page.dart';
 import 'signature_generator_page.dart';
+import 'theme/si_theme.dart';
 
 class MainNavigation extends StatefulWidget {
   final String role;
@@ -37,14 +38,12 @@ class _MainNavigationState extends State<MainNavigation> {
       'activeIcon': Icons.person,
       'widget': const UserDashboard(),
     });
-
     pages.add({
       'title': 'Social',
       'icon': Icons.diversity_3_outlined,
       'activeIcon': Icons.diversity_3,
       'widget': const SocialPage(),
     });
-
     pages.add({
       'title': 'Firmas',
       'icon': Icons.draw_outlined,
@@ -60,7 +59,6 @@ class _MainNavigationState extends State<MainNavigation> {
         'widget': CalendarPage(initialEventId: _selectedEventId),
       });
     }
-
     if (widget.permissions['show_incidencias'] == true) {
       pages.add({
         'title': 'Incidencias',
@@ -69,7 +67,6 @@ class _MainNavigationState extends State<MainNavigation> {
         'widget': const IncidenciasPage(),
       });
     }
-
     if (widget.permissions['show_users'] == true) {
       pages.add({
         'title': 'Usuarios',
@@ -78,7 +75,6 @@ class _MainNavigationState extends State<MainNavigation> {
         'widget': const AdminDashboard(),
       });
     }
-
     if (widget.permissions['show_issi'] == true) {
       pages.add({
         'title': 'Inventario',
@@ -87,7 +83,6 @@ class _MainNavigationState extends State<MainNavigation> {
         'widget': const IssiPage(),
       });
     }
-
     if (widget.permissions['show_cssi'] == true) {
       pages.add({
         'title': 'Colaborador',
@@ -96,7 +91,6 @@ class _MainNavigationState extends State<MainNavigation> {
         'widget': CssiPage(role: widget.role),
       });
     }
-
     if (widget.permissions['show_logs'] == true) {
       pages.add({
         'title': 'Logs',
@@ -105,7 +99,6 @@ class _MainNavigationState extends State<MainNavigation> {
         'widget': const SystemLogsPage(),
       });
     }
-
     if (widget.permissions['show_external_contacts'] == true) {
       pages.add({
         'title': 'Contactos',
@@ -114,7 +107,6 @@ class _MainNavigationState extends State<MainNavigation> {
         'widget': const ExternalContactsPage(),
       });
     }
-
     if (widget.permissions['show_asistencia'] == true) {
       pages.add({
         'title': 'Asistencia',
@@ -124,7 +116,6 @@ class _MainNavigationState extends State<MainNavigation> {
             role: widget.role, permissions: widget.permissions),
       });
     }
-
     if (widget.permissions['show_powerbi'] == true) {
       pages.add({
         'title': 'BI',
@@ -137,11 +128,12 @@ class _MainNavigationState extends State<MainNavigation> {
     return pages;
   }
 
-  void _onNavigateToCalendar(String? eventId, List<Map<String, dynamic>> pages) {
-    final calendarIndex = pages.indexWhere((p) => p['title'] == 'Calendario');
-    if (calendarIndex != -1) {
+  void _onNavigateToCalendar(
+      String? eventId, List<Map<String, dynamic>> pages) {
+    final idx = pages.indexWhere((p) => p['title'] == 'Calendario');
+    if (idx != -1) {
       setState(() {
-        _selectedIndex = calendarIndex;
+        _selectedIndex = idx;
         _selectedEventId = eventId;
       });
     }
@@ -149,266 +141,584 @@ class _MainNavigationState extends State<MainNavigation> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final pages = _availablePages;
-
-    if (_selectedIndex >= pages.length) {
-      _selectedIndex = 0;
-    }
+    if (_selectedIndex >= pages.length) _selectedIndex = 0;
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final isDesktop = constraints.maxWidth >= 800;
         return isDesktop
-            ? _buildDesktopLayout(theme, pages)
-            : _buildMobileLayout(theme, pages);
+            ? _DesktopShell(
+                pages: pages,
+                selectedIndex: _selectedIndex,
+                role: widget.role,
+                permissions: widget.permissions,
+                onSelect: (i) => setState(() {
+                  _selectedIndex = i;
+                  _selectedEventId = null;
+                }),
+                onNavigateToCalendar: (id) =>
+                    _onNavigateToCalendar(id, pages),
+              )
+            : _MobileShell(
+                pages: pages,
+                selectedIndex: _selectedIndex,
+                role: widget.role,
+                permissions: widget.permissions,
+                onSelect: (i) => setState(() {
+                  _selectedIndex = i;
+                  _selectedEventId = null;
+                }),
+                onNavigateToCalendar: (id) =>
+                    _onNavigateToCalendar(id, pages),
+              );
       },
     );
   }
+}
 
-  // ─── DESKTOP: NavigationRail lateral ─────────────────────────────────────
+// ── Desktop shell: expandable rail ──────────────────────────────────────────
 
-  Widget _buildDesktopLayout(
-      ThemeData theme, List<Map<String, dynamic>> pages) {
+class _DesktopShell extends StatefulWidget {
+  final List<Map<String, dynamic>> pages;
+  final int selectedIndex;
+  final String role;
+  final Map<String, dynamic> permissions;
+  final ValueChanged<int> onSelect;
+  final ValueChanged<String?> onNavigateToCalendar;
+
+  const _DesktopShell({
+    required this.pages,
+    required this.selectedIndex,
+    required this.role,
+    required this.permissions,
+    required this.onSelect,
+    required this.onNavigateToCalendar,
+  });
+
+  @override
+  State<_DesktopShell> createState() => _DesktopShellState();
+}
+
+class _DesktopShellState extends State<_DesktopShell>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _railCtrl;
+  late final Animation<double> _railAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _railCtrl = AnimationController(
+        vsync: this, duration: SiMotion.railExpand);
+    _railAnim =
+        CurvedAnimation(parent: _railCtrl, curve: SiMotion.easeOut);
+  }
+
+  @override
+  void dispose() {
+    _railCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = SiColors.of(context);
+    final userEmail =
+        Supabase.instance.client.auth.currentUser?.email ?? '';
+    final initials = _initials(userEmail);
+    final currentPage = widget.pages[widget.selectedIndex];
+
     return Scaffold(
-      appBar: AppBar(
-        title: Text(pages[_selectedIndex]['title']),
-        actions: [
-          NotificationBell(
-            role: widget.role,
-            permissions: widget.permissions,
-            currentUserId:
-                Supabase.instance.client.auth.currentUser?.id ?? '',
-            onNavigateToCalendar: (eventId) =>
-                _onNavigateToCalendar(eventId, pages),
-          ),
-        ],
-      ),
+      backgroundColor: c.bg,
       body: Row(
         children: [
-          // ── NavigationRail azul ──────────────────────────────────────────
-          NavigationRail(
-            backgroundColor: const Color(0xFF344092),
-            selectedIndex: _selectedIndex,
-            minWidth: 76,
-            onDestinationSelected: (index) {
-              setState(() {
-                _selectedIndex = index;
-                _selectedEventId = null;
-              });
-            },
-            labelType: NavigationRailLabelType.all,
-            indicatorColor: Colors.white,
-            selectedIconTheme:
-                const IconThemeData(color: Color(0xFF344092), size: 22),
-            unselectedIconTheme:
-                const IconThemeData(color: Colors.white70, size: 22),
-            selectedLabelTextStyle: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 11,
-            ),
-            unselectedLabelTextStyle: const TextStyle(
-              color: Colors.white70,
-              fontSize: 11,
-            ),
-            leading: Padding(
-              padding: const EdgeInsets.fromLTRB(8, 16, 8, 8),
-              child: Image.asset(
-                'assets/logo.png',
-                height: 38,
-                fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => const Icon(
-                  Icons.apps,
-                  color: Colors.white,
-                  size: 32,
-                ),
-              ),
-            ),
-            trailing: Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Divider(color: Colors.white.withOpacity(0.15), height: 1),
-                  const SizedBox(height: 8),
-                  IconButton(
-                    icon: const Icon(Icons.logout, color: Colors.white70, size: 22),
-                    tooltip: 'Cerrar sesión',
-                    onPressed: () async {
-                      try {
-                        final user = Supabase.instance.client.auth.currentUser;
-                        await Supabase.instance.client.rpc('log_event', params: {
-                          'action_type_param': 'CIERRE DE SESIÓN',
-                          'target_info_param': 'Usuario: ${user?.email ?? '---'}',
-                        });
-                      } catch (_) {}
-                      await Supabase.instance.client.auth.signOut();
-                    },
+          // Sidebar
+          MouseRegion(
+            onEnter: (_) => _railCtrl.forward(),
+            onExit: (_) => _railCtrl.reverse(),
+            child: AnimatedBuilder(
+              animation: _railAnim,
+              builder: (context, _) {
+                final w = SiLayout.railCollapsed +
+                    (SiLayout.railExpanded - SiLayout.railCollapsed) *
+                        _railAnim.value;
+                final labelVisible = _railAnim.value > 0.4;
+                final labelOpacity =
+                    ((_railAnim.value - 0.4) / 0.6).clamp(0.0, 1.0);
+
+                return Container(
+                  width: w,
+                  height: double.infinity,
+                  decoration: BoxDecoration(
+                    color: c.panel,
+                    border: Border(
+                        right: BorderSide(color: c.line, width: 1)),
                   ),
-                ],
-              ),
-            ),
-            destinations: pages
-                .map(
-                  (p) => NavigationRailDestination(
-                    icon: Icon(p['icon']),
-                    selectedIcon: Icon(p['activeIcon']),
-                    label: Text(p['title']),
-                    padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Column(
+                    children: [
+                      // Brand row
+                      SizedBox(
+                        height: SiLayout.headerHeight,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: SiSpace.x3),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 28,
+                                height: 28,
+                                decoration: BoxDecoration(
+                                    color: c.brand,
+                                    borderRadius: SiRadius.rSm),
+                                alignment: Alignment.center,
+                                child: const Text('S',
+                                    style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w700,
+                                        height: 1)),
+                              ),
+                              if (labelVisible) ...[
+                                const SizedBox(width: SiSpace.x2),
+                                Opacity(
+                                  opacity: labelOpacity,
+                                  child: Text('Sistemassi',
+                                      style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                          color: c.ink,
+                                          letterSpacing: -0.14)),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+                      Divider(color: c.line, height: 1),
+
+                      // Nav items
+                      Expanded(
+                        child: ListView(
+                          padding: const EdgeInsets.symmetric(
+                              vertical: SiSpace.x2,
+                              horizontal: SiSpace.x1),
+                          children: List.generate(
+                            widget.pages.length,
+                            (i) {
+                              final page = widget.pages[i];
+                              final isActive =
+                                  widget.selectedIndex == i;
+                              return _RailItem(
+                                icon: isActive
+                                    ? page['activeIcon']
+                                    : page['icon'],
+                                label: page['title'],
+                                isActive: isActive,
+                                showLabel: labelVisible,
+                                labelOpacity: labelOpacity,
+                                onTap: () => widget.onSelect(i),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+
+                      // User footer
+                      Divider(color: c.line, height: 1),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: SiSpace.x2,
+                            vertical: SiSpace.x2),
+                        child: Row(
+                          children: [
+                            _Avatar(
+                                initials: initials,
+                                size: 28,
+                                c: c),
+                            if (labelVisible) ...[
+                              const SizedBox(width: SiSpace.x2),
+                              Expanded(
+                                child: Opacity(
+                                  opacity: labelOpacity,
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(userEmail,
+                                          maxLines: 1,
+                                          overflow:
+                                              TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                              fontSize: 12,
+                                              color: c.ink,
+                                              fontWeight:
+                                                  FontWeight.w500)),
+                                      Text(widget.role.toUpperCase(),
+                                          style: TextStyle(
+                                              fontSize: 10,
+                                              color: c.ink3,
+                                              letterSpacing: 0.5)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              Opacity(
+                                opacity: labelOpacity,
+                                child: InkWell(
+                                  onTap: () async {
+                                    try {
+                                      final user = Supabase.instance
+                                          .client.auth.currentUser;
+                                      await Supabase.instance.client
+                                          .rpc('log_event', params: {
+                                        'action_type_param':
+                                            'CIERRE DE SESIÓN',
+                                        'target_info_param':
+                                            'Usuario: ${user?.email ?? '---'}',
+                                      });
+                                    } catch (_) {}
+                                    await Supabase.instance.client.auth
+                                        .signOut();
+                                  },
+                                  borderRadius: SiRadius.rSm,
+                                  child: Padding(
+                                    padding:
+                                        const EdgeInsets.all(SiSpace.x1),
+                                    child: Icon(Icons.logout,
+                                        size: 16, color: c.ink3),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                )
-                .toList(),
+                );
+              },
+            ),
           ),
-          // Línea divisoria sutil
-          const VerticalDivider(thickness: 1, width: 1),
-          // ── Contenido principal ──────────────────────────────────────────
+
+          // Main content
           Expanded(
-            child: pages[_selectedIndex]['widget'],
+            child: Column(
+              children: [
+                _Header(
+                  pageTitle: currentPage['title'],
+                  role: widget.role,
+                  permissions: widget.permissions,
+                  onNavigateToCalendar: widget.onNavigateToCalendar,
+                ),
+                Expanded(child: currentPage['widget']),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
+}
 
-  // ─── MÓVIL: Drawer (sidebar) ─────────────────────────────────────────────
+// ── Mobile shell: Drawer ────────────────────────────────────────────────────
 
-  Widget _buildMobileLayout(
-      ThemeData theme, List<Map<String, dynamic>> pages) {
+class _MobileShell extends StatelessWidget {
+  final List<Map<String, dynamic>> pages;
+  final int selectedIndex;
+  final String role;
+  final Map<String, dynamic> permissions;
+  final ValueChanged<int> onSelect;
+  final ValueChanged<String?> onNavigateToCalendar;
+
+  const _MobileShell({
+    required this.pages,
+    required this.selectedIndex,
+    required this.role,
+    required this.permissions,
+    required this.onSelect,
+    required this.onNavigateToCalendar,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = SiColors.of(context);
+    final currentPage = pages[selectedIndex];
+
     return Scaffold(
+      backgroundColor: c.bg,
       appBar: AppBar(
-        title: Text(pages[_selectedIndex]['title']),
-        // El ícono de hamburguesa se agrega automáticamente al haber un Drawer
+        title: Text(currentPage['title']),
         actions: [
           NotificationBell(
-            role: widget.role,
-            permissions: widget.permissions,
+            role: role,
+            permissions: permissions,
             currentUserId:
                 Supabase.instance.client.auth.currentUser?.id ?? '',
-            onNavigateToCalendar: (eventId) =>
-                _onNavigateToCalendar(eventId, pages),
+            onNavigateToCalendar: onNavigateToCalendar,
           ),
         ],
       ),
-      drawer: _buildDrawer(theme, pages),
-      body: pages[_selectedIndex]['widget'],
+      drawer: _buildDrawer(context, c),
+      body: currentPage['widget'],
     );
   }
 
-  Widget _buildDrawer(ThemeData theme, List<Map<String, dynamic>> pages) {
+  Widget _buildDrawer(BuildContext context, SiColors c) {
+    final userEmail =
+        Supabase.instance.client.auth.currentUser?.email ?? '';
+    final initials = _initials(userEmail);
+
     return Drawer(
-      backgroundColor: const Color(0xFF344092),
+      backgroundColor: c.panel,
       child: SafeArea(
         child: Column(
           children: [
-            // ── Cabecera del drawer ───────────────────────────────────────
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              padding: const EdgeInsets.fromLTRB(
+                  SiSpace.x4, SiSpace.x5, SiSpace.x4, SiSpace.x4),
+              child: Row(
                 children: [
                   Container(
-                    width: 48,
-                    height: 48,
+                    width: 28,
+                    height: 28,
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.apps, color: Colors.white, size: 28),
+                        color: c.brand, borderRadius: SiRadius.rSm),
+                    alignment: Alignment.center,
+                    child: const Text('S',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            height: 1)),
                   ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'App Sisol',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    widget.role.toUpperCase(),
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.6),
-                      fontSize: 11,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
+                  const SizedBox(width: SiSpace.x2),
+                  Text('Sistemassi',
+                      style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: c.ink)),
                 ],
               ),
             ),
-            Divider(color: Colors.white.withValues(alpha: 0.15), height: 1),
-            const SizedBox(height: 8),
-            // ── Ítems de navegación ───────────────────────────────────────
+            Divider(color: c.line, height: 1),
             Expanded(
               child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                    vertical: SiSpace.x2, horizontal: SiSpace.x2),
                 itemCount: pages.length,
-                itemBuilder: (context, index) {
-                  final page = pages[index];
-                  final isSelected = _selectedIndex == index;
-
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 2),
-                    child: ListTile(
-                      selected: isSelected,
-                      selectedTileColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      leading: Icon(
-                        isSelected ? page['activeIcon'] : page['icon'],
-                        color: isSelected
-                            ? const Color(0xFF344092)
-                            : Colors.white70,
-                        size: 22,
-                      ),
-                      title: Text(
-                        page['title'],
-                        style: TextStyle(
-                          color: isSelected
-                              ? const Color(0xFF344092)
-                              : Colors.white,
-                          fontWeight: isSelected
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                          fontSize: 14,
-                        ),
-                      ),
-                      onTap: () {
-                        setState(() {
-                          _selectedIndex = index;
-                          _selectedEventId = null;
-                        });
-                        Navigator.pop(context); // cierra el drawer
-                      },
-                    ),
+                itemBuilder: (context, i) {
+                  final page = pages[i];
+                  final isActive = selectedIndex == i;
+                  return _RailItem(
+                    icon: isActive ? page['activeIcon'] : page['icon'],
+                    label: page['title'],
+                    isActive: isActive,
+                    showLabel: true,
+                    labelOpacity: 1,
+                    onTap: () {
+                      onSelect(i);
+                      Navigator.pop(context);
+                    },
                   );
                 },
               ),
             ),
-            // ── Pie del drawer: cerrar sesión ─────────────────────────────
-            Divider(color: Colors.white.withValues(alpha: 0.15), height: 1),
+            Divider(color: c.line, height: 1),
             ListTile(
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
-              leading:
-                  const Icon(Icons.logout, color: Colors.white70, size: 22),
-              title: const Text(
-                'Cerrar sesión',
-                style: TextStyle(color: Colors.white70, fontSize: 14),
+              leading: _Avatar(initials: initials, size: 28, c: c),
+              title: Text(userEmail,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, color: c.ink)),
+              subtitle: Text(role.toUpperCase(),
+                  style: TextStyle(fontSize: 10, color: c.ink3)),
+              trailing: IconButton(
+                icon: Icon(Icons.logout, size: 18, color: c.ink3),
+                onPressed: () async {
+                  Navigator.pop(context);
+                  await Supabase.instance.client.auth.signOut();
+                },
               ),
-              onTap: () async {
-                Navigator.pop(context);
-                await Supabase.instance.client.auth.signOut();
-              },
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: SiSpace.x2),
           ],
         ),
       ),
     );
   }
+}
+
+// ── Header bar ──────────────────────────────────────────────────────────────
+
+class _Header extends StatelessWidget {
+  final String pageTitle;
+  final String role;
+  final Map<String, dynamic> permissions;
+  final ValueChanged<String?> onNavigateToCalendar;
+
+  const _Header({
+    required this.pageTitle,
+    required this.role,
+    required this.permissions,
+    required this.onNavigateToCalendar,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = SiColors.of(context);
+    final userEmail =
+        Supabase.instance.client.auth.currentUser?.email ?? '';
+    final initials = _initials(userEmail);
+
+    return Container(
+      height: SiLayout.headerHeight,
+      decoration: BoxDecoration(
+        color: c.panel,
+        border: Border(bottom: BorderSide(color: c.line, width: 1)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: SiSpace.x4),
+      child: Row(
+        children: [
+          Text(pageTitle,
+              style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: c.ink,
+                  letterSpacing: -0.07)),
+          const Spacer(),
+          NotificationBell(
+            role: role,
+            permissions: permissions,
+            currentUserId:
+                Supabase.instance.client.auth.currentUser?.id ?? '',
+            onNavigateToCalendar: onNavigateToCalendar,
+          ),
+          const SizedBox(width: SiSpace.x2),
+          _Avatar(initials: initials, size: 28, c: c),
+          const SizedBox(width: SiSpace.x3),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Rail nav item ────────────────────────────────────────────────────────────
+
+class _RailItem extends StatefulWidget {
+  final IconData icon;
+  final String label;
+  final bool isActive;
+  final bool showLabel;
+  final double labelOpacity;
+  final VoidCallback onTap;
+
+  const _RailItem({
+    required this.icon,
+    required this.label,
+    required this.isActive,
+    required this.showLabel,
+    required this.labelOpacity,
+    required this.onTap,
+  });
+
+  @override
+  State<_RailItem> createState() => _RailItemState();
+}
+
+class _RailItemState extends State<_RailItem> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = SiColors.of(context);
+    final bg = widget.isActive
+        ? c.brandTint
+        : _hovered
+            ? c.hover
+            : Colors.transparent;
+    final iconColor = widget.isActive ? c.brand : c.ink3;
+    final textColor = widget.isActive ? c.brand : c.ink2;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: SiMotion.fast,
+          curve: SiMotion.easeOut,
+          height: 36,
+          margin: const EdgeInsets.symmetric(vertical: 1),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: SiRadius.rMd,
+            border: widget.isActive
+                ? Border(left: BorderSide(color: c.brand, width: 2))
+                : null,
+          ),
+          padding: EdgeInsets.only(
+            left: widget.isActive ? SiSpace.x2 : SiSpace.x3,
+            right: SiSpace.x2,
+          ),
+          child: Row(
+            children: [
+              Icon(widget.icon, size: 17, color: iconColor),
+              if (widget.showLabel) ...[
+                const SizedBox(width: SiSpace.x2),
+                Opacity(
+                  opacity: widget.labelOpacity,
+                  child: Text(widget.label,
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: widget.isActive
+                              ? FontWeight.w500
+                              : FontWeight.w400,
+                          color: textColor),
+                      overflow: TextOverflow.ellipsis),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Shared helpers ───────────────────────────────────────────────────────────
+
+class _Avatar extends StatelessWidget {
+  final String initials;
+  final double size;
+  final SiColors c;
+
+  const _Avatar(
+      {required this.initials, required this.size, required this.c});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration:
+          BoxDecoration(color: c.brandTint, shape: BoxShape.circle),
+      alignment: Alignment.center,
+      child: Text(initials,
+          style: TextStyle(
+              fontSize: size * 0.4,
+              fontWeight: FontWeight.w600,
+              color: c.brand,
+              height: 1)),
+    );
+  }
+}
+
+String _initials(String email) {
+  final parts = email.split('@').first.split('.');
+  if (parts.length >= 2) {
+    return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+  }
+  return email.isNotEmpty ? email[0].toUpperCase() : '?';
 }
