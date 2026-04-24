@@ -875,67 +875,79 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   Widget _buildDesktopLayout(ThemeData theme, List<Map<String, dynamic>> users) {
+    final screenWidth = MediaQuery.of(context).size.width;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Card(
         elevation: 0,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey[200]!)),
-        child: PaginatedDataTable(
-          dataRowMaxHeight: 64,
-          dataRowMinHeight: 64,
-          header: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 350),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Buscar por nombre, correo, ID...',
-                hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                prefixIcon: const Icon(Icons.search, size: 20),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, size: 20),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() => _searchQuery = '');
-                        },
-                      )
-                    : null,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: theme.colorScheme.primary)),
-                filled: true,
-                fillColor: Colors.white,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                isDense: true,
-              ),
-              style: const TextStyle(fontSize: 14),
-              onChanged: (value) => setState(() => _searchQuery = value),
-            ),
-          ),
-          actions: [
-            if (_isAdmin)
-              OutlinedButton.icon(
-                onPressed: () => _showUserForm(),
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('Agregar Usuario'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: theme.colorScheme.primary,
-                  side: BorderSide(color: theme.colorScheme.primary),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: SizedBox(
+          width: double.infinity,
+          child: PaginatedDataTable(
+            dataRowMaxHeight: 54,
+            dataRowMinHeight: 54,
+            columnSpacing: 40,
+            horizontalMargin: 24,
+            header: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 350),
+              child: SizedBox(
+                height: 38,
+                child: TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'Buscar por nombre, correo, ID...',
+                    hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                    prefixIcon: const Icon(Icons.search, size: 18),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, size: 16),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _searchQuery = '');
+                            },
+                          )
+                        : null,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: theme.colorScheme.primary)),
+                    filled: true,
+                    fillColor: Colors.white,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                  ),
+                  style: const TextStyle(fontSize: 13),
+                  onChanged: (value) => setState(() => _searchQuery = value),
                 ),
               ),
-          ],
-          columns: [
-            DataColumn(label: Text('USUARIO', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
-            DataColumn(label: Text('ID', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
-            DataColumn(label: Text('ROL', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
-            DataColumn(label: Text('ESTADO', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
-            const DataColumn(label: SizedBox()), // Acciones
-          ],
-          source: _UserDataSource(users: users, theme: theme, isAdmin: _isAdmin, onEdit: (u) => _showUserForm(user: u), onDelete: (id) => _deleteUser(id)),
-          rowsPerPage: users.isEmpty ? 1 : (users.length > 10 ? 10 : users.length),
-          showCheckboxColumn: false,
+            ),
+            actions: [
+              if (_isAdmin)
+                SizedBox(
+                  height: 38,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showUserForm(),
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Usuario', style: TextStyle(fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: theme.colorScheme.primary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                    ),
+                  ),
+                ),
+            ],
+            columns: [
+              DataColumn(label: SizedBox(width: screenWidth * 0.25, child: Text('USUARIO', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+              DataColumn(label: SizedBox(width: screenWidth * 0.1, child: Text('ID', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+              DataColumn(label: SizedBox(width: screenWidth * 0.1, child: Text('ROL', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+              DataColumn(label: SizedBox(width: screenWidth * 0.1, child: Text('ESTADO', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+              const DataColumn(label: SizedBox()), // Acciones
+            ],
+            source: _UserDataSource(users: users, theme: theme, isAdmin: _isAdmin, onEdit: (u) => _showUserForm(user: u), onDelete: (id) => _deleteUser(id), screenWidth: screenWidth),
+            rowsPerPage: users.isEmpty ? 1 : (users.length > 10 ? 10 : users.length),
+            showCheckboxColumn: false,
+          ),
         ),
       ),
     );
@@ -991,8 +1003,9 @@ class _UserDataSource extends DataTableSource {
   final bool isAdmin;
   final Function(Map<String, dynamic>) onEdit;
   final Function(String) onDelete;
+  final double screenWidth;
 
-  _UserDataSource({required this.users, required this.theme, required this.isAdmin, required this.onEdit, required this.onDelete});
+  _UserDataSource({required this.users, required this.theme, required this.isAdmin, required this.onEdit, required this.onDelete, required this.screenWidth});
 
   @override
   DataRow? getRow(int index) {
@@ -1018,61 +1031,78 @@ class _UserDataSource extends DataTableSource {
       index: index,
       cells: [
         DataCell(
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 18,
-                backgroundColor: roleColor.withOpacity(0.15),
-                child: Text(initials, style: TextStyle(color: roleColor, fontSize: 13, fontWeight: FontWeight.bold)),
-              ),
-              const SizedBox(width: 14),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(nombre.isEmpty ? 'Sin Nombre' : nombre, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                  const SizedBox(height: 2),
-                  Text(user['email'] ?? '', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
-                ],
-              ),
-            ],
+          SizedBox(
+            width: screenWidth * 0.25,
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 16,
+                  backgroundColor: roleColor.withOpacity(0.15),
+                  child: Text(initials, style: TextStyle(color: roleColor, fontSize: 12, fontWeight: FontWeight.bold)),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(nombre.isEmpty ? 'Sin Nombre' : nombre, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis),
+                      const SizedBox(height: 2),
+                      Text(user['email'] ?? '', style: TextStyle(color: Colors.grey.shade500, fontSize: 11), overflow: TextOverflow.ellipsis),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-        DataCell(Text(user['numero_empleado'] ?? '----', style: const TextStyle(fontSize: 13, color: Colors.black87))),
+        DataCell(SizedBox(width: screenWidth * 0.1, child: Text(user['numero_empleado'] ?? '----', style: const TextStyle(fontSize: 13, color: Colors.black87)))),
         DataCell(
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border.all(color: Colors.grey.shade300),
-              borderRadius: BorderRadius.circular(16),
+          SizedBox(
+            width: screenWidth * 0.1,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(color: Colors.grey.shade300),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(width: 6, height: 6, decoration: BoxDecoration(color: roleColor, shape: BoxShape.circle)),
+                    const SizedBox(width: 6),
+                    Text(role.toString().toLowerCase(), style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                  ],
+                ),
+              ),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(width: 6, height: 6, decoration: BoxDecoration(color: roleColor, shape: BoxShape.circle)),
-                const SizedBox(width: 6),
-                Text(role.toString().toLowerCase(), style: const TextStyle(fontSize: 12, color: Colors.black87)),
-              ],
-            ),
-          )
+          ),
         ),
         DataCell(
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: statusColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(16),
+          SizedBox(
+            width: screenWidth * 0.1,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: statusColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(width: 6, height: 6, decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle)),
+                    const SizedBox(width: 6),
+                    Text(status, style: TextStyle(fontSize: 12, color: statusColor, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(width: 6, height: 6, decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle)),
-                const SizedBox(width: 6),
-                Text(status, style: TextStyle(fontSize: 12, color: statusColor, fontWeight: FontWeight.w600)),
-              ],
-            ),
-          )
+          ),
         ),
         DataCell(
           Align(
@@ -1081,8 +1111,8 @@ class _UserDataSource extends DataTableSource {
               icon: const Icon(Icons.more_horiz, color: Colors.grey),
               onSelected: (v) => v == 'edit' ? onEdit(user) : onDelete(user['id']),
               itemBuilder: (_) => [
-                const PopupMenuItem(value: 'edit', child: Text('Editar')),
-                const PopupMenuItem(value: 'delete', child: Text('Eliminar', style: TextStyle(color: Colors.red))),
+                const PopupMenuItem(value: 'edit', child: ListTile(leading: Icon(Icons.edit, size: 20), title: Text('Editar'), dense: true, contentPadding: EdgeInsets.zero)),
+                const PopupMenuItem(value: 'delete', child: ListTile(leading: Icon(Icons.delete, color: Colors.red, size: 20), title: Text('Eliminar', style: TextStyle(color: Colors.red)), dense: true, contentPadding: EdgeInsets.zero)),
               ],
             ) : const SizedBox(),
           )
