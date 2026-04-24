@@ -2,45 +2,55 @@
 // si_theme.dart
 // Sistemassi — Enterprise Quiet Design System (Flutter tokens)
 //
-// Uso:
-//   1) pubspec.yaml:
-//        dependencies:
-//          google_fonts: ^6.2.1
-//   2) main.dart:
-//        import 'theme/si_theme.dart';
-//        MaterialApp(theme: SiTheme.light, darkTheme: SiTheme.dark, ...)
-//   3) En widgets:
-//        final c = SiColors.of(context);
-//        Container(color: c.panel, ...)
+// IMPORTANTE: esta versión NO usa google_fonts. Las fuentes se declaran como
+// assets locales en pubspec.yaml bajo las familias 'Geist' y 'GeistMono'.
+//
+// pubspec.yaml:
+//   flutter:
+//     fonts:
+//       - family: Geist
+//         fonts:
+//           - asset: assets/fonts/Geist-Regular.ttf
+//             weight: 400
+//           - asset: assets/fonts/Geist-Medium.ttf
+//             weight: 500
+//           - asset: assets/fonts/Geist-SemiBold.ttf
+//             weight: 600
+//           - asset: assets/fonts/Geist-Bold.ttf
+//             weight: 700
+//       - family: GeistMono
+//         fonts:
+//           - asset: assets/fonts/GeistMono-Regular.ttf
+//             weight: 400
+//           - asset: assets/fonts/GeistMono-Medium.ttf
+//             weight: 500
+//
+// Si no tienes Geist, usa Inter (mismo patrón) y cambia SiType.fontFamily.
 // ============================================================================
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 // ----------------------------------------------------------------------------
 // 1) COLOR TOKENS
 // ----------------------------------------------------------------------------
 
 class SiColors extends ThemeExtension<SiColors> {
-  // Brand
   final Color brand;
   final Color brandInk;
   final Color brandTint;
   final Color brandHover;
 
-  // Surface / neutrals (cool scale)
   final Color bg;
   final Color panel;
-  final Color ink;      // primary text
-  final Color ink2;     // secondary
-  final Color ink3;     // tertiary / muted
-  final Color ink4;     // disabled / icons
-  final Color line;     // 1px borders
-  final Color line2;    // subtle dividers
+  final Color ink;
+  final Color ink2;
+  final Color ink3;
+  final Color ink4;
+  final Color line;
+  final Color line2;
   final Color hover;
   final Color active;
 
-  // Semantic
   final Color success;
   final Color successTint;
   final Color warn;
@@ -74,20 +84,18 @@ class SiColors extends ThemeExtension<SiColors> {
   static const light = SiColors(
     brand:       Color(0xFF344092),
     brandInk:    Color(0xFF1A2466),
-    brandTint:   Color(0xFFEFF1FA), // oklch(0.96 0.02 265)
+    brandTint:   Color(0xFFEFF1FA),
     brandHover:  Color(0xFF2A3577),
-
-    bg:          Color(0xFFFBFBFC), // oklch(0.992 0.003 250)
+    bg:          Color(0xFFFBFBFC),
     panel:       Color(0xFFFFFFFF),
-    ink:         Color(0xFF1C2030), // oklch(0.20 0.02 260)
-    ink2:        Color(0xFF4A5068), // oklch(0.38 0.02 260)
-    ink3:        Color(0xFF737A92), // oklch(0.55 0.015 260)
-    ink4:        Color(0xFFA2A7B8), // oklch(0.70 0.012 260)
-    line:        Color(0xFFE4E6EC), // oklch(0.92 0.006 260)
-    line2:       Color(0xFFEEF0F4), // oklch(0.95 0.005 260)
-    hover:       Color(0xFFF4F5F8), // oklch(0.97 0.006 260)
-    active:      Color(0xFFEAECF2), // oklch(0.94 0.012 265)
-
+    ink:         Color(0xFF1C2030),
+    ink2:        Color(0xFF4A5068),
+    ink3:        Color(0xFF737A92),
+    ink4:        Color(0xFFA2A7B8),
+    line:        Color(0xFFE4E6EC),
+    line2:       Color(0xFFEEF0F4),
+    hover:       Color(0xFFF4F5F8),
+    active:      Color(0xFFEAECF2),
     success:     Color(0xFF2E9460),
     successTint: Color(0xFFEAF6EE),
     warn:        Color(0xFFD99531),
@@ -101,7 +109,6 @@ class SiColors extends ThemeExtension<SiColors> {
     brandInk:    Color(0xFF8B9AE8),
     brandTint:   Color(0xFF1E2340),
     brandHover:  Color(0xFF7D8DE0),
-
     bg:          Color(0xFF0D0F14),
     panel:       Color(0xFF14171F),
     ink:         Color(0xFFEEF0F5),
@@ -112,7 +119,6 @@ class SiColors extends ThemeExtension<SiColors> {
     line2:       Color(0xFF1C2030),
     hover:       Color(0xFF1A1E2B),
     active:      Color(0xFF232841),
-
     success:     Color(0xFF49B27E),
     successTint: Color(0xFF18291E),
     warn:        Color(0xFFE8AE56),
@@ -231,29 +237,19 @@ class SiLayout {
 }
 
 // ----------------------------------------------------------------------------
-// 5) SHADOWS (used sparingly — prefer 1px borders)
+// 5) SHADOWS
 // ----------------------------------------------------------------------------
 
 class SiShadows {
   static const sm = [
-    BoxShadow(
-      color: Color(0xFFE4E6EC),
-      offset: Offset(0, 1),
-      blurRadius: 0,
-    ),
+    BoxShadow(color: Color(0xFFE4E6EC), offset: Offset(0, 1), blurRadius: 0),
   ];
-
   static const md = [
-    BoxShadow(
-      color: Color(0x0A1A2466), // rgba(26,36,102,0.04)
-      offset: Offset(0, 1),
-      blurRadius: 2,
-    ),
+    BoxShadow(color: Color(0x0A1A2466), offset: Offset(0, 1), blurRadius: 2),
   ];
-
   static const lg = [
     BoxShadow(
-      color: Color(0x2E1A2466), // rgba(26,36,102,0.18)
+      color: Color(0x2E1A2466),
       offset: Offset(0, 12),
       blurRadius: 32,
       spreadRadius: -8,
@@ -262,66 +258,95 @@ class SiShadows {
 }
 
 // ----------------------------------------------------------------------------
-// 6) TYPOGRAPHY — Geist + Geist Mono via google_fonts
+// 6) TYPOGRAPHY — Local fonts (Geist / GeistMono)
 // ----------------------------------------------------------------------------
 
 class SiType {
+  /// Familia principal. Si no tienes Geist en assets, cambia a 'Inter'.
+  static const String fontFamily = 'Geist';
+
+  /// Familia monoespaciada. Fallback sugerido: 'RobotoMono' o system mono.
+  static const String monoFamily = 'GeistMono';
+
   static TextTheme textTheme(Color ink, Color ink2) {
     return TextTheme(
-      displayLarge:   _g(size: 40, weight: FontWeight.w600, color: ink,  letter: -0.02),
-      displayMedium:  _g(size: 32, weight: FontWeight.w600, color: ink,  letter: -0.02),
-      headlineLarge:  _g(size: 24, weight: FontWeight.w600, color: ink,  letter: -0.015),
-      headlineMedium: _g(size: 20, weight: FontWeight.w600, color: ink,  letter: -0.01),
-      titleLarge:     _g(size: 16, weight: FontWeight.w600, color: ink,  letter: -0.005),
-      titleMedium:    _g(size: 14, weight: FontWeight.w500, color: ink),
-      bodyLarge:      _g(size: 14, weight: FontWeight.w400, color: ink),
-      bodyMedium:     _g(size: 13, weight: FontWeight.w400, color: ink2),
-      bodySmall:      _g(size: 12, weight: FontWeight.w400, color: ink2),
-      labelLarge:     _g(size: 13, weight: FontWeight.w500, color: ink),
-      labelMedium:    _g(size: 12, weight: FontWeight.w500, color: ink2),
-      labelSmall:     _g(size: 11, weight: FontWeight.w500, color: ink2, letter: 0.02),
+      displayLarge:   _s(40, FontWeight.w600, ink,  -0.80),
+      displayMedium:  _s(32, FontWeight.w600, ink,  -0.64),
+      displaySmall:   _s(28, FontWeight.w600, ink,  -0.48),
+      headlineLarge:  _s(24, FontWeight.w600, ink,  -0.36),
+      headlineMedium: _s(20, FontWeight.w600, ink,  -0.20),
+      headlineSmall:  _s(18, FontWeight.w600, ink,  -0.10),
+      titleLarge:     _s(16, FontWeight.w600, ink,  -0.08),
+      titleMedium:    _s(14, FontWeight.w500, ink,   0.00),
+      titleSmall:     _s(13, FontWeight.w500, ink,   0.00),
+      bodyLarge:      _s(14, FontWeight.w400, ink,   0.00),
+      bodyMedium:     _s(13, FontWeight.w400, ink2,  0.00),
+      bodySmall:      _s(12, FontWeight.w400, ink2,  0.00),
+      labelLarge:     _s(13, FontWeight.w500, ink,   0.00),
+      labelMedium:    _s(12, FontWeight.w500, ink2,  0.00),
+      labelSmall:     _s(11, FontWeight.w500, ink2,  0.22),
     );
   }
 
+  /// Estilo monoespaciado para IDs, SKUs, timestamps.
   static TextStyle mono({
     double size = 12,
     FontWeight weight = FontWeight.w400,
     Color? color,
+    double letterSpacing = 0,
   }) {
-    return GoogleFonts.geistMono(
+    return TextStyle(
+      fontFamily: monoFamily,
+      fontFamilyFallback: const ['RobotoMono', 'monospace'],
       fontSize: size,
       fontWeight: weight,
       color: color,
-      letterSpacing: 0,
+      letterSpacing: letterSpacing,
       height: 1.5,
     );
   }
 
-  static TextStyle _g({
-    required double size,
-    required FontWeight weight,
-    required Color color,
-    double letter = 0,
+  /// Estilo sans arbitrario.
+  static TextStyle sans({
+    double size = 14,
+    FontWeight weight = FontWeight.w400,
+    Color? color,
+    double letterSpacing = 0,
+    double height = 1.5,
   }) {
-    return GoogleFonts.geist(
+    return TextStyle(
+      fontFamily: fontFamily,
+      fontFamilyFallback: const ['Inter', 'system-ui', 'sans-serif'],
       fontSize: size,
       fontWeight: weight,
       color: color,
-      letterSpacing: letter * size,
+      letterSpacing: letterSpacing,
+      height: height,
+    );
+  }
+
+  static TextStyle _s(double size, FontWeight w, Color c, double letter) {
+    return TextStyle(
+      fontFamily: fontFamily,
+      fontFamilyFallback: const ['Inter', 'system-ui', 'sans-serif'],
+      fontSize: size,
+      fontWeight: w,
+      color: c,
+      letterSpacing: letter,
       height: 1.5,
     );
   }
 }
 
 // ----------------------------------------------------------------------------
-// 7) DURATIONS & CURVES (micro-interacciones)
+// 7) DURATIONS & CURVES
 // ----------------------------------------------------------------------------
 
 class SiMotion {
-  static const fast    = Duration(milliseconds: 120);
-  static const normal  = Duration(milliseconds: 180);
-  static const slow    = Duration(milliseconds: 260);
-  static const railExpand = Duration(milliseconds: 220);
+  static const fast        = Duration(milliseconds: 120);
+  static const normal      = Duration(milliseconds: 180);
+  static const slow        = Duration(milliseconds: 260);
+  static const railExpand  = Duration(milliseconds: 220);
 
   static const easeOut    = Cubic(0.2, 0.8, 0.2, 1.0);
   static const easeInOut  = Cubic(0.4, 0.0, 0.2, 1.0);
@@ -329,7 +354,7 @@ class SiMotion {
 }
 
 // ----------------------------------------------------------------------------
-// 8) THEME DATA — Light & Dark
+// 8) THEME DATA
 // ----------------------------------------------------------------------------
 
 class SiTheme {
@@ -342,6 +367,7 @@ class SiTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: b,
+      fontFamily: SiType.fontFamily,
       scaffoldBackgroundColor: c.bg,
       canvasColor: c.panel,
       dividerColor: c.line,
@@ -379,7 +405,6 @@ class SiTheme {
 
       extensions: <ThemeExtension<dynamic>>[c],
 
-      // ---- AppBar ----
       appBarTheme: AppBarTheme(
         backgroundColor: c.panel,
         foregroundColor: c.ink,
@@ -391,7 +416,6 @@ class SiTheme {
         iconTheme: IconThemeData(color: c.ink2, size: 18),
       ),
 
-      // ---- Card ----
       cardTheme: CardThemeData(
         color: c.panel,
         elevation: 0,
@@ -402,7 +426,6 @@ class SiTheme {
         ),
       ),
 
-      // ---- Buttons ----
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: c.brand,
@@ -412,8 +435,6 @@ class SiTheme {
           padding: const EdgeInsets.symmetric(horizontal: 14),
           shape: const RoundedRectangleBorder(borderRadius: SiRadius.rMd),
           textStyle: textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w500),
-        ).copyWith(
-          overlayColor: WidgetStateProperty.all(c.brandHover.withValues(alpha: 0.15)),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -435,7 +456,6 @@ class SiTheme {
         ),
       ),
 
-      // ---- Inputs ----
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: c.panel,
@@ -461,7 +481,6 @@ class SiTheme {
         ),
       ),
 
-      // ---- Chips ----
       chipTheme: ChipThemeData(
         backgroundColor: c.panel,
         side: BorderSide(color: c.line, width: 1),
@@ -470,14 +489,12 @@ class SiTheme {
         shape: const RoundedRectangleBorder(borderRadius: SiRadius.rPill),
       ),
 
-      // ---- Dividers ----
       dividerTheme: DividerThemeData(
         color: c.line,
         thickness: 1,
         space: 1,
       ),
 
-      // ---- Nav ----
       navigationRailTheme: NavigationRailThemeData(
         backgroundColor: c.panel,
         selectedIconTheme: IconThemeData(color: c.brand, size: 18),
@@ -488,7 +505,6 @@ class SiTheme {
         useIndicator: true,
       ),
 
-      // ---- ListTile ----
       listTileTheme: ListTileThemeData(
         minVerticalPadding: 8,
         dense: true,
@@ -499,7 +515,6 @@ class SiTheme {
         selectedTileColor: c.brandTint,
       ),
 
-      // ---- Tooltip ----
       tooltipTheme: TooltipThemeData(
         decoration: BoxDecoration(
           color: c.ink,
@@ -510,14 +525,12 @@ class SiTheme {
         waitDuration: const Duration(milliseconds: 400),
       ),
 
-      // ---- Scrollbar ----
       scrollbarTheme: ScrollbarThemeData(
         thumbColor: WidgetStateProperty.all(c.ink4.withValues(alpha: 0.4)),
         thickness: WidgetStateProperty.all(6),
         radius: const Radius.circular(3),
       ),
 
-      // ---- Dialogs ----
       dialogTheme: DialogThemeData(
         backgroundColor: c.panel,
         surfaceTintColor: Colors.transparent,

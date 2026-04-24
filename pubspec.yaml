@@ -31,7 +31,6 @@ dependencies:
   screenshot: ^3.0.0
   font_awesome_flutter: ^10.7.0
   share_plus: ^7.2.2
-  google_fonts: ^6.2.1
 
 dev_dependencies:
   flutter_test:
@@ -45,6 +44,23 @@ flutter:
     - assets/
     - assets/firmcred/
     - .env
+  fonts:
+    - family: Geist
+      fonts:
+        - asset: assets/fonts/Geist-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Geist-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Geist-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Geist-Bold.ttf
+          weight: 700
+    - family: GeistMono
+      fonts:
+        - asset: assets/fonts/GeistMono-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/GeistMono-Medium.ttf
+          weight: 500
 
 dependency_overrides:
 

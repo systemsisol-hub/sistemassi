@@ -3,7 +3,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:screenshot/screenshot.dart';
 import 'services/file_saver_util.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 extension StringTitleCase on String {
   String toTitleCase() {
@@ -136,9 +135,7 @@ class _SignatureGeneratorPageState extends State<SignatureGeneratorPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context).copyWith(
-      textTheme: GoogleFonts.interTextTheme(Theme.of(context).textTheme),
-    );
+    final theme = Theme.of(context);
 
     if (_isLoading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
@@ -328,7 +325,7 @@ class _SignatureGeneratorPageState extends State<SignatureGeneratorPage> {
               controller: _nameController,
               cursorColor: Colors.white,
               textCapitalization: TextCapitalization.words, // Allow mixed case and accents
-              style: GoogleFonts.lexend(
+              style: TextStyle(fontFamily: 'Geist', 
                 color: Colors.white,
                 fontWeight: FontWeight.w700,
                 fontSize: 22,
@@ -355,7 +352,7 @@ class _SignatureGeneratorPageState extends State<SignatureGeneratorPage> {
               controller: _positionController,
               cursorColor: Colors.white,
               textCapitalization: TextCapitalization.sentences, // Allow natural typing
-              style: GoogleFonts.lexend(
+              style: TextStyle(fontFamily: 'Geist', 
                 color: Colors.white,
                 fontWeight: FontWeight.w500,
                 fontSize: 14,
@@ -433,7 +430,7 @@ class _SignatureGeneratorPageState extends State<SignatureGeneratorPage> {
         Flexible(
           child: Text(
             text,
-            style: GoogleFonts.lexend(
+            style: TextStyle(fontFamily: 'Geist', 
               color: Colors.white,
               fontSize: 12, // Increased size
               fontWeight: FontWeight.w300,
@@ -456,7 +453,7 @@ class _SignatureGeneratorPageState extends State<SignatureGeneratorPage> {
           child: TextField(
             controller: controller,
             cursorColor: Colors.white,
-            style: GoogleFonts.lexend(
+            style: TextStyle(fontFamily: 'Geist', 
               color: Colors.white,
               fontSize: 12, // Increased size
               fontWeight: FontWeight.w300,
@@ -491,7 +488,7 @@ class _SignatureGeneratorPageState extends State<SignatureGeneratorPage> {
           const SizedBox(width: 6),
           const FaIcon(FontAwesomeIcons.instagram, color: iconColor, size: 14),
           const SizedBox(width: 8),
-          Text(_selectedBrand.facebook, style: GoogleFonts.lexend(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w300, height: 1.0)),
+          Text(_selectedBrand.facebook, style: TextStyle(fontFamily: 'Geist', color: Colors.white, fontSize: 12, fontWeight: FontWeight.w300, height: 1.0)),
         ],
       );
     } else {
@@ -505,7 +502,7 @@ class _SignatureGeneratorPageState extends State<SignatureGeneratorPage> {
             children: [
               const FaIcon(FontAwesomeIcons.facebook, color: iconColor, size: 14),
               const SizedBox(width: 6),
-              Text(_selectedBrand.facebook, style: GoogleFonts.lexend(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w300, height: 1.0)),
+              Text(_selectedBrand.facebook, style: TextStyle(fontFamily: 'Geist', color: Colors.white, fontSize: 12, fontWeight: FontWeight.w300, height: 1.0)),
             ],
           ),
           const SizedBox(height: 4),
@@ -514,7 +511,7 @@ class _SignatureGeneratorPageState extends State<SignatureGeneratorPage> {
             children: [
               const FaIcon(FontAwesomeIcons.instagram, color: iconColor, size: 14),
               const SizedBox(width: 6),
-              Text(_selectedBrand.instagram, style: GoogleFonts.lexend(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w300, height: 1.0)),
+              Text(_selectedBrand.instagram, style: TextStyle(fontFamily: 'Geist', color: Colors.white, fontSize: 12, fontWeight: FontWeight.w300, height: 1.0)),
             ],
           ),
         ],
