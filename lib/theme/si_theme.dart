@@ -497,7 +497,6 @@ class SiTheme {
         shape: const RoundedRectangleBorder(borderRadius: SiRadius.rMd),
         selectedColor: c.brand,
         selectedTileColor: c.brandTint,
-        hoverColor: c.hover,
       ),
 
       // ---- Tooltip ----
