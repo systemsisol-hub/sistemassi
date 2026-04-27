@@ -16,6 +16,24 @@ class _SystemLogsPageState extends State<SystemLogsPage> {
   DateTime? _endDate;
   Map<DateTime, int> _dailyLogins = {};
   Map<String, Map<String, dynamic>> _emailProfiles = {};
+  final _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  List<Map<String, dynamic>> get _filteredLogs {
+    var result = List<Map<String, dynamic>>.from(_logs);
+    if (_searchQuery.isNotEmpty) {
+      final query = _searchQuery.toLowerCase();
+      result = result.where((log) {
+        final action = (log['action_type'] ?? '').toString().toLowerCase();
+        final target = (log['target_info'] ?? '').toString().toLowerCase();
+        final name = _getProfileName(log).toLowerCase();
+        final email = _getProfileEmail(log).toLowerCase();
+        
+        return action.contains(query) || target.contains(query) || name.contains(query) || email.contains(query);
+      }).toList();
+    }
+    return result;
+  }
 
   Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
     return ClipRRect(
@@ -149,78 +167,79 @@ class _SystemLogsPageState extends State<SystemLogsPage> {
 
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              _buildGlassPill(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _buildDateSelector(
-                      label: _startDate == null
-                          ? 'Desde'
-                          : _formatDateOnly(_startDate!),
-                      icon: Icons.calendar_today,
-                      onTap: () async {
-                        final d = await showDatePicker(
-                          context: context,
-                          initialDate: _startDate ?? DateTime.now(),
-                          firstDate: DateTime(2024),
-                          lastDate: DateTime.now(),
-                        );
-                        if (d != null) {
-                          setState(() => _startDate = d);
-                          _fetchLogs();
-                        }
-                      },
-                    ),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 8),
-                      child: Icon(Icons.arrow_forward,
-                          size: 14, color: Colors.grey),
-                    ),
-                    _buildDateSelector(
-                      label: _endDate == null
-                          ? 'Hasta'
-                          : _formatDateOnly(_endDate!),
-                      icon: Icons.event,
-                      onTap: () async {
-                        final d = await showDatePicker(
-                          context: context,
-                          initialDate: _endDate ?? DateTime.now(),
-                          firstDate: _startDate ?? DateTime(2024),
-                          lastDate: DateTime.now(),
-                        );
-                        if (d != null) {
-                          setState(() => _endDate = d);
-                          _fetchLogs();
-                        }
-                      },
-                    ),
-                    if (_startDate != null || _endDate != null)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 8),
-                        child: IconButton(
-                          onPressed: () {
-                            setState(() {
-                              _startDate = null;
-                              _endDate = null;
-                            });
+        if (!isDesktop)
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                _buildGlassPill(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildDateSelector(
+                        label: _startDate == null
+                            ? 'Desde'
+                            : _formatDateOnly(_startDate!),
+                        icon: Icons.calendar_today,
+                        onTap: () async {
+                          final d = await showDatePicker(
+                            context: context,
+                            initialDate: _startDate ?? DateTime.now(),
+                            firstDate: DateTime(2024),
+                            lastDate: DateTime.now(),
+                          );
+                          if (d != null) {
+                            setState(() => _startDate = d);
                             _fetchLogs();
-                          },
-                          icon: const Icon(Icons.clear, size: 18),
-                          tooltip: 'Limpiar filtros',
-                        ),
+                          }
+                        },
                       ),
-                  ],
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 8),
+                        child: Icon(Icons.arrow_forward,
+                            size: 14, color: Colors.grey),
+                      ),
+                      _buildDateSelector(
+                        label: _endDate == null
+                            ? 'Hasta'
+                            : _formatDateOnly(_endDate!),
+                        icon: Icons.event,
+                        onTap: () async {
+                          final d = await showDatePicker(
+                            context: context,
+                            initialDate: _endDate ?? DateTime.now(),
+                            firstDate: _startDate ?? DateTime(2024),
+                            lastDate: DateTime.now(),
+                          );
+                          if (d != null) {
+                            setState(() => _endDate = d);
+                            _fetchLogs();
+                          }
+                        },
+                      ),
+                      if (_startDate != null || _endDate != null)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8),
+                          child: IconButton(
+                            onPressed: () {
+                              setState(() {
+                                _startDate = null;
+                                _endDate = null;
+                              });
+                              _fetchLogs();
+                            },
+                            icon: const Icon(Icons.clear, size: 18),
+                            tooltip: 'Limpiar filtros',
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
         _buildChartCard(theme),
         Expanded(
           child: _isLoading
@@ -237,7 +256,7 @@ class _SystemLogsPageState extends State<SystemLogsPage> {
                             : child,
                   ),
                 )
-              : _logs.isEmpty
+              : _filteredLogs.isEmpty
                   ? Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -251,7 +270,7 @@ class _SystemLogsPageState extends State<SystemLogsPage> {
                       ),
                     )
                   : isDesktop
-                      ? _buildDesktopTable(theme)
+                      ? _buildDesktopTable(theme, _filteredLogs)
                       : _buildMobileList(theme),
         ),
       ],
@@ -440,7 +459,8 @@ class _SystemLogsPageState extends State<SystemLogsPage> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        height: 38,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(8),
@@ -516,7 +536,8 @@ class _SystemLogsPageState extends State<SystemLogsPage> {
     );
   }
 
-  Widget _buildDesktopTable(ThemeData theme) {
+  Widget _buildDesktopTable(ThemeData theme, List<Map<String, dynamic>> filteredLogs) {
+    final screenWidth = MediaQuery.of(context).size.width;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: SizedBox(
@@ -527,60 +548,89 @@ class _SystemLogsPageState extends State<SystemLogsPage> {
             borderRadius: BorderRadius.circular(16),
             side: BorderSide(color: Colors.grey[200]!),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                child: Row(
-                  children: [
-                    const Text('Registros de Actividad',
-                        style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              Theme(
-                data: theme.copyWith(cardColor: Colors.transparent),
-                child: PaginatedDataTable(
-                  columns: const [
-                    DataColumn(
-                        label: Text('Nombre',
-                            style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(
-                        label: Text('Email',
-                            style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(
-                        label: Text('Acción',
-                            style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(
-                        label: Text('Detalle',
-                            style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(
-                        label: Text('Fecha',
-                            style: TextStyle(fontWeight: FontWeight.bold))),
-                  ],
-                  source: _LogsDataSource(
-                    items: _logs,
-                    theme: theme,
-                    formatTime: _formatTime,
-                    getStatusColor: _getStatusColor,
-                    getIconForAction: _getIconForAction,
-                    getProfileName: _getProfileName,
-                    getProfileEmail: _getProfileEmail,
+          child: PaginatedDataTable(
+            dataRowMaxHeight: 54,
+            dataRowMinHeight: 54,
+            columnSpacing: 40,
+            horizontalMargin: 24,
+            header: Wrap(
+              spacing: 12,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 350),
+                  child: SizedBox(
+                    height: 38,
+                    child: TextField(
+                      controller: _searchController,
+                      decoration: InputDecoration(
+                        hintText: 'Buscar en logs...',
+                        hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                        prefixIcon: const Icon(Icons.search, size: 18),
+                        suffixIcon: _searchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 16),
+                                onPressed: () {
+                                  _searchController.clear();
+                                  setState(() => _searchQuery = '');
+                                },
+                              )
+                            : null,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: theme.colorScheme.primary)),
+                        filled: true,
+                        fillColor: Colors.white,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                      ),
+                      style: const TextStyle(fontSize: 13),
+                      onChanged: (value) => setState(() => _searchQuery = value),
+                    ),
                   ),
-                  rowsPerPage: _logs.isEmpty
-                      ? 1
-                      : (_logs.length > 10 ? 10 : _logs.length),
-                  showCheckboxColumn: false,
-                  horizontalMargin: 16,
-                  columnSpacing: 16,
-                  dataRowMinHeight: 48,
                 ),
-              ),
+                _buildDateSelector(
+                  label: _startDate == null ? 'Desde' : _formatDateOnly(_startDate!),
+                  icon: Icons.calendar_today,
+                  onTap: () async {
+                    final d = await showDatePicker(context: context, initialDate: _startDate ?? DateTime.now(), firstDate: DateTime(2024), lastDate: DateTime.now());
+                    if (d != null) { setState(() => _startDate = d); _fetchLogs(); }
+                  },
+                ),
+                _buildDateSelector(
+                  label: _endDate == null ? 'Hasta' : _formatDateOnly(_endDate!),
+                  icon: Icons.event,
+                  onTap: () async {
+                    final d = await showDatePicker(context: context, initialDate: _endDate ?? DateTime.now(), firstDate: _startDate ?? DateTime(2024), lastDate: DateTime.now());
+                    if (d != null) { setState(() => _endDate = d); _fetchLogs(); }
+                  },
+                ),
+                if (_startDate != null || _endDate != null)
+                  SizedBox(
+                    height: 38,
+                    child: IconButton(
+                      onPressed: () { setState(() { _startDate = null; _endDate = null; }); _fetchLogs(); },
+                      icon: const Icon(Icons.clear, size: 18),
+                      tooltip: 'Limpiar filtros',
+                    ),
+                  ),
+              ],
+            ),
+            columns: [
+              DataColumn(label: SizedBox(width: screenWidth * 0.1, child: Text('FECHA', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+              DataColumn(label: SizedBox(width: screenWidth * 0.25, child: Text('USUARIO', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+              DataColumn(label: SizedBox(width: screenWidth * 0.15, child: Text('ACCIÓN', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+              DataColumn(label: SizedBox(width: screenWidth * 0.25, child: Text('DETALLE', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
             ],
+            source: _LogsDataSource(
+              items: filteredLogs,
+              theme: theme,
+              formatTime: _formatTime,
+              getProfileName: _getProfileName,
+              getProfileEmail: _getProfileEmail,
+              screenWidth: screenWidth,
+            ),
+            rowsPerPage: filteredLogs.isEmpty ? 1 : (filteredLogs.length > 10 ? 10 : filteredLogs.length),
+            showCheckboxColumn: false,
           ),
         ),
       ),
@@ -603,19 +653,17 @@ class _LogsDataSource extends DataTableSource {
   final List<Map<String, dynamic>> items;
   final ThemeData theme;
   final String Function(DateTime) formatTime;
-  final Color Function(String) getStatusColor;
-  final Icon Function(String, ThemeData) getIconForAction;
   final String Function(Map<String, dynamic>) getProfileName;
   final String Function(Map<String, dynamic>) getProfileEmail;
+  final double screenWidth;
 
   _LogsDataSource({
     required this.items,
     required this.theme,
     required this.formatTime,
-    required this.getStatusColor,
-    required this.getIconForAction,
     required this.getProfileName,
     required this.getProfileEmail,
+    required this.screenWidth,
   });
 
   @override
@@ -628,53 +676,74 @@ class _LogsDataSource extends DataTableSource {
     final nombre = getProfileName(log);
     final email = getProfileEmail(log);
 
+    final parts = nombre.split(' ').where((e) => e.isNotEmpty).toList();
+    final initials = parts.length > 1 ? '${parts[0][0]}${parts[1][0]}'.toUpperCase() : (parts.isNotEmpty ? parts[0][0].toUpperCase() : '?');
+
     Color actionColor;
     switch (action) {
-      case 'INICIO DE SESIÓN':
-        actionColor = Colors.green;
-        break;
-      case 'CIERRE DE SESIÓN':
-        actionColor = Colors.orange;
-        break;
-      case 'CREACIÓN':
-        actionColor = theme.colorScheme.secondary;
-        break;
-      case 'ELIMINACIÓN':
-        actionColor = Colors.redAccent;
-        break;
-      case 'REGISTRO':
-        actionColor = theme.colorScheme.primary;
-        break;
-      default:
-        actionColor = Colors.blueGrey;
+      case 'INICIO DE SESIÓN': actionColor = Colors.green; break;
+      case 'CIERRE DE SESIÓN': actionColor = Colors.orange; break;
+      case 'CREACIÓN': actionColor = theme.colorScheme.secondary; break;
+      case 'ELIMINACIÓN': actionColor = Colors.redAccent; break;
+      case 'REGISTRO': actionColor = theme.colorScheme.primary; break;
+      default: actionColor = Colors.blueGrey;
     }
 
     return DataRow.byIndex(
       index: index,
       cells: [
+        DataCell(SizedBox(width: screenWidth * 0.1, child: Text(formatTime(date), style: TextStyle(fontSize: 12, color: Colors.grey[600])))),
         DataCell(
-            Text(nombre, style: const TextStyle(fontWeight: FontWeight.w500))),
-        DataCell(Text(email,
-            style: TextStyle(fontSize: 12, color: Colors.grey[600]))),
-        DataCell(
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: actionColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              action,
-              style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  color: actionColor),
+          SizedBox(
+            width: screenWidth * 0.25,
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 16,
+                  backgroundColor: const Color(0xFF344092).withOpacity(0.15),
+                  child: Text(initials, style: const TextStyle(color: Color(0xFF344092), fontSize: 12, fontWeight: FontWeight.bold)),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(nombre.isEmpty ? 'Sin Nombre' : nombre, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis),
+                      const SizedBox(height: 2),
+                      Text(email, style: TextStyle(color: Colors.grey.shade500, fontSize: 11), overflow: TextOverflow.ellipsis),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
         ),
-        DataCell(Text(target, style: const TextStyle(fontSize: 12))),
-        DataCell(Text(formatTime(date),
-            style: TextStyle(fontSize: 12, color: Colors.grey[500]))),
+        DataCell(
+          SizedBox(
+            width: screenWidth * 0.15,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: actionColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: actionColor.withOpacity(0.3)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(width: 6, height: 6, decoration: BoxDecoration(color: actionColor, shape: BoxShape.circle)),
+                    const SizedBox(width: 6),
+                    Text(action, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: actionColor)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        DataCell(SizedBox(width: screenWidth * 0.25, child: Text(target, style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis, maxLines: 2))),
       ],
     );
   }
