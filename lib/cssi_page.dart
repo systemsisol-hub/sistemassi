@@ -1186,10 +1186,9 @@ class _CssiPageState extends State<CssiPage> {
             columns: [
               DataColumn(label: SizedBox(width: screenWidth * 0.25, child: Text('COLABORADOR', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
               DataColumn(label: SizedBox(width: screenWidth * 0.08, child: Text('ID', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
-              DataColumn(label: SizedBox(width: screenWidth * 0.12, child: Text('PUESTO', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
-              DataColumn(label: SizedBox(width: screenWidth * 0.12, child: Text('UBICACIÓN', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+              DataColumn(label: SizedBox(width: screenWidth * 0.15, child: Text('PUESTO', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+              DataColumn(label: SizedBox(width: screenWidth * 0.15, child: Text('UBICACIÓN', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
               DataColumn(label: SizedBox(width: screenWidth * 0.12, child: Text('ESTADO', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
-              DataColumn(label: SizedBox(width: screenWidth * 0.1, child: Text('EQUIPO', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
               const DataColumn(label: SizedBox()), // Acciones
             ],
             source: _CssiDataSource(
@@ -1366,31 +1365,14 @@ class _CssiDataSource extends DataTableSource {
           ),
         ),
         DataCell(SizedBox(width: screenWidth * 0.08, child: Text(item['numero_empleado']?.toString() ?? '----', style: const TextStyle(fontSize: 13, color: Colors.black87)))),
-        DataCell(SizedBox(width: screenWidth * 0.12, child: Text(item['puesto'] ?? '---', style: const TextStyle(fontSize: 13, color: Colors.black87), overflow: TextOverflow.ellipsis))),
-        DataCell(SizedBox(width: screenWidth * 0.12, child: Text(item['ubicacion'] ?? '---', style: const TextStyle(fontSize: 13, color: Colors.black87), overflow: TextOverflow.ellipsis))),
+        DataCell(SizedBox(width: screenWidth * 0.15, child: Text(item['puesto'] ?? '---', style: const TextStyle(fontSize: 13, color: Colors.black87), overflow: TextOverflow.ellipsis))),
+        DataCell(SizedBox(width: screenWidth * 0.15, child: Text(item['ubicacion'] ?? '---', style: const TextStyle(fontSize: 13, color: Colors.black87), overflow: TextOverflow.ellipsis))),
         DataCell(
           SizedBox(
             width: screenWidth * 0.12,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                buildStatusChip(statusRh, 'RH'),
-                const SizedBox(height: 2),
-                buildStatusChip(statusSys, 'SYS'),
-              ],
-            ),
-          ),
-        ),
-        DataCell(
-          SizedBox(
-            width: screenWidth * 0.1,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (userDevices.containsKey(item['id']))
-                  ...userDevices[item['id']]!.take(3).map((tipo) => _buildMiniIcon(_getIconForType(tipo))),
-              ],
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: buildStatusChip(statusRh, 'RH'),
             ),
           ),
         ),
