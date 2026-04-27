@@ -184,12 +184,16 @@ class _CssiPageState extends State<CssiPage> {
         final area = (item['area'] ?? '').toString().toLowerCase();
         final puesto = (item['puesto'] ?? '').toString().toLowerCase();
         final numEmp = (item['numero_empleado'] ?? '').toString().toLowerCase();
+        final emailPers = (item['correo_personal'] ?? '').toString().toLowerCase();
+        final emailUser = (item['mail_user'] ?? '').toString().toLowerCase();
         return name.contains(query) ||
             curp.contains(query) ||
             rfc.contains(query) ||
             area.contains(query) ||
             puesto.contains(query) ||
-            numEmp.contains(query);
+            numEmp.contains(query) ||
+            emailPers.contains(query) ||
+            emailUser.contains(query);
       }).toList();
     }
     result.sort((a, b) {
@@ -1026,6 +1030,18 @@ class _CssiPageState extends State<CssiPage> {
   }
 
   Widget _buildMobileLayout(List<Map<String, dynamic>> filtered) {
+    if (filtered.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.badge_outlined, size: 64, color: Colors.grey[300]),
+            const SizedBox(height: 16),
+            Text('No se encontraron colaboradores', style: TextStyle(color: Colors.grey[500])),
+          ],
+        ),
+      );
+    }
     return RefreshIndicator(
       onRefresh: _fetchItems,
       child: ListView.separated(
@@ -1235,32 +1251,17 @@ class _CssiPageState extends State<CssiPage> {
               ? SliverFillRemaining(
                   child: _buildShimmerLoading(),
                 )
-              : filtered.isEmpty
-                  ? SliverFillRemaining(
-                      child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.badge_outlined,
-                                size: 64, color: Colors.grey[300]),
-                            const SizedBox(height: 16),
-                            Text('No se encontraron colaboradores',
-                                style: TextStyle(color: Colors.grey[500])),
-                          ],
-                        ),
-                      ),
-                    )
-                  : SliverFillRemaining(
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          if (constraints.maxWidth > 800) {
-                            return _buildDesktopLayout(filtered, theme);
-                          } else {
-                            return _buildMobileLayout(filtered);
-                          }
-                        },
-                      ),
-                    ),
+              : SliverFillRemaining(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      if (constraints.maxWidth > 800) {
+                        return _buildDesktopLayout(filtered, theme);
+                      } else {
+                        return _buildMobileLayout(filtered);
+                      }
+                    },
+                  ),
+                ),
         ],
       ),
     );

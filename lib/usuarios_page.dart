@@ -659,7 +659,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       _buildControls(theme),
-                    ],
+],
                   ),
                 );
               },
@@ -681,38 +681,19 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     ),
                   ),
                 )
-              : users.isEmpty
-                  ? SliverFillRemaining(
-                      child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.person_search,
-                                size: 64, color: Colors.grey[300]),
-                            const SizedBox(height: 16),
-                            Text(
-                              _searchQuery.isNotEmpty
-                                  ? 'Sin resultados para "$_searchQuery"'
-                                  : 'No hay usuarios registrados',
-                              style: TextStyle(color: Colors.grey[500]),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  : SliverFillRemaining(
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          final isDesktop = constraints.maxWidth > 800;
-                          return RefreshIndicator(
-                            onRefresh: _fetchUsers,
-                            child: isDesktop
-                                ? _buildDesktopLayout(theme, users)
-                                : _buildMobileLayout(theme, users),
-                          );
-                        },
-                      ),
-                    ),
+              : SliverFillRemaining(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isDesktop = constraints.maxWidth > 800;
+                      return RefreshIndicator(
+                        onRefresh: _fetchUsers,
+                        child: isDesktop
+                            ? _buildDesktopLayout(theme, users)
+                            : _buildMobileLayout(theme, users),
+                      );
+                    },
+                  ),
+                ),
         ],
       ),
     );
@@ -730,6 +711,23 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   Widget _buildMobileLayout(ThemeData theme, List<Map<String, dynamic>> users) {
+    if (users.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.person_search, size: 64, color: Colors.grey[300]),
+            const SizedBox(height: 16),
+            Text(
+              _searchQuery.isNotEmpty
+                  ? 'Sin resultados para "$_searchQuery"'
+                  : 'No hay usuarios registrados',
+              style: TextStyle(color: Colors.grey[500]),
+            ),
+          ],
+        ),
+      );
+    }
     return ListView.separated(
       padding: const EdgeInsets.all(16),
       itemCount: users.length,
