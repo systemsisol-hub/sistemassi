@@ -1113,77 +1113,99 @@ class _CssiPageState extends State<CssiPage> {
 
   Widget _buildDesktopLayout(
       List<Map<String, dynamic>> filtered, ThemeData theme) {
+    final screenWidth = MediaQuery.of(context).size.width;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
-      child: SizedBox(
-        width: double.infinity,
-        child: Card(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: BorderSide(color: Colors.grey[200]!)),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-                child: Row(
-                  children: [
-                    const Text('Directorio de Colaboradores',
-                        style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              Theme(
-                data: theme.copyWith(
-                  cardColor: Colors.transparent,
-                ),
-                child: PaginatedDataTable(
-                  columns: const [
-                    DataColumn(
-                        label: Text('Número',
-                            style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(
-                        label: Text('Status RH',
-                            style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(
-                        label: Text('Nombre',
-                            style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(
-                        label: Text('Puesto',
-                            style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(
-                        label: Text('Ubicación',
-                            style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(
-                        label: Text('Email',
-                            style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(
-                        label: Text('Acciones',
-                            style: TextStyle(fontWeight: FontWeight.bold))),
-                  ],
-                  source: _CssiDataSource(
-                    items: filtered,
-                    theme: theme,
-                    isAdmin: widget.role == 'admin',
-                    onEdit: (item) => _showForm(item: item),
-                    onDelete: (id) => _deleteItem(id),
-                    buildStatusChip: _buildStatusChip,
-                    userDevices: _userDevices,
+      child: Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: Colors.grey[200]!)),
+        child: SizedBox(
+          width: double.infinity,
+          child: PaginatedDataTable(
+            dataRowMaxHeight: 54,
+            dataRowMinHeight: 54,
+            columnSpacing: 40,
+            horizontalMargin: 24,
+            header: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 350),
+              child: SizedBox(
+                height: 38,
+                child: TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'Buscar por nombre, correo, ID...',
+                    hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                    prefixIcon: const Icon(Icons.search, size: 18),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, size: 16),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() {
+                                _searchQuery = '';
+                                _currentPage = 0;
+                              });
+                            },
+                          )
+                        : null,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: theme.colorScheme.primary)),
+                    filled: true,
+                    fillColor: Colors.white,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                   ),
-                  rowsPerPage: filtered.isEmpty
-                      ? 1
-                      : (filtered.length > 10 ? 10 : filtered.length),
-                  showCheckboxColumn: false,
-                  horizontalMargin: 16,
-                  columnSpacing: 16,
-                  dataRowMinHeight: 40,
+                  style: const TextStyle(fontSize: 13),
+                  onChanged: (value) => setState(() {
+                    _searchQuery = value;
+                    _currentPage = 0;
+                  }),
                 ),
               ),
+            ),
+            actions: [
+              if (widget.role == 'admin')
+                SizedBox(
+                  height: 38,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showForm(),
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Colaborador', style: TextStyle(fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: theme.colorScheme.primary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                    ),
+                  ),
+                ),
             ],
+            columns: [
+              DataColumn(label: SizedBox(width: screenWidth * 0.25, child: Text('COLABORADOR', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+              DataColumn(label: SizedBox(width: screenWidth * 0.08, child: Text('ID', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+              DataColumn(label: SizedBox(width: screenWidth * 0.12, child: Text('PUESTO', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+              DataColumn(label: SizedBox(width: screenWidth * 0.12, child: Text('UBICACIÓN', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+              DataColumn(label: SizedBox(width: screenWidth * 0.12, child: Text('ESTADO', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+              DataColumn(label: SizedBox(width: screenWidth * 0.1, child: Text('EQUIPO', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+              const DataColumn(label: SizedBox()), // Acciones
+            ],
+            source: _CssiDataSource(
+              items: filtered,
+              theme: theme,
+              isAdmin: widget.role == 'admin',
+              onEdit: (item) => _showForm(item: item),
+              onDelete: (id) => _deleteItem(id),
+              buildStatusChip: _buildStatusChip,
+              userDevices: _userDevices,
+              screenWidth: screenWidth,
+            ),
+            rowsPerPage: filtered.isEmpty
+                ? 1
+                : (filtered.length > 10 ? 10 : filtered.length),
+            showCheckboxColumn: false,
           ),
         ),
       ),
@@ -1198,17 +1220,18 @@ class _CssiPageState extends State<CssiPage> {
     return Scaffold(
       body: CustomScrollView(
         slivers: [
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  _buildControls(theme),
-                ],
+          if (MediaQuery.of(context).size.width <= 800)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    _buildControls(theme),
+                  ],
+                ),
               ),
             ),
-          ),
           _isLoading
               ? SliverFillRemaining(
                   child: _buildShimmerLoading(),
@@ -1287,6 +1310,7 @@ class _CssiDataSource extends DataTableSource {
   final Function(String) onDelete;
   final Widget Function(String, String) buildStatusChip;
   final Map<String, List<String>> userDevices;
+  final double screenWidth;
 
   _CssiDataSource({
     required this.items,
@@ -1296,6 +1320,7 @@ class _CssiDataSource extends DataTableSource {
     required this.onDelete,
     required this.buildStatusChip,
     required this.userDevices,
+    required this.screenWidth,
   });
 
   @override
@@ -1303,76 +1328,87 @@ class _CssiDataSource extends DataTableSource {
     if (index >= items.length) return null;
     final item = items[index];
 
+    final nombre = '${item['nombre'] ?? ''} ${item['paterno'] ?? ''} ${item['materno'] ?? ''}'.trim();
+    final parts = nombre.split(' ').where((e) => e.isNotEmpty).toList();
+    final initials = parts.length > 1 ? '${parts[0][0]}${parts[1][0]}'.toUpperCase() : (parts.isNotEmpty ? parts[0][0].toUpperCase() : '?');
+
+    final statusRh = item['status_rh'] ?? 'ACTIVO';
+    final statusSys = item['status_sys'] ?? 'CAMBIO';
+
     return DataRow.byIndex(
       index: index,
       cells: [
-        DataCell(Text(item['numero_empleado']?.toString() ?? '---')),
         DataCell(
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              buildStatusChip(item['status_rh'] ?? 'ACTIVO', 'RH'),
-              if (userDevices.containsKey(item['id'])) ...[
-                const SizedBox(width: 8),
-                ...userDevices[item['id']]!
-                    .take(3) // Show max 3 icons to avoid overflow
-                    .map((tipo) => _buildMiniIcon(_getIconForType(tipo))),
+          SizedBox(
+            width: screenWidth * 0.25,
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 16,
+                  backgroundColor: const Color(0xFF344092).withOpacity(0.15),
+                  backgroundImage: item['foto_url'] != null ? NetworkImage(item['foto_url']) : null,
+                  child: item['foto_url'] == null ? Text(initials, style: const TextStyle(color: Color(0xFF344092), fontSize: 12, fontWeight: FontWeight.bold)) : null,
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(nombre.isEmpty ? 'Sin Nombre' : nombre, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis),
+                      const SizedBox(height: 2),
+                      Text(item['mail_user'] ?? item['correo_personal'] ?? '', style: TextStyle(color: Colors.grey.shade500, fontSize: 11), overflow: TextOverflow.ellipsis),
+                    ],
+                  ),
+                ),
               ],
-            ],
+            ),
+          ),
+        ),
+        DataCell(SizedBox(width: screenWidth * 0.08, child: Text(item['numero_empleado']?.toString() ?? '----', style: const TextStyle(fontSize: 13, color: Colors.black87)))),
+        DataCell(SizedBox(width: screenWidth * 0.12, child: Text(item['puesto'] ?? '---', style: const TextStyle(fontSize: 13, color: Colors.black87), overflow: TextOverflow.ellipsis))),
+        DataCell(SizedBox(width: screenWidth * 0.12, child: Text(item['ubicacion'] ?? '---', style: const TextStyle(fontSize: 13, color: Colors.black87), overflow: TextOverflow.ellipsis))),
+        DataCell(
+          SizedBox(
+            width: screenWidth * 0.12,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                buildStatusChip(statusRh, 'RH'),
+                const SizedBox(height: 2),
+                buildStatusChip(statusSys, 'SYS'),
+              ],
+            ),
           ),
         ),
         DataCell(
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircleAvatar(
-                radius: 14,
-                backgroundColor: const Color(0xFF344092).withOpacity(0.1),
-                backgroundImage: item['foto_url'] != null
-                    ? NetworkImage(item['foto_url'])
-                    : null,
-                child: item['foto_url'] == null
-                    ? Text((item['nombre'] ?? '?')[0],
-                        style: const TextStyle(
-                            color: Color(0xFF344092),
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12))
-                    : null,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                  '${item['nombre']} ${item['paterno']} ${item['materno'] ?? ''}'
-                      .trim()),
-            ],
+          SizedBox(
+            width: screenWidth * 0.1,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (userDevices.containsKey(item['id']))
+                  ...userDevices[item['id']]!.take(3).map((tipo) => _buildMiniIcon(_getIconForType(tipo))),
+              ],
+            ),
           ),
         ),
-        DataCell(Text(item['puesto'] ?? '---')),
-        DataCell(Text(item['ubicacion'] ?? '---')),
-        DataCell(Text(item['mail_user'] ?? '---')),
         DataCell(
-          isAdmin
-              ? PopupMenuButton<String>(
-                  onSelected: (value) {
-                    if (value == 'edit') onEdit(item);
-                    if (value == 'delete') onDelete(item['id']);
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                        value: 'edit',
-                        child: ListTile(
-                            leading: Icon(Icons.edit, color: Colors.blue),
-                            title: Text('Editar'),
-                            dense: true)),
-                    const PopupMenuItem(
-                        value: 'delete',
-                        child: ListTile(
-                            leading: Icon(Icons.delete, color: Colors.red),
-                            title: Text('Eliminar',
-                                style: TextStyle(color: Colors.red)),
-                            dense: true)),
-                  ],
-                )
-              : const SizedBox.shrink(),
+          Align(
+            alignment: Alignment.centerRight,
+            child: isAdmin ? PopupMenuButton<String>(
+              icon: const Icon(Icons.more_horiz, color: Colors.grey),
+              onSelected: (v) {
+                if (v == 'edit') onEdit(item);
+                if (v == 'delete') onDelete(item['id']);
+              },
+              itemBuilder: (_) => [
+                const PopupMenuItem(value: 'edit', child: ListTile(leading: Icon(Icons.edit, size: 20), title: Text('Editar'), dense: true, contentPadding: EdgeInsets.zero)),
+                const PopupMenuItem(value: 'delete', child: ListTile(leading: Icon(Icons.delete, color: Colors.red, size: 20), title: Text('Eliminar', style: TextStyle(color: Colors.red)), dense: true, contentPadding: EdgeInsets.zero)),
+              ],
+            ) : const SizedBox(),
+          ),
         ),
       ],
     );
