@@ -250,7 +250,6 @@ class _CssiPageState extends State<CssiPage> {
     final numeroEmpleadoCtrl =
         TextEditingController(text: item?['numero_empleado']);
     final fechaNacCtrl = TextEditingController(text: item?['fecha_nacimiento']);
-    final tallaCtrl = TextEditingController(text: item?['talla']);
     final detalleEscolCtrl =
         TextEditingController(text: item?['detalle_escolaridad']);
     final calleCtrl = TextEditingController(text: item?['calle']);
@@ -274,10 +273,7 @@ class _CssiPageState extends State<CssiPage> {
     final liderCtrl = TextEditingController(text: item?['lider']);
     final gerenteCtrl = TextEditingController(text: item?['gerente_regional']);
     final directorCtrl = TextEditingController(text: item?['director']);
-    final reclutaCtrl = TextEditingController(text: item?['recluta']);
     final reclutadorCtrl = TextEditingController(text: item?['reclutador']);
-    final fuenteCtrl =
-        TextEditingController(text: item?['fuente_reclutamiento']);
     final fuenteEspecCtrl =
         TextEditingController(text: item?['fuente_reclutamiento_espec']);
     final fechaIngresoCtrl =
@@ -297,6 +293,11 @@ class _CssiPageState extends State<CssiPage> {
     String? estadoCivil = item?['estado_civil'];
     String? escolaridad = item?['escolaridad'];
     String? credito = item?['credito'];
+    String? lugarNacimiento = item?['lugar_nacimiento'];
+    String? talla = item?['talla'];
+    String? tipoColaborador = item?['tipo'];
+    String? reclutaOption = item?['recluta'];
+    String? fuenteOption = item?['fuente_reclutamiento'];
     String? statusSys = item?['status_sys'] ?? 'CAMBIO';
     String? statusRh = item?['status_rh'] ?? 'ACTIVO';
     String? horario = item?['horario'];
@@ -454,6 +455,49 @@ class _CssiPageState extends State<CssiPage> {
               onChanged: (v) => setDialogState(() => credito = v))),
           fieldColumn(Row(children: [
             Expanded(
+                child: DropdownButtonFormField<String>(
+                    value: lugarNacimiento,
+                    decoration:
+                        const InputDecoration(labelText: 'Lugar de Nacimiento'),
+                    items: [
+                      'AGUASCALIENTES',
+                      'BAJA CALIFORNIA',
+                      'BAJA CALIFORNIA SUR',
+                      'CAMPECHE',
+                      'CHIAPAS',
+                      'CHIHUAHUA',
+                      'COAHUILA',
+                      'COLIMA',
+                      'CIUDAD DE MÉXICO',
+                      'DURANGO',
+                      'GUANAJUATO',
+                      'GUERRERO',
+                      'HIDALGO',
+                      'JALISCO',
+                      'MÉXICO',
+                      'MICHOACÁN',
+                      'MORELOS',
+                      'NAYARIT',
+                      'NUEVO LEÓN',
+                      'OAXACA',
+                      'PUEBLA',
+                      'QUERÉTARO',
+                      'QUINTANA ROO',
+                      'SAN LUIS POTOSÍ',
+                      'SINALOA',
+                      'SONORA',
+                      'TABASCO',
+                      'TAMAULIPAS',
+                      'TLAXCALA',
+                      'VERACRUZ',
+                      'YUCATÁN',
+                      'ZACATECAS',
+                      'EXTRANJERO'
+                    ].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                    onChanged: (v) => setDialogState(() => lugarNacimiento = v))),
+          ])),
+          fieldColumn(Row(children: [
+            Expanded(
                 child: TextField(
                     controller: fechaNacCtrl,
                     decoration: const InputDecoration(
@@ -472,9 +516,13 @@ class _CssiPageState extends State<CssiPage> {
                     })),
             const SizedBox(width: 8),
             Expanded(
-                child: TextField(
-                    controller: tallaCtrl,
-                    decoration: const InputDecoration(labelText: 'Talla'))),
+                child: DropdownButtonFormField<String>(
+                    value: talla,
+                    decoration: const InputDecoration(labelText: 'Talla'),
+                    items: ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL', '4XL']
+                        .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                        .toList(),
+                    onChanged: (v) => setDialogState(() => talla = v))),
           ])),
           fieldColumn(Row(children: [
             Expanded(
@@ -620,17 +668,55 @@ class _CssiPageState extends State<CssiPage> {
               controller: directorCtrl,
               decoration: const InputDecoration(labelText: 'Director'))),
           const SizedBox(height: 24),
+          fieldColumn(DropdownButtonFormField<String>(
+              value: tipoColaborador,
+              decoration: const InputDecoration(labelText: 'Tipo'),
+              items: [
+                'ASIMILADOS',
+                'BACK OFFICE',
+                'MANTENIMIENTO',
+                'MERCADO SECUNDARIO',
+                'SI SOL'
+              ].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              onChanged: (v) => setDialogState(() => tipoColaborador = v))),
+          const SizedBox(height: 24),
           _sectionTitle('Area RH'),
-          fieldColumn(TextField(
-              controller: reclutaCtrl,
-              decoration: const InputDecoration(labelText: 'Recluta'))),
+          fieldColumn(DropdownButtonFormField<String>(
+              value: reclutaOption,
+              decoration: const InputDecoration(labelText: 'Recluta'),
+              items: [
+                'ASESOR INMOBILIARIO',
+                'BACK OFFICE',
+                'DESARROLLO HUMANO',
+                'OTRO'
+              ].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              onChanged: (v) => setDialogState(() => reclutaOption = v))),
           fieldColumn(TextField(
               controller: reclutadorCtrl,
               decoration: const InputDecoration(labelText: 'Reclutador'))),
-          fieldColumn(TextField(
-              controller: fuenteCtrl,
+          fieldColumn(DropdownButtonFormField<String>(
+              value: fuenteOption,
               decoration:
-                  const InputDecoration(labelText: 'Fuente de reclutamiento'))),
+                  const InputDecoration(labelText: 'Fuente de reclutamiento'),
+              items: [
+                'ANUNCIO DE PERIODICO',
+                'BANNER',
+                'BANNER EN CESI',
+                'BOLSA DE TRABAJO ESCUELA',
+                'COMPUTRABAJO',
+                'FACEBOOK',
+                'FERIA DEL EMPLEO',
+                'INDEED',
+                'JOB AND JOB',
+                'OCC',
+                'OTRO',
+                'OUTSOURCING',
+                'RECOMENDACIÓN',
+                'TALENTECA',
+                'TWITER',
+                'VOLANTEO'
+              ].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              onChanged: (v) => setDialogState(() => fuenteOption = v))),
           fieldColumn(TextField(
               controller: fuenteEspecCtrl,
               decoration: const InputDecoration(labelText: 'Fuente espec.'))),
@@ -789,9 +875,11 @@ class _CssiPageState extends State<CssiPage> {
         'lider': toUpper(liderCtrl.text),
         'gerente_regional': toUpper(gerenteCtrl.text),
         'director': toUpper(directorCtrl.text),
-        'recluta': toUpper(reclutaCtrl.text),
+        'lugar_nacimiento': lugarNacimiento,
+        'tipo': tipoColaborador,
+        'recluta': reclutaOption,
         'reclutador': toUpper(reclutadorCtrl.text),
-        'fuente_reclutamiento': toUpper(fuenteCtrl.text),
+        'fuente_reclutamiento': fuenteOption,
         'fuente_reclutamiento_espec': toUpper(fuenteEspecCtrl.text),
         'fecha_ingreso':
             fechaIngresoCtrl.text.isEmpty ? null : fechaIngresoCtrl.text,
