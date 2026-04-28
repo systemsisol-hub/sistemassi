@@ -17,8 +17,8 @@ import 'theme/si_theme.dart';
 
 // Visual-only nav group definitions — order here is render order.
 final _navGroups = <(String, List<String>)>[
-  ('GENERAL',        ['Mi Perfil', 'Social', 'Firmas', 'Calendario']),
-  ('OPERACIÓN',      ['Incidencias', 'Inventario', 'Colaborador', 'Asistencia', 'Contactos']),
+  ('GENERAL',        ['Mi Perfil', 'Social', 'Contactos', 'Firmas', 'Calendario']),
+  ('OPERACIÓN',      ['Incidencias', 'Inventario', 'Colaborador', 'Asistencia']),
   ('ANÁLISIS',       ['BI', 'Logs']),
   ('ADMINISTRACIÓN', ['Usuarios']),
 ];
@@ -549,25 +549,10 @@ class _MobileShell extends StatelessWidget {
             ),
             Divider(color: c.line, height: 1),
             Expanded(
-              child: ListView.builder(
+              child: ListView(
                 padding: const EdgeInsets.symmetric(
                     vertical: SiSpace.x2, horizontal: SiSpace.x2),
-                itemCount: pages.length,
-                itemBuilder: (context, i) {
-                  final page = pages[i];
-                  final isActive = selectedIndex == i;
-                  return _RailItem(
-                    icon: isActive ? page['activeIcon'] : page['icon'],
-                    label: page['title'],
-                    isActive: isActive,
-                    showLabel: true,
-                    labelOpacity: 1,
-                    onTap: () {
-                      onSelect(i);
-                      Navigator.pop(context);
-                    },
-                  );
-                },
+                children: _buildGroupedDrawerItems(context, c),
               ),
             ),
             Divider(color: c.line, height: 1),
@@ -592,6 +577,40 @@ class _MobileShell extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  List<Widget> _buildGroupedDrawerItems(BuildContext context, SiColors c) {
+    final items = <Widget>[];
+    for (final (label, titles) in _navGroups) {
+      final groupEntries = <(int, Map<String, dynamic>)>[];
+      for (var i = 0; i < pages.length; i++) {
+        if (titles.contains(pages[i]['title'])) {
+          groupEntries.add((i, pages[i]));
+        }
+      }
+      if (groupEntries.isEmpty) continue;
+
+      items.add(_SectionHeader(
+          label: label, visible: true, opacity: 1.0, onDark: false));
+
+      for (final (i, page) in groupEntries) {
+        final isActive = selectedIndex == i;
+        items.add(_RailItem(
+          icon: isActive ? page['activeIcon'] : page['icon'],
+          label: page['title'],
+          isActive: isActive,
+          showLabel: true,
+          labelOpacity: 1.0,
+          onTap: () {
+            onSelect(i);
+            Navigator.pop(context);
+          },
+          onDark: false,
+        ));
+      }
+      items.add(const SizedBox(height: SiSpace.x2));
+    }
+    return items;
   }
 }
 
@@ -727,13 +746,15 @@ class _SearchBar extends StatelessWidget {
 
 class _SectionHeader extends StatelessWidget {
   final String label;
-  final bool visible; // true = expanded (show text), false = collapsed (show separator)
+  final bool visible;
   final double opacity;
+  final bool onDark;
 
   const _SectionHeader({
     required this.label,
     required this.visible,
     required this.opacity,
+    this.onDark = true,
   });
 
   @override
@@ -743,7 +764,9 @@ class _SectionHeader extends StatelessWidget {
         height: 1,
         margin: const EdgeInsets.symmetric(
             vertical: SiSpace.x2, horizontal: SiSpace.x2),
-        color: Colors.white.withValues(alpha: 0.08),
+        color: onDark 
+            ? Colors.white.withValues(alpha: 0.08)
+            : SiColors.light.line,
       );
     }
     return Opacity(
@@ -757,7 +780,9 @@ class _SectionHeader extends StatelessWidget {
             fontSize: 10.5,
             fontWeight: FontWeight.w600,
             letterSpacing: 10.5 * 0.08,
-            color: Colors.white.withValues(alpha: 0.45),
+            color: onDark 
+                ? Colors.white.withValues(alpha: 0.45)
+                : SiColors.light.ink3,
             height: 1,
           ),
         ),
