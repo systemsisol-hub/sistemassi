@@ -369,7 +369,7 @@ class _ExternalContactsPageState extends State<ExternalContactsPage> {
       height: 40,
       decoration: BoxDecoration(
         color: c.panel,
-        borderRadius: SiRadius.rFull,
+        borderRadius: SiRadius.rPill,
         border: Border.all(color: c.line),
       ),
       child: TextField(
@@ -392,7 +392,7 @@ class _ExternalContactsPageState extends State<ExternalContactsPage> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: c.panel,
-        borderRadius: SiRadius.rFull,
+        borderRadius: SiRadius.rPill,
         border: Border.all(color: c.line),
       ),
       child: Row(
@@ -423,7 +423,7 @@ class _ExternalContactsPageState extends State<ExternalContactsPage> {
         foregroundColor: c.brand,
         side: BorderSide(color: c.brand),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        shape: const RoundedRectangleBorder(borderRadius: SiRadius.rFull),
+        shape: const RoundedRectangleBorder(borderRadius: SiRadius.rPill),
       ),
     );
   }
@@ -561,7 +561,7 @@ class _ContactGridTile extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: c.bg,
-                borderRadius: SiRadius.rFull,
+                borderRadius: SiRadius.rPill,
                 border: Border.all(color: c.line),
               ),
               child: Row(
