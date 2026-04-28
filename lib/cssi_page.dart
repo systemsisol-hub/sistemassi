@@ -775,7 +775,9 @@ class _CssiPageState extends State<CssiPage> {
           fieldColumn(TextField(
               controller: obsCtrl,
               decoration: const InputDecoration(labelText: 'Observaciones'),
-              maxLines: 2)),
+              maxLines: 5,
+              minLines: 5,
+              keyboardType: TextInputType.multiline)),
           const SizedBox(height: 24),
           _sectionTitle('Referencia'),
           fieldColumn(TextField(
