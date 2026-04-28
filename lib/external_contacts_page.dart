@@ -362,17 +362,15 @@ class _ExternalContactsPageState extends State<ExternalContactsPage> {
     return SingleChildScrollView(
       padding: EdgeInsets.all(SiSpace.x6),
       child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1400),
-          child: Card(
-            elevation: 0,
-            clipBehavior: Clip.antiAlias,
-            shape: RoundedRectangleBorder(
-              borderRadius: SiRadius.rLg,
-              side: BorderSide(color: c.line),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: Card(
+          elevation: 0,
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(
+            borderRadius: SiRadius.rLg,
+            side: BorderSide(color: c.line),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // Header (Search & Actions)
                 Padding(
@@ -452,7 +450,7 @@ class _ExternalContactsPageState extends State<ExternalContactsPage> {
     return ElevatedButton.icon(
       onPressed: () => _showContactForm(),
       icon: const Icon(Icons.add, size: 16),
-      label: const Text('+ Contacto', style: TextStyle(fontWeight: FontWeight.w600)),
+      label: const Text('Contacto', style: TextStyle(fontWeight: FontWeight.w600)),
       style: ElevatedButton.styleFrom(
         backgroundColor: c.brand,
         foregroundColor: Colors.white,
