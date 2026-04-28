@@ -4,6 +4,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'theme/si_theme.dart';
 
 class CollaboratorDetailPage extends StatefulWidget {
@@ -426,10 +427,33 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
     // Load logo
     pw.MemoryImage? logoImage;
     try {
-      final logoData = await rootBundle.load('assets/sisolok.png');
+      final logoData = await rootBundle.load('assets/logo.png');
       logoImage = pw.MemoryImage(logoData.buffer.asUint8List());
     } catch (e) {
       debugPrint('Could not load logo: $e');
+    }
+
+    // Load collaborator photo
+    pw.MemoryImage? profileImage;
+    if (colab['foto_url'] != null && colab['foto_url'].toString().isNotEmpty) {
+      try {
+        final response = await http.get(Uri.parse(colab['foto_url']));
+        if (response.statusCode == 200) {
+          profileImage = pw.MemoryImage(response.bodyBytes);
+        }
+      } catch (e) {
+        debugPrint('Could not load profile photo: $e');
+      }
+    }
+
+    // Load Material Icons Font
+    pw.Font? iconFont;
+    try {
+      final fontData = await rootBundle.load('assets/fonts/MaterialIcons-Regular.ttf');
+      iconFont = pw.Font.ttf(fontData);
+    } catch (e) {
+      // Fallback: try to find it in common paths if not in assets
+      debugPrint('Could not load icon font from assets: $e');
     }
 
     doc.addPage(
@@ -438,26 +462,39 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
         margin: const pw.EdgeInsets.all(40),
         build: (pw.Context context) {
           return [
-            // Header with Logo and Title
+            // Header with Logo, Title and Photo
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              crossAxisAlignment: pw.CrossAxisAlignment.center,
               children: [
                 if (logoImage != null)
                   pw.Container(
-                    width: 100,
+                    height: 60,
                     child: pw.Image(logoImage),
                   )
                 else
                   pw.Text('SISTEMASSI', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: brandColor)),
+                
                 pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  crossAxisAlignment: pw.CrossAxisAlignment.center,
                   children: [
                     pw.Text('FICHA DE IDENTIFICACIÓN', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: brandColor)),
                     pw.Text('DEPARTAMENTO DE RECURSOS HUMANOS', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
                     pw.Text(DateTime.now().toString().split(' ').first, style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey500)),
                   ],
                 ),
+
+                if (profileImage != null)
+                  pw.Container(
+                    width: 60,
+                    height: 60,
+                    decoration: pw.BoxDecoration(
+                      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(30)),
+                      image: pw.DecorationImage(image: profileImage, fit: pw.BoxFit.cover),
+                    ),
+                  )
+                else
+                  pw.Container(width: 60, height: 60),
               ],
             ),
             pw.SizedBox(height: 20),
@@ -501,19 +538,19 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
                   child: pw.Column(
                     children: [
                       _pwCard('DATOS PERSONALES', [
-                        ['Género', colab['genero']],
-                        ['Fecha Nacimiento', colab['fecha_nacimiento']],
-                        ['Lugar Nacimiento', colab['lugar_nacimiento']],
-                        ['RFC', colab['rfc']],
-                        ['CURP', colab['curp']],
-                        ['IMSS', colab['imss']],
-                        ['Talla', colab['talla']],
-                      ], brandColor),
+                        [Icons.wc, 'Género', colab['genero']],
+                        [Icons.calendar_today, 'Fecha Nacimiento', colab['fecha_nacimiento']],
+                        [Icons.location_city, 'Lugar Nacimiento', colab['lugar_nacimiento']],
+                        [Icons.info_outline, 'RFC', colab['rfc']],
+                        [Icons.info_outline, 'CURP', colab['curp']],
+                        [Icons.info_outline, 'IMSS', colab['imss']],
+                        [Icons.straighten, 'Talla', colab['talla']],
+                      ], brandColor, iconFont),
                       _pwCard('DATOS BANCARIOS', [
-                        ['Banco', colab['banco']],
-                        ['Cuenta', colab['cuenta']],
-                        ['Clabe', colab['clabe']],
-                      ], brandColor),
+                        [Icons.account_balance, 'Banco', colab['banco']],
+                        [Icons.credit_card, 'Cuenta', colab['cuenta']],
+                        [Icons.numbers, 'Clabe', colab['clabe']],
+                      ], brandColor, iconFont),
                     ],
                   ),
                 ),
@@ -522,22 +559,22 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
                   child: pw.Column(
                     children: [
                       _pwCard('DATOS EMPRESA', [
-                        ['Tipo', colab['empresa_tipo']],
-                        ['Área', colab['area']],
-                        ['Ubicación', colab['ubicacion']],
-                        ['Empresa', colab['empresa']],
-                        ['Jefe Inmediato', colab['jefe_inmediato']],
-                        ['Líder', colab['lider']],
-                        ['Gerente Reg.', colab['gerente_regional']],
-                        ['Director', colab['director']],
-                        ['Horario', scheduleDisplay],
-                      ], brandColor),
+                        [Icons.business_center, 'Tipo', colab['empresa_tipo']],
+                        [Icons.account_tree, 'Área', colab['area']],
+                        [Icons.place, 'Ubicación', colab['ubicacion']],
+                        [Icons.business, 'Empresa', colab['empresa']],
+                        [Icons.person, 'Jefe Inmediato', colab['jefe_inmediato']],
+                        [Icons.group, 'Líder', colab['lider']],
+                        [Icons.person_pin, 'Gerente Reg.', colab['gerente_regional']],
+                        [Icons.supervisor_account, 'Director', colab['director']],
+                        [Icons.schedule, 'Horario', scheduleDisplay],
+                      ], brandColor, iconFont),
                       _pwCard('AREA RH', [
-                        ['Recluta', colab['recluta']],
-                        ['Reclutador', colab['reclutador']],
-                        ['Fuente', colab['fuente_reclutamiento']],
-                        ['Ingreso', colab['fecha_ingreso']],
-                      ], brandColor),
+                        [Icons.person_search, 'Recluta', colab['recluta']],
+                        [Icons.badge, 'Reclutador', colab['reclutador']],
+                        [Icons.source, 'Fuente', colab['fuente_reclutamiento']],
+                        [Icons.event_available, 'Ingreso', colab['fecha_ingreso']],
+                      ], brandColor, iconFont),
                     ],
                   ),
                 ),
@@ -545,18 +582,19 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
             ),
             
             _pwCard('DOMICILIO Y CONTACTO', [
-              ['Calle', '${colab['calle']} ${colab['no_calle']}'],
-              ['Colonia', colab['colonia']],
-              ['Estado', colab['estado_federal']],
-              ['Celular', colab['celular']],
-              ['Correo', colab['correo_personal']],
-            ], brandColor),
+              [Icons.home, 'Calle', '${colab['calle']} ${colab['no_calle']}'],
+              [Icons.map, 'Colonia', colab['colonia']],
+              [Icons.public, 'Estado', colab['estado_federal']],
+              [Icons.smartphone, 'Celular', colab['celular']],
+              [Icons.email, 'Correo', colab['correo_personal']],
+            ], brandColor, iconFont),
 
             if (_assignedEquipment != null && _assignedEquipment!.isNotEmpty)
               _pwCard('EQUIPO ASIGNADO', _assignedEquipment!.map((e) => [
+                Icons.devices,
                 e['tipo'] ?? 'Equipo',
                 '${e['marca'] ?? ''} ${e['modelo'] ?? ''} (S/N: ${e['n_s'] ?? 'N/A'})'
-              ]).toList(), brandColor),
+              ]).toList(), brandColor, iconFont),
 
             if (colab['observaciones'] != null && colab['observaciones'].toString().isNotEmpty)
               pw.Container(
@@ -583,7 +621,7 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
     await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => doc.save(), name: 'Ficha_${colab['numero_empleado']}.pdf');
   }
 
-  pw.Widget _pwCard(String title, List<List<dynamic>> rows, PdfColor brandColor) {
+  pw.Widget _pwCard(String title, List<List<dynamic>> rows, PdfColor brandColor, pw.Font? iconFont) {
     return pw.Container(
       margin: const pw.EdgeInsets.only(bottom: 10),
       padding: const pw.EdgeInsets.all(10),
@@ -597,11 +635,26 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
           pw.Text(title, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: brandColor)),
           pw.SizedBox(height: 5),
           pw.Table(
+            columnWidths: {
+              0: const pw.FixedColumnWidth(15), // Icon
+              1: const pw.FlexColumnWidth(2),   // Label
+              2: const pw.FlexColumnWidth(3),   // Value
+            },
             children: rows.map((r) {
+              final IconData? iconData = r[0] is IconData ? r[0] : null;
+              final String label = r.length > 2 ? r[1].toString() : r[0].toString();
+              final String value = r.length > 2 ? r[2]?.toString() ?? '---' : r[1]?.toString() ?? '---';
+
               return pw.TableRow(
                 children: [
-                  pw.Padding(padding: const pw.EdgeInsets.symmetric(vertical: 2), child: pw.Text(r[0].toString(), style: const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey700))),
-                  pw.Padding(padding: const pw.EdgeInsets.symmetric(vertical: 2), child: pw.Text(r[1]?.toString() ?? '---', style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold))),
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.symmetric(vertical: 2),
+                    child: iconData != null && iconFont != null 
+                      ? pw.Text(String.fromCharCode(iconData.codePoint), style: pw.TextStyle(font: iconFont, fontSize: 8, color: PdfColors.grey600))
+                      : pw.SizedBox(),
+                  ),
+                  pw.Padding(padding: const pw.EdgeInsets.symmetric(vertical: 2), child: pw.Text(label, style: const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey700))),
+                  pw.Padding(padding: const pw.EdgeInsets.symmetric(vertical: 2), child: pw.Text(value, style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold))),
                 ],
               );
             }).toList(),
