@@ -650,13 +650,18 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
             ),
           ),
           // Scrollable Table Content
-          Scrollbar(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minWidth: 520),
-                child: Column(
-                  children: [
+          LayoutBuilder(
+            builder: (context, tableConstraints) {
+              return Scrollbar(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                        minWidth: tableConstraints.maxWidth > 520
+                            ? tableConstraints.maxWidth
+                            : 520),
+                    child: Column(
+                      children: [
                     // Header row
                     Container(
                       color: Colors.grey[200],
@@ -742,7 +747,8 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                 ),
               ),
             ),
-          ),
+          );
+        }),
         ],
       ),
     );
