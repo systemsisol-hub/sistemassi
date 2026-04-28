@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/services.dart';
+import 'theme/si_theme.dart';
 
 class ExternalContactsPage extends StatefulWidget {
   const ExternalContactsPage({super.key});
@@ -336,7 +337,7 @@ class _ExternalContactsPageState extends State<ExternalContactsPage> {
         children: [
           // Header: Search + Count
           Padding(
-            padding: const EdgeInsets.all(SiSpace.x6),
+            padding: EdgeInsets.all(SiSpace.x6),
             child: Row(
               children: [
                 _buildSearchBar(c),
@@ -433,7 +434,7 @@ class _ExternalContactsPageState extends State<ExternalContactsPage> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.contact_support_outlined, size: 64, color: c.line),
-          const SizedBox(height: SiSpace.x4),
+          SizedBox(height: SiSpace.x4),
           Text('No se encontraron contactos',
               style: TextStyle(color: c.ink3, fontSize: 15)),
         ],
@@ -443,7 +444,7 @@ class _ExternalContactsPageState extends State<ExternalContactsPage> {
 
   Widget _buildGrid(SiColors c, List<Map<String, dynamic>> items) {
     return GridView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: SiSpace.x6),
+      padding: EdgeInsets.symmetric(horizontal: SiSpace.x6),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 450,
         mainAxisExtent: 180,
@@ -488,7 +489,7 @@ class _ContactGridTile extends StatelessWidget {
       decoration: BoxDecoration(
         border: Border.all(color: c.line.withOpacity(0.5), width: 0.5),
       ),
-      padding: const EdgeInsets.all(SiSpace.x5),
+      padding: EdgeInsets.all(SiSpace.x5),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -513,7 +514,7 @@ class _ContactGridTile extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(width: SiSpace.x4),
+              SizedBox(width: SiSpace.x4),
               // Name & Company
               Expanded(
                 child: Column(
@@ -553,7 +554,7 @@ class _ContactGridTile extends StatelessWidget {
           if (email.isNotEmpty)
             _buildDetailRow(Icons.mail_outline, email, c),
           
-          const SizedBox(height: SiSpace.x3),
+          SizedBox(height: SiSpace.x3),
           // Tag
           if (category.isNotEmpty)
             Container(
@@ -635,5 +636,4 @@ class _ContactGridTile extends StatelessWidget {
       ],
     );
   }
-}nt => 0;
 }
