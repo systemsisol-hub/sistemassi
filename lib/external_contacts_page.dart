@@ -100,52 +100,15 @@ class _ExternalContactsPageState extends State<ExternalContactsPage> {
     );
   }
 
-  Widget _buildControls(ThemeData theme) {
-    return _buildGlassPill(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+  Widget _buildEmptyState(SiColors c) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 200),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Buscar...',
-                hintStyle: TextStyle(color: Colors.grey.shade400),
-                prefixIcon: const Icon(Icons.search, size: 20),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, size: 20),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() => _searchQuery = '');
-                        },
-                      )
-                    : null,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-                filled: true,
-                fillColor: Colors.grey.shade100,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                isDense: true,
-              ),
-              style: const TextStyle(fontSize: 14),
-              onChanged: (v) => setState(() => _searchQuery = v),
-            ),
-          ),
-          const VerticalDivider(
-              width: 1, thickness: 1, indent: 8, endIndent: 8),
-          GestureDetector(
-            onTap: () => _showContactForm(),
-            child: const Padding(
-              padding: EdgeInsets.all(8.0),
-              child: Icon(Icons.add, size: 22, color: Colors.black87),
-            ),
-          ),
+          Icon(Icons.contact_support_outlined, size: 64, color: c.line),
+          SizedBox(height: SiSpace.x4),
+          Text('No se encontraron contactos',
+              style: TextStyle(color: c.ink3, fontSize: 15)),
         ],
       ),
     );
