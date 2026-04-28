@@ -347,36 +347,18 @@ class _ExternalContactsPageState extends State<ExternalContactsPage> {
 
     return Scaffold(
       backgroundColor: c.bg,
-      body: Column(
-        children: [
-          // Header: Search + Count
-          Padding(
-            padding: EdgeInsets.all(SiSpace.x6),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                _buildControls(c),
-              ],
-            ),
-          ),
-
-          // Content
-          Expanded(
-            child: _isLoading
-                ? Center(
-                    child: CircularProgressIndicator(
-                        color: c.brand, strokeWidth: 2),
-                  )
-                : filtered.isEmpty
-                    ? _buildEmptyState(c)
-                    : _buildGrid(c, filtered),
-          ),
-        ],
-      ),
+      body: _isLoading
+          ? Center(
+              child:
+                  CircularProgressIndicator(color: c.brand, strokeWidth: 2),
+            )
+          : filtered.isEmpty
+              ? _buildEmptyState(c)
+              : _buildMainTable(c, filtered),
     );
   }
 
-  Widget _buildGrid(SiColors c, List<Map<String, dynamic>> items) {
+  Widget _buildMainTable(SiColors c, List<Map<String, dynamic>> items) {
     return SingleChildScrollView(
       padding: EdgeInsets.all(SiSpace.x6),
       child: Center(
@@ -384,32 +366,100 @@ class _ExternalContactsPageState extends State<ExternalContactsPage> {
           constraints: const BoxConstraints(maxWidth: 1400),
           child: Card(
             elevation: 0,
+            clipBehavior: Clip.antiAlias,
             shape: RoundedRectangleBorder(
               borderRadius: SiRadius.rLg,
               side: BorderSide(color: c.line),
             ),
-            child: GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              padding: EdgeInsets.all(SiSpace.x2),
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 450,
-                mainAxisExtent: 180,
-                crossAxisSpacing: 0,
-                mainAxisSpacing: 0,
-              ),
-              itemCount: items.length,
-              itemBuilder: (context, index) {
-                final item = items[index];
-                return _ContactGridTile(
-                  item: item,
-                  onEdit: () => _showContactForm(contact: item),
-                  onDelete: () => _deleteContact(item['id']),
-                );
-              },
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Header (Search & Actions)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  child: Row(
+                    children: [
+                      _buildTableSearchBar(c),
+                      const Spacer(),
+                      _buildAddButton(c),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                // Grid Content
+                GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 466,
+                    mainAxisExtent: 180,
+                    crossAxisSpacing: 1,
+                    mainAxisSpacing: 1,
+                  ),
+                  itemCount: items.length,
+                  itemBuilder: (context, index) {
+                    final item = items[index];
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: c.panel,
+                        border: Border(
+                          right: BorderSide(color: c.line2, width: 0.5),
+                          bottom: BorderSide(color: c.line2, width: 0.5),
+                        ),
+                      ),
+                      child: _ContactGridTile(
+                        item: item,
+                        onEdit: () => _showContactForm(contact: item),
+                        onDelete: () => _deleteContact(item['id']),
+                      ),
+                    );
+                  },
+                ),
+              ],
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildTableSearchBar(SiColors c) {
+    return Container(
+      width: 320,
+      height: 38,
+      decoration: BoxDecoration(
+        color: c.bg,
+        borderRadius: SiRadius.rMd,
+        border: Border.all(color: c.line),
+      ),
+      child: TextField(
+        controller: _searchController,
+        style: const TextStyle(fontSize: 13),
+        decoration: InputDecoration(
+          hintText: 'Buscar contacto, empresa...',
+          hintStyle: TextStyle(fontSize: 13, color: c.ink4),
+          prefixIcon: Icon(Icons.search, size: 16, color: c.ink3),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(vertical: 10),
+          isDense: true,
+        ),
+        onChanged: (v) => setState(() => _searchQuery = v),
+      ),
+    );
+  }
+
+  Widget _buildAddButton(SiColors c) {
+    return ElevatedButton.icon(
+      onPressed: () => _showContactForm(),
+      icon: const Icon(Icons.add, size: 16),
+      label: const Text('+ Contacto', style: TextStyle(fontWeight: FontWeight.w600)),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: c.brand,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        minimumSize: const Size(0, 38),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        shape: const RoundedRectangleBorder(borderRadius: SiRadius.rMd),
       ),
     );
   }
