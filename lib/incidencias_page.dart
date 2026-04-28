@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/notification_service.dart';
 import '../services/incidencias_pdf_service.dart';
+import 'theme/si_theme.dart';
 
 
 class IncidenciasPage extends StatefulWidget {
@@ -54,39 +55,48 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
     );
   }
 
-  Widget _buildControls(ThemeData theme) {
+  Widget _buildControls(SiColors c) {
     return _buildGlassPill(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (_userRole == 'admin' && _adminUserList.isNotEmpty)
-            DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: _selectedUserId,
-                isDense: true,
-                icon: const Icon(Icons.keyboard_arrow_down,
-                    color: Colors.black87, size: 20),
-                items: _adminUserList.map((user) {
-                  final name =
-                      '${user['nombre']} ${user['paterno']} ${user['materno'] ?? ''}'
-                          .trim();
-                  return DropdownMenuItem(
-                    value: user['id'] as String,
-                    child: Text(name.isEmpty ? 'Usuario' : name,
-                        style: const TextStyle(fontSize: 13)),
-                  );
-                }).toList(),
-                onChanged: _onUserSelected,
+          if (_userRole == 'admin' && _adminUserList.isNotEmpty) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _selectedUserId,
+                  isDense: true,
+                  icon: const Icon(Icons.keyboard_arrow_down,
+                      color: Colors.black87, size: 20),
+                  items: _adminUserList.map((user) {
+                    final name =
+                        '${user['nombre']} ${user['paterno']} ${user['materno'] ?? ''}'
+                            .trim();
+                    return DropdownMenuItem(
+                      value: user['id'] as String,
+                      child: Text(name.isEmpty ? 'Usuario' : name,
+                          style: const TextStyle(fontSize: 13)),
+                    );
+                  }).toList(),
+                  onChanged: _onUserSelected,
+                ),
               ),
             ),
-          const VerticalDivider(
-              width: 1, thickness: 1, indent: 8, endIndent: 8),
+            const VerticalDivider(
+                width: 1, thickness: 1, indent: 8, endIndent: 8),
+          ],
           GestureDetector(
             onTap: () => _showIncidenciaForm(),
             child: const Padding(
-                padding: EdgeInsets.all(8.0),
-                child: Icon(Icons.add, size: 22, color: Colors.black87)),
+              padding: EdgeInsets.all(8.0),
+              child: Icon(Icons.add, size: 22, color: Colors.black87),
+            ),
           ),
         ],
       ),
@@ -1279,222 +1289,191 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
     );
   }
 
-  Widget _buildDesktopTable(ThemeData theme) {
-    return SizedBox(
-      width: double.infinity,
-      child: Card(
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: Colors.grey[200]!),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-              child: Text('Historial de ${_userFullName ?? "Solicitudes"}',
-                  style: const TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.bold)),
+  Widget _buildDesktopTable(SiColors c) {
+    final theme = Theme.of(context);
+    return Card(
+      elevation: 0,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: SiRadius.rLg,
+        side: BorderSide(color: c.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            child: Row(
+              children: [
+                Text('Historial de Solicitudes',
+                    style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: c.ink)),
+                const Spacer(),
+                _buildControls(c),
+              ],
             ),
-            const Divider(height: 1),
-            Theme(
-              data: theme.copyWith(cardColor: Colors.transparent),
-              child: PaginatedDataTable(
-                columns: const [
-                  DataColumn(
-                      label: Text('Periodo',
-                          style: TextStyle(fontWeight: FontWeight.bold))),
-                  DataColumn(
-                      label: Text('Días',
-                          style: TextStyle(fontWeight: FontWeight.bold))),
-                  DataColumn(
-                      label: Text('Creado',
-                          style: TextStyle(fontWeight: FontWeight.bold))),
-                  DataColumn(
-                      label: Text('Fecha Inicio',
-                          style: TextStyle(fontWeight: FontWeight.bold))),
-                  DataColumn(
-                      label: Text('Fecha Fin',
-                          style: TextStyle(fontWeight: FontWeight.bold))),
-                  DataColumn(
-                      label: Text('Estatus',
-                          style: TextStyle(fontWeight: FontWeight.bold))),
-                  DataColumn(
-                      label: Text('Doc',
-                          style: TextStyle(fontWeight: FontWeight.bold))),
-                ],
-                source: _IncidenciasDataSource(
-                  items: _incidencias,
-                  theme: theme,
-                  isAdmin: _userRole == 'admin',
-                  userProfile: _selectedUserProfile,
-                  formatDate: _formatDate,
-                  getStatusColor: _getStatusColor,
-                  onEdit: (item) => _showIncidenciaForm(incidencia: item),
-                  onStatusChange: (item, val) async {
-                    if (val == 'PDF') {
-                      if (_selectedUserProfile != null) {
-                        IncidenciasPdfService.generateVacationRequest(
-                            _selectedUserProfile!, item);
-                      }
-                    } else {
-                      await Supabase.instance.client
-                          .from('incidencias')
-                          .update({'status': val}).eq('id', item['id']);
-                      await NotificationService.send(
-                        title: 'Tu incidencia fue $val',
-                        message: 'El estado de tu petición ha cambiado a $val.',
-                        userId: item['usuario_id'],
-                        type: 'incidencia_status',
-                      );
-                      _fetchIncidencias();
+          ),
+          const Divider(height: 1),
+          Theme(
+            data: theme.copyWith(cardColor: Colors.transparent),
+            child: PaginatedDataTable(
+              columns: const [
+                DataColumn(
+                    label: Text('Periodo',
+                        style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(
+                    label: Text('Días',
+                        style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(
+                    label: Text('Creado',
+                        style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(
+                    label: Text('Fecha Inicio',
+                        style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(
+                    label: Text('Fecha Fin',
+                        style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(
+                    label: Text('Estatus',
+                        style: TextStyle(fontWeight: FontWeight.bold))),
+                DataColumn(
+                    label: Text('Doc',
+                        style: TextStyle(fontWeight: FontWeight.bold))),
+              ],
+              source: _IncidenciasDataSource(
+                items: _incidencias,
+                theme: theme,
+                isAdmin: _userRole == 'admin',
+                userProfile: _selectedUserProfile,
+                formatDate: _formatDate,
+                getStatusColor: _getStatusColor,
+                onEdit: (item) => _showIncidenciaForm(incidencia: item),
+                onStatusChange: (item, val) async {
+                  if (val == 'PDF') {
+                    if (_selectedUserProfile != null) {
+                      IncidenciasPdfService.generateVacationRequest(
+                          _selectedUserProfile!, item);
                     }
-                  },
-                ),
-
-                rowsPerPage: _incidencias.isEmpty
-                    ? 1
-                    : (_incidencias.length > 10 ? 10 : _incidencias.length),
-                showCheckboxColumn: false,
-                horizontalMargin: 16,
-                columnSpacing: 16,
-                dataRowMinHeight: 48,
+                  } else {
+                    await Supabase.instance.client
+                        .from('incidencias')
+                        .update({'status': val}).eq('id', item['id']);
+                    await NotificationService.send(
+                      title: 'Tu incidencia fue $val',
+                      message: 'El estado de tu petición ha cambiado a $val.',
+                      userId: item['usuario_id'],
+                      type: 'incidencia_status',
+                    );
+                    _fetchIncidencias();
+                  }
+                },
               ),
+              rowsPerPage: _incidencias.isEmpty
+                  ? 1
+                  : (_incidencias.length > 10 ? 10 : _incidencias.length),
+              showCheckboxColumn: false,
+              horizontalMargin: 24,
+              columnSpacing: 24,
+              dataRowMaxHeight: 54,
+              dataRowMinHeight: 54,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final c = SiColors.of(context);
 
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+      backgroundColor: c.bg,
+      body: _isLoading
+          ? Center(
+              child: Image.asset(
+                'assets/sisol_loader.gif',
+                width: 150,
+                errorBuilder: (context, error, stackTrace) =>
+                    const CircularProgressIndicator(),
+              ),
+            )
+          : SingleChildScrollView(
+              padding: EdgeInsets.all(SiSpace.x6),
+              child: Column(
                 children: [
-                  _buildControls(theme),
+                  // Admin Pending Section
+                  if (_userRole == 'admin' && _allIncidencias.isNotEmpty) ...[
+                    _buildPendingTable(Theme.of(context)),
+                    SizedBox(height: SiSpace.x6),
+                  ],
+
+                  // Main Content Grid
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isDesktop = constraints.maxWidth > 1100;
+                      if (isDesktop) {
+                        return Column(
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  flex: 2,
+                                  child: _buildAntiguedadDesktop(),
+                                ),
+                                SizedBox(width: SiSpace.x6),
+                                Expanded(
+                                  flex: 3,
+                                  child: _buildHistorialVacaciones(),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: SiSpace.x6),
+                            _buildDesktopTable(c),
+                          ],
+                        );
+                      } else {
+                        return Column(
+                          children: [
+                            _buildAntiguedadMobile(),
+                            SizedBox(height: SiSpace.x4),
+                            Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 16),
+                              child: _buildHistorialVacaciones(),
+                            ),
+                            SizedBox(height: SiSpace.x6),
+                            _incidencias.isEmpty
+                                ? const Padding(
+                                    padding: EdgeInsets.all(40),
+                                    child:
+                                        Text('No hay solicitudes registradas'),
+                                  )
+                                : ListView.builder(
+                                    shrinkWrap: true,
+                                    physics:
+                                        const NeverScrollableScrollPhysics(),
+                                    itemCount: _incidencias.length,
+                                    itemBuilder: (context, index) {
+                                      final inc = _incidencias[index];
+                                      return _buildMobileCard(inc);
+                                    },
+                                  ),
+                          ],
+                        );
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 80),
                 ],
               ),
             ),
-          ),
-          // Main content (Responsive layout)
-          SliverToBoxAdapter(
-            child: Builder(
-              builder: (context) {
-                final isDesktop = MediaQuery.of(context).size.width > 800;
-
-                if (isDesktop) {
-                  return Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // Admin-only pending table at top
-                        if (_userRole == 'admin') ...[
-                          _buildPendingTable(theme),
-                          const SizedBox(height: 24),
-                        ],
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              flex: 1,
-                              child: _buildAntiguedadDesktop(),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              flex: 2,
-                              child: _buildHistorialVacaciones(),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              flex: 6,
-                              child: _isLoading
-                                  ? Center(
-                                      child: Image.asset(
-                                        'assets/sisol_loader.gif',
-                                        width: 150,
-                                        errorBuilder: (context, error,
-                                                stackTrace) =>
-                                            const CircularProgressIndicator(),
-                                        frameBuilder: (context, child, frame,
-                                                wasSynchronouslyLoaded) =>
-                                            frame == null
-                                                ? const CircularProgressIndicator()
-                                                : child,
-                                      ),
-                                    )
-                                  : _buildDesktopTable(theme),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                return Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 1000),
-                    child: Column(
-                      children: [
-                        // Admin-only pending table at top on mobile too
-                        if (_userRole == 'admin')
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                            child: _buildPendingTable(theme),
-                          ),
-                        _buildAntiguedadMobile(),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: _buildHistorialVacaciones(),
-                        ),
-                        if (_isLoading)
-                          Padding(
-                            padding: const EdgeInsets.all(32),
-                            child: Center(
-                              child: Image.asset(
-                                'assets/sisol_loader.gif',
-                                width: 150,
-                                errorBuilder: (context, error, stackTrace) =>
-                                    const CircularProgressIndicator(),
-                                frameBuilder: (context, child, frame,
-                                        wasSynchronouslyLoaded) =>
-                                    frame == null
-                                        ? const CircularProgressIndicator()
-                                        : child,
-                              ),
-                            ),
-                          )
-                        else if (_incidencias.isEmpty)
-                          const Padding(
-                              padding: EdgeInsets.all(40),
-                              child: Text('Sin incidencias registradas'))
-                        else
-                          _buildMobileList(theme),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-          const SliverToBoxAdapter(
-              child: SizedBox(height: 80)), // FAB clearance
-        ],
-      ),
     );
   }
+
 
   Color _getStatusColor(String status) {
 
