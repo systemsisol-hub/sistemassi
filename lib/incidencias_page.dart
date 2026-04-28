@@ -1120,29 +1120,46 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
   }
 
 
-  /// Admin-only: shows all PENDIENTE records from all users.
-  Widget _buildPendingTable(ThemeData theme) {
+  Widget _buildPendingTable(SiColors c) {
     return Card(
       elevation: 0,
+      clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: SiRadius.rLg,
         side: BorderSide(color: Colors.orange.withOpacity(0.35)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
+          Container(
+            color: Colors.orange.withOpacity(0.05),
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
             child: Row(
               children: [
-                Icon(Icons.pending_actions,
-                    color: Colors.orange[700], size: 20),
-                const SizedBox(width: 8),
+                Icon(Icons.pending_actions_rounded,
+                    color: Colors.orange[700], size: 22),
+                const SizedBox(width: 12),
                 Text(
-                  'Solicitudes Pendientes (${_allIncidencias.length})',
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.bold),
+                  'Solicitudes Pendientes',
+                  style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.orange[900]),
                 ),
+                const Spacer(),
+                if (_allIncidencias.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.orange[700],
+                      borderRadius: SiRadius.rPill,
+                    ),
+                    child: Text('${_allIncidencias.length}',
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold)),
+                  ),
               ],
             ),
           ),
@@ -1302,16 +1319,20 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
             child: Row(
               children: [
+                if (_userRole == 'admin' && _adminUserList.isNotEmpty)
+                  _buildTableUserSelector(c),
+                const Spacer(),
                 Text('Historial de Solicitudes',
                     style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.5,
                         color: c.ink)),
                 const Spacer(),
-                _buildControls(c),
+                _buildTableAddButton(c),
               ],
             ),
           ),
@@ -1383,6 +1404,50 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
         ],
       ),
     );
+  Widget _buildTableUserSelector(SiColors c) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      height: 38,
+      decoration: BoxDecoration(
+        color: c.bg,
+        borderRadius: SiRadius.rMd,
+        border: Border.all(color: c.line),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _selectedUserId,
+          isDense: true,
+          icon: Icon(Icons.keyboard_arrow_down, color: c.ink3, size: 18),
+          style: TextStyle(fontSize: 13, color: c.ink, fontWeight: FontWeight.w500),
+          items: _adminUserList.map((user) {
+            final name =
+                '${user['nombre']} ${user['paterno']} ${user['materno'] ?? ''}'
+                    .trim();
+            return DropdownMenuItem(
+              value: user['id'] as String,
+              child: Text(name.isEmpty ? 'Seleccionar Usuario' : name),
+            );
+          }).toList(),
+          onChanged: _onUserSelected,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTableAddButton(SiColors c) {
+    return ElevatedButton.icon(
+      onPressed: () => _showIncidenciaForm(),
+      icon: const Icon(Icons.add, size: 18),
+      label: const Text('Nuevo', style: TextStyle(fontWeight: FontWeight.w700)),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: c.brand,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        minimumSize: const Size(0, 40),
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        shape: const RoundedRectangleBorder(borderRadius: SiRadius.rMd),
+      ),
+    );
   }
 
   @override
@@ -1405,8 +1470,8 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
               child: Column(
                 children: [
                   // Admin Pending Section
-                  if (_userRole == 'admin' && _allIncidencias.isNotEmpty) ...[
-                    _buildPendingTable(Theme.of(context)),
+                  if (_userRole == 'admin') ...[
+                    _buildPendingTable(c),
                     SizedBox(height: SiSpace.x6),
                   ],
 
@@ -1550,6 +1615,10 @@ class _IncidenciasDataSource extends DataTableSource {
         ),
         DataCell(
           PopupMenuButton<String>(
+            icon: Icon(Icons.more_vert_rounded, color: theme.colorScheme.primary.withOpacity(0.7), size: 20),
+            tooltip: 'Acciones',
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            elevation: 4,
             onSelected: (val) {
               if (val == 'EDIT') {
                 onEdit(inc);
@@ -1558,24 +1627,49 @@ class _IncidenciasDataSource extends DataTableSource {
               }
             },
             itemBuilder: (ctx) => [
-              const PopupMenuItem(
-                  value: 'PDF',
-                  child: ListTile(
-                      leading: Icon(Icons.picture_as_pdf_outlined),
-                      title: Text('Descargar PDF'),
-                      dense: true)),
+              PopupMenuItem(
+                value: 'PDF',
+                child: Row(
+                  children: [
+                    Icon(Icons.picture_as_pdf_outlined, size: 18, color: Colors.red[700]),
+                    const SizedBox(width: 12),
+                    const Text('Descargar PDF', style: TextStyle(fontSize: 13)),
+                  ],
+                ),
+              ),
               if (isAdmin || inc['status'] == 'PENDIENTE')
-                const PopupMenuItem(
-                    value: 'EDIT',
-                    child: ListTile(
-                        leading: Icon(Icons.edit_outlined),
-                        title: Text('Editar'),
-                        dense: true)),
+                PopupMenuItem(
+                  value: 'EDIT',
+                  child: Row(
+                    children: [
+                      Icon(Icons.edit_outlined, size: 18, color: Colors.blue[700]),
+                      const SizedBox(width: 12),
+                      const Text('Editar', style: TextStyle(fontSize: 13)),
+                    ],
+                  ),
+                ),
               if (isAdmin) ...[
                 const PopupMenuDivider(),
-                const PopupMenuItem(value: 'APROBADA', child: Text('Aprobar')),
-                const PopupMenuItem(value: 'CANCELADA', child: Text('Cancelar')),
-                const PopupMenuItem(value: 'PENDIENTE', child: Text('Pendiente')),
+                PopupMenuItem(
+                  value: 'APROBADA',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.check_circle_outline, size: 18, color: Colors.green),
+                      const SizedBox(width: 12),
+                      const Text('Aprobar', style: TextStyle(fontSize: 13)),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'CANCELADA',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.cancel_outlined, size: 18, color: Colors.red),
+                      const SizedBox(width: 12),
+                      const Text('Cancelar', style: TextStyle(fontSize: 13)),
+                    ],
+                  ),
+                ),
               ],
             ],
           ),
