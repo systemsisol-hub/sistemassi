@@ -295,7 +295,7 @@ class _CssiPageState extends State<CssiPage> {
     String? credito = item?['credito'];
     String? lugarNacimiento = item?['lugar_nacimiento'];
     String? talla = item?['talla'];
-    String? tipoColaborador = item?['tipo'];
+    String? tipoColaborador = item?['empresa_tipo'];
     String? reclutaOption = item?['recluta'];
     String? fuenteOption = item?['fuente_reclutamiento'];
     String? statusSys = item?['status_sys'] ?? 'CAMBIO';
@@ -849,7 +849,7 @@ class _CssiPageState extends State<CssiPage> {
         'fecha_nacimiento':
             fechaNacCtrl.text.isEmpty ? null : fechaNacCtrl.text,
         'genero': genero,
-        'talla': toUpper(tallaCtrl.text),
+        'talla': talla,
         'estado_civil': estadoCivil,
         'escolaridad': escolaridad,
         'detalle_escolaridad': toUpper(detalleEscolCtrl.text),
@@ -876,7 +876,7 @@ class _CssiPageState extends State<CssiPage> {
         'gerente_regional': toUpper(gerenteCtrl.text),
         'director': toUpper(directorCtrl.text),
         'lugar_nacimiento': lugarNacimiento,
-        'tipo': tipoColaborador,
+        'empresa_tipo': tipoColaborador,
         'recluta': reclutaOption,
         'reclutador': toUpper(reclutadorCtrl.text),
         'fuente_reclutamiento': fuenteOption,
