@@ -325,259 +325,315 @@ class _ExternalContactsPageState extends State<ExternalContactsPage> {
         },
       ),
     );
-  }
-
-  @override
+  }  @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final c = SiColors.of(context);
     final filtered = _filteredContacts;
 
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  _buildControls(theme),
-                ],
-              ),
+      backgroundColor: c.bg,
+      body: Column(
+        children: [
+          // Header: Search + Count
+          Padding(
+            padding: const EdgeInsets.all(SiSpace.x6),
+            child: Row(
+              children: [
+                _buildSearchBar(c),
+                const Spacer(),
+                _buildAddButton(c),
+              ],
             ),
           ),
-          _isLoading
-              ? SliverFillRemaining(
-                  child: Center(
-                    child: Image.asset(
-                      'assets/sisol_loader.gif',
-                      width: 150,
-                      errorBuilder: (context, error, stackTrace) =>
-                          const CircularProgressIndicator(),
-                    ),
-                  ),
-                )
-              : filtered.isEmpty
-                  ? SliverFillRemaining(
-                      child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.contact_phone_outlined,
-                                size: 64, color: Colors.grey[300]),
-                            const SizedBox(height: 16),
-                            const Text('No hay contactos registrados',
-                                style: TextStyle(color: Colors.grey)),
-                          ],
-                        ),
-                      ),
-                    )
-                  : SliverFillRemaining(
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          final isDesktop = constraints.maxWidth > 800;
-                          return isDesktop
-                              ? _buildDesktopLayout(filtered, theme)
-                              : _buildMobileLayout(filtered);
-                        },
-                      ),
-                    ),
+
+          // Content
+          Expanded(
+            child: _isLoading
+                ? Center(
+                    child: CircularProgressIndicator(
+                        color: c.brand, strokeWidth: 2),
+                  )
+                : filtered.isEmpty
+                    ? _buildEmptyState(c)
+                    : _buildGrid(c, filtered),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildDesktopLayout(
-      List<Map<String, dynamic>> items, ThemeData theme) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1400),
-          child: Card(
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-                side: BorderSide(color: Colors.grey[200]!)),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-                  child: Row(
-                    children: [
-                      const Text('Lista de Contactos',
-                          style: TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                ),
-                const Divider(height: 1),
-                PaginatedDataTable(
-                  columns: const [
-                    DataColumn(
-                        label: Text('Nombre',
-                            style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(
-                        label: Text('Empresa',
-                            style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(
-                        label: Text('Correo',
-                            style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(
-                        label: Text('Teléfono',
-                            style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(
-                        label: Text('Otro',
-                            style: TextStyle(fontWeight: FontWeight.bold))),
-                    DataColumn(
-                        label: Text('Acciones',
-                            style: TextStyle(fontWeight: FontWeight.bold))),
-                  ],
-                  source: _ContactsDataSource(
-                    items: items,
-                    onEdit: (c) => _showContactForm(contact: c),
-                    onDelete: (id) => _deleteContact(id),
-                  ),
-                  rowsPerPage: items.isEmpty
-                      ? 1
-                      : (items.length > 10 ? 10 : items.length),
-                  showCheckboxColumn: false,
-                  horizontalMargin: 24,
-                  columnSpacing: 24,
-                ),
-              ],
-            ),
-          ),
+  Widget _buildSearchBar(SiColors c) {
+    return Container(
+      width: 320,
+      height: 40,
+      decoration: BoxDecoration(
+        color: c.panel,
+        borderRadius: SiRadius.rFull,
+        border: Border.all(color: c.line),
+      ),
+      child: TextField(
+        controller: _searchController,
+        style: TextStyle(fontSize: 14, color: c.ink),
+        decoration: InputDecoration(
+          hintText: 'Buscar contacto, empresa, categoría...',
+          hintStyle: TextStyle(fontSize: 14, color: c.ink4),
+          prefixIcon: Icon(Icons.search, size: 18, color: c.ink3),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(vertical: 10),
         ),
+        onChanged: (v) => setState(() => _searchQuery = v),
       ),
     );
   }
 
-  Widget _buildMobileLayout(List<Map<String, dynamic>> items) {
-    return RefreshIndicator(
-      onRefresh: _fetchContacts,
-      child: ListView.separated(
-        padding: const EdgeInsets.all(16),
-        itemCount: items.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 12),
-        itemBuilder: (context, index) {
-          final c = items[index];
-          return Card(
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-                side: BorderSide(color: Colors.grey[200]!)),
-            child: ListTile(
-              title: Text(c['nombre'] ?? '',
-                  style: const TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (c['correo'] != null && c['correo'].toString().isNotEmpty)
-                    Text('✉️ ${c['correo']}'),
-                  if (c['telefono'] != null &&
-                      c['telefono'].toString().isNotEmpty)
-                    Text('📞 ${c['telefono']}'),
-                ],
-              ),
-              trailing: PopupMenuButton<String>(
-                onSelected: (value) {
-                  if (value == 'edit') _showContactForm(contact: c);
-                  if (value == 'delete') _deleteContact(c['id']);
-                },
-                itemBuilder: (context) => [
-                  const PopupMenuItem(
-                      value: 'edit',
-                      child: ListTile(
-                          leading: Icon(Icons.edit),
-                          title: Text('Editar'),
-                          dense: true)),
-                  const PopupMenuItem(
-                      value: 'delete',
-                      child: ListTile(
-                          leading: Icon(Icons.delete, color: Colors.red),
-                          title: Text('Eliminar',
-                              style: TextStyle(color: Colors.red)),
-                          dense: true)),
-                ],
-              ),
-            ),
-          );
-        },
+  Widget _buildCountBadge(SiColors c, int count) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: c.panel,
+        borderRadius: SiRadius.rFull,
+        border: Border.all(color: c.line),
       ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(color: c.brand, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '$count contactos',
+            style: TextStyle(
+                fontSize: 13, fontWeight: FontWeight.w500, color: c.ink2),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAddButton(SiColors c) {
+    return OutlinedButton.icon(
+      onPressed: () => _showContactForm(),
+      icon: const Icon(Icons.add, size: 18),
+      label: const Text('+ Contacto'),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: c.brand,
+        side: BorderSide(color: c.brand),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        shape: const RoundedRectangleBorder(borderRadius: SiRadius.rFull),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(SiColors c) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.contact_support_outlined, size: 64, color: c.line),
+          const SizedBox(height: SiSpace.x4),
+          Text('No se encontraron contactos',
+              style: TextStyle(color: c.ink3, fontSize: 15)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGrid(SiColors c, List<Map<String, dynamic>> items) {
+    return GridView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: SiSpace.x6),
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 450,
+        mainAxisExtent: 180,
+        crossAxisSpacing: 0,
+        mainAxisSpacing: 0,
+      ),
+      itemCount: items.length,
+      itemBuilder: (context, index) {
+        final item = items[index];
+        return _ContactGridTile(
+          item: item,
+          onEdit: () => _showContactForm(contact: item),
+          onDelete: () => _deleteContact(item['id']),
+        );
+      },
     );
   }
 }
 
-class _ContactsDataSource extends DataTableSource {
-  final List<Map<String, dynamic>> items;
-  final Function(Map<String, dynamic>) onEdit;
-  final Function(String) onDelete;
+class _ContactGridTile extends StatelessWidget {
+  final Map<String, dynamic> item;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
-  _ContactsDataSource(
-      {required this.items, required this.onEdit, required this.onDelete});
+  const _ContactGridTile({
+    required this.item,
+    required this.onEdit,
+    required this.onDelete,
+  });
 
   @override
-  DataRow? getRow(int index) {
-    if (index >= items.length) return null;
-    final c = items[index];
-    return DataRow.byIndex(
-      index: index,
-      cells: [
-        DataCell(Text(c['nombre'] ?? '')),
-        DataCell(Text(c['empresa'] ?? '')),
-        DataCell(
+  Widget build(BuildContext context) {
+    final c = SiColors.of(context);
+    final name = item['nombre'] ?? 'Sin Nombre';
+    final company = item['empresa'] ?? '';
+    final email = item['correo'] ?? '';
+    final phone = item['telefono'] ?? '';
+    final category = item['otro'] ?? '';
+    final initials = name.split(' ').take(2).map((e) => e.isNotEmpty ? e[0] : '').join('').toUpperCase();
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: c.line.withOpacity(0.5), width: 0.5),
+      ),
+      padding: const EdgeInsets.all(SiSpace.x5),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Row(
-            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(c['correo'] ?? ''),
-              if (c['correo'] != null && c['correo'].toString().isNotEmpty)
-                IconButton(
-                  icon: const Icon(Icons.copy, size: 16, color: Colors.grey),
-                  onPressed: () {
-                    Clipboard.setData(ClipboardData(
-                        text: (c['correo'] ?? '').toString().trim()));
-                  },
-                  tooltip: 'Copiar correo',
+              // Avatar
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: c.brandTint,
+                  borderRadius: SiRadius.rMd,
                 ),
+                alignment: Alignment.center,
+                child: Text(
+                  initials,
+                  style: TextStyle(
+                    color: c.brand,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                  ),
+                ),
+              ),
+              const SizedBox(width: SiSpace.x4),
+              // Name & Company
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: c.ink,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (company.isNotEmpty)
+                      Text(
+                        company,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: c.ink3,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                  ],
+                ),
+              ),
+              // Actions
+              _buildPopupMenu(c),
+            ],
+          ),
+          const Spacer(),
+          // Details
+          if (phone.isNotEmpty)
+            _buildDetailRow(Icons.phone_outlined, phone, c),
+          if (email.isNotEmpty)
+            _buildDetailRow(Icons.mail_outline, email, c),
+          
+          const SizedBox(height: SiSpace.x3),
+          // Tag
+          if (category.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: c.bg,
+                borderRadius: SiRadius.rFull,
+                border: Border.all(color: c.line),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 4,
+                    height: 4,
+                    decoration: BoxDecoration(color: c.ink4, shape: BoxShape.circle),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    category,
+                    style: TextStyle(fontSize: 11, color: c.ink3, fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(IconData icon, String text, SiColors c) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: c.ink4),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(fontSize: 13, color: c.ink2),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPopupMenu(SiColors c) {
+    return PopupMenuButton<String>(
+      icon: Icon(Icons.more_vert, size: 18, color: c.ink4),
+      onSelected: (v) {
+        if (v == 'edit') onEdit();
+        if (v == 'delete') onDelete();
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem(
+          value: 'edit',
+          child: Row(
+            children: [
+              Icon(Icons.edit_outlined, size: 16, color: c.ink2),
+              const SizedBox(width: 12),
+              const Text('Editar'),
             ],
           ),
         ),
-        DataCell(Text(c['telefono'] ?? '')),
-        DataCell(Text(c['otro'] ?? '')),
-        DataCell(
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              if (value == 'edit') onEdit(c);
-              if (value == 'delete') onDelete(c['id']);
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                  value: 'edit',
-                  child: ListTile(
-                      leading: Icon(Icons.edit, color: Colors.blue),
-                      title: Text('Editar'),
-                      dense: true)),
-              const PopupMenuItem(
-                  value: 'delete',
-                  child: ListTile(
-                      leading: Icon(Icons.delete, color: Colors.red),
-                      title:
-                          Text('Eliminar', style: TextStyle(color: Colors.red)),
-                      dense: true)),
+        PopupMenuItem(
+          value: 'delete',
+          child: Row(
+            children: [
+              Icon(Icons.delete_outline, size: 16, color: c.danger),
+              const SizedBox(width: 12),
+              Text('Eliminar', style: TextStyle(color: c.danger)),
             ],
           ),
         ),
       ],
     );
   }
-
-  @override
-  bool get isRowCountApproximate => false;
-  @override
-  int get rowCount => items.length;
-  @override
-  int get selectedRowCount => 0;
+}nt => 0;
 }
