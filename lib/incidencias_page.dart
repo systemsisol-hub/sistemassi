@@ -1452,16 +1452,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                                     child:
                                         Text('No hay solicitudes registradas'),
                                   )
-                                : ListView.builder(
-                                    shrinkWrap: true,
-                                    physics:
-                                        const NeverScrollableScrollPhysics(),
-                                    itemCount: _incidencias.length,
-                                    itemBuilder: (context, index) {
-                                      final inc = _incidencias[index];
-                                      return _buildMobileCard(inc);
-                                    },
-                                  ),
+                                : _buildMobileList(Theme.of(context)),
                           ],
                         );
                       }

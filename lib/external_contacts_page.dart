@@ -415,7 +415,6 @@ class _ExternalContactsPageState extends State<ExternalContactsPage> {
                 ),
               ],
             ),
-          ),
         ),
       ),
     );
