@@ -49,6 +49,57 @@ class _ExternalContactsPageState extends State<ExternalContactsPage> {
     );
   }
 
+  Widget _buildControls(SiColors c) {
+    return _buildGlassPill(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 200),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Buscar...',
+                hintStyle: TextStyle(color: Colors.grey.shade400),
+                prefixIcon: const Icon(Icons.search, size: 20),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, size: 20),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _searchQuery = '');
+                        },
+                      )
+                    : null,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                filled: true,
+                fillColor: Colors.grey.shade100,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                isDense: true,
+              ),
+              style: const TextStyle(fontSize: 14),
+              onChanged: (v) => setState(() => _searchQuery = v),
+            ),
+          ),
+          const VerticalDivider(
+              width: 1, thickness: 1, indent: 8, endIndent: 8),
+          GestureDetector(
+            onTap: () => _showContactForm(),
+            child: const Padding(
+              padding: EdgeInsets.all(8.0),
+              child: Icon(Icons.add, size: 22, color: Colors.black87),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildControls(ThemeData theme) {
     return _buildGlassPill(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -339,10 +390,9 @@ class _ExternalContactsPageState extends State<ExternalContactsPage> {
           Padding(
             padding: EdgeInsets.all(SiSpace.x6),
             child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                _buildSearchBar(c),
-                const Spacer(),
-                _buildAddButton(c),
+                _buildControls(c),
               ],
             ),
           ),
@@ -363,103 +413,41 @@ class _ExternalContactsPageState extends State<ExternalContactsPage> {
     );
   }
 
-  Widget _buildSearchBar(SiColors c) {
-    return Container(
-      width: 320,
-      height: 40,
-      decoration: BoxDecoration(
-        color: c.panel,
-        borderRadius: SiRadius.rPill,
-        border: Border.all(color: c.line),
-      ),
-      child: TextField(
-        controller: _searchController,
-        style: TextStyle(fontSize: 14, color: c.ink),
-        decoration: InputDecoration(
-          hintText: 'Buscar contacto, empresa, categoría...',
-          hintStyle: TextStyle(fontSize: 14, color: c.ink4),
-          prefixIcon: Icon(Icons.search, size: 18, color: c.ink3),
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(vertical: 10),
-        ),
-        onChanged: (v) => setState(() => _searchQuery = v),
-      ),
-    );
-  }
-
-  Widget _buildCountBadge(SiColors c, int count) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: c.panel,
-        borderRadius: SiRadius.rPill,
-        border: Border.all(color: c.line),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(color: c.brand, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            '$count contactos',
-            style: TextStyle(
-                fontSize: 13, fontWeight: FontWeight.w500, color: c.ink2),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAddButton(SiColors c) {
-    return OutlinedButton.icon(
-      onPressed: () => _showContactForm(),
-      icon: const Icon(Icons.add, size: 18),
-      label: const Text('+ Contacto'),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: c.brand,
-        side: BorderSide(color: c.brand),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        shape: const RoundedRectangleBorder(borderRadius: SiRadius.rPill),
-      ),
-    );
-  }
-
-  Widget _buildEmptyState(SiColors c) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.contact_support_outlined, size: 64, color: c.line),
-          SizedBox(height: SiSpace.x4),
-          Text('No se encontraron contactos',
-              style: TextStyle(color: c.ink3, fontSize: 15)),
-        ],
-      ),
-    );
-  }
-
   Widget _buildGrid(SiColors c, List<Map<String, dynamic>> items) {
-    return GridView.builder(
-      padding: EdgeInsets.symmetric(horizontal: SiSpace.x6),
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 450,
-        mainAxisExtent: 180,
-        crossAxisSpacing: 0,
-        mainAxisSpacing: 0,
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(SiSpace.x6),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1400),
+          child: Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: SiRadius.rLg,
+              side: BorderSide(color: c.line),
+            ),
+            child: GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: EdgeInsets.all(SiSpace.x2),
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 450,
+                mainAxisExtent: 180,
+                crossAxisSpacing: 0,
+                mainAxisSpacing: 0,
+              ),
+              itemCount: items.length,
+              itemBuilder: (context, index) {
+                final item = items[index];
+                return _ContactGridTile(
+                  item: item,
+                  onEdit: () => _showContactForm(contact: item),
+                  onDelete: () => _deleteContact(item['id']),
+                );
+              },
+            ),
+          ),
+        ),
       ),
-      itemCount: items.length,
-      itemBuilder: (context, index) {
-        final item = items[index];
-        return _ContactGridTile(
-          item: item,
-          onEdit: () => _showContactForm(contact: item),
-          onDelete: () => _deleteContact(item['id']),
-        );
-      },
     );
   }
 }
