@@ -1404,6 +1404,8 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
         ],
       ),
     );
+  }
+
   Widget _buildTableUserSelector(SiColors c) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -1418,7 +1420,8 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
           value: _selectedUserId,
           isDense: true,
           icon: Icon(Icons.keyboard_arrow_down, color: c.ink3, size: 18),
-          style: TextStyle(fontSize: 13, color: c.ink, fontWeight: FontWeight.w500),
+          style:
+              TextStyle(fontSize: 13, color: c.ink, fontWeight: FontWeight.w500),
           items: _adminUserList.map((user) {
             final name =
                 '${user['nombre']} ${user['paterno']} ${user['materno'] ?? ''}'
@@ -1449,6 +1452,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
       ),
     );
   }
+
 
   @override
   Widget build(BuildContext context) {
