@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/services.dart';
 import 'dart:io';
+import 'colaborador_detail_page.dart';
 
 class CssiPage extends StatefulWidget {
   final String role;
@@ -22,6 +23,15 @@ class _CssiPageState extends State<CssiPage> {
   String _searchQuery = '';
   int _currentPage = 0;
   static const int _itemsPerPage = 10;
+
+  void _onViewCollaborator(Map<String, dynamic> item) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CollaboratorDetailPage(colab: item),
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -1145,6 +1155,7 @@ class _CssiPageState extends State<CssiPage> {
                 borderRadius: BorderRadius.circular(16),
                 side: BorderSide(color: Colors.grey[200]!)),
             child: ListTile(
+              onTap: () => _onViewCollaborator(item),
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               leading: CircleAvatar(
@@ -1305,6 +1316,7 @@ class _CssiPageState extends State<CssiPage> {
               buildStatusChip: _buildStatusChip,
               userDevices: _userDevices,
               screenWidth: screenWidth,
+              onView: _onViewCollaborator,
             ),
             rowsPerPage: filtered.isEmpty
                 ? 1
@@ -1410,7 +1422,10 @@ class _CssiDataSource extends DataTableSource {
     required this.buildStatusChip,
     required this.userDevices,
     required this.screenWidth,
+    required this.onView,
   });
+
+  final Function(Map<String, dynamic>) onView;
 
   @override
   DataRow? getRow(int index) {
@@ -1426,6 +1441,7 @@ class _CssiDataSource extends DataTableSource {
 
     return DataRow.byIndex(
       index: index,
+      onSelectChanged: (_) => onView(item),
       cells: [
         DataCell(
           SizedBox(
