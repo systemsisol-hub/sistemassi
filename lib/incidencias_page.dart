@@ -1232,7 +1232,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                               ? _formatDate(inc['fecha_regreso'])
                               : '---')),
                           DataCell(
-                            PopupMenuButton<String>(
+                           PopupMenuButton<String>(
                               tooltip: 'Cambiar estatus',
                               child: Container(
                                 padding: const EdgeInsets.symmetric(
@@ -1360,7 +1360,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                     label: Text('Estatus',
                         style: TextStyle(fontWeight: FontWeight.bold))),
                 DataColumn(
-                    label: Text('Doc',
+                    label: Text('',
                         style: TextStyle(fontWeight: FontWeight.bold))),
               ],
               source: _IncidenciasDataSource(
@@ -1619,9 +1619,11 @@ class _IncidenciasDataSource extends DataTableSource {
         ),
         DataCell(
           PopupMenuButton<String>(
-            icon: Icon(Icons.more_vert_rounded, color: theme.colorScheme.primary.withOpacity(0.7), size: 20),
+            icon: Icon(Icons.more_horiz_rounded,
+                color: theme.colorScheme.primary.withOpacity(0.7), size: 20),
             tooltip: 'Acciones',
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             elevation: 4,
             onSelected: (val) {
               if (val == 'EDIT') {
@@ -1635,7 +1637,8 @@ class _IncidenciasDataSource extends DataTableSource {
                 value: 'PDF',
                 child: Row(
                   children: [
-                    Icon(Icons.picture_as_pdf_outlined, size: 18, color: Colors.red[700]),
+                    Icon(Icons.picture_as_pdf_outlined,
+                        size: 18, color: Colors.red[700]),
                     const SizedBox(width: 12),
                     const Text('Descargar PDF', style: TextStyle(fontSize: 13)),
                   ],
@@ -1646,7 +1649,8 @@ class _IncidenciasDataSource extends DataTableSource {
                   value: 'EDIT',
                   child: Row(
                     children: [
-                      Icon(Icons.edit_outlined, size: 18, color: Colors.blue[700]),
+                      Icon(Icons.edit_outlined,
+                          size: 18, color: Colors.blue[700]),
                       const SizedBox(width: 12),
                       const Text('Editar', style: TextStyle(fontSize: 13)),
                     ],
@@ -1658,7 +1662,8 @@ class _IncidenciasDataSource extends DataTableSource {
                   value: 'APROBADA',
                   child: Row(
                     children: [
-                      const Icon(Icons.check_circle_outline, size: 18, color: Colors.green),
+                      const Icon(Icons.check_circle_outline,
+                          size: 18, color: Colors.green),
                       const SizedBox(width: 12),
                       const Text('Aprobar', style: TextStyle(fontSize: 13)),
                     ],
@@ -1668,7 +1673,8 @@ class _IncidenciasDataSource extends DataTableSource {
                   value: 'CANCELADA',
                   child: Row(
                     children: [
-                      const Icon(Icons.cancel_outlined, size: 18, color: Colors.red),
+                      const Icon(Icons.cancel_outlined,
+                          size: 18, color: Colors.red),
                       const SizedBox(width: 12),
                       const Text('Cancelar', style: TextStyle(fontSize: 13)),
                     ],
