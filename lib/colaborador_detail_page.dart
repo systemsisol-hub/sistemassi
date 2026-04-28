@@ -3,6 +3,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter/services.dart';
 import 'theme/si_theme.dart';
 
 class CollaboratorDetailPage extends StatefulWidget {
@@ -16,12 +17,15 @@ class CollaboratorDetailPage extends StatefulWidget {
 
 class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
   List<Map<String, dynamic>>? _assignedEquipment;
+  String? _scheduleName;
   bool _isLoadingEquipment = true;
+  bool _isLoadingSchedule = true;
 
   @override
   void initState() {
     super.initState();
     _fetchEquipment();
+    _fetchSchedule();
   }
 
   Future<void> _fetchEquipment() async {
@@ -49,11 +53,42 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
     }
   }
 
+  Future<void> _fetchSchedule() async {
+    try {
+      final scheduleId = widget.colab['horario'];
+      if (scheduleId == null || scheduleId.toString().isEmpty) {
+        if (mounted) setState(() => _isLoadingSchedule = false);
+        return;
+      }
+
+      // If it looks like an ID (numeric or UUID), fetch name
+      final data = await Supabase.instance.client
+          .from('schedules')
+          .select('name')
+          .eq('id', scheduleId)
+          .maybeSingle();
+      
+      if (mounted) {
+        setState(() {
+          _scheduleName = data?['name'];
+          _isLoadingSchedule = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching schedule: $e');
+      if (mounted) setState(() => _isLoadingSchedule = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = SiColors.of(context);
     final isDesktop = MediaQuery.of(context).size.width > 900;
     final colab = widget.colab;
+
+    final horarioDisplay = _isLoadingSchedule 
+      ? 'Cargando...' 
+      : (_scheduleName ?? colab['horario'] ?? '---');
 
     return Scaffold(
       backgroundColor: c.bg,
@@ -156,7 +191,7 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
                               _infoRow(context, Icons.group, 'Líder', colab['lider']),
                               _infoRow(context, Icons.person_pin, 'Gerente Reg.', colab['gerente_regional']),
                               _infoRow(context, Icons.supervisor_account, 'Director', colab['director']),
-                              _infoRow(context, Icons.schedule, 'Horario', colab['horario']),
+                              _infoRow(context, Icons.schedule, 'Horario', horarioDisplay),
                             ]),
                             const SizedBox(height: SiSpace.x4),
                             _buildInfoCard(context, 'Area RH', [
@@ -186,6 +221,7 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
                       _buildInfoCard(context, 'Datos Empresa', [
                         _infoRow(context, Icons.work, 'Puesto', colab['puesto']),
                         _infoRow(context, Icons.business, 'Empresa', colab['empresa']),
+                        _infoRow(context, Icons.schedule, 'Horario', horarioDisplay),
                       ]),
                     ],
                   ),
@@ -194,8 +230,9 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
                   const SizedBox(height: SiSpace.x4),
                   _buildInfoCard(context, 'Observaciones', [
                     Text(
-                      colab['observaciones'],
+                      colab['observaciones'].toString().replaceAll('\\n', '\n'),
                       style: TextStyle(fontSize: 13, color: c.ink2, height: 1.5),
+                      softWrap: true,
                     ),
                   ]),
                 ],
@@ -248,6 +285,8 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
                     _buildBadge(widget.colab['puesto'] ?? 'PUESTO NO ASIGNADO', c.brand, c.brandTint),
                     const SizedBox(width: 8),
                     _buildBadge('N° EMPLEADO: ${widget.colab['numero_empleado'] ?? '---'}', c.ink2, c.hover),
+                    const SizedBox(width: 8),
+                    _buildBadge('ANTIGÜEDAD: ${_calculateAntiguedad()}', c.warn, c.warnTint),
                   ],
                 ),
               ],
@@ -257,6 +296,49 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
         ],
       ),
     );
+  }
+
+  String _calculateAntiguedad() {
+    try {
+      final ingreso = widget.colab['fecha_ingreso'];
+      final reingreso = widget.colab['fecha_reingreso'];
+      final cambio = widget.colab['fecha_cambio'];
+
+      List<DateTime> dates = [];
+      if (ingreso != null && ingreso.toString().isNotEmpty) {
+        final d = DateTime.tryParse(ingreso.toString());
+        if (d != null) dates.add(d);
+      }
+      if (reingreso != null && reingreso.toString().isNotEmpty) {
+        final d = DateTime.tryParse(reingreso.toString());
+        if (d != null) dates.add(d);
+      }
+      if (cambio != null && cambio.toString().isNotEmpty) {
+        final d = DateTime.tryParse(cambio.toString());
+        if (d != null) dates.add(d);
+      }
+
+      if (dates.isEmpty) return '---';
+
+      // Get the most recent date
+      dates.sort((a, b) => b.compareTo(a));
+      final baseDate = dates.first;
+      final now = DateTime.now();
+      
+      final diff = now.difference(baseDate);
+      final years = (diff.inDays / 365).floor();
+      final months = ((diff.inDays % 365) / 30).floor();
+
+      if (years > 0) {
+        return '$years añ${years == 1 ? 'o' : 'os'}${months > 0 ? ', $months mes${months == 1 ? '' : 'es'}' : ''}';
+      } else if (months > 0) {
+        return '$months mes${months == 1 ? '' : 'es'}';
+      } else {
+        return '${diff.inDays} días';
+      }
+    } catch (e) {
+      return '---';
+    }
   }
 
   Widget _buildBadge(String label, Color color, Color bg) {
@@ -338,94 +420,158 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
   Future<void> _printFicha(BuildContext context) async {
     final doc = pw.Document();
     final colab = widget.colab;
+    final scheduleDisplay = _scheduleName ?? colab['horario'] ?? '---';
+    final brandColor = PdfColor.fromInt(0xFF344092);
+
+    // Load logo
+    pw.MemoryImage? logoImage;
+    try {
+      final logoData = await rootBundle.load('assets/sisolok.png');
+      logoImage = pw.MemoryImage(logoData.buffer.asUint8List());
+    } catch (e) {
+      debugPrint('Could not load logo: $e');
+    }
 
     doc.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(40),
         build: (pw.Context context) {
           return [
-            pw.Header(
-              level: 0,
-              child: pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('FICHA DEL COLABORADOR', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
-                  pw.Text('SISTEMASSI', style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey)),
-                ],
-              ),
-            ),
-            pw.SizedBox(height: 20),
+            // Header with Logo and Title
             pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
+                if (logoImage != null)
+                  pw.Container(
+                    width: 100,
+                    child: pw.Image(logoImage),
+                  )
+                else
+                  pw.Text('SISTEMASSI', style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: brandColor)),
                 pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
                   children: [
-                    pw.Text('${colab['nombre']} ${colab['paterno']} ${colab['materno']}',
-                        style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold)),
-                    pw.Text('N° Empleado: ${colab['numero_empleado']} | Puesto: ${colab['puesto']}'),
+                    pw.Text('FICHA DE IDENTIFICACIÓN', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: brandColor)),
+                    pw.Text('DEPARTAMENTO DE RECURSOS HUMANOS', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+                    pw.Text(DateTime.now().toString().split(' ').first, style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey500)),
                   ],
                 ),
               ],
             ),
             pw.SizedBox(height: 20),
-            _pwSection('DATOS PERSONALES', [
-              ['Género', colab['genero']],
-              ['Fecha Nacimiento', colab['fecha_nacimiento']],
-              ['Lugar Nacimiento', colab['lugar_nacimiento']],
-              ['RFC', colab['rfc']],
-              ['CURP', colab['curp']],
-              ['IMSS', colab['imss']],
-              ['Talla', colab['talla']],
-            ]),
-            _pwSection('DATOS EMPRESA', [
-              ['Tipo', colab['empresa_tipo']],
-              ['Área', colab['area']],
-              ['Puesto', colab['puesto']],
-              ['Ubicación', colab['ubicacion']],
-              ['Empresa', colab['empresa']],
-              ['Jefe Inmediato', colab['jefe_inmediato']],
-              ['Líder', colab['lider']],
-              ['Gerente Regional', colab['gerente_regional']],
-              ['Director', colab['director']],
-              ['Horario', colab['horario']],
-            ]),
-            _pwSection('DATOS BANCARIOS', [
-              ['Banco', colab['banco']],
-              ['Cuenta', colab['cuenta']],
-              ['Clabe', colab['clabe']],
-            ]),
-            _pwSection('AREA RH', [
-              ['Recluta', colab['recluta']],
-              ['Reclutador', colab['reclutador']],
-              ['Fuente', colab['fuente_reclutamiento']],
-              ['Fecha Ingreso', colab['fecha_ingreso']],
-              ['Fecha Reingreso', colab['fecha_reingreso']],
-              ['Fecha Cambio', colab['fecha_cambio']],
-            ]),
-            if (_assignedEquipment != null && _assignedEquipment!.isNotEmpty)
-              _pwSection('EQUIPO ASIGNADO', _assignedEquipment!.map((e) => [
-                e['tipo'] ?? 'Equipo',
-                '${e['marca'] ?? ''} ${e['modelo'] ?? ''} (S/N: ${e['n_s'] ?? 'N/A'})'
-              ]).toList()),
             
-             _pwSection('DOMICILIO Y CONTACTO', [
+            // Name and Main Info Header
+            pw.Container(
+              padding: const pw.EdgeInsets.all(15),
+              decoration: pw.BoxDecoration(
+                color: PdfColor.fromInt(0xFFEFF1FA),
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+              ),
+              child: pw.Row(
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text('${colab['nombre']} ${colab['paterno']} ${colab['materno']}'.toUpperCase(),
+                          style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold, color: brandColor)),
+                      pw.SizedBox(height: 4),
+                      pw.Row(
+                        children: [
+                          _pwBadge('N° EMPLEADO: ${colab['numero_empleado']}', PdfColors.grey800, PdfColors.white),
+                          pw.SizedBox(width: 10),
+                          _pwBadge('PUESTO: ${colab['puesto'] ?? '---'}', PdfColors.grey800, PdfColors.white),
+                          pw.SizedBox(width: 10),
+                          _pwBadge('ANTIGÜEDAD: ${_calculateAntiguedad()}', PdfColor.fromInt(0xFFD99531), PdfColor.fromInt(0xFFFCF4E4)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 10),
+
+            // Data Grid
+            pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Expanded(
+                  child: pw.Column(
+                    children: [
+                      _pwCard('DATOS PERSONALES', [
+                        ['Género', colab['genero']],
+                        ['Fecha Nacimiento', colab['fecha_nacimiento']],
+                        ['Lugar Nacimiento', colab['lugar_nacimiento']],
+                        ['RFC', colab['rfc']],
+                        ['CURP', colab['curp']],
+                        ['IMSS', colab['imss']],
+                        ['Talla', colab['talla']],
+                      ], brandColor),
+                      _pwCard('DATOS BANCARIOS', [
+                        ['Banco', colab['banco']],
+                        ['Cuenta', colab['cuenta']],
+                        ['Clabe', colab['clabe']],
+                      ], brandColor),
+                    ],
+                  ),
+                ),
+                pw.SizedBox(width: 10),
+                pw.Expanded(
+                  child: pw.Column(
+                    children: [
+                      _pwCard('DATOS EMPRESA', [
+                        ['Tipo', colab['empresa_tipo']],
+                        ['Área', colab['area']],
+                        ['Ubicación', colab['ubicacion']],
+                        ['Empresa', colab['empresa']],
+                        ['Jefe Inmediato', colab['jefe_inmediato']],
+                        ['Líder', colab['lider']],
+                        ['Gerente Reg.', colab['gerente_regional']],
+                        ['Director', colab['director']],
+                        ['Horario', scheduleDisplay],
+                      ], brandColor),
+                      _pwCard('AREA RH', [
+                        ['Recluta', colab['recluta']],
+                        ['Reclutador', colab['reclutador']],
+                        ['Fuente', colab['fuente_reclutamiento']],
+                        ['Ingreso', colab['fecha_ingreso']],
+                      ], brandColor),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            
+            _pwCard('DOMICILIO Y CONTACTO', [
               ['Calle', '${colab['calle']} ${colab['no_calle']}'],
               ['Colonia', colab['colonia']],
-              ['Municipio', colab['municipio_alcaldia']],
               ['Estado', colab['estado_federal']],
-              ['C.P.', colab['codigo_postal']],
               ['Celular', colab['celular']],
               ['Correo', colab['correo_personal']],
-            ]),
-            if (colab['observaciones'] != null)
-              pw.Padding(
-                padding: const pw.EdgeInsets.only(top: 20),
+            ], brandColor),
+
+            if (_assignedEquipment != null && _assignedEquipment!.isNotEmpty)
+              _pwCard('EQUIPO ASIGNADO', _assignedEquipment!.map((e) => [
+                e['tipo'] ?? 'Equipo',
+                '${e['marca'] ?? ''} ${e['modelo'] ?? ''} (S/N: ${e['n_s'] ?? 'N/A'})'
+              ]).toList(), brandColor),
+
+            if (colab['observaciones'] != null && colab['observaciones'].toString().isNotEmpty)
+              pw.Container(
+                width: double.infinity,
+                padding: const pw.EdgeInsets.all(10),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: PdfColors.grey200),
+                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+                ),
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Text('OBSERVACIONES', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                    pw.Text('OBSERVACIONES', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9, color: brandColor)),
                     pw.SizedBox(height: 5),
-                    pw.Text(colab['observaciones'], style: const pw.TextStyle(fontSize: 10)),
+                    pw.Text(colab['observaciones'].toString().replaceAll('\\n', '\n'), style: const pw.TextStyle(fontSize: 8)),
                   ],
                 ),
               ),
@@ -434,29 +580,46 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
       ),
     );
 
-    await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => doc.save());
+    await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => doc.save(), name: 'Ficha_${colab['numero_empleado']}.pdf');
   }
 
-  pw.Widget _pwSection(String title, List<List<dynamic>> rows) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.only(top: 15),
+  pw.Widget _pwCard(String title, List<List<dynamic>> rows, PdfColor brandColor) {
+    return pw.Container(
+      margin: const pw.EdgeInsets.only(bottom: 10),
+      padding: const pw.EdgeInsets.all(10),
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: PdfColors.grey200),
+        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+      ),
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          pw.Text(title, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)),
-          pw.Divider(thickness: 0.5),
+          pw.Text(title, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: brandColor)),
+          pw.SizedBox(height: 5),
           pw.Table(
             children: rows.map((r) {
               return pw.TableRow(
                 children: [
-                  pw.Padding(padding: const pw.EdgeInsets.all(2), child: pw.Text(r[0].toString(), style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700))),
-                  pw.Padding(padding: const pw.EdgeInsets.all(2), child: pw.Text(r[1]?.toString() ?? '---', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold))),
+                  pw.Padding(padding: const pw.EdgeInsets.symmetric(vertical: 2), child: pw.Text(r[0].toString(), style: const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey700))),
+                  pw.Padding(padding: const pw.EdgeInsets.symmetric(vertical: 2), child: pw.Text(r[1]?.toString() ?? '---', style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold))),
                 ],
               );
             }).toList(),
           ),
         ],
       ),
+    );
+  }
+
+  pw.Widget _pwBadge(String text, PdfColor fg, PdfColor bg) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: pw.BoxDecoration(
+        color: bg,
+        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+        border: bg == PdfColors.white ? pw.Border.all(color: PdfColors.grey300) : null,
+      ),
+      child: pw.Text(text, style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold, color: fg)),
     );
   }
 }
