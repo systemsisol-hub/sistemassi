@@ -276,10 +276,6 @@ class _CssiPageState extends State<CssiPage> {
     final cuentaCtrl = TextEditingController(text: item?['cuenta']);
     final clabeCtrl = TextEditingController(text: item?['clabe']);
     final empresaCtrl = TextEditingController(text: item?['empresa']);
-    final jefeCtrl = TextEditingController(text: item?['jefe_inmediato']);
-    final liderCtrl = TextEditingController(text: item?['lider']);
-    final gerenteCtrl = TextEditingController(text: item?['gerente_regional']);
-    final directorCtrl = TextEditingController(text: item?['director']);
     final reclutadorCtrl = TextEditingController(text: item?['reclutador']);
     final fuenteEspecCtrl =
         TextEditingController(text: item?['fuente_reclutamiento_espec']);
@@ -311,6 +307,10 @@ class _CssiPageState extends State<CssiPage> {
     String? area = item?['area'];
     String? puesto = item?['puesto'];
     String? ubicacion = item?['ubicacion'];
+    String? jefeInmediato = item?['jefe_inmediato'];
+    String? liderValue = item?['lider'];
+    String? gerenteRegional = item?['gerente_regional'];
+    String? directorValue = item?['director'];
     XFile? pickedFile;
     String? currentFotoUrl = item?['foto_url'];
 
@@ -332,19 +332,6 @@ class _CssiPageState extends State<CssiPage> {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (snapshot.hasError) {
-            return DropdownButtonFormField<String>(
-              value: horario,
-              decoration: const InputDecoration(
-                labelText: 'Horario',
-                prefixIcon: Icon(Icons.schedule),
-              ),
-              items: const [
-                DropdownMenuItem(value: null, child: Text('Sin horario')),
-              ],
-              onChanged: (v) => setDialogState(() => horario = v),
-            );
-          }
           final schedules = snapshot.data ?? [];
           return DropdownButtonFormField<String>(
             value: horario,
@@ -363,6 +350,59 @@ class _CssiPageState extends State<CssiPage> {
           );
         },
       );
+
+      // FutureBuilder for active collaborators
+      Widget supervisorDropdowns(StateSetter setDialogState) {
+        return FutureBuilder<List<String>>(
+          future: Supabase.instance.client
+              .from('profiles')
+              .select('nombre, paterno, materno')
+              .eq('status_rh', 'ACTIVO')
+              .order('nombre')
+              .then((data) => (data as List).map((e) {
+                    final n = e['nombre'] ?? '';
+                    final p = e['paterno'] ?? '';
+                    final m = e['materno'] ?? '';
+                    return '$n $p $m'.trim().toUpperCase();
+                  }).toList()),
+          builder: (context, snapshot) {
+            final list = snapshot.data ?? [];
+            final items = [
+              const DropdownMenuItem<String>(value: null, child: Text('Ninguno')),
+              ...list.map((e) => DropdownMenuItem(value: e, child: Text(e)))
+            ];
+
+            return Column(
+              children: [
+                fieldColumn(DropdownButtonFormField<String>(
+                  value: list.contains(jefeInmediato) ? jefeInmediato : null,
+                  decoration: const InputDecoration(labelText: 'Jefe Inmediato'),
+                  items: items,
+                  onChanged: (v) => setDialogState(() => jefeInmediato = v),
+                )),
+                fieldColumn(DropdownButtonFormField<String>(
+                  value: list.contains(liderValue) ? liderValue : null,
+                  decoration: const InputDecoration(labelText: 'Líder'),
+                  items: items,
+                  onChanged: (v) => setDialogState(() => liderValue = v),
+                )),
+                fieldColumn(DropdownButtonFormField<String>(
+                  value: list.contains(gerenteRegional) ? gerenteRegional : null,
+                  decoration: const InputDecoration(labelText: 'Gerente Regional'),
+                  items: items,
+                  onChanged: (v) => setDialogState(() => gerenteRegional = v),
+                )),
+                fieldColumn(DropdownButtonFormField<String>(
+                  value: list.contains(directorValue) ? directorValue : null,
+                  decoration: const InputDecoration(labelText: 'Director'),
+                  items: items,
+                  onChanged: (v) => setDialogState(() => directorValue = v),
+                )),
+              ],
+            );
+          },
+        );
+      }
 
       final col1 = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -949,19 +989,7 @@ class _CssiPageState extends State<CssiPage> {
           fieldColumn(TextField(
               controller: empresaCtrl,
               decoration: const InputDecoration(labelText: 'Empresa'))),
-          fieldColumn(TextField(
-              controller: jefeCtrl,
-              decoration: const InputDecoration(labelText: 'Jefe Inmediato'))),
-          fieldColumn(TextField(
-              controller: liderCtrl,
-              decoration: const InputDecoration(labelText: 'Líder'))),
-          fieldColumn(TextField(
-              controller: gerenteCtrl,
-              decoration:
-                  const InputDecoration(labelText: 'Gerente Regional'))),
-          fieldColumn(TextField(
-              controller: directorCtrl,
-              decoration: const InputDecoration(labelText: 'Director'))),
+          supervisorDropdowns(setDialogState),
           fieldColumn(scheduleDropdown),
         ],
       );
@@ -1162,10 +1190,10 @@ class _CssiPageState extends State<CssiPage> {
         'puesto': puesto,
         'ubicacion': ubicacion,
         'empresa': toUpper(empresaCtrl.text),
-        'jefe_inmediato': toUpper(jefeCtrl.text),
-        'lider': toUpper(liderCtrl.text),
-        'gerente_regional': toUpper(gerenteCtrl.text),
-        'director': toUpper(directorCtrl.text),
+        'jefe_inmediato': jefeInmediato,
+        'lider': liderValue,
+        'gerente_regional': gerenteRegional,
+        'director': directorValue,
         'lugar_nacimiento': lugarNacimiento,
         'empresa_tipo': tipoColaborador,
         'recluta': reclutaOption,
