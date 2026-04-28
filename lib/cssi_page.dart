@@ -634,17 +634,19 @@ class _CssiPageState extends State<CssiPage> {
                     controller: clabeCtrl,
                     decoration: const InputDecoration(labelText: 'Clabe'))),
           ])),
-        ],
-      );
-
-      final col3 = Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+          const SizedBox(height: 24),
           _sectionTitle('Datos Empresa'),
-          fieldColumn(scheduleDropdown),
-          fieldColumn(TextField(
-              controller: empresaCtrl,
-              decoration: const InputDecoration(labelText: 'Empresa'))),
+          fieldColumn(DropdownButtonFormField<String>(
+              value: tipoColaborador,
+              decoration: const InputDecoration(labelText: 'Tipo'),
+              items: [
+                'ASIMILADOS',
+                'BACK OFFICE',
+                'MANTENIMIENTO',
+                'MERCADO SECUNDARIO',
+                'SI SOL'
+              ].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              onChanged: (v) => setDialogState(() => tipoColaborador = v))),
           fieldColumn(TextField(
               controller: areaCtrl,
               decoration: const InputDecoration(labelText: 'Área'))),
@@ -654,6 +656,9 @@ class _CssiPageState extends State<CssiPage> {
           fieldColumn(TextField(
               controller: ubicacionCtrl,
               decoration: const InputDecoration(labelText: 'Ubicación'))),
+          fieldColumn(TextField(
+              controller: empresaCtrl,
+              decoration: const InputDecoration(labelText: 'Empresa'))),
           fieldColumn(TextField(
               controller: jefeCtrl,
               decoration: const InputDecoration(labelText: 'Jefe Inmediato'))),
@@ -667,19 +672,13 @@ class _CssiPageState extends State<CssiPage> {
           fieldColumn(TextField(
               controller: directorCtrl,
               decoration: const InputDecoration(labelText: 'Director'))),
-          const SizedBox(height: 24),
-          fieldColumn(DropdownButtonFormField<String>(
-              value: tipoColaborador,
-              decoration: const InputDecoration(labelText: 'Tipo'),
-              items: [
-                'ASIMILADOS',
-                'BACK OFFICE',
-                'MANTENIMIENTO',
-                'MERCADO SECUNDARIO',
-                'SI SOL'
-              ].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-              onChanged: (v) => setDialogState(() => tipoColaborador = v))),
-          const SizedBox(height: 24),
+          fieldColumn(scheduleDropdown),
+        ],
+      );
+
+      final col3 = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
           _sectionTitle('Area RH'),
           fieldColumn(DropdownButtonFormField<String>(
               value: reclutaOption,
