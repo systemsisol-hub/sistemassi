@@ -476,6 +476,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
         '${base.day.toString().padLeft(2, '0')}/${base.month.toString().padLeft(2, '0')}/${base.year}';
 
     return Column(
+      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _buildAntiguedadCardContent(
@@ -630,6 +631,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
       ),
       clipBehavior: Clip.hardEdge,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // Title (Fixed)
@@ -1397,8 +1399,8 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
           ],
           dataRowMaxHeight: 54,
           dataRowMinHeight: 54,
-          columnSpacing: 30,
-          horizontalMargin: 24,
+          columnSpacing: 20,
+          horizontalMargin: 16,
           columns: [
             DataColumn(
                 label: Text('PERIODO',
@@ -1541,7 +1543,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
               ),
             )
           : SingleChildScrollView(
-              padding: EdgeInsets.all(SiSpace.x6),
+              padding: EdgeInsets.symmetric(horizontal: SiSpace.x6, vertical: SiSpace.x4),
               child: Column(
                 children: [
                   // Admin Pending Section
