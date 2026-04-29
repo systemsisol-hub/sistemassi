@@ -1024,88 +1024,104 @@ class _IssiPageState extends State<IssiPage> {
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
                   side: BorderSide(color: Colors.grey[200]!)),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 24, vertical: 20),
-                    child: Row(
-                      children: [
-                        const Text('ISSI - Inventario',
-                            style: TextStyle(
-                                fontSize: 18, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                  ),
-                  const Divider(height: 1),
-                  Theme(
-                    data: theme.copyWith(
-                      cardColor: Colors.transparent,
-                    ),
-                    child: PaginatedDataTable(
-                      columns: const [
-                        DataColumn(
-                            label: Text('Usuario',
-                                style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(
-                            label: Text('Ubicación',
-                                style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(
-                            label: Text('Tipo',
-                                style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(
-                            label: Text('Marca',
-                                style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(
-                            label: Text('Serie',
-                                style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(
-                            label: Text('Condición',
-                                style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(
-                            label: Text('Acciones',
-                                style: TextStyle(fontWeight: FontWeight.bold))),
-                      ],
-                      source: _IssiDataSource(
-                        items: filtered,
-                        theme: theme,
-                        isAdmin: _isAdmin,
-                        onEdit: (item) => _showItemForm(item: item),
-                        onDelete: (id) => _deleteItem(id),
-                        buildConditionChip: (condicion) {
-                          final c = condicion ?? '';
-                          return Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: _getColorForCondition(c).withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                  color: _getColorForCondition(c)
-                                      .withOpacity(0.5)),
-                            ),
-                            child: Text(
-                              c.toUpperCase(),
-                              style: TextStyle(
-                                  color: _getColorForCondition(c),
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold),
-                            ),
-                          );
-                        },
-                        getIconForType: _getIconForType,
+              child: Theme(
+                data: theme.copyWith(
+                  cardColor: Colors.transparent,
+                ),
+                child: PaginatedDataTable(
+                  dataRowMaxHeight: 54,
+                  dataRowMinHeight: 54,
+                  columnSpacing: 20,
+                  horizontalMargin: 24,
+                  header: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 350),
+                    child: SizedBox(
+                      height: 38,
+                      child: TextField(
+                        controller: _searchController,
+                        decoration: InputDecoration(
+                          hintText: 'Buscar marca, modelo, ubicación, usuario...',
+                          hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                          prefixIcon: const Icon(Icons.search, size: 18),
+                          suffixIcon: _searchQuery.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear, size: 16),
+                                  onPressed: () {
+                                    _searchController.clear();
+                                    setState(() => _searchQuery = '');
+                                  },
+                                )
+                              : null,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: theme.colorScheme.primary)),
+                          filled: true,
+                          fillColor: Colors.white,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                        ),
+                        style: const TextStyle(fontSize: 13),
+                        onChanged: (value) => setState(() => _searchQuery = value),
                       ),
-                      rowsPerPage: filtered.isEmpty
-                          ? 1
-                          : (filtered.length > 10 ? 10 : filtered.length),
-                      showCheckboxColumn: false,
-                      horizontalMargin: 16,
-                      columnSpacing: 16,
-                      dataRowMinHeight: 40,
                     ),
                   ),
-                ],
+                  actions: [
+                    if (_isAdmin)
+                      SizedBox(
+                        height: 38,
+                        child: ElevatedButton.icon(
+                          onPressed: () => _showItemForm(),
+                          icon: const Icon(Icons.add, size: 16),
+                          label: const Text('Inventario', style: TextStyle(fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: theme.colorScheme.primary,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                          ),
+                        ),
+                      ),
+                  ],
+                  columns: [
+                    DataColumn(label: SizedBox(width: screenWidth * 0.2, child: Text('USUARIO / UBICACIÓN', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+                    DataColumn(label: SizedBox(width: screenWidth * 0.15, child: Text('EQUIPO', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+                    DataColumn(label: SizedBox(width: screenWidth * 0.1, child: Text('MARCA', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+                    DataColumn(label: SizedBox(width: screenWidth * 0.1, child: Text('SERIE', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+                    DataColumn(label: SizedBox(width: screenWidth * 0.1, child: Text('CONDICIÓN', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+                    const DataColumn(label: SizedBox()), // Acciones
+                  ],
+                  source: _IssiDataSource(
+                    items: filtered,
+                    theme: theme,
+                    isAdmin: _isAdmin,
+                    onEdit: (item) => _showItemForm(item: item),
+                    onDelete: (id) => _deleteItem(id),
+                    buildConditionChip: (condicion) {
+                      final c = condicion ?? '';
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: _getColorForCondition(c).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: _getColorForCondition(c).withOpacity(0.5)),
+                        ),
+                        child: Text(
+                          c.toUpperCase(),
+                          style: TextStyle(
+                              color: _getColorForCondition(c),
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold),
+                        ),
+                      );
+                    },
+                    getIconForType: _getIconForType,
+                    screenWidth: screenWidth,
+                  ),
+                  rowsPerPage: filtered.isEmpty
+                      ? 1
+                      : (filtered.length > 10 ? 10 : filtered.length),
+                  showCheckboxColumn: false,
+                ),
               ),
             ),
           ),
@@ -1123,14 +1139,19 @@ class _IssiPageState extends State<IssiPage> {
       body: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  _buildControls(theme),
-                ],
-              ),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                if (constraints.maxWidth > 800) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      _buildControls(theme),
+                    ],
+                  ),
+                );
+              },
             ),
           ),
           _isLoading
@@ -1545,6 +1566,8 @@ class _IssiDataSource extends DataTableSource {
   final Widget Function(String) buildConditionChip;
   final IconData Function(String) getIconForType;
 
+  final double screenWidth;
+
   _IssiDataSource({
     required this.items,
     required this.theme,
@@ -1553,6 +1576,7 @@ class _IssiDataSource extends DataTableSource {
     required this.onDelete,
     required this.buildConditionChip,
     required this.getIconForType,
+    required this.screenWidth,
   });
 
   @override
@@ -1563,46 +1587,87 @@ class _IssiDataSource extends DataTableSource {
     return DataRow.byIndex(
       index: index,
       cells: [
-        DataCell(Text(item['usuario_nombre']?.toString() ?? '---')),
-        DataCell(Text(item['ubicacion']?.toString() ?? '---')),
         DataCell(
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(getIconForType(item['tipo']?.toString() ?? ''),
-                  size: 20, color: theme.colorScheme.primary),
-              const SizedBox(width: 8),
-              Text(item['tipo']?.toString() ?? '---'),
-            ],
+          SizedBox(
+            width: screenWidth * 0.2,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  item['usuario_nombre']?.toString().toUpperCase() ?? 'SIN USUARIO',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  item['ubicacion']?.toString() ?? '---',
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ),
+        DataCell(
+          SizedBox(
+            width: screenWidth * 0.15,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Row(
+                  children: [
+                    Icon(getIconForType(item['tipo']?.toString() ?? ''),
+                        size: 16, color: theme.colorScheme.primary),
+                    const SizedBox(width: 8),
+                    Text(
+                      item['tipo']?.toString() ?? '---',
+                      style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
+                    ),
+                  ],
+                ),
+                Text(
+                  item['modelo']?.toString() ?? '---',
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
         ),
         DataCell(Text(item['marca']?.toString() ?? '---')),
         DataCell(Text(item['n_s']?.toString() ?? '---')),
         DataCell(buildConditionChip(item['condicion']?.toString() ?? '')),
         DataCell(
-          isAdmin
-              ? PopupMenuButton<String>(
-                  onSelected: (value) {
-                    if (value == 'edit') onEdit(item);
-                    if (value == 'delete') onDelete(item['id']);
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                        value: 'edit',
-                        child: ListTile(
-                            leading: Icon(Icons.edit, color: Colors.blue),
-                            title: Text('Editar'),
-                            dense: true)),
-                    const PopupMenuItem(
-                        value: 'delete',
-                        child: ListTile(
-                            leading: Icon(Icons.delete, color: Colors.red),
-                            title: Text('Eliminar',
-                                style: TextStyle(color: Colors.red)),
-                            dense: true)),
-                  ],
-                )
-              : const SizedBox.shrink(),
+          Align(
+            alignment: Alignment.centerRight,
+            child: isAdmin
+                ? PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_horiz, color: Colors.grey),
+                    tooltip: 'Acciones',
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    elevation: 4,
+                    onSelected: (value) {
+                      if (value == 'edit') onEdit(item);
+                      if (value == 'delete') onDelete(item['id']);
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                          value: 'edit',
+                          child: ListTile(
+                              leading: Icon(Icons.edit_outlined, color: Colors.blue),
+                              title: Text('Editar'),
+                              dense: true)),
+                      const PopupMenuItem(
+                          value: 'delete',
+                          child: ListTile(
+                              leading: Icon(Icons.delete_outline, color: Colors.red),
+                              title: Text('Eliminar', style: TextStyle(color: Colors.red)),
+                              dense: true)),
+                    ],
+                  )
+                : const SizedBox.shrink(),
+          ),
         ),
       ],
     );
