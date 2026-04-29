@@ -3,10 +3,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'schedules_page.dart';
 import 'dart:typed_data';
 import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:url_launcher/url_launcher.dart';
+import 'attendance_admin_page.dart';
 import 'checador_camera_native.dart'
     if (dart.library.html) 'checador_web_impl.dart' as camera_impl;
 import 'checador_camera_preview_native.dart'
@@ -14,7 +16,15 @@ import 'checador_camera_preview_native.dart'
     as camera_preview;
 
 class ChecadorPage extends StatefulWidget {
-  const ChecadorPage({super.key});
+  final bool isAdmin;
+  final String role;
+  final Map<String, dynamic> permissions;
+  const ChecadorPage({
+    super.key,
+    this.isAdmin = false,
+    this.role = 'user',
+    this.permissions = const {},
+  });
 
   @override
   State<ChecadorPage> createState() => _ChecadorPageState();
@@ -323,47 +333,43 @@ class _ChecadorPageState extends State<ChecadorPage> {
                         ),
                         if (isDesktop) ...[
                           const SizedBox(width: 32),
-                          // Columna Derecha: Historial
+                          // Columna Derecha: Historial en Tarjeta
                           Expanded(
                             flex: 4,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Padding(
-                                  padding: EdgeInsets.only(left: 8, bottom: 16),
-                                  child: Text(
-                                    'HISTORIAL RECIENTE',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 1,
-                                      color: Colors.grey,
-                                    ),
-                                  ),
-                                ),
-                                _buildHistoryList(theme),
-                              ],
-                            ),
+                            child: _buildHistoryCard(theme),
                           ),
                         ],
                       ],
                     ),
                     if (!isDesktop) ...[
                       const SizedBox(height: 32),
+                      _buildHistoryCard(theme),
+                    ],
+                    if (widget.isAdmin) ...[
+                      const SizedBox(height: 48),
+                      const Divider(),
+                      const SizedBox(height: 32),
                       const Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
-                          'HISTORIAL RECIENTE',
+                          'PANEL DE ADMINISTRACIÓN',
                           style: TextStyle(
-                            fontSize: 14,
+                            fontSize: 18,
                             fontWeight: FontWeight.bold,
-                            letterSpacing: 1,
-                            color: Colors.grey,
+                            letterSpacing: 1.2,
+                            color: Colors.black87,
                           ),
                         ),
                       ),
-                      const SizedBox(height: 16),
-                      _buildHistoryList(theme),
+                      const SizedBox(height: 24),
+                      // Usamos AttendanceAdminPage que ya tiene todo el layout de admin
+                      SizedBox(
+                        height: 800,
+                        child: AttendanceAdminPage(
+                          role: widget.role,
+                          permissions: widget.permissions,
+                        ),
+                      ),
                     ],
                   ],
                 ),
@@ -551,20 +557,57 @@ class _ChecadorPageState extends State<ChecadorPage> {
     );
   }
 
+  Widget _buildHistoryCard(ThemeData theme) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+        side: BorderSide(color: Colors.grey[200]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+            child: Row(
+              children: [
+                Icon(Icons.history, size: 20, color: theme.colorScheme.primary),
+                const SizedBox(width: 12),
+                const Text(
+                  'HISTORIAL RECIENTE',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          // Altura fija para mostrar aprox 5 registros (cada registro mide ~90px)
+          SizedBox(
+            height: 500,
+            child: _buildHistoryList(theme),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildHistoryList(ThemeData theme) {
     if (_history.isEmpty) {
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(32),
-          child: Text('No hay registros previos',
-              style: TextStyle(color: Colors.grey)),
+          child: Text('No hay registros previos', style: TextStyle(color: Colors.grey)),
         ),
       );
     }
 
     return ListView.separated(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(16),
       itemCount: _history.length,
       separatorBuilder: (context, index) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
@@ -572,23 +615,23 @@ class _ChecadorPageState extends State<ChecadorPage> {
         final date = DateTime.parse(item['date']);
         return Card(
           elevation: 0,
+          color: Colors.grey[50]!,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
             side: BorderSide(color: Colors.grey[100]!),
           ),
           child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             leading: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
                   DateFormat('dd').format(date),
-                  style: const TextStyle(
-                      fontSize: 18, fontWeight: FontWeight.bold),
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 Text(
                   DateFormat('MMM').format(date).toUpperCase(),
-                  style:
-                      TextStyle(fontSize: 10, color: theme.colorScheme.primary),
+                  style: TextStyle(fontSize: 10, color: theme.colorScheme.primary),
                 ),
               ],
             ),
@@ -630,11 +673,9 @@ class _ChecadorPageState extends State<ChecadorPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 4),
-                Text(
-                  item['validated'] == true
-                      ? 'Validado ✅'
-                      : 'Pendiente (GPS capturado 📍)',
-                  style: const TextStyle(fontSize: 12),
+                const Text(
+                  'Registro capturado (GPS activo 📍)',
+                  style: TextStyle(fontSize: 12),
                 ),
                 if (item['lat'] != null && item['lng'] != null) ...[
                   const SizedBox(height: 4),

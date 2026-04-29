@@ -22,6 +22,7 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
   bool _isLoading = true;
   List<Map<String, dynamic>> _allRecords = [];
   final _supabase = Supabase.instance.client;
+  String _searchQuery = '';
   final GlobalKey<SchedulesPageState> _schedulesKey =
       GlobalKey<SchedulesPageState>();
 
@@ -195,176 +196,72 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
   }
 
   Widget _buildList(ThemeData theme) {
-    if (_allRecords.isEmpty) {
-      return const Center(child: Text('No se encontraron registros.'));
-    }
+    final screenWidth = MediaQuery.of(context).size.width;
+    final filteredRecords = _allRecords.where((rec) {
+      final name = (rec['profiles']?['full_name'] ?? '').toString().toLowerCase();
+      final date = (rec['date'] ?? '').toString().toLowerCase();
+      return name.contains(_searchQuery.toLowerCase()) || date.contains(_searchQuery.toLowerCase());
+    }).toList();
 
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(16),
-      itemCount: _allRecords.length,
-      itemBuilder: (context, index) {
-        final rec = _allRecords[index];
-        final name = rec['profiles']?['full_name'] ?? 'Usuario Desconocido';
-        final dateStr = rec['date'];
-        final recordDate = DateTime.parse(dateStr);
-        final checkInStr = rec['check_in'];
-
-        // Robustez: Manejar respuesta de Supabase (Mapa o Lista)
-        final schedData = rec['profiles']?['schedules'];
-        final Map<String, dynamic>? sched =
-            (schedData is List && schedData.isNotEmpty)
-                ? schedData[0] as Map<String, dynamic>
-                : (schedData is Map<String, dynamic> ? schedData : null);
-
-        final List<dynamic> rules =
-            (sched != null && sched['rules'] != null) ? sched['rules'] : [];
-
-        String statusText = 'Pendiente';
-        Color statusColor = Colors.grey;
-
-        // dayOfWeek: 1 (Mon) to 7 (Sun) in Dart. Convert to 0-6 (0=Sun, 1=Mon...).
-        final dayIndex = recordDate.weekday % 7;
-
-        // Buscar regla de ENTRADA para este día
-        final entryRule = rules.firstWhere(
-          (r) => r['day'] == dayIndex && r['type'] == 'ENTRADA',
-          orElse: () => null,
-        );
-
-        if (checkInStr != null) {
-          final checkInLocal = DateTime.parse(checkInStr).toLocal();
-
-          if (entryRule != null) {
-            final workStartStr = entryRule['time'] ?? '09:00:00';
-            final tolerance = entryRule['tol'] ?? 10;
-
-            final parts = workStartStr.split(':');
-            final workStart = DateTime(
-              recordDate.year,
-              recordDate.month,
-              recordDate.day,
-              int.parse(parts[0]),
-              int.parse(parts[1]),
-            );
-
-            if (checkInLocal
-                .isAfter(workStart.add(Duration(minutes: tolerance)))) {
-              statusText = 'RETARDO';
-              statusColor = Colors.orange;
-            } else {
-              statusText = 'A TIEMPO';
-              statusColor = Colors.green;
-            }
-          } else {
-            // Sin regla específica, marcamos como VALIDADO
-            statusText = 'VALIDADO';
-            statusColor = theme.colorScheme.primary;
-          }
-        } else {
-          // Si es un día pasado y no hay check_in, es FALTA
-          final now = DateTime.now();
-          final today = DateTime(now.year, now.month, now.day);
-          if (recordDate.isBefore(today)) {
-            statusText = 'FALTA';
-            statusColor = Colors.red;
-          }
-        }
-
-        return Card(
-          margin: const EdgeInsets.only(bottom: 12),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: statusColor.withOpacity(0.3), width: 2),
-          ),
-          child: ExpansionTile(
-            leading: CircleAvatar(
-              backgroundColor: statusColor.withOpacity(0.1),
-              child: Text(name[0].toUpperCase(),
-                  style: TextStyle(
-                      color: statusColor, fontWeight: FontWeight.bold)),
-            ),
-            title: Row(
-              children: [
-                Expanded(
-                    child: Text(name,
-                        style: const TextStyle(fontWeight: FontWeight.bold))),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    statusText,
-                    style: TextStyle(
-                        color: statusColor,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
-            subtitle: Text(
-                DateFormat('EEEE, dd MMMM yyyy', 'es_MX').format(recordDate)),
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    _buildAdminInfoRow(
-                      'Entrada',
-                      rec['check_in'],
-                      rec['lat'],
-                      rec['lng'],
-                      theme,
-                    ),
-                    const Divider(),
-                    _buildAdminInfoRow(
-                      'Salida',
-                      rec['check_out'],
-                      rec['lat_out'],
-                      rec['lng_out'],
-                      theme,
-                      isOut: true,
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          rec['validated'] == true
-                              ? 'VALIDADO ✅'
-                              : 'PENDIENTE ⏳',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: rec['validated'] == true
-                                ? Colors.green
-                                : Colors.orange,
-                          ),
-                        ),
-                        if (rec['validated'] != true)
-                          TextButton(
-                            onPressed: () async {
-                              await _supabase.from('attendance').update(
-                                  {'validated': true}).eq('id', rec['id']);
-                              _fetchData();
-                            },
-                            child: const Text('VALIDAR AHORA'),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    _buildPhotoSection(rec['photo_url'], rec['photo_out_url']),
-                  ],
-                ),
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey[200]!)),
+      child: PaginatedDataTable(
+        dataRowMaxHeight: 60,
+        dataRowMinHeight: 60,
+        columnSpacing: 20,
+        horizontalMargin: 24,
+        header: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 350),
+          child: SizedBox(
+            height: 38,
+            child: TextField(
+              onChanged: (value) => setState(() => _searchQuery = value),
+              decoration: InputDecoration(
+                hintText: 'Buscar empleado o fecha...',
+                hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                prefixIcon: const Icon(Icons.search, size: 18),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: theme.colorScheme.primary)),
+                filled: true,
+                fillColor: Colors.white,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
               ),
-            ],
+              style: const TextStyle(fontSize: 13),
+            ),
           ),
-        );
-      },
+        ),
+        columns: [
+          DataColumn(label: SizedBox(width: screenWidth * 0.15, child: Text('EMPLEADO', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+          DataColumn(label: SizedBox(width: screenWidth * 0.12, child: Text('FECHA', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+          DataColumn(label: SizedBox(width: screenWidth * 0.08, child: Text('ENTRADA', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+          DataColumn(label: SizedBox(width: screenWidth * 0.08, child: Text('SALIDA', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+          DataColumn(label: SizedBox(width: screenWidth * 0.08, child: Text('ESTATUS', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+          const DataColumn(label: SizedBox()), // Acciones
+        ],
+        source: _AttendanceDataSource(
+          records: filteredRecords,
+          theme: theme,
+          onOpenMap: (lat, lng) => _openMap(lat, lng),
+          onViewPhotos: (rec) => _showPhotosDialog(rec),
+        ),
+        rowsPerPage: filteredRecords.isEmpty ? 1 : (filteredRecords.length > 10 ? 10 : filteredRecords.length),
+        showCheckboxColumn: false,
+      ),
+    );
+  }
+
+  void _showPhotosDialog(Map<String, dynamic> rec) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Evidencia Fotográfica - ${rec['profiles']?['full_name'] ?? 'Usuario'}'),
+        content: _buildPhotoSection(rec['photo_url'], rec['photo_out_url']),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('CERRAR')),
+        ],
+      ),
     );
   }
 
@@ -373,7 +270,7 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Validación Visual:',
+        const Text('Evidencia Fotográfica:',
             style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
@@ -490,4 +387,114 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
       ),
     );
   }
+}
+
+class _AttendanceDataSource extends DataTableSource {
+  final List<Map<String, dynamic>> records;
+  final ThemeData theme;
+  final Function(num?, num?) onOpenMap;
+  final Function(Map<String, dynamic>) onViewPhotos;
+
+  _AttendanceDataSource({
+    required this.records,
+    required this.theme,
+    required this.onOpenMap,
+    required this.onViewPhotos,
+  });
+
+  @override
+  DataRow? getRow(int index) {
+    if (index >= records.length) return null;
+    final rec = records[index];
+    final name = rec['profiles']?['full_name'] ?? 'Usuario Desconocido';
+    final dateStr = rec['date'] ?? '';
+    final recordDate = DateTime.tryParse(dateStr) ?? DateTime.now();
+    final checkInStr = rec['check_in'];
+    final checkOutStr = rec['check_out'];
+
+    final schedData = rec['profiles']?['schedules'];
+    final Map<String, dynamic>? sched =
+        (schedData is List && schedData.isNotEmpty)
+            ? schedData[0] as Map<String, dynamic>
+            : (schedData is Map<String, dynamic> ? schedData : null);
+
+    final List<dynamic> rules =
+        (sched != null && sched['rules'] != null) ? sched['rules'] : [];
+
+    String statusText = 'PENDIENTE';
+    Color statusColor = Colors.grey;
+
+    final dayIndex = recordDate.weekday % 7;
+    final entryRule = rules.firstWhere(
+      (r) => r['day'] == dayIndex && r['type'] == 'ENTRADA',
+      orElse: () => null,
+    );
+
+    if (checkInStr != null) {
+      final checkInLocal = DateTime.parse(checkInStr).toLocal();
+      if (entryRule != null) {
+        final workStartStr = entryRule['time'] ?? '09:00:00';
+        final tolerance = entryRule['tol'] ?? 10;
+        final parts = workStartStr.split(':');
+        final workStart = DateTime(recordDate.year, recordDate.month, recordDate.day, int.parse(parts[0]), int.parse(parts[1]));
+        if (checkInLocal.isAfter(workStart.add(Duration(minutes: tolerance)))) {
+          statusText = 'RETARDO';
+          statusColor = Colors.orange;
+        } else {
+          statusText = 'A TIEMPO';
+          statusColor = Colors.green;
+        }
+      } else {
+        statusText = 'REGISTRADO';
+        statusColor = theme.colorScheme.primary;
+      }
+    } else {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      // Wait, there's a typo in my thought: recordDate.isBefore(today).
+      if (recordDate.isBefore(today)) {
+        statusText = 'FALTA';
+        statusColor = Colors.red;
+      }
+    }
+
+    return DataRow.byIndex(
+      index: index,
+      cells: [
+        DataCell(Text(name, style: const TextStyle(fontWeight: FontWeight.bold))),
+        DataCell(Text(DateFormat('dd/MM/yyyy').format(recordDate))),
+        DataCell(Text(checkInStr != null ? DateFormat('HH:mm').format(DateTime.parse(checkInStr).toLocal()) : '--:--')),
+        DataCell(Text(checkOutStr != null ? DateFormat('HH:mm').format(DateTime.parse(checkOutStr).toLocal()) : '--:--')),
+        DataCell(Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(color: statusColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+          child: Text(statusText, style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold)),
+        )),
+        DataCell(Align(
+          alignment: Alignment.centerRight,
+          child: PopupMenuButton<String>(
+            icon: const Icon(Icons.more_horiz, color: Colors.grey),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            onSelected: (val) {
+              if (val == 'map_in') onOpenMap(rec['lat'], rec['lng']);
+              if (val == 'map_out') onOpenMap(rec['lat_out'], rec['lng_out']);
+              if (val == 'photos') onViewPhotos(rec);
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(value: 'photos', child: ListTile(leading: Icon(Icons.photo_library_outlined), title: Text('Ver Fotos'), dense: true)),
+              if (rec['lat'] != null) const PopupMenuItem(value: 'map_in', child: ListTile(leading: Icon(Icons.location_on_outlined, color: Colors.blue), title: Text('Mapa Entrada'), dense: true)),
+              if (rec['lat_out'] != null) const PopupMenuItem(value: 'map_out', child: ListTile(leading: Icon(Icons.location_on_outlined, color: Colors.orange), title: Text('Mapa Salida'), dense: true)),
+            ],
+          ),
+        )),
+      ],
+    );
+  }
+
+  @override
+  bool get isRowCountApproximate => false;
+  @override
+  int get rowCount => records.length;
+  @override
+  int get selectedRowCount => 0;
 }

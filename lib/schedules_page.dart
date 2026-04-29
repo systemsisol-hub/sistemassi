@@ -14,6 +14,7 @@ class SchedulesPageState extends State<SchedulesPage> {
   final _supabase = Supabase.instance.client;
   bool _isLoading = true;
   List<Map<String, dynamic>> _schedules = [];
+  String _searchQuery = '';
 
   // Form State
   final _nameController = TextEditingController();
@@ -377,149 +378,162 @@ class SchedulesPageState extends State<SchedulesPage> {
 
 
 
-  Widget _buildScheduleList(ThemeData theme) {
-    if (_schedules.isEmpty) {
-      if (_isLoading) return const Center(child: CircularProgressIndicator());
-      return const Center(child: Text('No hay horarios registrados.'));
-    }
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final screenWidth = MediaQuery.of(context).size.width;
+    
+    final filteredSchedules = _schedules.where((s) {
+      final name = (s['name'] ?? '').toString().toLowerCase();
+      final zone = (s['zone'] ?? '').toString().toLowerCase();
+      return name.contains(_searchQuery.toLowerCase()) || zone.contains(_searchQuery.toLowerCase());
+    }).toList();
 
-    return ListView.separated(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: _schedules.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 12),
-      itemBuilder: (context, index) {
-        final sched = _schedules[index];
-        final List<dynamic> rules = sched['rules'] ?? [];
-        
-        return Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.grey[200]!),
-          ),
-          child: ExpansionTile(
-            shape: const RoundedRectangleBorder(side: BorderSide.none),
-            collapsedShape: const RoundedRectangleBorder(side: BorderSide.none),
-            leading: CircleAvatar(
-              backgroundColor: theme.colorScheme.primary.withOpacity(0.1),
-              child: Icon(Icons.calendar_today_rounded, color: theme.colorScheme.primary, size: 20),
-            ),
-            title: Text(
-              sched['name'], 
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            subtitle: Text(
-              'Zona: ${sched['zone'] ?? 'N/A'}',
-              style: TextStyle(color: Colors.grey[600], fontSize: 13),
-            ),
-            trailing: IconButton(
-              icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
-              onPressed: () => _deleteSchedule(sched['id']),
-            ),
-            children: [
-              const Divider(height: 1),
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: rules.map((r) {
-                    final dayLabel = _daysOfWeek[r['day']];
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            flex: 2,
-                            child: Text(
-                              dayLabel, 
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.blueGrey)
-                            ),
-                          ),
-                          Expanded(
-                            flex: 3,
-                            child: Row(
-                              children: [
-                                Icon(Icons.access_time, size: 14, color: Colors.grey[400]),
-                                const SizedBox(width: 8),
-                                Text(
-                                  '${r['type'] == 'ENTRADA' ? 'Entr' : 'Sali'}: ${r['time'].toString().substring(0, 5)}',
-                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-                                ),
-                                if (r['type'] == 'ENTRADA')
-                                  Text(' (+${r['tol']}m)', style: const TextStyle(fontSize: 11, color: Colors.blueGrey)),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey[200]!)),
+      child: PaginatedDataTable(
+        header: Row(
+          children: [
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 300),
+              child: SizedBox(
+                height: 38,
+                child: TextField(
+                  onChanged: (value) => setState(() => _searchQuery = value),
+                  decoration: InputDecoration(
+                    hintText: 'Buscar horario...',
+                    hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                    prefixIcon: const Icon(Icons.search, size: 18),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: theme.colorScheme.primary)),
+                    filled: true,
+                    fillColor: Colors.white,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                  ),
+                  style: const TextStyle(fontSize: 13),
                 ),
               ),
+            ),
+            const Spacer(),
+            if (!widget.hideAddButton)
+              ElevatedButton.icon(
+                onPressed: showScheduleForm,
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('NUEVO HORARIO', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: theme.colorScheme.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                ),
+              ),
+          ],
+        ),
+        columns: [
+          DataColumn(label: Text('NOMBRE', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
+          DataColumn(label: Text('ZONA', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
+          DataColumn(label: Text('REGLAS', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
+          const DataColumn(label: SizedBox()), // Acciones
+        ],
+        source: _SchedulesDataSource(
+          schedules: filteredSchedules,
+          theme: theme,
+          daysOfWeek: _daysOfWeek,
+          onDelete: (id) => _deleteSchedule(id),
+          onViewRules: (s) => _showRulesDialog(s),
+        ),
+        rowsPerPage: filteredSchedules.isEmpty ? 1 : (filteredSchedules.length > 5 ? 5 : filteredSchedules.length),
+        showCheckboxColumn: false,
+      ),
+    );
+  }
+
+  void _showRulesDialog(Map<String, dynamic> sched) {
+    final List<dynamic> rules = sched['rules'] ?? [];
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Reglas de Horario: ${sched['name']}'),
+        content: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: rules.map((r) {
+              final dayLabel = _daysOfWeek[r['day']];
+              return ListTile(
+                title: Text(dayLabel, style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text('${r['type']}: ${r['time'].toString().substring(0, 5)} ${r['type'] == 'ENTRADA' ? '(Tol: ${r['tol']}m)' : ''}'),
+                dense: true,
+              );
+            }).toList(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('CERRAR')),
+        ],
+      ),
+    );
+  }
+}
+
+class _SchedulesDataSource extends DataTableSource {
+  final List<Map<String, dynamic>> schedules;
+  final ThemeData theme;
+  final List<String> daysOfWeek;
+  final Function(String) onDelete;
+  final Function(Map<String, dynamic>) onViewRules;
+
+  _SchedulesDataSource({
+    required this.schedules,
+    required this.theme,
+    required this.daysOfWeek,
+    required this.onDelete,
+    required this.onViewRules,
+  });
+
+  @override
+  DataRow? getRow(int index) {
+    if (index >= schedules.length) return null;
+    final sched = schedules[index];
+    final List<dynamic> rules = sched['rules'] ?? [];
+    
+    // Resumen de días
+    final daysIndices = rules.map((r) => r['day'] as int).toSet().toList();
+    daysIndices.sort();
+    final daysSummary = daysIndices.map((i) => daysOfWeek[i].substring(0, 2)).join(', ');
+
+    return DataRow.byIndex(
+      index: index,
+      cells: [
+        DataCell(Text(sched['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold))),
+        DataCell(Text(sched['zone'] ?? 'N/A')),
+        DataCell(Text(daysSummary, style: TextStyle(color: theme.colorScheme.primary, fontSize: 12))),
+        DataCell(Align(
+          alignment: Alignment.centerRight,
+          child: PopupMenuButton<String>(
+            icon: const Icon(Icons.more_horiz, color: Colors.grey),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            onSelected: (val) {
+              if (val == 'rules') onViewRules(sched);
+              if (val == 'delete') onDelete(sched['id']);
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(value: 'rules', child: ListTile(leading: Icon(Icons.rule_outlined), title: Text('Ver Reglas'), dense: true)),
+              const PopupMenuItem(value: 'delete', child: ListTile(leading: Icon(Icons.delete_outline, color: Colors.red), title: Text('Eliminar', style: TextStyle(color: Colors.red)), dense: true)),
             ],
           ),
-        );
-      },
+        )),
+      ],
     );
   }
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDesktop = MediaQuery.of(context).size.width > 900;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (!widget.hideAddButton)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: InkWell(
-              onTap: showScheduleForm,
-              borderRadius: BorderRadius.circular(16),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [theme.colorScheme.primary, theme.colorScheme.primary.withOpacity(0.8)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: theme.colorScheme.primary.withOpacity(0.35),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.add_circle_outline_rounded, color: Colors.white, size: 22),
-                    SizedBox(width: 10),
-                    Text(
-                      'Nuevo Horario',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        _isLoading 
-          ? const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator()))
-            : Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child: _buildScheduleList(theme),
-              ),
-      ],
-    );
-  }
+  bool get isRowCountApproximate => false;
+  @override
+  int get rowCount => schedules.length;
+  @override
+  int get selectedRowCount => 0;
+}
 }
