@@ -1756,7 +1756,8 @@ class _IncidenciasDataSource extends DataTableSource {
             ],
           ),
         ),
-      ],
+      ),
+    ],
     );
   }
 
