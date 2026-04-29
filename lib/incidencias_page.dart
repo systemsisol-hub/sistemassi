@@ -652,104 +652,133 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
           // Scrollable Table Content
           LayoutBuilder(
             builder: (context, tableConstraints) {
+              final double tableWidth = tableConstraints.maxWidth > 520
+                  ? tableConstraints.maxWidth
+                  : 520;
+
               return Scrollbar(
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                        minWidth: tableConstraints.maxWidth > 520
-                            ? tableConstraints.maxWidth
-                            : 520),
-                    child: Column(
+                  child: SizedBox(
+                    width: tableWidth,
+                    child: Table(
+                      columnWidths: const {
+                        0: FlexColumnWidth(2), // Periodo gets more space
+                        1: FixedColumnWidth(wLey),
+                        2: FixedColumnWidth(wProp),
+                        3: FixedColumnWidth(wPedidos),
+                        4: FixedColumnWidth(wSaldo),
+                      },
                       children: [
-                    // Header row
-                    Container(
-                      color: Colors.grey[200],
-                      child: Row(children: [
-                        _cell('Período',
-                            weight: FontWeight.bold, align: TextAlign.left),
-                        _cell('Dias', weight: FontWeight.bold, width: wLey),
-                        _cell('Proporcional',
-                            weight: FontWeight.bold, width: wProp),
-                        _cell('Solicitados',
-                            weight: FontWeight.bold, width: wPedidos),
-                        _cell('Actual',
-                            weight: FontWeight.bold, width: wSaldo),
-                      ]),
-                    ),
-                    // Data rows
-                    ...tableRows.asMap().entries.map((entry) {
-                      final i = entry.key;
-                      final row = entry.value;
-                      final isCurrent = row['isCurrent'] as bool;
-                      final isUpcoming = row['isUpcoming'] as bool;
+                        // Header row
+                        TableRow(
+                          decoration: BoxDecoration(color: Colors.grey[200]),
+                          children: [
+                            _cellTable('Período',
+                                weight: FontWeight.bold, align: TextAlign.left),
+                            _cellTable('Dias', weight: FontWeight.bold),
+                            _cellTable('Proporcional', weight: FontWeight.bold),
+                            _cellTable('Solicitados', weight: FontWeight.bold),
+                            _cellTable('Actual', weight: FontWeight.bold),
+                          ],
+                        ),
+                        // Data rows
+                        ...tableRows.asMap().entries.map((entry) {
+                          final i = entry.key;
+                          final row = entry.value;
+                          final isCurrent = row['isCurrent'] as bool;
+                          final isUpcoming = row['isUpcoming'] as bool;
 
-                      final Color? textColor = isCurrent
-                          ? theme.colorScheme.secondary
-                          : (isUpcoming ? Colors.orange[700] : null);
-                      final double saldo = row['saldo'] as double;
-                      final double proporcional = row['proporcional'] as double;
-                      final FontWeight? weight =
-                          isCurrent ? FontWeight.bold : null;
-                      final Color saldoColor = saldo < 0
-                          ? Colors.red
-                          : (saldo == 0 ? Colors.grey : Colors.green[700]!);
+                          final Color? textColor = isCurrent
+                              ? theme.colorScheme.secondary
+                              : (isUpcoming ? Colors.orange[700] : null);
+                          final double saldo = row['saldo'] as double;
+                          final double proporcional =
+                              row['proporcional'] as double;
+                          final FontWeight? weight =
+                              isCurrent ? FontWeight.bold : null;
+                          final Color saldoColor = saldo < 0
+                              ? Colors.red
+                              : (saldo == 0 ? Colors.grey : Colors.green[700]!);
 
-                      Color bgColor;
-                      if (isCurrent)
-                        bgColor = theme.colorScheme.secondary.withOpacity(0.15);
-                      else if (isUpcoming)
-                        bgColor = Colors.orange.withOpacity(0.07);
-                      else
-                        bgColor = i.isEven ? Colors.white : Colors.grey[50]!;
+                          Color bgColor;
+                          if (isCurrent)
+                            bgColor =
+                                theme.colorScheme.secondary.withOpacity(0.15);
+                          else if (isUpcoming)
+                            bgColor = Colors.orange.withOpacity(0.07);
+                          else
+                            bgColor = i.isEven ? Colors.white : Colors.grey[50]!;
 
-                      return Container(
-                        color: bgColor,
-                        child: Row(children: [
-                          _cell(row['periodo'] as String,
-                              color: textColor,
-                              weight: weight,
-                              align: TextAlign.left),
-                          _cell('${row['days']}',
-                              color: textColor, weight: weight, width: wLey),
-                          _cell('${proporcional.toInt()}',
-                              color: textColor, weight: weight, width: wProp),
-                          _cell(
-                              row['requested'] > 0 ? '${row['requested']}' : '',
-                              color: textColor, weight: weight, width: wPedidos),
-                          _cell(
-                              proporcional == 0 && row['requested'] == 0
-                                  ? ''
-                                  : '${saldo.toInt()}',
-                              color: saldoColor,
-                              weight: FontWeight.bold,
-                              width: wSaldo),
-                        ]),
-                      );
-                    }),
-                    // Grand Total row
-                    Container(
-                      color: Colors.grey[200],
-                      child: Row(children: [
-                        _cell('Saldo Actual Total',
-                            weight: FontWeight.bold, align: TextAlign.left),
-                        _cell('', width: wLey),
-                        _cell('', width: wProp),
-                        _cell('', width: wPedidos),
-                        _cell('${totalSaldo.toInt()} días.',
-                            weight: FontWeight.bold,
-                            color:
-                                totalSaldo < 0 ? Colors.red : Colors.green[700],
-                            width: wSaldo),
-                      ]),
+                          return TableRow(
+                            decoration: BoxDecoration(color: bgColor),
+                            children: [
+                              _cellTable(row['periodo'] as String,
+                                  color: textColor,
+                                  weight: weight,
+                                  align: TextAlign.left),
+                              _cellTable('${row['days']}',
+                                  color: textColor, weight: weight),
+                              _cellTable('${proporcional.toInt()}',
+                                  color: textColor, weight: weight),
+                              _cellTable(
+                                  row['requested'] > 0
+                                      ? '${row['requested']}'
+                                      : '',
+                                  color: textColor,
+                                  weight: weight),
+                              _cellTable(
+                                  proporcional == 0 && row['requested'] == 0
+                                      ? ''
+                                      : '${saldo.toInt()}',
+                                  color: saldoColor,
+                                  weight: FontWeight.bold),
+                            ],
+                          );
+                        }),
+                        // Grand Total row
+                        TableRow(
+                          decoration: BoxDecoration(color: Colors.grey[200]),
+                          children: [
+                            _cellTable('Saldo Actual Total',
+                                weight: FontWeight.bold, align: TextAlign.left),
+                            _cellTable(''),
+                            _cellTable(''),
+                            _cellTable(''),
+                            _cellTable('${totalSaldo.toInt()} días.',
+                                weight: FontWeight.bold,
+                                color: totalSaldo < 0
+                                    ? Colors.red
+                                    : Colors.green[700]),
+                          ],
+                        ),
+                      ],
                     ),
                   ],
                 ),
               ),
-            ),
-          );
-        }),
+            );
+          }),
         ],
+      ),
+    );
+  }
+
+  // Helper for Table cells
+  Widget _cellTable(String text,
+      {Color? color,
+      FontWeight? weight,
+      TextAlign align = TextAlign.center}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Text(
+        text,
+        textAlign: align,
+        style: TextStyle(
+          color: color ?? Colors.black87,
+          fontWeight: weight,
+          fontSize: 12,
+        ),
       ),
     );
   }
