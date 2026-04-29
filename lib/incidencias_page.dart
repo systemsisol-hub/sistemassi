@@ -754,11 +754,11 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                         ),
                       ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
-            );
-          }),
+              );
+            },
+          ),
         ],
       ),
     );
