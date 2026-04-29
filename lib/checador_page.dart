@@ -323,23 +323,38 @@ class _ChecadorPageState extends State<ChecadorPage> {
                         ),
                       ),
                     ],
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Card 1: Checador Unificado
-                        Expanded(
-                          child: _buildUnifiedChecadorCard(theme, isCheckedIn, isCheckedOut),
-                        ),
-                        const SizedBox(width: 24),
-                        // Card 2: Historial Reciente
-                        Expanded(
-                          child: _buildHistoryCard(theme),
-                        ),
-                        const SizedBox(width: 24),
-                        // Card 3: Tarjeta Vacía
-                        Expanded(
-                          child: Container(
-                            height: 580, // Ajustar a la altura aprox de las otras
+                    if (isDesktop)
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: _buildUnifiedChecadorCard(theme, isCheckedIn, isCheckedOut)),
+                          const SizedBox(width: 24),
+                          Expanded(child: _buildHistoryCard(theme)),
+                          const SizedBox(width: 24),
+                          Expanded(
+                            child: Container(
+                              height: 580,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(24),
+                                border: Border.all(color: Colors.grey[200]!),
+                              ),
+                              child: Center(
+                                child: Icon(Icons.add_circle_outline, color: Colors.grey[200], size: 48),
+                              ),
+                            ),
+                          ),
+                        ],
+                      )
+                    else
+                      Column(
+                        children: [
+                          _buildUnifiedChecadorCard(theme, isCheckedIn, isCheckedOut),
+                          const SizedBox(height: 24),
+                          _buildHistoryCard(theme),
+                          const SizedBox(height: 24),
+                          Container(
+                            height: 580,
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(24),
@@ -349,13 +364,8 @@ class _ChecadorPageState extends State<ChecadorPage> {
                               child: Icon(Icons.add_circle_outline, color: Colors.grey[200], size: 48),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                    if (!isDesktop) ...[
-                      const SizedBox(height: 32),
-                      _buildHistoryCard(theme),
-                    ],
+                        ],
+                      ),
                     if (widget.isAdmin) ...[
                       const SizedBox(height: 48),
                       const Divider(),
