@@ -415,64 +415,118 @@ class _ChecadorPageState extends State<ChecadorPage> {
               ),
             ),
             const SizedBox(height: 24),
-            // Imagen (Cámara)
-            Container(
-              height: 240,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (_cameraReady)
-                    kIsWeb
-                        ? HtmlElementView(viewType: _cameraController.viewId)
-                        : camera_preview.NativeCameraPreview(
-                            controller: _cameraController.controller)
-                  else
-                    Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.videocam_off_rounded, size: 64, color: Colors.white.withOpacity(0.2)),
-                        const SizedBox(height: 16),
-                        Text('Iniciando cámara...', style: TextStyle(color: Colors.white.withOpacity(0.4))),
-                      ],
-                    ),
-                  // Status Badge
-                  Positioned(
-                    top: 16,
-                    left: 16,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: isIn ? (isOut ? Colors.grey : const Color(0xFFB1CB34)) : theme.colorScheme.primary,
-                        borderRadius: BorderRadius.circular(30),
-                        boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 8)],
+            // Sección de 3 Columnas Responsiva
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isWide = constraints.maxWidth > 600;
+                final children = [
+                  // Columna 1: Cámara (Proporción Cartilla)
+                  Expanded(
+                    flex: isWide ? 1 : 0,
+                    child: AspectRatio(
+                      aspectRatio: 3 / 4,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.black,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.05),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: _cameraReady
+                            ? (kIsWeb
+                                ? HtmlElementView(viewType: _cameraController.viewId)
+                                : camera_preview.NativeCameraPreview(
+                                    controller: _cameraController.controller))
+                            : Center(
+                                child: Icon(Icons.videocam_off_rounded,
+                                    color: Colors.white.withOpacity(0.2), size: 40),
+                              ),
                       ),
-                      child: Row(
+                    ),
+                  ),
+                  if (isWide) const SizedBox(width: 16) else const SizedBox(height: 16),
+                  // Columna 2: Estado / Info
+                  Expanded(
+                    flex: isWide ? 1 : 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[50],
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.grey[200]!),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(isIn ? (isOut ? Icons.check_circle : Icons.work) : Icons.work_outline, size: 16, color: Colors.white),
-                          const SizedBox(width: 8),
                           Text(
-                            isIn ? (isOut ? 'JORNADA TERMINADA' : 'EN TURNO') : 'FUERA DE TURNO',
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                            'ESTADO ACTUAL',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.grey.shade500,
+                              letterSpacing: 1,
+                            ),
                           ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: isIn ? (isOut ? Colors.grey : const Color(0xFFB1CB34)) : theme.colorScheme.primary,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  isIn ? (isOut ? 'Jornada Terminada' : 'En Turno') : 'Fuera de Turno',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          if (isIn) ...[
+                            _buildMiniInfo('Entrada', _todayRecord!['check_in']),
+                            if (isOut) ...[
+                              const SizedBox(height: 8),
+                              _buildMiniInfo('Salida', _todayRecord!['check_out']),
+                            ],
+                          ],
                         ],
                       ),
                     ),
                   ),
-                ],
-              ),
+                  if (isWide) const SizedBox(width: 16) else const SizedBox(height: 16),
+                  // Columna 3: Tarjeta Vacía
+                  Expanded(
+                    flex: isWide ? 1 : 0,
+                    child: Container(
+                      height: isWide ? null : 80,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[50],
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.grey[100]!, style: BorderStyle.solid),
+                      ),
+                      child: Center(
+                        child: Icon(Icons.add_circle_outline, color: Colors.grey[300], size: 32),
+                      ),
+                    ),
+                  ),
+                ];
+
+                return isWide 
+                  ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: children)
+                  : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children);
+              },
             ),
             const SizedBox(height: 24),
             // Botón Único Unificado
@@ -552,6 +606,21 @@ class _ChecadorPageState extends State<ChecadorPage> {
         Text(
           DateFormat('HH:mm').format(dateTime),
           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMiniInfo(String label, String? time) {
+    if (time == null) return const SizedBox.shrink();
+    final dateTime = DateTime.parse(time).toLocal();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.w500)),
+        Text(
+          DateFormat('HH:mm').format(dateTime),
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
       ],
     );

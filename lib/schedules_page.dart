@@ -433,8 +433,7 @@ class SchedulesPageState extends State<SchedulesPage> {
         ),
         columns: [
           DataColumn(label: Text('NOMBRE', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
-          DataColumn(label: Text('ZONA', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
-          DataColumn(label: Text('REGLAS', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
+          DataColumn(label: Text('DÍAS / REGLAS', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
           const DataColumn(label: SizedBox()), // Acciones
         ],
         source: _SchedulesDataSource(
@@ -508,7 +507,6 @@ class _SchedulesDataSource extends DataTableSource {
       index: index,
       cells: [
         DataCell(Text(sched['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold))),
-        DataCell(Text(sched['zone'] ?? 'N/A')),
         DataCell(Text(daysSummary, style: TextStyle(color: theme.colorScheme.primary, fontSize: 12))),
         DataCell(Align(
           alignment: Alignment.centerRight,

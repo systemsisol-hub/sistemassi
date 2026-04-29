@@ -88,13 +88,11 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
             return Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Columna Izquierda: Horarios (Fija o proporcional)
+                // Columna 1: Horarios
                 Expanded(
-                  flex: 2,
                   child: Container(
                     decoration: BoxDecoration(
-                      border:
-                          Border(right: BorderSide(color: Colors.grey[200]!)),
+                      border: Border(right: BorderSide(color: Colors.grey[200]!)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -105,10 +103,10 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                'Gestión de Horarios',
+                                'Horarios',
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
-                                  fontSize: 20,
+                                  fontSize: 18,
                                   color: theme.colorScheme.primary,
                                 ),
                               ),
@@ -123,29 +121,47 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
                     ),
                   ),
                 ),
-                // Columna Derecha: Registros (Scroll independiente)
+                // Columna 2: Registros de Asistencia
                 Expanded(
-                  flex: 3,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Text(
-                          'Registros de Asistencia',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 20,
-                            color: theme.colorScheme.primary,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border(right: BorderSide(color: Colors.grey[200]!)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Text(
+                            'Asistencia',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                              color: theme.colorScheme.primary,
+                            ),
                           ),
                         ),
-                      ),
-                      Expanded(
-                        child: _isLoading
-                            ? const Center(child: CircularProgressIndicator())
-                            : SingleChildScrollView(child: _buildList(theme)),
-                      ),
-                    ],
+                        Expanded(
+                          child: _isLoading
+                              ? const Center(child: CircularProgressIndicator())
+                              : _buildList(theme),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                // Columna 3: Tarjeta Vacía
+                Expanded(
+                  child: Container(
+                    margin: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[50],
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.grey[100]!, style: BorderStyle.solid),
+                    ),
+                    child: Center(
+                      child: Icon(Icons.add_chart_outlined, color: Colors.grey[300], size: 32),
+                    ),
                   ),
                 ),
               ],
@@ -233,11 +249,9 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
           ),
         ),
         columns: [
-          DataColumn(label: SizedBox(width: screenWidth * 0.15, child: Text('EMPLEADO', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
-          DataColumn(label: SizedBox(width: screenWidth * 0.12, child: Text('FECHA', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
-          DataColumn(label: SizedBox(width: screenWidth * 0.08, child: Text('ENTRADA', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
-          DataColumn(label: SizedBox(width: screenWidth * 0.08, child: Text('SALIDA', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
-          DataColumn(label: SizedBox(width: screenWidth * 0.08, child: Text('ESTATUS', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+          DataColumn(label: Text('EMPLEADO / ESTATUS', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
+          DataColumn(label: Text('REGISTRO', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
+          DataColumn(label: Text('FECHA', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
           const DataColumn(label: SizedBox()), // Acciones
         ],
         source: _AttendanceDataSource(
@@ -458,18 +472,34 @@ class _AttendanceDataSource extends DataTableSource {
       }
     }
 
+    final nameParts = name.split(' ');
+    final shortName = nameParts.length >= 2 ? '${nameParts[0]} ${nameParts[1]}' : name;
+
     return DataRow.byIndex(
       index: index,
       cells: [
-        DataCell(Text(name, style: const TextStyle(fontWeight: FontWeight.bold))),
-        DataCell(Text(DateFormat('dd/MM/yyyy').format(recordDate))),
-        DataCell(Text(checkInStr != null ? DateFormat('HH:mm').format(DateTime.parse(checkInStr).toLocal()) : '--:--')),
-        DataCell(Text(checkOutStr != null ? DateFormat('HH:mm').format(DateTime.parse(checkOutStr).toLocal()) : '--:--')),
-        DataCell(Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(color: statusColor.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-          child: Text(statusText, style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold)),
+        DataCell(Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(shortName.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+            Text(statusText, style: TextStyle(color: statusColor, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+          ],
         )),
+        DataCell(Row(
+          children: [
+            const Icon(Icons.login, size: 13, color: Color(0xFFB1CB34)),
+            const SizedBox(width: 4),
+            Text(checkInStr != null ? DateFormat('HH:mm').format(DateTime.parse(checkInStr).toLocal()) : '--:--', 
+                 style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+            const SizedBox(width: 8),
+            const Icon(Icons.logout, size: 13, color: Colors.orange),
+            const SizedBox(width: 4),
+            Text(checkOutStr != null ? DateFormat('HH:mm').format(DateTime.parse(checkOutStr).toLocal()) : '--:--',
+                 style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+          ],
+        )),
+        DataCell(Text(DateFormat('dd/MM/yy').format(recordDate), style: const TextStyle(fontSize: 12))),
         DataCell(Align(
           alignment: Alignment.centerRight,
           child: PopupMenuButton<String>(
