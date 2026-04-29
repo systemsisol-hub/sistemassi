@@ -884,6 +884,23 @@ class _IssiPageState extends State<IssiPage> {
   }
 
   Widget _buildMobileLayout(List<Map<String, dynamic>> items, ThemeData theme) {
+    if (items.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.inventory_2_outlined, size: 64, color: Colors.grey[300]),
+            const SizedBox(height: 16),
+            Text(
+              _searchQuery.isNotEmpty
+                  ? 'Sin resultados para la búsqueda'
+                  : 'No hay elementos en el inventario',
+              style: TextStyle(color: Colors.grey[500]),
+            ),
+          ],
+        ),
+      );
+    }
     return ListView.separated(
       padding: const EdgeInsets.all(16),
       itemCount: items.length,
@@ -1159,36 +1176,17 @@ class _IssiPageState extends State<IssiPage> {
               ? SliverFillRemaining(
                   child: _buildShimmerLoading(),
                 )
-              : filtered.isEmpty
-                  ? SliverFillRemaining(
-                      child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.inventory_2_outlined,
-                                size: 64, color: Colors.grey[300]),
-                            const SizedBox(height: 16),
-                            Text(
-                              _searchQuery.isNotEmpty
-                                  ? 'Sin resultados para la búsqueda'
-                                  : 'No hay elementos en el inventario',
-                              style: TextStyle(color: Colors.grey[500]),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  : SliverFillRemaining(
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          if (constraints.maxWidth > 800) {
-                            return _buildDesktopLayout(filtered, theme);
-                          } else {
-                            return _buildMobileLayout(filtered, theme);
-                          }
-                        },
-                      ),
-                    ),
+              : SliverFillRemaining(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      if (constraints.maxWidth > 800) {
+                        return _buildDesktopLayout(filtered, theme);
+                      } else {
+                        return _buildMobileLayout(filtered, theme);
+                      }
+                    },
+                  ),
+                ),
         ],
       ),
     );
