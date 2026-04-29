@@ -386,6 +386,7 @@ class _ChecadorPageState extends State<ChecadorPage> {
                 ),
               ),
             ),
+          );
         },
       ),
     );
