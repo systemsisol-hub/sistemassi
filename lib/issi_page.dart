@@ -1011,6 +1011,7 @@ class _IssiPageState extends State<IssiPage> {
 
   Widget _buildDesktopLayout(
       List<Map<String, dynamic>> filtered, ThemeData theme) {
+    final screenWidth = MediaQuery.of(context).size.width;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
