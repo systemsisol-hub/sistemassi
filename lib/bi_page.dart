@@ -510,10 +510,15 @@ class _BiPageState extends State<BiPage> {
       body: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child:
-                  _isAdmin ? _buildAdminHeader(theme) : _buildUserHeader(theme),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                if (constraints.maxWidth > 800) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.all(16),
+                  child:
+                      _isAdmin ? _buildAdminHeader(theme) : _buildUserHeader(theme),
+                );
+              },
             ),
           ),
           _isAdmin ? _buildAdminContent(theme) : _buildUserContent(theme),
@@ -683,37 +688,61 @@ class _BiPageState extends State<BiPage> {
   }
 
   Widget _buildUserTableDesktop(List<Map<String, dynamic>> filteredLinks) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.all(16),
-      child: PaginatedDataTable(
-        header: const Text('Mis Reportes',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        columns: const [
-          DataColumn(
-              label: Text('Título',
-                  style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(
-              label: Text('Descripción',
-                  style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(
-              label: Text('', style: TextStyle(fontWeight: FontWeight.bold))),
-        ],
-        source: _LinksDataSource(
-          links: filteredLinks,
-          isAdmin: false,
-          onEdit: (link) {},
-          onDelete: (id) {},
-          onTap: (link) => _openLink(link),
+      padding: const EdgeInsets.all(24),
+      child: Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey[200]!)),
+        child: PaginatedDataTable(
+          dataRowMaxHeight: 54,
+          dataRowMinHeight: 54,
+          columnSpacing: 20,
+          horizontalMargin: 24,
+          header: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 350),
+            child: SizedBox(
+              height: 38,
+              child: TextField(
+                controller: TextEditingController(text: _searchQuery)..selection = TextSelection.fromPosition(TextPosition(offset: _searchQuery.length)),
+                decoration: InputDecoration(
+                  hintText: 'Buscar reportes...',
+                  hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                  prefixIcon: const Icon(Icons.search, size: 18),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 16),
+                          onPressed: () => setState(() => _searchQuery = ''),
+                        )
+                      : null,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: theme.colorScheme.primary)),
+                  filled: true,
+                  fillColor: Colors.white,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                ),
+                style: const TextStyle(fontSize: 13),
+                onChanged: (value) => setState(() => _searchQuery = value),
+              ),
+            ),
+          ),
+          columns: [
+            DataColumn(label: SizedBox(width: screenWidth * 0.3, child: Text('TÍTULO', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+            DataColumn(label: SizedBox(width: screenWidth * 0.4, child: Text('DESCRIPCIÓN', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+            const DataColumn(label: SizedBox()), // Acciones
+          ],
+          source: _LinksDataSource(
+            links: filteredLinks,
+            isAdmin: false,
+            onEdit: (link) {},
+            onDelete: (id) {},
+            onTap: (link) => _openLink(link),
+          ),
+          rowsPerPage: filteredLinks.isEmpty ? 1 : (filteredLinks.length > 10 ? 10 : filteredLinks.length),
+          showCheckboxColumn: false,
         ),
-        rowsPerPage: filteredLinks.length > 10
-            ? 10
-            : (filteredLinks.isEmpty ? 1 : filteredLinks.length),
-        showCheckboxColumn: false,
-        horizontalMargin: 16,
-        columnSpacing: 24,
-        dataRowMinHeight: 40,
-        dataRowMaxHeight: 48,
-        headingRowHeight: 48,
       ),
     );
   }
@@ -803,38 +832,78 @@ class _BiPageState extends State<BiPage> {
   }
 
   Widget _buildAdminTableDesktop(List<Map<String, dynamic>> filteredLinks) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.all(16),
-      child: PaginatedDataTable(
-        header: const Text('Enlaces BI',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        columns: const [
-          DataColumn(
-              label: Text('Título',
-                  style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(
-              label: Text('Descripción',
-                  style: TextStyle(fontWeight: FontWeight.bold))),
-          DataColumn(
-              label: Text('Acciones',
-                  style: TextStyle(fontWeight: FontWeight.bold))),
-        ],
-        source: _LinksDataSource(
-          links: filteredLinks,
-          isAdmin: true,
-          onEdit: (link) => _showLinkForm(link: link),
-          onDelete: (id) => _deleteLink(id),
-          onTap: (link) => _openLink(link),
+      padding: const EdgeInsets.all(24),
+      child: Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey[200]!)),
+        child: PaginatedDataTable(
+          dataRowMaxHeight: 54,
+          dataRowMinHeight: 54,
+          columnSpacing: 20,
+          horizontalMargin: 24,
+          header: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 350),
+            child: SizedBox(
+              height: 38,
+              child: TextField(
+                controller: TextEditingController(text: _searchQuery)..selection = TextSelection.fromPosition(TextPosition(offset: _searchQuery.length)),
+                decoration: InputDecoration(
+                  hintText: 'Buscar reportes...',
+                  hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                  prefixIcon: const Icon(Icons.search, size: 18),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 16),
+                          onPressed: () => setState(() => _searchQuery = ''),
+                        )
+                      : null,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: theme.colorScheme.primary)),
+                  filled: true,
+                  fillColor: Colors.white,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                ),
+                style: const TextStyle(fontSize: 13),
+                onChanged: (value) => setState(() => _searchQuery = value),
+              ),
+            ),
+          ),
+          actions: [
+            SizedBox(
+              height: 38,
+              child: ElevatedButton.icon(
+                onPressed: () => _showLinkForm(),
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('Enlace', style: TextStyle(fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: theme.colorScheme.primary,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                ),
+              ),
+            ),
+          ],
+          columns: [
+            DataColumn(label: SizedBox(width: screenWidth * 0.3, child: Text('TÍTULO', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+            DataColumn(label: SizedBox(width: screenWidth * 0.4, child: Text('DESCRIPCIÓN', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+            const DataColumn(label: SizedBox()), // Acciones
+          ],
+          source: _LinksDataSource(
+            links: filteredLinks,
+            isAdmin: true,
+            onEdit: (link) => _showLinkForm(link: link),
+            onDelete: (id) => _deleteLink(id),
+            onTap: (link) => _openLink(link),
+          ),
+          rowsPerPage: filteredLinks.isEmpty ? 1 : (filteredLinks.length > 10 ? 10 : filteredLinks.length),
+          showCheckboxColumn: false,
         ),
-        rowsPerPage: filteredLinks.length > 10
-            ? 10
-            : (filteredLinks.isEmpty ? 1 : filteredLinks.length),
-        showCheckboxColumn: false,
-        horizontalMargin: 16,
-        columnSpacing: 24,
-        dataRowMinHeight: 40,
-        dataRowMaxHeight: 48,
-        headingRowHeight: 48,
       ),
     );
   }
@@ -1079,56 +1148,55 @@ class _LinksDataSource extends DataTableSource {
       cells: [
         DataCell(
           Text(
-            link['title'] ?? 'Sin título',
-            style: const TextStyle(fontWeight: FontWeight.w500),
+            (link['title'] ?? 'Sin título').toString().toUpperCase(),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
           ),
           onTap: () => onTap(link),
         ),
         DataCell(
           Tooltip(
             message: descripcion,
-            child: Text(truncateDesc),
+            child: Text(
+              truncateDesc,
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+            ),
           ),
         ),
-        if (isAdmin)
-          DataCell(
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert),
-              onSelected: (value) {
-                if (value == 'edit') {
-                  onEdit(link);
-                } else if (value == 'delete') {
-                  onDelete(link['id']);
-                }
-              },
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'edit',
-                  child: Row(
-                    children: [
-                      Icon(Icons.edit, size: 20),
-                      SizedBox(width: 12),
-                      Text('Editar'),
+        DataCell(
+          Align(
+            alignment: Alignment.centerRight,
+            child: isAdmin
+                ? PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_horiz, color: Colors.grey),
+                    tooltip: 'Acciones',
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    elevation: 4,
+                    onSelected: (value) {
+                      if (value == 'edit') onEdit(link);
+                      if (value == 'delete') onDelete(link['id']);
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                          value: 'edit',
+                          child: ListTile(
+                              leading: Icon(Icons.edit_outlined, color: Colors.blue),
+                              title: Text('Editar'),
+                              dense: true)),
+                      const PopupMenuItem(
+                          value: 'delete',
+                          child: ListTile(
+                              leading: Icon(Icons.delete_outline, color: Colors.red),
+                              title: Text('Eliminar', style: TextStyle(color: Colors.red)),
+                              dense: true)),
                     ],
+                  )
+                : IconButton(
+                    icon: const Icon(Icons.open_in_new, size: 18, color: Colors.blue),
+                    onPressed: () => onTap(link),
+                    tooltip: 'Abrir Reporte',
                   ),
-                ),
-                const PopupMenuItem(
-                  value: 'delete',
-                  child: Row(
-                    children: [
-                      Icon(Icons.delete, size: 20, color: Colors.red),
-                      SizedBox(width: 12),
-                      Text('Eliminar', style: TextStyle(color: Colors.red)),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          )
-        else
-          DataCell(
-            Icon(Icons.arrow_forward, size: 18, color: Colors.grey[600]),
           ),
+        ),
       ],
     );
   }
