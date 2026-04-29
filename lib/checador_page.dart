@@ -326,19 +326,30 @@ class _ChecadorPageState extends State<ChecadorPage> {
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Columna Izquierda: Checador Unificado
+                        // Card 1: Checador Unificado
                         Expanded(
-                          flex: 6,
                           child: _buildUnifiedChecadorCard(theme, isCheckedIn, isCheckedOut),
                         ),
-                        if (isDesktop) ...[
-                          const SizedBox(width: 32),
-                          // Columna Derecha: Historial en Tarjeta
-                          Expanded(
-                            flex: 4,
-                            child: _buildHistoryCard(theme),
+                        const SizedBox(width: 24),
+                        // Card 2: Historial Reciente
+                        Expanded(
+                          child: _buildHistoryCard(theme),
+                        ),
+                        const SizedBox(width: 24),
+                        // Card 3: Tarjeta Vacía
+                        Expanded(
+                          child: Container(
+                            height: 580, // Ajustar a la altura aprox de las otras
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(24),
+                              border: Border.all(color: Colors.grey[200]!),
+                            ),
+                            child: Center(
+                              child: Icon(Icons.add_circle_outline, color: Colors.grey[200], size: 48),
+                            ),
                           ),
-                        ],
+                        ),
                       ],
                     ),
                     if (!isDesktop) ...[
@@ -375,163 +386,111 @@ class _ChecadorPageState extends State<ChecadorPage> {
                 ),
               ),
             ),
-          );
         },
       ),
     );
   }
 
   Widget _buildUnifiedChecadorCard(ThemeData theme, bool isIn, bool isOut) {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(24),
-        side: BorderSide(color: Colors.grey[200]!),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          children: [
-            // Fecha
-            Text(
-              _formatDateForUser(_currentTime).toUpperCase(),
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey.shade500,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.5,
+    return SizedBox(
+      height: 580,
+      child: Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(color: Colors.grey[200]!),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            children: [
+              // Fecha
+              Text(
+                _formatDateForUser(_currentTime).toUpperCase(),
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey.shade500,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.5,
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            // Hora
-            Text(
-              DateFormat('HH:mm:ss').format(_currentTime),
-              style: TextStyle(
-                fontSize: 54,
-                fontWeight: FontWeight.bold,
-                letterSpacing: -1.5,
-                color: theme.colorScheme.primary,
-                fontFeatures: const [FontFeature.tabularFigures()],
+              const SizedBox(height: 12),
+              // Hora
+              Text(
+                DateFormat('HH:mm:ss').format(_currentTime),
+                style: TextStyle(
+                  fontSize: 48,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: -1.5,
+                  color: theme.colorScheme.primary,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
               ),
-            ),
-            const SizedBox(height: 24),
-            // Sección de 3 Columnas Responsiva
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final isWide = constraints.maxWidth > 600;
-                final children = [
-                  // Columna 1: Cámara (Proporción Cartilla)
-                  Expanded(
-                    flex: isWide ? 1 : 0,
-                    child: AspectRatio(
-                      aspectRatio: 3 / 4,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.black,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.05),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        clipBehavior: Clip.antiAlias,
-                        child: _cameraReady
-                            ? (kIsWeb
-                                ? HtmlElementView(viewType: _cameraController.viewId)
-                                : camera_preview.NativeCameraPreview(
-                                    controller: _cameraController.controller))
-                            : Center(
-                                child: Icon(Icons.videocam_off_rounded,
-                                    color: Colors.white.withOpacity(0.2), size: 40),
-                              ),
-                      ),
-                    ),
-                  ),
-                  if (isWide) const SizedBox(width: 16) else const SizedBox(height: 16),
-                  // Columna 2: Estado / Info
-                  Expanded(
-                    flex: isWide ? 1 : 0,
+              const SizedBox(height: 24),
+              // Imagen (Proporción Cartilla - Reducida)
+              Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 200),
+                  child: AspectRatio(
+                    aspectRatio: 3 / 4,
                     child: Container(
-                      padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: Colors.grey[50],
+                        color: Colors.black,
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.grey[200]!),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'ESTADO ACTUAL',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.grey.shade500,
-                              letterSpacing: 1,
-                            ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
                           ),
-                          const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              Container(
-                                width: 8,
-                                height: 8,
-                                decoration: BoxDecoration(
-                                  color: isIn ? (isOut ? Colors.grey : const Color(0xFFB1CB34)) : theme.colorScheme.primary,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  isIn ? (isOut ? 'Jornada Terminada' : 'En Turno') : 'Fuera de Turno',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          if (isIn) ...[
-                            _buildMiniInfo('Entrada', _todayRecord!['check_in']),
-                            if (isOut) ...[
-                              const SizedBox(height: 8),
-                              _buildMiniInfo('Salida', _todayRecord!['check_out']),
-                            ],
-                          ],
                         ],
                       ),
+                      clipBehavior: Clip.antiAlias,
+                      child: _cameraReady
+                          ? (kIsWeb
+                              ? HtmlElementView(viewType: _cameraController.viewId)
+                              : camera_preview.NativeCameraPreview(
+                                  controller: _cameraController.controller))
+                          : Center(
+                              child: Icon(Icons.videocam_off_rounded,
+                                  color: Colors.white.withOpacity(0.2), size: 40),
+                            ),
                     ),
                   ),
-                  if (isWide) const SizedBox(width: 16) else const SizedBox(height: 16),
-                  // Columna 3: Tarjeta Vacía
-                  Expanded(
-                    flex: isWide ? 1 : 0,
-                    child: Container(
-                      height: isWide ? null : 80,
+                ),
+              ),
+              const Spacer(),
+              // Status Info (Compacta)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
                       decoration: BoxDecoration(
-                        color: Colors.grey[50],
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.grey[100]!, style: BorderStyle.solid),
-                      ),
-                      child: Center(
-                        child: Icon(Icons.add_circle_outline, color: Colors.grey[300], size: 32),
+                        color: isIn ? (isOut ? Colors.grey : const Color(0xFFB1CB34)) : theme.colorScheme.primary,
+                        shape: BoxShape.circle,
                       ),
                     ),
-                  ),
-                ];
-
-                return isWide 
-                  ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: children)
-                  : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children);
-              },
-            ),
-            const SizedBox(height: 24),
-            // Botón Único Unificado
-            _buildUnifiedActionButton(isIn, isOut, theme),
-          ],
+                    const SizedBox(width: 8),
+                    Text(
+                      isIn ? (isOut ? 'Jornada Terminada' : 'En Turno') : 'Fuera de Turno',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Botón Único Unificado
+              _buildUnifiedActionButton(isIn, isOut, theme),
+            ],
+          ),
         ),
       ),
     );
@@ -627,40 +586,42 @@ class _ChecadorPageState extends State<ChecadorPage> {
   }
 
   Widget _buildHistoryCard(ThemeData theme) {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(24),
-        side: BorderSide(color: Colors.grey[200]!),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
-            child: Row(
-              children: [
-                Icon(Icons.history, size: 20, color: theme.colorScheme.primary),
-                const SizedBox(width: 12),
-                const Text(
-                  'HISTORIAL RECIENTE',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1,
-                    color: Colors.black87,
+    return SizedBox(
+      height: 580,
+      child: Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(color: Colors.grey[200]!),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+              child: Row(
+                children: [
+                  Icon(Icons.history, size: 20, color: theme.colorScheme.primary),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'HISTORIAL RECIENTE',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1,
+                      color: Colors.black87,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          const Divider(height: 1),
-          // Altura fija para mostrar aprox 5 registros (cada registro mide ~90px)
-          SizedBox(
-            height: 500,
-            child: _buildHistoryList(theme),
-          ),
-        ],
+            const Divider(height: 1),
+            // Altura expandida para llenar la tarjeta
+            Expanded(
+              child: _buildHistoryList(theme),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -676,7 +637,7 @@ class _ChecadorPageState extends State<ChecadorPage> {
     }
 
     return ListView.separated(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(24),
       itemCount: _history.length,
       separatorBuilder: (context, index) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
