@@ -1403,48 +1403,63 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
           horizontalMargin: 16,
           columns: [
             DataColumn(
-                label: Text('PERIODO',
-                    style: TextStyle(
-                        color: Colors.grey.shade500,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 11,
-                        letterSpacing: 1))),
+                label: SizedBox(
+                    width: screenWidth * 0.15,
+                    child: Text('PERIODO',
+                        style: TextStyle(
+                            color: Colors.grey.shade500,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                            letterSpacing: 1)))),
             DataColumn(
-                label: Text('DÍAS',
-                    style: TextStyle(
-                        color: Colors.grey.shade500,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 11,
-                        letterSpacing: 1))),
+                label: SizedBox(
+                    width: screenWidth * 0.05,
+                    child: Text('DÍAS',
+                        style: TextStyle(
+                            color: Colors.grey.shade500,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                            letterSpacing: 1)))),
             DataColumn(
-                label: Text('CREADO',
-                    style: TextStyle(
-                        color: Colors.grey.shade500,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 11,
-                        letterSpacing: 1))),
+                label: SizedBox(
+                    width: screenWidth * 0.1,
+                    child: Text('CREADO',
+                        style: TextStyle(
+                            color: Colors.grey.shade500,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                            letterSpacing: 1)))),
             DataColumn(
-                label: Text('FECHA INICIO',
-                    style: TextStyle(
-                        color: Colors.grey.shade500,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 11,
-                        letterSpacing: 1))),
+                label: SizedBox(
+                    width: screenWidth * 0.1,
+                    child: Text('FECHA INICIO',
+                        style: TextStyle(
+                            color: Colors.grey.shade500,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                            letterSpacing: 1)))),
             DataColumn(
-                label: Text('FECHA FIN',
-                    style: TextStyle(
-                        color: Colors.grey.shade500,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 11,
-                        letterSpacing: 1))),
+                label: SizedBox(
+                    width: screenWidth * 0.1,
+                    child: Text('FECHA FIN',
+                        style: TextStyle(
+                            color: Colors.grey.shade500,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                            letterSpacing: 1)))),
             DataColumn(
-                label: Text('ESTATUS',
-                    style: TextStyle(
-                        color: Colors.grey.shade500,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 11,
-                        letterSpacing: 1))),
-            const DataColumn(label: SizedBox()), // Acciones
+                label: SizedBox(
+                    width: screenWidth * 0.1,
+                    child: Text('ESTATUS',
+                        style: TextStyle(
+                            color: Colors.grey.shade500,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                            letterSpacing: 1)))),
+            DataColumn(
+                label: SizedBox(
+                    width: screenWidth * 0.05,
+                    child: const SizedBox())), // Acciones
           ],
           source: _IncidenciasDataSource(
             items: _incidencias,
@@ -1570,6 +1585,21 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                                 Expanded(
                                   flex: 3,
                                   child: _buildHistorialVacaciones(),
+                                ),
+                                SizedBox(width: SiSpace.x6),
+                                Expanded(
+                                  flex: 2,
+                                  child: Container(
+                                    height: 120, // Empty placeholder height
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: SiRadius.rLg,
+                                      border: Border.all(color: Colors.grey[200]!),
+                                    ),
+                                    child: const Center(
+                                      child: Icon(Icons.info_outline, color: Colors.grey, size: 24),
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
