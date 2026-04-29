@@ -302,7 +302,7 @@ class _ChecadorPageState extends State<ChecadorPage> {
             padding: EdgeInsets.all(isDesktop ? 32 : 20),
             child: Center(
               child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: isDesktop ? 1200 : 600),
+                constraints: const BoxConstraints(maxWidth: double.infinity),
                 child: Column(
                   children: [
                     if (_errorString != null) ...[
@@ -389,7 +389,7 @@ class _ChecadorPageState extends State<ChecadorPage> {
         side: BorderSide(color: Colors.grey[200]!),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.all(24),
         child: Column(
           children: [
             // Fecha
@@ -407,17 +407,17 @@ class _ChecadorPageState extends State<ChecadorPage> {
             Text(
               DateFormat('HH:mm:ss').format(_currentTime),
               style: TextStyle(
-                fontSize: 72,
+                fontSize: 54,
                 fontWeight: FontWeight.bold,
-                letterSpacing: -2,
+                letterSpacing: -1.5,
                 color: theme.colorScheme.primary,
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
             // Imagen (Cámara)
             Container(
-              height: 360,
+              height: 240,
               width: double.infinity,
               decoration: BoxDecoration(
                 color: Colors.black,
@@ -474,7 +474,7 @@ class _ChecadorPageState extends State<ChecadorPage> {
                 ],
               ),
             ),
-            const SizedBox(height: 40),
+            const SizedBox(height: 24),
             // Botón Único Unificado
             _buildUnifiedActionButton(isIn, isOut, theme),
           ],
@@ -487,7 +487,7 @@ class _ChecadorPageState extends State<ChecadorPage> {
     if (isOut) {
       return Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 24),
+        padding: const EdgeInsets.symmetric(vertical: 18),
         decoration: BoxDecoration(
           color: const Color(0xFFB1CB34).withOpacity(0.1),
           borderRadius: BorderRadius.circular(20),
@@ -511,7 +511,7 @@ class _ChecadorPageState extends State<ChecadorPage> {
     if (_isProcessing) {
       return Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 24),
+        padding: const EdgeInsets.symmetric(vertical: 18),
         child: const Center(child: CircularProgressIndicator()),
       );
     }
@@ -528,15 +528,15 @@ class _ChecadorPageState extends State<ChecadorPage> {
         style: ElevatedButton.styleFrom(
           backgroundColor: color,
           foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 26),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          elevation: 8,
-          shadowColor: color.withOpacity(0.4),
+          padding: const EdgeInsets.symmetric(vertical: 18),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          elevation: 4,
+          shadowColor: color.withOpacity(0.3),
         ),
-        icon: Icon(icon, size: 32),
+        icon: Icon(icon, size: 24),
         label: Text(
           label,
-          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, letterSpacing: 1.5),
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.2),
         ),
       ),
     );
