@@ -1365,6 +1365,8 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
 
   Widget _buildDesktopTable(SiColors c) {
     final theme = Theme.of(context);
+    final screenWidth = MediaQuery.of(context).size.width;
+
     return Card(
       elevation: 0,
       clipBehavior: Clip.antiAlias,
@@ -1372,113 +1374,132 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
         borderRadius: SiRadius.rLg,
         side: BorderSide(color: c.line),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-            child: Row(
-              children: [
-                if (_userRole == 'admin' && _adminUserList.isNotEmpty)
-                  _buildTableUserSelector(c),
-                const Spacer(),
-                _buildTableAddButton(c),
-              ],
-            ),
+      child: Theme(
+        data: theme.copyWith(cardColor: Colors.transparent),
+        child: PaginatedDataTable(
+          header: Row(
+            children: [
+              if (_userRole == 'admin' && _adminUserList.isNotEmpty)
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 300),
+                  child: SizedBox(
+                    height: 38,
+                    child: _buildTableUserSelector(c),
+                  ),
+                ),
+            ],
           ),
-          const Divider(height: 1),
-          Theme(
-            data: theme.copyWith(cardColor: Colors.transparent),
-            child: PaginatedDataTable(
-              columns: const [
-                DataColumn(
-                    label: Text('Periodo',
-                        style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(
-                    label: Text('Días',
-                        style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(
-                    label: Text('Creado',
-                        style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(
-                    label: Text('Fecha Inicio',
-                        style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(
-                    label: Text('Fecha Fin',
-                        style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(
-                    label: Text('Estatus',
-                        style: TextStyle(fontWeight: FontWeight.bold))),
-                DataColumn(
-                    label: Text('',
-                        style: TextStyle(fontWeight: FontWeight.bold))),
-              ],
-              source: _IncidenciasDataSource(
-                items: _incidencias,
-                theme: theme,
-                isAdmin: _userRole == 'admin',
-                userProfile: _selectedUserProfile,
-                formatDate: _formatDate,
-                getStatusColor: _getStatusColor,
-                onEdit: (item) => _showIncidenciaForm(incidencia: item),
-                onStatusChange: (item, val) async {
-                  if (val == 'PDF') {
-                    if (_selectedUserProfile != null) {
-                      IncidenciasPdfService.generateVacationRequest(
-                          _selectedUserProfile!, item);
-                    }
-                  } else {
-                    await Supabase.instance.client
-                        .from('incidencias')
-                        .update({'status': val}).eq('id', item['id']);
-                    await NotificationService.send(
-                      title: 'Tu incidencia fue $val',
-                      message: 'El estado de tu petición ha cambiado a $val.',
-                      userId: item['usuario_id'],
-                      type: 'incidencia_status',
-                    );
-                    _fetchIncidencias();
-                  }
-                },
-              ),
-              rowsPerPage: _incidencias.isEmpty
-                  ? 1
-                  : (_incidencias.length > 5 ? 5 : _incidencias.length),
-              showCheckboxColumn: false,
-              horizontalMargin: 24,
-              columnSpacing: 24,
-              dataRowMaxHeight: 54,
-              dataRowMinHeight: 54,
+          actions: [
+            SizedBox(
+              height: 38,
+              child: _buildTableAddButton(c),
             ),
+          ],
+          dataRowMaxHeight: 54,
+          dataRowMinHeight: 54,
+          columnSpacing: 30,
+          horizontalMargin: 24,
+          columns: [
+            DataColumn(
+                label: Text('PERIODO',
+                    style: TextStyle(
+                        color: Colors.grey.shade500,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                        letterSpacing: 1))),
+            DataColumn(
+                label: Text('DÍAS',
+                    style: TextStyle(
+                        color: Colors.grey.shade500,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                        letterSpacing: 1))),
+            DataColumn(
+                label: Text('CREADO',
+                    style: TextStyle(
+                        color: Colors.grey.shade500,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                        letterSpacing: 1))),
+            DataColumn(
+                label: Text('FECHA INICIO',
+                    style: TextStyle(
+                        color: Colors.grey.shade500,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                        letterSpacing: 1))),
+            DataColumn(
+                label: Text('FECHA FIN',
+                    style: TextStyle(
+                        color: Colors.grey.shade500,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                        letterSpacing: 1))),
+            DataColumn(
+                label: Text('ESTATUS',
+                    style: TextStyle(
+                        color: Colors.grey.shade500,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                        letterSpacing: 1))),
+            const DataColumn(label: SizedBox()), // Acciones
+          ],
+          source: _IncidenciasDataSource(
+            items: _incidencias,
+            theme: theme,
+            isAdmin: _userRole == 'admin',
+            userProfile: _selectedUserProfile,
+            formatDate: _formatDate,
+            getStatusColor: _getStatusColor,
+            onEdit: (inc) => _showIncidenciaForm(incidencia: inc),
+            onStatusChange: (inc, status) async {
+              if (status == 'PDF') {
+                if (_selectedUserProfile != null) {
+                  IncidenciasPdfService.generateVacationRequest(
+                      _selectedUserProfile!, inc);
+                }
+              } else {
+                await Supabase.instance.client
+                    .from('incidencias')
+                    .update({'status': status}).eq('id', inc['id']);
+                await NotificationService.send(
+                  title: 'Tu incidencia fue $status',
+                  message: 'El estado de tu petición ha cambiado a $status.',
+                  userId: inc['usuario_id'],
+                  type: 'incidencia_status',
+                );
+                _fetchIncidencias();
+              }
+            },
           ),
-        ],
+          rowsPerPage: _incidencias.isEmpty
+              ? 1
+              : (_incidencias.length > 5 ? 5 : _incidencias.length),
+          showCheckboxColumn: false,
+        ),
       ),
     );
   }
 
   Widget _buildTableUserSelector(SiColors c) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      height: 38,
       decoration: BoxDecoration(
-        color: c.bg,
-        borderRadius: SiRadius.rMd,
-        border: Border.all(color: c.line),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade300),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: _selectedUserId,
-          isDense: true,
-          icon: Icon(Icons.keyboard_arrow_down, color: c.ink3, size: 18),
-          style:
-              TextStyle(fontSize: 13, color: c.ink, fontWeight: FontWeight.w500),
+          isExpanded: true,
+          icon: Icon(Icons.keyboard_arrow_down_rounded, color: Colors.grey.shade600, size: 20),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          style: const TextStyle(fontSize: 13, color: Colors.black87),
           items: _adminUserList.map((user) {
-            final name =
-                '${user['nombre']} ${user['paterno']} ${user['materno'] ?? ''}'
-                    .trim();
+            final name = '${user['nombre'] ?? ''} ${user['paterno'] ?? ''}'.trim();
             return DropdownMenuItem(
               value: user['id'] as String,
-              child: Text(name.isEmpty ? 'Seleccionar Usuario' : name),
+              child: Text(name.isEmpty ? 'Seleccionar Usuario' : name, overflow: TextOverflow.ellipsis),
             );
           }).toList(),
           onChanged: _onUserSelected,
@@ -1488,17 +1509,17 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
   }
 
   Widget _buildTableAddButton(SiColors c) {
+    final theme = Theme.of(context);
     return ElevatedButton.icon(
       onPressed: () => _showIncidenciaForm(),
-      icon: const Icon(Icons.add, size: 18),
-      label: const Text('Nuevo', style: TextStyle(fontWeight: FontWeight.w700)),
+      icon: const Icon(Icons.add, size: 16),
+      label: const Text('Nuevo', style: TextStyle(fontWeight: FontWeight.bold)),
       style: ElevatedButton.styleFrom(
-        backgroundColor: c.brand,
+        backgroundColor: theme.colorScheme.primary,
         foregroundColor: Colors.white,
         elevation: 0,
-        minimumSize: const Size(0, 40),
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        shape: const RoundedRectangleBorder(borderRadius: SiRadius.rMd),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
       ),
     );
   }
@@ -1668,9 +1689,10 @@ class _IncidenciasDataSource extends DataTableSource {
           ),
         ),
         DataCell(
-          PopupMenuButton<String>(
-            icon: Icon(Icons.more_horiz_rounded,
-                color: theme.colorScheme.primary.withOpacity(0.7), size: 20),
+          Align(
+            alignment: Alignment.centerRight,
+            child: PopupMenuButton<String>(
+              icon: const Icon(Icons.more_horiz, color: Colors.grey),
             tooltip: 'Acciones',
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
