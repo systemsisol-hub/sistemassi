@@ -1404,7 +1404,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
           columns: [
             DataColumn(
                 label: SizedBox(
-                    width: screenWidth * 0.15,
+                    width: screenWidth * 0.12,
                     child: Text('PERIODO',
                         style: TextStyle(
                             color: Colors.grey.shade500,
@@ -1413,7 +1413,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                             letterSpacing: 1)))),
             DataColumn(
                 label: SizedBox(
-                    width: screenWidth * 0.05,
+                    width: screenWidth * 0.03,
                     child: Text('DÍAS',
                         style: TextStyle(
                             color: Colors.grey.shade500,
@@ -1422,7 +1422,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                             letterSpacing: 1)))),
             DataColumn(
                 label: SizedBox(
-                    width: screenWidth * 0.1,
+                    width: screenWidth * 0.07,
                     child: Text('CREADO',
                         style: TextStyle(
                             color: Colors.grey.shade500,
@@ -1431,7 +1431,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                             letterSpacing: 1)))),
             DataColumn(
                 label: SizedBox(
-                    width: screenWidth * 0.1,
+                    width: screenWidth * 0.07,
                     child: Text('FECHA INICIO',
                         style: TextStyle(
                             color: Colors.grey.shade500,
@@ -1440,7 +1440,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                             letterSpacing: 1)))),
             DataColumn(
                 label: SizedBox(
-                    width: screenWidth * 0.1,
+                    width: screenWidth * 0.07,
                     child: Text('FECHA FIN',
                         style: TextStyle(
                             color: Colors.grey.shade500,
@@ -1449,7 +1449,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                             letterSpacing: 1)))),
             DataColumn(
                 label: SizedBox(
-                    width: screenWidth * 0.1,
+                    width: screenWidth * 0.07,
                     child: Text('ESTATUS',
                         style: TextStyle(
                             color: Colors.grey.shade500,
@@ -1458,7 +1458,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                             letterSpacing: 1)))),
             DataColumn(
                 label: SizedBox(
-                    width: screenWidth * 0.05,
+                    width: screenWidth * 0.04,
                     child: const SizedBox())), // Acciones
           ],
           source: _IncidenciasDataSource(
@@ -1572,39 +1572,26 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                     builder: (context, constraints) {
                       final isDesktop = constraints.maxWidth > 1100;
                       if (isDesktop) {
-                        return Column(
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  flex: 2,
-                                  child: _buildAntiguedadDesktop(),
-                                ),
-                                SizedBox(width: SiSpace.x6),
-                                Expanded(
-                                  flex: 3,
-                                  child: _buildHistorialVacaciones(),
-                                ),
-                                SizedBox(width: SiSpace.x6),
-                                Expanded(
-                                  flex: 2,
-                                  child: Container(
-                                    height: 120, // Empty placeholder height
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: SiRadius.rLg,
-                                      border: Border.all(color: Colors.grey[200]!),
-                                    ),
-                                    child: const Center(
-                                      child: Icon(Icons.info_outline, color: Colors.grey, size: 24),
-                                    ),
-                                  ),
-                                ),
-                              ],
+                            // Main Table (50% width)
+                            Expanded(
+                              flex: 2,
+                              child: _buildDesktopTable(c),
                             ),
-                            SizedBox(height: SiSpace.x6),
-                            _buildDesktopTable(c),
+                            SizedBox(width: SiSpace.x6),
+                            // Historial (25% width)
+                            Expanded(
+                              flex: 1,
+                              child: _buildHistorialVacaciones(),
+                            ),
+                            SizedBox(width: SiSpace.x6),
+                            // Antigüedad (25% width)
+                            Expanded(
+                              flex: 1,
+                              child: _buildAntiguedadDesktop(),
+                            ),
                           ],
                         );
                       } else {
