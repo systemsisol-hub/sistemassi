@@ -346,19 +346,8 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
     );
   }
 
-  Widget _buildAddScheduleButtonDesktop(ThemeData theme) {
-    return ElevatedButton.icon(
-      onPressed: () => _schedulesKey.currentState?.showScheduleForm(),
-      icon: const Icon(Icons.add, size: 18),
-      label: const Text('NUEVO', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1)),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: theme.colorScheme.primary,
-        foregroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      ),
-    );
-  }
+
+
 }
 
 class _AttendanceDataSource extends DataTableSource {
