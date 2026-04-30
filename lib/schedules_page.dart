@@ -4,7 +4,8 @@ import 'package:intl/intl.dart';
 
 class SchedulesPage extends StatefulWidget {
   final bool hideAddButton;
-  const SchedulesPage({super.key, this.hideAddButton = false});
+  final bool hideSearch;
+  const SchedulesPage({super.key, this.hideAddButton = false, this.hideSearch = false});
 
   @override
   State<SchedulesPage> createState() => SchedulesPageState();
@@ -392,36 +393,39 @@ class SchedulesPageState extends State<SchedulesPage> {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey[200]!)),
-      child: PaginatedDataTable(
-        header: Row(
+      child: SizedBox(
+        width: double.infinity,
+        child: PaginatedDataTable(
+          header: Row(
           children: [
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 300),
-              child: SizedBox(
-                height: 38,
-                child: TextField(
-                  onChanged: (value) => setState(() => _searchQuery = value),
-                  decoration: InputDecoration(
-                    hintText: 'Buscar horario...',
-                    hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-                    prefixIcon: const Icon(Icons.search, size: 18),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: theme.colorScheme.primary)),
-                    filled: true,
-                    fillColor: Colors.white,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+            if (!widget.hideSearch)
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 300),
+                child: SizedBox(
+                  height: 38,
+                  child: TextField(
+                    onChanged: (value) => setState(() => _searchQuery = value),
+                    decoration: InputDecoration(
+                      hintText: 'Buscar horario...',
+                      hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                      prefixIcon: const Icon(Icons.search, size: 18),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: theme.colorScheme.primary)),
+                      filled: true,
+                      fillColor: Colors.white,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                    ),
+                    style: const TextStyle(fontSize: 13),
                   ),
-                  style: const TextStyle(fontSize: 13),
                 ),
               ),
-            ),
-            const Spacer(),
+            if (!widget.hideSearch) const Spacer(),
             if (!widget.hideAddButton)
               ElevatedButton.icon(
                 onPressed: showScheduleForm,
                 icon: const Icon(Icons.add, size: 18),
-                label: const Text('NUEVO HORARIO', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1)),
+                label: const Text('NUEVO', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: theme.colorScheme.primary,
                   foregroundColor: Colors.white,
@@ -433,7 +437,6 @@ class SchedulesPageState extends State<SchedulesPage> {
         ),
         columns: [
           DataColumn(label: Text('NOMBRE', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
-          DataColumn(label: Text('DÍAS / REGLAS', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
           const DataColumn(label: SizedBox()), // Acciones
         ],
         source: _SchedulesDataSource(
@@ -445,6 +448,7 @@ class SchedulesPageState extends State<SchedulesPage> {
         ),
         rowsPerPage: filteredSchedules.isEmpty ? 1 : (filteredSchedules.length > 5 ? 5 : filteredSchedules.length),
         showCheckboxColumn: false,
+        ),
       ),
     );
   }
@@ -507,7 +511,6 @@ class _SchedulesDataSource extends DataTableSource {
       index: index,
       cells: [
         DataCell(Text(sched['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold))),
-        DataCell(Text(daysSummary, style: TextStyle(color: theme.colorScheme.primary, fontSize: 12))),
         DataCell(Align(
           alignment: Alignment.centerRight,
           child: PopupMenuButton<String>(

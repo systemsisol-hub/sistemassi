@@ -84,87 +84,103 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
       body: LayoutBuilder(
         builder: (context, constraints) {
           if (constraints.maxWidth > 800) {
-            // Diseño Escritorio: Dos columnas
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Columna 1: Horarios
-                Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      border: Border(right: BorderSide(color: Colors.grey[200]!)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'Horarios',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 18,
-                                  color: theme.colorScheme.primary,
+            // Diseño Escritorio: Tres tarjetas iguales
+            return Padding(
+              padding: const EdgeInsets.all(24),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Card 1: Horarios
+                  Expanded(
+                    child: Card(
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(24),
+                        side: BorderSide(color: Colors.grey[200]!),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'HORARIOS',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                    letterSpacing: 1,
+                                    color: theme.colorScheme.primary,
+                                  ),
                                 ),
-                              ),
-                              _buildAddScheduleButtonDesktop(theme),
-                            ],
-                          ),
-                        ),
-                        Expanded(
-                            child: SchedulesPage(
-                                key: _schedulesKey, hideAddButton: true)),
-                      ],
-                    ),
-                  ),
-                ),
-                // Columna 2: Registros de Asistencia
-                Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      border: Border(right: BorderSide(color: Colors.grey[200]!)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Text(
-                            'Asistencia',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                              color: theme.colorScheme.primary,
+                                _buildAddScheduleButtonDesktop(theme),
+                              ],
                             ),
                           ),
-                        ),
-                        Expanded(
-                          child: _isLoading
-                              ? const Center(child: CircularProgressIndicator())
-                              : _buildList(theme),
-                        ),
-                      ],
+                          const Divider(height: 1),
+                          Expanded(
+                            child: SchedulesPage(
+                              key: _schedulesKey,
+                              hideAddButton: true,
+                              hideSearch: true,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                // Columna 3: Tarjeta Vacía
-                Expanded(
-                  child: Container(
-                    margin: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[50],
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.grey[100]!, style: BorderStyle.solid),
-                    ),
-                    child: Center(
-                      child: Icon(Icons.add_chart_outlined, color: Colors.grey[300], size: 32),
+                  const SizedBox(width: 24),
+                  // Card 2: Registros de Asistencia
+                  Expanded(
+                    child: Card(
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(24),
+                        side: BorderSide(color: Colors.grey[200]!),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+                            child: Text(
+                              'ASISTENCIA',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                letterSpacing: 1,
+                                color: theme.colorScheme.primary,
+                              ),
+                            ),
+                          ),
+                          const Divider(height: 1),
+                          Expanded(
+                            child: _isLoading
+                                ? const Center(child: CircularProgressIndicator())
+                                : _buildList(theme),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 24),
+                  // Card 3: Tarjeta Vacía
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: Colors.grey[200]!),
+                      ),
+                      child: Center(
+                        child: Icon(Icons.add_chart_outlined, color: Colors.grey[200], size: 48),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             );
           } else {
             // Diseño Móvil: Secciones retráctiles (Existente)
@@ -205,8 +221,22 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
                 ],
               ),
             );
-          }
+  }
         },
+      ),
+    );
+  }
+
+  Widget _buildAddScheduleButtonDesktop(ThemeData theme) {
+    return ElevatedButton.icon(
+      onPressed: () => _schedulesKey.currentState?.showScheduleForm(),
+      icon: const Icon(Icons.add, size: 18),
+      label: const Text('NUEVO', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1)),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: theme.colorScheme.primary,
+        foregroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       ),
     );
   }
@@ -222,8 +252,10 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey[200]!)),
-      child: PaginatedDataTable(
-        dataRowMaxHeight: 60,
+      child: SizedBox(
+        width: double.infinity,
+        child: PaginatedDataTable(
+          dataRowMaxHeight: 60,
         dataRowMinHeight: 60,
         columnSpacing: 20,
         horizontalMargin: 24,
@@ -249,9 +281,9 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
           ),
         ),
         columns: [
-          DataColumn(label: Text('EMPLEADO / ESTATUS', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
-          DataColumn(label: Text('REGISTRO', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
+          DataColumn(label: Text('EMPLEADO', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
           DataColumn(label: Text('FECHA', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
+          DataColumn(label: Text('HORA', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
           const DataColumn(label: SizedBox()), // Acciones
         ],
         source: _AttendanceDataSource(
@@ -262,6 +294,7 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
         ),
         rowsPerPage: filteredRecords.isEmpty ? 1 : (filteredRecords.length > 10 ? 10 : filteredRecords.length),
         showCheckboxColumn: false,
+        ),
       ),
     );
   }
@@ -486,6 +519,7 @@ class _AttendanceDataSource extends DataTableSource {
             Text(statusText, style: TextStyle(color: statusColor, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
           ],
         )),
+        DataCell(Text(DateFormat('dd/MM/yy').format(recordDate), style: const TextStyle(fontSize: 12))),
         DataCell(Row(
           children: [
             const Icon(Icons.login, size: 13, color: Color(0xFFB1CB34)),
@@ -499,7 +533,6 @@ class _AttendanceDataSource extends DataTableSource {
                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
           ],
         )),
-        DataCell(Text(DateFormat('dd/MM/yy').format(recordDate), style: const TextStyle(fontSize: 12))),
         DataCell(Align(
           alignment: Alignment.centerRight,
           child: PopupMenuButton<String>(
