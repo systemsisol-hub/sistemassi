@@ -227,20 +227,6 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
     );
   }
 
-  Widget _buildAddScheduleButtonDesktop(ThemeData theme) {
-    return ElevatedButton.icon(
-      onPressed: () => _schedulesKey.currentState?.showScheduleForm(),
-      icon: const Icon(Icons.add, size: 18),
-      label: const Text('NUEVO', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1)),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: theme.colorScheme.primary,
-        foregroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      ),
-    );
-  }
-
   Widget _buildList(ThemeData theme) {
     final screenWidth = MediaQuery.of(context).size.width;
     final filteredRecords = _allRecords.where((rec) {
@@ -413,24 +399,15 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
   }
 
   Widget _buildAddScheduleButtonDesktop(ThemeData theme) {
-    return InkWell(
-      onTap: () => _schedulesKey.currentState?.showScheduleForm(),
-      borderRadius: BorderRadius.circular(30),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(30),
-          border: Border.all(color: Colors.grey[200]!),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: const Icon(Icons.add, size: 20, color: Colors.black87),
+    return ElevatedButton.icon(
+      onPressed: () => _schedulesKey.currentState?.showScheduleForm(),
+      icon: const Icon(Icons.add, size: 18),
+      label: const Text('NUEVO', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1)),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: theme.colorScheme.primary,
+        foregroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       ),
     );
   }
