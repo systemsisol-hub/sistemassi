@@ -90,104 +90,19 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
               children: [
                 // Card 1: Horarios
                 Expanded(
-                  child: Card(
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(24),
-                      side: BorderSide(color: Colors.grey[200]!),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'HORARIOS',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
-                                  letterSpacing: 1,
-                                  color: theme.colorScheme.primary,
-                                ),
-                              ),
-                              _buildAddScheduleButtonDesktop(theme),
-                            ],
-                          ),
-                        ),
-                        const Divider(height: 1),
-                        Expanded(
-                          child: SchedulesPage(
-                            key: _schedulesKey,
-                            hideAddButton: true,
-                            hideSearch: true,
-                          ),
-                        ),
-                      ],
-                    ),
+                  child: SchedulesPage(
+                    key: _schedulesKey,
+                    title: 'HORARIOS',
+                    hideAddButton: false,
+                    hideSearch: true,
                   ),
                 ),
                 const SizedBox(width: 24),
                 // Card 2: Registros de Asistencia
                 Expanded(
-                  child: Card(
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(24),
-                      side: BorderSide(color: Colors.grey[200]!),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'ASISTENCIA',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
-                                  letterSpacing: 1,
-                                  color: theme.colorScheme.primary,
-                                ),
-                              ),
-                              ConstrainedBox(
-                                constraints: const BoxConstraints(maxWidth: 200),
-                                child: SizedBox(
-                                  height: 38,
-                                  child: TextField(
-                                    onChanged: (value) => setState(() => _searchQuery = value),
-                                    decoration: InputDecoration(
-                                      hintText: 'Buscar empleado o fecha...',
-                                      hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-                                      prefixIcon: const Icon(Icons.search, size: 16),
-                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-                                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-                                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: theme.colorScheme.primary)),
-                                      filled: true,
-                                      fillColor: Colors.white,
-                                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                                    ),
-                                    style: const TextStyle(fontSize: 13),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const Divider(height: 1),
-                        Expanded(
-                          child: _isLoading
-                              ? const Center(child: CircularProgressIndicator())
-                              : _buildList(theme),
-                        ),
-                      ],
-                    ),
-                  ),
+                  child: _isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : _buildList(theme),
                 ),
                 const SizedBox(width: 24),
                 // Card 3: Tarjeta Vacía
@@ -261,6 +176,41 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
     return SizedBox(
       width: double.infinity,
       child: PaginatedDataTable(
+        header: Row(
+          children: [
+            Text(
+              'ASISTENCIA',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                letterSpacing: 1,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            const SizedBox(width: 16),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 200),
+              child: SizedBox(
+                height: 38,
+                child: TextField(
+                  onChanged: (value) => setState(() => _searchQuery = value),
+                  decoration: InputDecoration(
+                    hintText: 'Buscar empleado o fecha...',
+                    hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                    prefixIcon: const Icon(Icons.search, size: 16),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: theme.colorScheme.primary)),
+                    filled: true,
+                    fillColor: Colors.white,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                  ),
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
+            ),
+          ],
+        ),
         dataRowMaxHeight: 60,
         dataRowMinHeight: 60,
         columnSpacing: 20,

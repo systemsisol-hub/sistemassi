@@ -5,7 +5,8 @@ import 'package:intl/intl.dart';
 class SchedulesPage extends StatefulWidget {
   final bool hideAddButton;
   final bool hideSearch;
-  const SchedulesPage({super.key, this.hideAddButton = false, this.hideSearch = false});
+  final String? title;
+  const SchedulesPage({super.key, this.hideAddButton = false, this.hideSearch = false, this.title});
 
   @override
   State<SchedulesPage> createState() => SchedulesPageState();
@@ -392,9 +393,21 @@ class SchedulesPageState extends State<SchedulesPage> {
 
     return SizedBox(
       width: double.infinity,
-        child: PaginatedDataTable(
-          header: Row(
+      child: PaginatedDataTable(
+        header: Row(
           children: [
+            if (widget.title != null) ...[
+              Text(
+                widget.title!,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  letterSpacing: 1,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+              const SizedBox(width: 16),
+            ],
             if (!widget.hideSearch)
               ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 300),
@@ -417,7 +430,7 @@ class SchedulesPageState extends State<SchedulesPage> {
                   ),
                 ),
               ),
-            if (!widget.hideSearch) const Spacer(),
+            const Spacer(),
             if (!widget.hideAddButton)
               ElevatedButton.icon(
                 onPressed: showScheduleForm,
