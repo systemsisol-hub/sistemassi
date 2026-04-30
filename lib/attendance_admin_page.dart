@@ -85,102 +85,125 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
         builder: (context, constraints) {
           if (constraints.maxWidth > 800) {
             // Diseño Escritorio: Tres tarjetas iguales
-            return Padding(
-              padding: const EdgeInsets.all(24),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Card 1: Horarios
-                  Expanded(
-                    child: Card(
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(24),
-                        side: BorderSide(color: Colors.grey[200]!),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'HORARIOS',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
-                                    letterSpacing: 1,
-                                    color: theme.colorScheme.primary,
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Card 1: Horarios
+                Expanded(
+                  child: Card(
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24),
+                      side: BorderSide(color: Colors.grey[200]!),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'HORARIOS',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                  letterSpacing: 1,
+                                  color: theme.colorScheme.primary,
+                                ),
+                              ),
+                              _buildAddScheduleButtonDesktop(theme),
+                            ],
+                          ),
+                        ),
+                        const Divider(height: 1),
+                        Expanded(
+                          child: SchedulesPage(
+                            key: _schedulesKey,
+                            hideAddButton: true,
+                            hideSearch: true,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 24),
+                // Card 2: Registros de Asistencia
+                Expanded(
+                  child: Card(
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24),
+                      side: BorderSide(color: Colors.grey[200]!),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'ASISTENCIA',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                  letterSpacing: 1,
+                                  color: theme.colorScheme.primary,
+                                ),
+                              ),
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(maxWidth: 200),
+                                child: SizedBox(
+                                  height: 38,
+                                  child: TextField(
+                                    onChanged: (value) => setState(() => _searchQuery = value),
+                                    decoration: InputDecoration(
+                                      hintText: 'Buscar empleado o fecha...',
+                                      hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                                      prefixIcon: const Icon(Icons.search, size: 16),
+                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: theme.colorScheme.primary)),
+                                      filled: true,
+                                      fillColor: Colors.white,
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                                    ),
+                                    style: const TextStyle(fontSize: 13),
                                   ),
                                 ),
-                                _buildAddScheduleButtonDesktop(theme),
-                              ],
-                            ),
-                          ),
-                          const Divider(height: 1),
-                          Expanded(
-                            child: SchedulesPage(
-                              key: _schedulesKey,
-                              hideAddButton: true,
-                              hideSearch: true,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 24),
-                  // Card 2: Registros de Asistencia
-                  Expanded(
-                    child: Card(
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(24),
-                        side: BorderSide(color: Colors.grey[200]!),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
-                            child: Text(
-                              'ASISTENCIA',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                                letterSpacing: 1,
-                                color: theme.colorScheme.primary,
                               ),
-                            ),
+                            ],
                           ),
-                          const Divider(height: 1),
-                          Expanded(
-                            child: _isLoading
-                                ? const Center(child: CircularProgressIndicator())
-                                : _buildList(theme),
-                          ),
-                        ],
-                      ),
+                        ),
+                        const Divider(height: 1),
+                        Expanded(
+                          child: _isLoading
+                              ? const Center(child: CircularProgressIndicator())
+                              : _buildList(theme),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 24),
-                  // Card 3: Tarjeta Vacía
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(color: Colors.grey[200]!),
-                      ),
-                      child: Center(
-                        child: Icon(Icons.add_chart_outlined, color: Colors.grey[200], size: 48),
-                      ),
+                ),
+                const SizedBox(width: 24),
+                // Card 3: Tarjeta Vacía
+                Expanded(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: Colors.grey[200]!),
+                    ),
+                    child: Center(
+                      child: Icon(Icons.add_chart_outlined, color: Colors.grey[200], size: 48),
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             );
           } else {
             // Diseño Móvil: Secciones retráctiles (Existente)
@@ -235,37 +258,13 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
       return name.contains(_searchQuery.toLowerCase()) || date.contains(_searchQuery.toLowerCase());
     }).toList();
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey[200]!)),
-      child: SizedBox(
-        width: double.infinity,
-        child: PaginatedDataTable(
-          dataRowMaxHeight: 60,
+    return SizedBox(
+      width: double.infinity,
+      child: PaginatedDataTable(
+        dataRowMaxHeight: 60,
         dataRowMinHeight: 60,
         columnSpacing: 20,
         horizontalMargin: 24,
-        header: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 350),
-          child: SizedBox(
-            height: 38,
-            child: TextField(
-              onChanged: (value) => setState(() => _searchQuery = value),
-              decoration: InputDecoration(
-                hintText: 'Buscar empleado o fecha...',
-                hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-                prefixIcon: const Icon(Icons.search, size: 18),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: theme.colorScheme.primary)),
-                filled: true,
-                fillColor: Colors.white,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-              ),
-              style: const TextStyle(fontSize: 13),
-            ),
-          ),
-        ),
         columns: [
           DataColumn(label: Text('EMPLEADO', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
           DataColumn(label: Text('FECHA', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
@@ -280,7 +279,6 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
         ),
         rowsPerPage: filteredRecords.isEmpty ? 1 : (filteredRecords.length > 10 ? 10 : filteredRecords.length),
         showCheckboxColumn: false,
-        ),
       ),
     );
   }

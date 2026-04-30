@@ -390,11 +390,8 @@ class SchedulesPageState extends State<SchedulesPage> {
       return name.contains(_searchQuery.toLowerCase()) || zone.contains(_searchQuery.toLowerCase());
     }).toList();
 
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey[200]!)),
-      child: SizedBox(
-        width: double.infinity,
+    return SizedBox(
+      width: double.infinity,
         child: PaginatedDataTable(
           header: Row(
           children: [
@@ -448,7 +445,6 @@ class SchedulesPageState extends State<SchedulesPage> {
         ),
         rowsPerPage: filteredSchedules.isEmpty ? 1 : (filteredSchedules.length > 5 ? 5 : filteredSchedules.length),
         showCheckboxColumn: false,
-        ),
       ),
     );
   }
