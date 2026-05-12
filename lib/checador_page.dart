@@ -368,8 +368,6 @@ class _ChecadorPageState extends State<ChecadorPage> {
                       ),
                     if (widget.isAdmin) ...[
                       const SizedBox(height: 48),
-                      const Divider(),
-                      const SizedBox(height: 32),
                       const Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
