@@ -72,8 +72,20 @@ ios/DerivedData/
 # Zip files
 *.zip
 f l u t t e r . z i p
+
+# Credentials
 .env
 
 # Claude Code
 .claude/worktrees/
 .claude/settings.local.json
+
+# Android local/generated
+android/.gradle/
+android/local.properties
+android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
+
+# Skills/agents
+skills/
+.agents/
+skills-lock.json
