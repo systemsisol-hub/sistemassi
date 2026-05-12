@@ -74,13 +74,6 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
 
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: const SizedBox.shrink(),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.black),
-        toolbarHeight: 0, // Ocultamos el appbar vacío para ganar espacio
-      ),
       body: LayoutBuilder(
         builder: (context, constraints) {
           if (constraints.maxWidth > 800) {
