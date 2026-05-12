@@ -43,7 +43,6 @@ flutter:
   assets:
     - assets/
     - assets/firmcred/
-    - .env
   fonts:
     - family: Geist
       fonts:
