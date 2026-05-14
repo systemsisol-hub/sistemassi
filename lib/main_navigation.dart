@@ -27,8 +27,13 @@ final _navGroups = <(String, List<String>)>[
 class MainNavigation extends StatefulWidget {
   final String role;
   final Map<String, dynamic> permissions;
-  const MainNavigation(
-      {super.key, required this.role, required this.permissions});
+  final ValueNotifier<ThemeMode> themeNotifier;
+  const MainNavigation({
+    super.key,
+    required this.role,
+    required this.permissions,
+    required this.themeNotifier,
+  });
 
   @override
   State<MainNavigation> createState() => _MainNavigationState();
@@ -171,6 +176,7 @@ class _MainNavigationState extends State<MainNavigation> {
                 selectedIndex: _selectedIndex,
                 role: widget.role,
                 permissions: widget.permissions,
+                themeNotifier: widget.themeNotifier,
                 onSelect: (i) => setState(() {
                   _selectedIndex = i;
                   _selectedEventId = null;
@@ -183,6 +189,7 @@ class _MainNavigationState extends State<MainNavigation> {
                 selectedIndex: _selectedIndex,
                 role: widget.role,
                 permissions: widget.permissions,
+                themeNotifier: widget.themeNotifier,
                 onSelect: (i) => setState(() {
                   _selectedIndex = i;
                   _selectedEventId = null;
@@ -202,6 +209,7 @@ class _DesktopShell extends StatefulWidget {
   final int selectedIndex;
   final String role;
   final Map<String, dynamic> permissions;
+  final ValueNotifier<ThemeMode> themeNotifier;
   final ValueChanged<int> onSelect;
   final ValueChanged<String?> onNavigateToCalendar;
 
@@ -210,6 +218,7 @@ class _DesktopShell extends StatefulWidget {
     required this.selectedIndex,
     required this.role,
     required this.permissions,
+    required this.themeNotifier,
     required this.onSelect,
     required this.onNavigateToCalendar,
   });
@@ -463,6 +472,7 @@ class _DesktopShellState extends State<_DesktopShell>
                   pageTitle: currentPage['title'],
                   role: widget.role,
                   permissions: widget.permissions,
+                  themeNotifier: widget.themeNotifier,
                   onNavigateToCalendar: widget.onNavigateToCalendar,
                   onSelectHome: () => widget.onSelect(0),
                 ),
@@ -483,6 +493,7 @@ class _MobileShell extends StatelessWidget {
   final int selectedIndex;
   final String role;
   final Map<String, dynamic> permissions;
+  final ValueNotifier<ThemeMode> themeNotifier;
   final ValueChanged<int> onSelect;
   final ValueChanged<String?> onNavigateToCalendar;
 
@@ -491,6 +502,7 @@ class _MobileShell extends StatelessWidget {
     required this.selectedIndex,
     required this.role,
     required this.permissions,
+    required this.themeNotifier,
     required this.onSelect,
     required this.onNavigateToCalendar,
   });
@@ -505,6 +517,20 @@ class _MobileShell extends StatelessWidget {
       appBar: AppBar(
         title: Text(currentPage['title']),
         actions: [
+          ValueListenableBuilder<ThemeMode>(
+            valueListenable: themeNotifier,
+            builder: (context, mode, _) => IconButton(
+              icon: Icon(
+                mode == ThemeMode.dark
+                    ? Icons.wb_sunny_outlined
+                    : Icons.dark_mode_outlined,
+                size: 20,
+              ),
+              tooltip: mode == ThemeMode.dark ? 'Modo claro' : 'Modo oscuro',
+              onPressed: () => themeNotifier.value =
+                  mode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark,
+            ),
+          ),
           NotificationBell(
             role: role,
             permissions: permissions,
@@ -630,6 +656,7 @@ class _Header extends StatelessWidget {
   final String pageTitle;
   final String role;
   final Map<String, dynamic> permissions;
+  final ValueNotifier<ThemeMode> themeNotifier;
   final ValueChanged<String?> onNavigateToCalendar;
   final VoidCallback onSelectHome;
 
@@ -637,6 +664,7 @@ class _Header extends StatelessWidget {
     required this.pageTitle,
     required this.role,
     required this.permissions,
+    required this.themeNotifier,
     required this.onNavigateToCalendar,
     required this.onSelectHome,
   });
@@ -679,6 +707,23 @@ class _Header extends StatelessWidget {
             child: Center(child: _SearchBar()),
           ),
           const SizedBox(width: 8),
+          ValueListenableBuilder<ThemeMode>(
+            valueListenable: themeNotifier,
+            builder: (context, mode, _) {
+              final isDark = mode == ThemeMode.dark;
+              return IconButton(
+                visualDensity: VisualDensity.compact,
+                tooltip: isDark ? 'Modo claro' : 'Modo oscuro',
+                icon: Icon(
+                  isDark ? Icons.wb_sunny_outlined : Icons.dark_mode_outlined,
+                  size: 18,
+                  color: c.ink3,
+                ),
+                onPressed: () => themeNotifier.value =
+                    isDark ? ThemeMode.light : ThemeMode.dark,
+              );
+            },
+          ),
           NotificationBell(
             role: role,
             permissions: permissions,

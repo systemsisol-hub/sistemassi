@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
+import 'theme/si_theme.dart';
 
 class SchedulesPage extends StatefulWidget {
   final bool hideAddButton;
@@ -119,6 +120,7 @@ class SchedulesPageState extends State<SchedulesPage> {
   }
 
   Future<void> _deleteSchedule(String id) async {
+    final c = SiColors.of(context);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -127,8 +129,8 @@ class SchedulesPageState extends State<SchedulesPage> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('CANCELAR')),
           TextButton(
-            onPressed: () => Navigator.pop(ctx, true), 
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: c.danger),
             child: const Text('ELIMINAR')
           ),
         ],
@@ -158,14 +160,15 @@ class SchedulesPageState extends State<SchedulesPage> {
       builder: (context) => StatefulBuilder(
         builder: (context, setModalState) {
           final theme = Theme.of(context);
+          final c = SiColors.of(context);
           return Container(
             height: MediaQuery.of(context).size.height * 0.9,
             padding: EdgeInsets.only(
               bottom: MediaQuery.of(context).viewInsets.bottom,
             ),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+            decoration: BoxDecoration(
+              color: c.panel,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
             ),
             child: Column(
               children: [
@@ -177,7 +180,7 @@ class SchedulesPageState extends State<SchedulesPage> {
                     children: [
                       TextButton(
                         onPressed: () => Navigator.pop(context),
-                        child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+                        child: Text('Cancelar', style: TextStyle(color: c.ink3)),
                       ),
                       const Text(
                         'Nuevo Horario',
@@ -194,7 +197,7 @@ class SchedulesPageState extends State<SchedulesPage> {
                           _saveSchedule();
                           Navigator.pop(context);
                         },
-                        child: const Text('Añadir', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+                        child: Text('Añadir', style: TextStyle(fontWeight: FontWeight.bold, color: c.brand)),
                       ),
                     ],
                   ),
@@ -203,7 +206,7 @@ class SchedulesPageState extends State<SchedulesPage> {
                 Expanded(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.all(24),
-                    child: _buildFormLogic(theme, setModalState),
+                    child: _buildFormLogic(theme, setModalState, c),
                   ),
                 ),
               ],
@@ -214,7 +217,7 @@ class SchedulesPageState extends State<SchedulesPage> {
     );
   }
 
-  Widget _buildFormLogic(ThemeData theme, StateSetter setModalState) {
+  Widget _buildFormLogic(ThemeData theme, StateSetter setModalState, SiColors c) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -224,6 +227,7 @@ class SchedulesPageState extends State<SchedulesPage> {
           label: 'Título del horario',
           hint: 'Ej. Corporativo, Nocturno...',
           icon: Icons.title,
+          c: c,
         ),
         const SizedBox(height: 16),
         _buildIconInput(
@@ -231,14 +235,15 @@ class SchedulesPageState extends State<SchedulesPage> {
           label: 'Zona / Ubicación',
           hint: 'Añadir ubicación',
           icon: Icons.location_on_outlined,
+          c: c,
         ),
         const SizedBox(height: 24),
         const Divider(),
         const SizedBox(height: 24),
-        
+
         // Quick Define
-        _buildQuickDefineRow(theme, setModalState),
-        
+        _buildQuickDefineRow(theme, setModalState, c),
+
         const SizedBox(height: 24),
       ],
     );
@@ -249,11 +254,12 @@ class SchedulesPageState extends State<SchedulesPage> {
     required String label,
     required String hint,
     required IconData icon,
+    required SiColors c,
   }) {
     return Row(
       children: [
         const SizedBox(width: 8), // Más espacio a la izquierda antes del icono
-        Icon(icon, color: Colors.grey[400], size: 22),
+        Icon(icon, color: c.ink4, size: 22),
         const SizedBox(width: 16),
         Expanded(
           child: TextField(
@@ -261,14 +267,14 @@ class SchedulesPageState extends State<SchedulesPage> {
             decoration: InputDecoration(
               labelText: label,
               hintText: hint,
-              hintStyle: TextStyle(color: Colors.grey[300]),
+              hintStyle: TextStyle(color: c.line),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: Colors.grey[200]!),
+                borderSide: BorderSide(color: c.line2),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: Colors.grey[200]!),
+                borderSide: BorderSide(color: c.line2),
               ),
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             ),
@@ -279,7 +285,7 @@ class SchedulesPageState extends State<SchedulesPage> {
     );
   }
 
-  Widget _buildQuickDefineRow(ThemeData theme, StateSetter setModalState) {
+  Widget _buildQuickDefineRow(ThemeData theme, StateSetter setModalState, SiColors c) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -287,6 +293,7 @@ class SchedulesPageState extends State<SchedulesPage> {
           label: 'Comienza',
           time: _tempIn,
           icon: Icons.access_time_outlined,
+          c: c,
           onTap: () async {
             final t = await showTimePicker(context: context, initialTime: _tempIn);
             if (t != null) setModalState(() => _tempIn = t);
@@ -297,6 +304,7 @@ class SchedulesPageState extends State<SchedulesPage> {
           label: 'Termina',
           time: _tempOut,
           icon: Icons.access_time_outlined,
+          c: c,
           onTap: () async {
             final t = await showTimePicker(context: context, initialTime: _tempOut);
             if (t != null) setModalState(() => _tempOut = t);
@@ -306,7 +314,7 @@ class SchedulesPageState extends State<SchedulesPage> {
         // Tolerancia con mismo estilo
         Row(
           children: [
-            Icon(Icons.timer_outlined, color: Colors.grey[400], size: 22),
+            Icon(Icons.timer_outlined, color: c.ink4, size: 22),
             const SizedBox(width: 16),
             const Text('Tolerancia', style: TextStyle(fontSize: 16)),
             const Spacer(),
@@ -321,7 +329,7 @@ class SchedulesPageState extends State<SchedulesPage> {
         const SizedBox(height: 24),
         const Divider(),
         const SizedBox(height: 24),
-        const Text('Días de la semana', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.blueGrey)),
+        Text('Días de la semana', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: c.ink2)),
         const SizedBox(height: 8),
         ...List.generate(7, (i) {
           final active = _selectedDays.contains(i);
@@ -353,10 +361,11 @@ class SchedulesPageState extends State<SchedulesPage> {
     required TimeOfDay time,
     required IconData icon,
     required VoidCallback onTap,
+    required SiColors c,
   }) {
     return Row(
       children: [
-        Icon(icon, color: Colors.grey[400], size: 22),
+        Icon(icon, color: c.ink4, size: 22),
         const SizedBox(width: 16),
         Text(label, style: const TextStyle(fontSize: 16)),
         const Spacer(),
@@ -365,7 +374,7 @@ class SchedulesPageState extends State<SchedulesPage> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: Colors.grey[100],
+              color: c.line2,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
@@ -383,6 +392,7 @@ class SchedulesPageState extends State<SchedulesPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final c = SiColors.of(context);
     final screenWidth = MediaQuery.of(context).size.width;
     
     final filteredSchedules = _schedules.where((s) {
@@ -417,13 +427,13 @@ class SchedulesPageState extends State<SchedulesPage> {
                     onChanged: (value) => setState(() => _searchQuery = value),
                     decoration: InputDecoration(
                       hintText: 'Buscar horario...',
-                      hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                      hintStyle: TextStyle(color: c.ink4, fontSize: 13),
                       prefixIcon: const Icon(Icons.search, size: 18),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: c.line)),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: c.line)),
                       focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: theme.colorScheme.primary)),
                       filled: true,
-                      fillColor: Colors.white,
+                      fillColor: c.panel,
                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                     ),
                     style: const TextStyle(fontSize: 13),
@@ -446,12 +456,13 @@ class SchedulesPageState extends State<SchedulesPage> {
           ],
         ),
         columns: [
-          DataColumn(label: Text('NOMBRE', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
+          DataColumn(label: Text('NOMBRE', style: TextStyle(color: c.ink3, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
           const DataColumn(label: SizedBox()), // Acciones
         ],
         source: _SchedulesDataSource(
           schedules: filteredSchedules,
           theme: theme,
+          siColors: c,
           daysOfWeek: _daysOfWeek,
           onDelete: (id) => _deleteSchedule(id),
           onViewRules: (s) => _showRulesDialog(s),
@@ -493,6 +504,7 @@ class SchedulesPageState extends State<SchedulesPage> {
 class _SchedulesDataSource extends DataTableSource {
   final List<Map<String, dynamic>> schedules;
   final ThemeData theme;
+  final SiColors siColors;
   final List<String> daysOfWeek;
   final Function(String) onDelete;
   final Function(Map<String, dynamic>) onViewRules;
@@ -500,6 +512,7 @@ class _SchedulesDataSource extends DataTableSource {
   _SchedulesDataSource({
     required this.schedules,
     required this.theme,
+    required this.siColors,
     required this.daysOfWeek,
     required this.onDelete,
     required this.onViewRules,
@@ -523,7 +536,7 @@ class _SchedulesDataSource extends DataTableSource {
         DataCell(Align(
           alignment: Alignment.centerRight,
           child: PopupMenuButton<String>(
-            icon: const Icon(Icons.more_horiz, color: Colors.grey),
+            icon: Icon(Icons.more_horiz, color: siColors.ink3),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             onSelected: (val) {
               if (val == 'rules') onViewRules(sched);
@@ -531,7 +544,7 @@ class _SchedulesDataSource extends DataTableSource {
             },
             itemBuilder: (context) => [
               const PopupMenuItem(value: 'rules', child: ListTile(leading: Icon(Icons.rule_outlined), title: Text('Ver Reglas'), dense: true)),
-              const PopupMenuItem(value: 'delete', child: ListTile(leading: Icon(Icons.delete_outline, color: Colors.red), title: Text('Eliminar', style: TextStyle(color: Colors.red)), dense: true)),
+              PopupMenuItem(value: 'delete', child: ListTile(leading: Icon(Icons.delete_outline, color: siColors.danger), title: Text('Eliminar', style: TextStyle(color: siColors.danger)), dense: true)),
             ],
           ),
         )),

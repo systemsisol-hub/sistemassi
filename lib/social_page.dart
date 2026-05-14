@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'dart:math';
 import 'widgets/page_header.dart';
 import 'calendar_event_form_dialog.dart';
+import 'theme/si_theme.dart';
 
 class SocialPage extends StatefulWidget {
   const SocialPage({super.key});
@@ -54,7 +55,7 @@ class _SocialPageState extends State<SocialPage> {
       if (mounted) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al cargar cumpleaños: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Error al cargar cumpleaños: $e'), backgroundColor: SiColors.of(context).danger),
         );
       }
     }
@@ -126,12 +127,13 @@ class _SocialPageState extends State<SocialPage> {
 
   @override
   Widget build(BuildContext context) {
+    final c = SiColors.of(context);
     final theme = Theme.of(context);
     final upcoming = _filteredBirthdays;
     final isDesktop = MediaQuery.of(context).size.width > 900;
 
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: c.bg,
       body: _isLoading
           ? Center(
               child: Image.asset(
@@ -185,6 +187,7 @@ class _SocialPageState extends State<SocialPage> {
 
 
   Widget _buildWeeklyEventsSection() {
+    final c = SiColors.of(context);
     final now = DateTime.now();
     final monday = DateTime(now.year, now.month, now.day - (now.weekday - 1));
     final sunday = DateTime(now.year, now.month, now.day - (now.weekday - 1) + 6);
@@ -219,16 +222,16 @@ class _SocialPageState extends State<SocialPage> {
               ),
               Text(
                 dateRange,
-                style: const TextStyle(color: Colors.white70, fontSize: 12),
+                style: const TextStyle(color: Color(0xB3FFFFFF), fontSize: 12),
               ),
             ],
           ),
         ),
         Container(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: c.panel,
             borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
-            border: Border.all(color: Colors.grey[200]!),
+            border: Border.all(color: c.line2),
           ),
           child: _isLoadingEvents
               ? Padding(
@@ -249,11 +252,11 @@ class _SocialPageState extends State<SocialPage> {
                       child: Center(
                         child: Column(
                           children: [
-                            Icon(Icons.event_available_outlined, size: 40, color: Colors.grey[300]),
+                            Icon(Icons.event_available_outlined, size: 40, color: c.line),
                             const SizedBox(height: 12),
                             Text(
                               'Sin eventos esta semana',
-                              style: TextStyle(color: Colors.grey[500], fontSize: 13),
+                              style: TextStyle(color: c.ink3, fontSize: 13),
                             ),
                           ],
                         ),
@@ -273,16 +276,16 @@ class _SocialPageState extends State<SocialPage> {
                         IconData iconData;
 
                         if (isHigh) {
-                          bgColor = Colors.red.shade50;
-                          iconColor = Colors.red.shade700;
+                          bgColor = c.dangerTint;
+                          iconColor = c.danger;
                           iconData = Icons.priority_high;
                         } else if (isPublic) {
-                          bgColor = Colors.green.shade50;
-                          iconColor = Colors.green.shade600;
+                          bgColor = c.successTint;
+                          iconColor = c.success;
                           iconData = Icons.groups;
                         } else {
-                          bgColor = Colors.blue.shade50;
-                          iconColor = Colors.blue.shade500;
+                          bgColor = c.brandTint;
+                          iconColor = c.brand;
                           iconData = Icons.person;
                         }
 
@@ -310,7 +313,7 @@ class _SocialPageState extends State<SocialPage> {
                               ),
                               subtitle: Text(
                                 DateFormat('EEE dd MMM, HH:mm', 'es_MX').format(start),
-                                style: TextStyle(fontSize: 11, color: isToday ? Colors.orange : Colors.grey[600]),
+                                style: TextStyle(fontSize: 11, color: isToday ? c.warn : c.ink3),
                               ),
                               trailing: Wrap(
                                 spacing: 4,
@@ -320,21 +323,21 @@ class _SocialPageState extends State<SocialPage> {
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                       decoration: BoxDecoration(
-                                        color: Colors.red.shade100,
+                                        color: c.dangerTint,
                                         borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(color: Colors.red.shade200),
+                                        border: Border.all(color: c.danger),
                                       ),
-                                      child: const Text('ALTA', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.red)),
+                                      child: Text('ALTA', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: c.danger)),
                                     ),
                                   if (isToday)
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                       decoration: BoxDecoration(
-                                        color: Colors.orange.shade100,
+                                        color: c.warnTint,
                                         borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(color: Colors.orange.shade200),
+                                        border: Border.all(color: c.warn),
                                       ),
-                                      child: const Text('HOY', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.orange)),
+                                      child: Text('HOY', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: c.warn)),
                                     ),
                                 ],
                               ),
@@ -348,7 +351,7 @@ class _SocialPageState extends State<SocialPage> {
                               },
                             ),
                             if (index < _weeklyEvents.length - 1)
-                              Divider(height: 1, indent: 64, endIndent: 12, color: Colors.grey[100]),
+                              Divider(height: 1, indent: 64, endIndent: 12, color: c.line2),
                           ],
                         );
                       }),
@@ -359,6 +362,7 @@ class _SocialPageState extends State<SocialPage> {
   }
 
   Widget _buildBirthdaySection(List<Map<String, dynamic>> upcoming, ThemeData theme) {
+    final c = SiColors.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -418,9 +422,9 @@ class _SocialPageState extends State<SocialPage> {
         // Content Area
         Container(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: c.panel,
             borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
-            border: Border.all(color: Colors.grey[200]!),
+            border: Border.all(color: c.line2),
           ),
           child: upcoming.isEmpty
               ? Padding(
@@ -434,6 +438,7 @@ class _SocialPageState extends State<SocialPage> {
   }
 
   Widget _buildBirthdayList(List<Map<String, dynamic>> items, ThemeData theme) {
+    final c = SiColors.of(context);
     return Column(
       children: List.generate(items.length, (index) {
         final item = items[index];
@@ -461,7 +466,7 @@ class _SocialPageState extends State<SocialPage> {
                       top: -2,
                       child: Container(
                         padding: const EdgeInsets.all(1),
-                        decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                        decoration: BoxDecoration(color: c.panel, shape: BoxShape.circle),
                         child: const Text('👑', style: TextStyle(fontSize: 10)),
                       ),
                     ),
@@ -473,7 +478,7 @@ class _SocialPageState extends State<SocialPage> {
               ),
               subtitle: Text(
                 item['ubicacion'] ?? 'SIN UBICACIÓN',
-                style: TextStyle(color: Colors.grey[600], fontSize: 11),
+                style: TextStyle(color: c.ink3, fontSize: 11),
                 overflow: TextOverflow.ellipsis,
               ),
               trailing: Column(
@@ -484,20 +489,20 @@ class _SocialPageState extends State<SocialPage> {
                     style: TextStyle(
                       fontSize: 16, 
                       fontWeight: FontWeight.bold, 
-                      color: isToday ? Colors.orange : theme.colorScheme.primary
+                      color: isToday ? c.warn : theme.colorScheme.primary
                     ),
                   ),
                   if (isToday)
-                    const Text(
+                    Text(
                       'HOY',
-                      style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.orange),
+                      style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: c.warn),
                     ),
                 ],
               ),
               onTap: () {},
             ),
             if (index < items.length - 1)
-              Divider(height: 1, indent: 64, endIndent: 12, color: Colors.grey[100]),
+              Divider(height: 1, indent: 64, endIndent: 12, color: c.line2),
           ],
         );
       }),
@@ -505,16 +510,17 @@ class _SocialPageState extends State<SocialPage> {
   }
 
   Widget _buildEmptyState() {
+    final c = SiColors.of(context);
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.cake_outlined, size: 48, color: Colors.grey[300]),
+          Icon(Icons.cake_outlined, size: 48, color: c.line),
           const SizedBox(height: 12),
           Text(
             'No hay cumpleaños en ${_months[_selectedMonth - 1]}',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey[500], fontSize: 13),
+            style: TextStyle(color: c.ink3, fontSize: 13),
           ),
         ],
       ),
@@ -522,20 +528,21 @@ class _SocialPageState extends State<SocialPage> {
   }
 
   Widget _buildPlaceholderSection(String title, IconData icon) {
+    final c = SiColors.of(context);
     return Container(
       height: 300,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: c.panel,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.grey[100]!),
+        border: Border.all(color: c.line2),
       ),
       child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 40, color: Colors.grey[200]),
+            Icon(icon, size: 40, color: c.line2),
             const SizedBox(height: 12),
-            Text(title, style: TextStyle(color: Colors.grey[400], fontWeight: FontWeight.w500)),
+            Text(title, style: TextStyle(color: c.line, fontWeight: FontWeight.w500)),
           ],
         ),
       ),

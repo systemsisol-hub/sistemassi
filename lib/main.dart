@@ -178,6 +178,7 @@ class _AuthRouterState extends State<AuthRouter> {
     return MainNavigation(
       role: _role ?? 'usuario',
       permissions: _permissions ?? {},
+      themeNotifier: widget.themeNotifier,
     );
   }
 }

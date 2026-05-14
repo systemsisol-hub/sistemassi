@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'theme/si_theme.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -243,7 +244,7 @@ class _ChecadorPageState extends State<ChecadorPage> {
       if (mounted) {
         setState(() => _errorString = 'Error en el proceso: $e');
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Error: $e'), backgroundColor: SiColors.of(context).danger),
         );
       }
     } finally {
@@ -285,6 +286,7 @@ class _ChecadorPageState extends State<ChecadorPage> {
 
   @override
   Widget build(BuildContext context) {
+    final c = SiColors.of(context);
     final theme = Theme.of(context);
     final isCheckedIn = _todayRecord != null;
     final isCheckedOut = isCheckedIn && _todayRecord!['check_out'] != null;
@@ -294,7 +296,7 @@ class _ChecadorPageState extends State<ChecadorPage> {
     }
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: c.panel,
       body: LayoutBuilder(
         builder: (context, constraints) {
           final isDesktop = constraints.maxWidth > 800;
@@ -310,15 +312,15 @@ class _ChecadorPageState extends State<ChecadorPage> {
                         padding: const EdgeInsets.all(12),
                         margin: const EdgeInsets.only(bottom: 16),
                         decoration: BoxDecoration(
-                          color: Colors.red.shade50,
+                          color: c.dangerTint,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.red.shade100),
+                          border: Border.all(color: c.dangerTint),
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.error_outline, color: Colors.red),
+                            Icon(Icons.error_outline, color: c.danger),
                             const SizedBox(width: 12),
-                            Expanded(child: Text(_errorString!, style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w500))),
+                            Expanded(child: Text(_errorString!, style: TextStyle(color: c.danger, fontWeight: FontWeight.w500))),
                           ],
                         ),
                       ),
@@ -335,12 +337,12 @@ class _ChecadorPageState extends State<ChecadorPage> {
                             child: Container(
                               height: 580,
                               decoration: BoxDecoration(
-                                color: Colors.white,
+                                color: c.panel,
                                 borderRadius: BorderRadius.circular(24),
-                                border: Border.all(color: Colors.grey[200]!),
+                                border: Border.all(color: c.line2),
                               ),
                               child: Center(
-                                child: Icon(Icons.add_circle_outline, color: Colors.grey[200], size: 48),
+                                child: Icon(Icons.add_circle_outline, color: c.line2, size: 48),
                               ),
                             ),
                           ),
@@ -356,19 +358,19 @@ class _ChecadorPageState extends State<ChecadorPage> {
                           Container(
                             height: 580,
                             decoration: BoxDecoration(
-                              color: Colors.white,
+                              color: c.panel,
                               borderRadius: BorderRadius.circular(24),
-                              border: Border.all(color: Colors.grey[200]!),
+                              border: Border.all(color: c.line2),
                             ),
                             child: Center(
-                              child: Icon(Icons.add_circle_outline, color: Colors.grey[200], size: 48),
+                              child: Icon(Icons.add_circle_outline, color: c.line2, size: 48),
                             ),
                           ),
                         ],
                       ),
                     if (widget.isAdmin) ...[
                       const SizedBox(height: 48),
-                      const Align(
+                      Align(
                         alignment: Alignment.centerLeft,
                         child: Text(
                           'PANEL DE ADMINISTRACIÓN',
@@ -376,7 +378,7 @@ class _ChecadorPageState extends State<ChecadorPage> {
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                             letterSpacing: 1.2,
-                            color: Colors.black87,
+                            color: c.ink,
                           ),
                         ),
                       ),
@@ -401,13 +403,14 @@ class _ChecadorPageState extends State<ChecadorPage> {
   }
 
   Widget _buildUnifiedChecadorCard(ThemeData theme, bool isIn, bool isOut) {
+    final c = SiColors.of(context);
     return SizedBox(
       height: 580,
       child: Card(
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
-          side: BorderSide(color: Colors.grey[200]!),
+          side: BorderSide(color: c.line2),
         ),
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -418,7 +421,7 @@ class _ChecadorPageState extends State<ChecadorPage> {
                 _formatDateForUser(_currentTime).toUpperCase(),
                 style: TextStyle(
                   fontSize: 14,
-                  color: Colors.grey.shade500,
+                  color: c.ink3,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 1.5,
                 ),
@@ -473,7 +476,7 @@ class _ChecadorPageState extends State<ChecadorPage> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
-                  color: Colors.grey[50],
+                  color: c.bg,
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Row(
@@ -483,7 +486,7 @@ class _ChecadorPageState extends State<ChecadorPage> {
                       width: 8,
                       height: 8,
                       decoration: BoxDecoration(
-                        color: isIn ? (isOut ? Colors.grey : const Color(0xFFB1CB34)) : theme.colorScheme.primary,
+                        color: isIn ? (isOut ? c.ink3 : const Color(0xFFB1CB34)) : theme.colorScheme.primary,
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -506,6 +509,7 @@ class _ChecadorPageState extends State<ChecadorPage> {
   }
 
   Widget _buildUnifiedActionButton(bool isIn, bool isOut, ThemeData theme) {
+    final c = SiColors.of(context);
     if (isOut) {
       return Container(
         width: double.infinity,
@@ -539,7 +543,7 @@ class _ChecadorPageState extends State<ChecadorPage> {
     }
 
     final bool isEntry = !isIn;
-    final color = isEntry ? const Color(0xFFB1CB34) : Colors.orange;
+    final color = isEntry ? const Color(0xFFB1CB34) : c.warn;
     final label = isEntry ? 'REGISTRAR ENTRADA' : 'REGISTRAR SALIDA';
     final icon = isEntry ? Icons.login_rounded : Icons.logout_rounded;
 
@@ -564,12 +568,13 @@ class _ChecadorPageState extends State<ChecadorPage> {
     );
   }
 
-  Widget _buildTimeInfo(String label, String? time) {
+  Widget _buildTimeInfo(BuildContext context, String label, String? time) {
+    final c = SiColors.of(context);
     if (time == null) return const SizedBox.shrink();
     final dateTime = DateTime.parse(time).toLocal();
     return Column(
       children: [
-        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 14)),
+        Text(label, style: TextStyle(color: c.ink3, fontSize: 14)),
         const SizedBox(height: 4),
         Text(
           DateFormat('HH:mm').format(dateTime),
@@ -579,13 +584,14 @@ class _ChecadorPageState extends State<ChecadorPage> {
     );
   }
 
-  Widget _buildMiniInfo(String label, String? time) {
+  Widget _buildMiniInfo(BuildContext context, String label, String? time) {
+    final c = SiColors.of(context);
     if (time == null) return const SizedBox.shrink();
     final dateTime = DateTime.parse(time).toLocal();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.w500)),
+        Text(label, style: TextStyle(color: c.ink3, fontSize: 11, fontWeight: FontWeight.w500)),
         Text(
           DateFormat('HH:mm').format(dateTime),
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -595,13 +601,14 @@ class _ChecadorPageState extends State<ChecadorPage> {
   }
 
   Widget _buildHistoryCard(ThemeData theme) {
+    final c = SiColors.of(context);
     return SizedBox(
       height: 580,
       child: Card(
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
-          side: BorderSide(color: Colors.grey[200]!),
+          side: BorderSide(color: c.line2),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -612,13 +619,13 @@ class _ChecadorPageState extends State<ChecadorPage> {
                 children: [
                   Icon(Icons.history, size: 20, color: theme.colorScheme.primary),
                   const SizedBox(width: 12),
-                  const Text(
+                  Text(
                     'HISTORIAL RECIENTE',
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 1,
-                      color: Colors.black87,
+                      color: c.ink,
                     ),
                   ),
                 ],
@@ -636,11 +643,12 @@ class _ChecadorPageState extends State<ChecadorPage> {
   }
 
   Widget _buildHistoryList(ThemeData theme) {
+    final c = SiColors.of(context);
     if (_history.isEmpty) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(32),
-          child: Text('No hay registros previos', style: TextStyle(color: Colors.grey)),
+          padding: const EdgeInsets.all(32),
+          child: Text('No hay registros previos', style: TextStyle(color: c.ink3)),
         ),
       );
     }
@@ -654,10 +662,10 @@ class _ChecadorPageState extends State<ChecadorPage> {
         final date = DateTime.parse(item['date']);
         return Card(
           elevation: 0,
-          color: Colors.grey[50]!,
+          color: c.bg,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: Colors.grey[100]!),
+            side: BorderSide(color: c.line2),
           ),
           child: ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -697,7 +705,7 @@ class _ChecadorPageState extends State<ChecadorPage> {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.logout, size: 14, color: Colors.orange),
+                      Icon(Icons.logout, size: 14, color: c.warn),
                       const SizedBox(width: 4),
                       Text(
                         DateFormat('HH:mm').format(
@@ -746,12 +754,12 @@ class _ChecadorPageState extends State<ChecadorPage> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.location_on, size: 12, color: Colors.orange),
+                        Icon(Icons.location_on, size: 12, color: c.warn),
                         const SizedBox(width: 4),
                         Text(
                           'Ver ubicación Salida',
                           style: TextStyle(
-                            color: Colors.orange[700],
+                            color: c.warn,
                             fontSize: 12,
                             decoration: TextDecoration.underline,
                             fontWeight: FontWeight.bold,

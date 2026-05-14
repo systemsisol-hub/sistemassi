@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'schedules_page.dart';
+import 'theme/si_theme.dart';
 
 class AttendanceAdminPage extends StatefulWidget {
   final String role;
@@ -71,9 +72,10 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final c = SiColors.of(context);
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: c.panel,
       body: LayoutBuilder(
         builder: (context, constraints) {
           if (constraints.maxWidth > 800) {
@@ -102,12 +104,12 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
                 Expanded(
                   child: Container(
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: c.panel,
                       borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: Colors.grey[200]!),
+                      border: Border.all(color: c.line2),
                     ),
                     child: Center(
-                      child: Icon(Icons.add_chart_outlined, color: Colors.grey[200], size: 48),
+                      child: Icon(Icons.add_chart_outlined, color: c.line2, size: 48),
                     ),
                   ),
                 ),
@@ -121,7 +123,7 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
                   ExpansionTile(
                     initiallyExpanded: false,
                     iconColor: theme.colorScheme.primary,
-                    collapsedIconColor: Colors.grey,
+                    collapsedIconColor: c.ink3,
                     title: Text('Horarios',
                         style: TextStyle(
                             fontWeight: FontWeight.bold,
@@ -135,7 +137,7 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
                   ExpansionTile(
                     initiallyExpanded: false,
                     iconColor: theme.colorScheme.primary,
-                    collapsedIconColor: Colors.grey,
+                    collapsedIconColor: c.ink3,
                     title: Text('Registros',
                         style: TextStyle(
                             fontWeight: FontWeight.bold,
@@ -159,6 +161,7 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
   }
 
   Widget _buildList(ThemeData theme) {
+    final c = SiColors.of(context);
     final screenWidth = MediaQuery.of(context).size.width;
     final filteredRecords = _allRecords.where((rec) {
       final name = (rec['profiles']?['full_name'] ?? '').toString().toLowerCase();
@@ -189,13 +192,13 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
                   onChanged: (value) => setState(() => _searchQuery = value),
                   decoration: InputDecoration(
                     hintText: 'Buscar empleado o fecha...',
-                    hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                    hintStyle: TextStyle(color: c.ink4, fontSize: 13),
                     prefixIcon: const Icon(Icons.search, size: 16),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: c.line)),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: c.line)),
                     focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: theme.colorScheme.primary)),
                     filled: true,
-                    fillColor: Colors.white,
+                    fillColor: c.panel,
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                   ),
                   style: const TextStyle(fontSize: 13),
@@ -209,14 +212,15 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
         columnSpacing: 20,
         horizontalMargin: 24,
         columns: [
-          DataColumn(label: Text('EMPLEADO', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
-          DataColumn(label: Text('FECHA', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
-          DataColumn(label: Text('HORA', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
+          DataColumn(label: Text('EMPLEADO', style: TextStyle(color: c.ink3, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
+          DataColumn(label: Text('FECHA', style: TextStyle(color: c.ink3, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
+          DataColumn(label: Text('HORA', style: TextStyle(color: c.ink3, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
           const DataColumn(label: SizedBox()), // Acciones
         ],
         source: _AttendanceDataSource(
           records: filteredRecords,
           theme: theme,
+          colors: c,
           onOpenMap: (lat, lng) => _openMap(lat, lng),
           onViewPhotos: (rec) => _showPhotosDialog(rec),
         ),
@@ -240,15 +244,16 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
   }
 
   Widget _buildPhotoSection(String? entryUrl, String? exitUrl) {
+    final c = SiColors.of(context);
     if (entryUrl == null && exitUrl == null) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Evidencia Fotográfica:',
+        Text('Evidencia Fotográfica:',
             style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
-                color: Colors.blueGrey)),
+                color: c.ink2)),
         const SizedBox(height: 12),
         Wrap(
           // Wrap es mejor que Row+Expanded para evitar el estiramiento en pantallas grandes
@@ -264,6 +269,7 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
   }
 
   Widget _buildImageCard(String label, String url) {
+    final c = SiColors.of(context);
     return SizedBox(
       width: 180, // Tamaño fijo controlado para evitar "exageración"
       child: Column(
@@ -278,17 +284,17 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
               errorBuilder: (context, error, stackTrace) => Container(
                 height: 180,
                 width: 180,
-                color: Colors.grey[100],
-                child: const Icon(Icons.broken_image, color: Colors.grey),
+                color: c.line2,
+                child: Icon(Icons.broken_image, color: c.ink3),
               ),
             ),
           ),
           const SizedBox(height: 8),
           Text(label,
-              style: const TextStyle(
+              style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w500,
-                  color: Colors.grey)),
+                  color: c.ink3)),
         ],
       ),
     );
@@ -297,6 +303,7 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
   Widget _buildAdminInfoRow(
       String label, String? timeStr, num? lat, num? lng, ThemeData theme,
       {bool isOut = false}) {
+    final c = SiColors.of(context);
     final hasTime = timeStr != null;
     final time = hasTime ? DateTime.parse(timeStr).toLocal() : null;
 
@@ -310,7 +317,7 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(label,
-                      style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                      style: TextStyle(color: c.ink3, fontSize: 12)),
                   const SizedBox(height: 4),
                   Text(
                     hasTime ? DateFormat('HH:mm').format(time!) : '--:--',
@@ -327,14 +334,14 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
             onPressed: () => _openMap(lat, lng),
             icon: Icon(Icons.map,
                 size: 16,
-                color: isOut ? Colors.orange : theme.colorScheme.primary),
+                color: isOut ? c.warn : theme.colorScheme.primary),
             label: Text('VER MAPA',
                 style: TextStyle(
-                    color: isOut ? Colors.orange : theme.colorScheme.primary)),
+                    color: isOut ? c.warn : theme.colorScheme.primary)),
           )
         else
-          const Text('Sin GPS',
-              style: TextStyle(color: Colors.grey, fontSize: 12)),
+          Text('Sin GPS',
+              style: TextStyle(color: c.ink3, fontSize: 12)),
       ],
     );
   }
@@ -346,12 +353,14 @@ class _AttendanceAdminPageState extends State<AttendanceAdminPage> {
 class _AttendanceDataSource extends DataTableSource {
   final List<Map<String, dynamic>> records;
   final ThemeData theme;
+  final SiColors colors;
   final Function(num?, num?) onOpenMap;
   final Function(Map<String, dynamic>) onViewPhotos;
 
   _AttendanceDataSource({
     required this.records,
     required this.theme,
+    required this.colors,
     required this.onOpenMap,
     required this.onViewPhotos,
   });
@@ -376,7 +385,7 @@ class _AttendanceDataSource extends DataTableSource {
         (sched != null && sched['rules'] != null) ? sched['rules'] : [];
 
     String statusText = 'PENDIENTE';
-    Color statusColor = Colors.grey;
+    Color statusColor = colors.ink3;
 
     final dayIndex = recordDate.weekday % 7;
     final entryRule = rules.firstWhere(
@@ -393,10 +402,10 @@ class _AttendanceDataSource extends DataTableSource {
         final workStart = DateTime(recordDate.year, recordDate.month, recordDate.day, int.parse(parts[0]), int.parse(parts[1]));
         if (checkInLocal.isAfter(workStart.add(Duration(minutes: tolerance)))) {
           statusText = 'RETARDO';
-          statusColor = Colors.orange;
+          statusColor = colors.warn;
         } else {
           statusText = 'A TIEMPO';
-          statusColor = Colors.green;
+          statusColor = colors.success;
         }
       } else {
         statusText = 'REGISTRADO';
@@ -408,7 +417,7 @@ class _AttendanceDataSource extends DataTableSource {
       // Wait, there's a typo in my thought: recordDate.isBefore(today).
       if (recordDate.isBefore(today)) {
         statusText = 'FALTA';
-        statusColor = Colors.red;
+        statusColor = colors.danger;
       }
     }
 
@@ -434,7 +443,7 @@ class _AttendanceDataSource extends DataTableSource {
             Text(checkInStr != null ? DateFormat('HH:mm').format(DateTime.parse(checkInStr).toLocal()) : '--:--', 
                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
             const SizedBox(width: 8),
-            const Icon(Icons.logout, size: 13, color: Colors.orange),
+            Icon(Icons.logout, size: 13, color: colors.warn),
             const SizedBox(width: 4),
             Text(checkOutStr != null ? DateFormat('HH:mm').format(DateTime.parse(checkOutStr).toLocal()) : '--:--',
                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
@@ -443,7 +452,7 @@ class _AttendanceDataSource extends DataTableSource {
         DataCell(Align(
           alignment: Alignment.centerRight,
           child: PopupMenuButton<String>(
-            icon: const Icon(Icons.more_horiz, color: Colors.grey),
+            icon: Icon(Icons.more_horiz, color: colors.ink3),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             onSelected: (val) {
               if (val == 'map_in') onOpenMap(rec['lat'], rec['lng']);
@@ -452,8 +461,8 @@ class _AttendanceDataSource extends DataTableSource {
             },
             itemBuilder: (context) => [
               const PopupMenuItem(value: 'photos', child: ListTile(leading: Icon(Icons.photo_library_outlined), title: Text('Ver Fotos'), dense: true)),
-              if (rec['lat'] != null) const PopupMenuItem(value: 'map_in', child: ListTile(leading: Icon(Icons.location_on_outlined, color: Colors.blue), title: Text('Mapa Entrada'), dense: true)),
-              if (rec['lat_out'] != null) const PopupMenuItem(value: 'map_out', child: ListTile(leading: Icon(Icons.location_on_outlined, color: Colors.orange), title: Text('Mapa Salida'), dense: true)),
+              if (rec['lat'] != null) PopupMenuItem(value: 'map_in', child: ListTile(leading: Icon(Icons.location_on_outlined, color: colors.brand), title: const Text('Mapa Entrada'), dense: true)),
+              if (rec['lat_out'] != null) PopupMenuItem(value: 'map_out', child: ListTile(leading: Icon(Icons.location_on_outlined, color: colors.warn), title: const Text('Mapa Salida'), dense: true)),
             ],
           ),
         )),
