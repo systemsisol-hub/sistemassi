@@ -287,6 +287,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           'show_external_contacts': false,
           'show_asistencia': false,
           'show_powerbi': false,
+          'show_passwords': false,
         });
 
     // Credential Controllers
@@ -418,6 +419,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   Icons.fingerprint, permissions, setDialogState),
               _buildPermissionSwitch('Power BI', 'show_powerbi',
                   Icons.bar_chart, permissions, setDialogState),
+              _buildPermissionSwitch('Contraseñas', 'show_passwords',
+                  Icons.vpn_key, permissions, setDialogState),
             ],
           );
 
