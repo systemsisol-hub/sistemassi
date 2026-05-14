@@ -1,5 +1,5 @@
-import 'dart:html' as html;
 import 'dart:ui_web' as ui_web;
+import 'package:web/web.dart' as web;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'theme/si_theme.dart';
@@ -922,12 +922,12 @@ class _WebIframeState extends State<_WebIframe> {
     super.initState();
     _viewType = 'bi-iframe-${DateTime.now().millisecondsSinceEpoch}';
     ui_web.platformViewRegistry.registerViewFactory(_viewType, (int _) {
-      return html.IFrameElement()
+      return web.HTMLIFrameElement()
         ..src = widget.url
+        ..allow = 'fullscreen'
         ..style.border = 'none'
         ..style.width = '100%'
-        ..style.height = '100%'
-        ..allow = 'fullscreen';
+        ..style.height = '100%';
     });
   }
 
