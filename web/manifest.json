@@ -1,11 +1,11 @@
 {
-    "name": "App Sisol",
-    "short_name": "Sisol",
+    "name": "Sistemassi",
+    "short_name": "Sistemassi",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#ffffff",
     "theme_color": "#ffffff",
-    "description": "App de Registro Sisol",
+    "description": "Plataforma Operativa SistemasSI",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

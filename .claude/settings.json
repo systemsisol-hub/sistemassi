@@ -1,4 +1,13 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(git -C /d/Documents/GitHub/sistemassi ls-files build/ .dart_tool/ .flutter-plugins .flutter-plugins-dependencies build.log)",
+      "Bash(git -C /d/Documents/GitHub/sistemassi ls-files flutter/ android/ design_handoff_sistemassi_redesign/)",
+      "Bash(git -C /d/Documents/GitHub/sistemassi ls-files Dockerfile docker-compose.yml build.sh build_cloudflare.sh build.log dev-server.ps1 appsi.iml .puro.json .mcp.json)",
+      "Bash(git -C /d/Documents/GitHub/sistemassi status --short)",
+      "Bash(git -C /d/Documents/GitHub/sistemassi commit -m ' *)"
+    ]
+  },
   "mcpServers": {
     "supabase": {
       "serverUrl": "https://mcp.supabase.com/mcp?project_ref=zkmbebybyyefmqcxjqrg"

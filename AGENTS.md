@@ -1,4 +1,4 @@
-# Agent Guidelines for appsi_apk
+# Agent Guidelines for sistemassi
 
 This document provides guidance for AI agents working with this Flutter/Dart codebase.
 
