@@ -5,7 +5,11 @@
       "Bash(git -C /d/Documents/GitHub/sistemassi ls-files flutter/ android/ design_handoff_sistemassi_redesign/)",
       "Bash(git -C /d/Documents/GitHub/sistemassi ls-files Dockerfile docker-compose.yml build.sh build_cloudflare.sh build.log dev-server.ps1 appsi.iml .puro.json .mcp.json)",
       "Bash(git -C /d/Documents/GitHub/sistemassi status --short)",
-      "Bash(git -C /d/Documents/GitHub/sistemassi commit -m ' *)"
+      "Bash(git -C /d/Documents/GitHub/sistemassi commit -m ' *)",
+      "Bash(git -C /d/Documents/GitHub/sistemassi diff --stat)",
+      "Bash(git -C /d/Documents/GitHub/sistemassi status)",
+      "Bash(git -C /d/Documents/GitHub/sistemassi diff .claude/settings.json)",
+      "Bash(git -C /d/Documents/GitHub/sistemassi add lib/bi_page.dart lib/passwords_page.dart .claude/settings.json)"
     ]
   },
   "mcpServers": {
