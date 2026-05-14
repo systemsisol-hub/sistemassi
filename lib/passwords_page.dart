@@ -982,7 +982,8 @@ class _ShareDialogState extends State<_ShareDialog> {
       final users = await Supabase.instance.client
           .from('profiles')
           .select()
-          .neq('id', widget.currentUserId);
+          .neq('id', widget.currentUserId)
+          .filter('permissions->>show_passwords', 'eq', 'true');
 
       if (mounted) {
         setState(() {
