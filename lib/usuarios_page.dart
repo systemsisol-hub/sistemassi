@@ -43,7 +43,7 @@ class AdminDashboard extends StatefulWidget {
 
 class _AdminDashboardState extends State<AdminDashboard> {
   List<Map<String, dynamic>> _users = [];
-  List<Map<String, dynamic>> _collaborators = [];
+  List<Map<String, dynamic>> _filteredCache = [];
   bool _isLoading = true;
   final _searchController = TextEditingController();
   String _searchQuery = '';
@@ -54,7 +54,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
     super.initState();
     _checkAdminRole();
     _fetchUsers();
-    _fetchCollaborators();
   }
 
   @override
@@ -74,28 +73,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
     }
   }
 
-  Future<void> _fetchCollaborators() async {
-    try {
-      List<Map<String, dynamic>> all = [];
-      int offset = 0;
-      const limit = 1000;
-      while (true) {
-        final data = await Supabase.instance.client
-            .from('profiles')
-            .select('id, nombre, paterno, materno, numero_empleado, status_sys')
-            .not('nombre', 'is', null)
-            .order('nombre')
-            .range(offset, offset + limit - 1);
-        all.addAll(List<Map<String, dynamic>>.from(data));
-        if (data.length < limit) break;
-        offset += limit;
-      }
-      if (mounted) setState(() => _collaborators = all);
-    } catch (e) {
-      debugPrint('Error fetching collaborators: $e');
-    }
-  }
-
   Future<void> _fetchUsers() async {
     setState(() => _isLoading = true);
     try {
@@ -105,23 +82,17 @@ class _AdminDashboardState extends State<AdminDashboard> {
       while (true) {
         final data = await Supabase.instance.client
             .from('profiles')
-            .select('*')
-            .order('created_at', ascending: false)
+            .select('id, nombre, paterno, materno, email, numero_empleado, role, is_blocked, status_sys, permissions')
             .range(offset, offset + limit - 1);
         all.addAll(List<Map<String, dynamic>>.from(data));
         if (data.length < limit) break;
         offset += limit;
       }
       if (mounted) {
-        all.sort((a, b) {
-          final ac = (a['status_sys'] == 'CAMBIO') ? 0 : 1;
-          final bc = (b['status_sys'] == 'CAMBIO') ? 0 : 1;
-          if (ac != bc) return ac.compareTo(bc);
-          final an = int.tryParse(a['numero_empleado']?.toString() ?? '') ?? -1;
-          final bn = int.tryParse(b['numero_empleado']?.toString() ?? '') ?? -1;
-          return bn.compareTo(an);
+        setState(() {
+          _users = all;
+          _recomputeFiltered();
         });
-        setState(() => _users = all);
       }
     } catch (e) {
       debugPrint('Error al cargar usuarios: $e');
@@ -176,12 +147,25 @@ class _AdminDashboardState extends State<AdminDashboard> {
     }
   }
 
-  void _showUserForm({Map<String, dynamic>? user}) {
+  void _showUserForm({Map<String, dynamic>? user}) async {
+    Map<String, dynamic>? fullUser = user;
+    if (user != null) {
+      try {
+        final data = await Supabase.instance.client
+            .from('profiles')
+            .select()
+            .eq('id', user['id'])
+            .single();
+        fullUser = Map<String, dynamic>.from(data);
+      } catch (e) {
+        debugPrint('Error loading user details: $e');
+      }
+    }
+    if (!mounted) return;
     showFullWidthModal(
       context: context,
       builder: (ctx) => _UserFormSheet(
-        user: user,
-        collaborators: _collaborators,
+        user: fullUser,
         onSaved: () {
           _fetchUsers();
           if (mounted) {
@@ -193,9 +177,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  List<Map<String, dynamic>> get _filtered {
-    List<Map<String, dynamic>> result = _searchQuery.isEmpty
-        ? List.from(_users)
+  void _recomputeFiltered() {
+    final result = _searchQuery.isEmpty
+        ? List<Map<String, dynamic>>.from(_users)
         : _users.where((u) {
             final q = _searchQuery.toLowerCase();
             return (u['nombre'] ?? '').toString().toLowerCase().contains(q) ||
@@ -204,17 +188,20 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 (u['numero_empleado'] ?? '').toString().toLowerCase().contains(q);
           }).toList();
     result.sort((a, b) {
+      final ac = (a['status_sys'] == 'CAMBIO') ? 0 : 1;
+      final bc = (b['status_sys'] == 'CAMBIO') ? 0 : 1;
+      if (ac != bc) return ac.compareTo(bc);
       final an = int.tryParse(a['numero_empleado']?.toString() ?? '') ?? 0;
       final bn = int.tryParse(b['numero_empleado']?.toString() ?? '') ?? 0;
       return bn.compareTo(an);
     });
-    return result;
+    _filteredCache = result;
   }
 
   @override
   Widget build(BuildContext context) {
     final c = SiColors.of(context);
-    final items = _filtered;
+    final items = _filteredCache;
 
     return Scaffold(
       backgroundColor: c.bg,
@@ -274,7 +261,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         icon: Icon(Icons.clear, size: 14, color: c.ink3),
                         onPressed: () {
                           _searchController.clear();
-                          setState(() => _searchQuery = '');
+                          setState(() {
+                            _searchQuery = '';
+                            _recomputeFiltered();
+                          });
                         },
                       )
                     : null,
@@ -284,7 +274,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 contentPadding: const EdgeInsets.symmetric(vertical: 10),
                 isDense: true,
               ),
-              onChanged: (v) => setState(() => _searchQuery = v),
+              onChanged: (v) => setState(() {
+                _searchQuery = v;
+                _recomputeFiltered();
+              }),
             ),
           ),
           const Spacer(),
@@ -734,11 +727,9 @@ class _PermIcon {
 
 class _UserFormSheet extends StatefulWidget {
   final Map<String, dynamic>? user;
-  final List<Map<String, dynamic>> collaborators;
   final VoidCallback onSaved;
 
   const _UserFormSheet({
-    required this.collaborators,
     required this.onSaved,
     this.user,
   });
