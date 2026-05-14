@@ -13,11 +13,12 @@ import 'calendar_page.dart';
 import 'attendance_hub_page.dart';
 import 'bi_page.dart';
 import 'signature_generator_page.dart';
+import 'passwords_page.dart';
 import 'theme/si_theme.dart';
 
 // Visual-only nav group definitions — order here is render order.
 final _navGroups = <(String, List<String>)>[
-  ('GENERAL',        ['Mi Perfil', 'Social', 'Contactos', 'Firmas', 'Calendario']),
+  ('GENERAL',        ['Mi Perfil', 'Social', 'Contraseñas', 'Contactos', 'Firmas', 'Calendario']),
   ('OPERACIÓN',      ['Incidencias', 'Inventario', 'Colaborador', 'Asistencia']),
   ('ANÁLISIS',       ['BI', 'Logs']),
   ('ADMINISTRACIÓN', ['Usuarios']),
@@ -58,6 +59,15 @@ class _MainNavigationState extends State<MainNavigation> {
       'activeIcon': Icons.draw,
       'widget': const SignatureGeneratorPage(),
     });
+
+    if (widget.permissions['show_passwords'] == true) {
+      pages.add({
+        'title': 'Contraseñas',
+        'icon': Icons.vpn_key_outlined,
+        'activeIcon': Icons.vpn_key,
+        'widget': const PasswordsPage(),
+      });
+    }
 
     if (widget.permissions['show_calendar'] == true) {
       pages.add({
