@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -42,12 +43,15 @@ class AdminDashboard extends StatefulWidget {
 }
 
 class _AdminDashboardState extends State<AdminDashboard> {
+  static const _pageSize = 25;
   List<Map<String, dynamic>> _users = [];
-  List<Map<String, dynamic>> _filteredCache = [];
   bool _isLoading = true;
+  bool _hasMore = false;
+  int _page = 0;
   final _searchController = TextEditingController();
   String _searchQuery = '';
   bool _isAdmin = false;
+  Timer? _searchDebounce;
 
   @override
   void initState() {
@@ -59,6 +63,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   @override
   void dispose() {
     _searchController.dispose();
+    _searchDebounce?.cancel();
     super.dispose();
   }
 
@@ -76,35 +81,60 @@ class _AdminDashboardState extends State<AdminDashboard> {
   Future<void> _fetchUsers() async {
     setState(() => _isLoading = true);
     try {
-      List<Map<String, dynamic>> all = [];
-      int offset = 0;
-      const limit = 1000;
-      while (true) {
-        final data = await Supabase.instance.client
-            .from('profiles')
-            .select('id, nombre, paterno, materno, email, numero_empleado, role, is_blocked, status_sys, permissions')
-            .range(offset, offset + limit - 1);
-        all.addAll(List<Map<String, dynamic>>.from(data));
-        if (data.length < limit) break;
-        offset += limit;
+      final from = _page * _pageSize;
+      var query = Supabase.instance.client
+          .from('profiles')
+          .select('id, nombre, paterno, materno, email, numero_empleado, role, is_blocked, status_sys, permissions');
+
+      if (_searchQuery.isNotEmpty) {
+        final q = _searchQuery.trim();
+        query = query.or(
+            'nombre.ilike.%$q%,paterno.ilike.%$q%,email.ilike.%$q%,numero_empleado.ilike.%$q%');
       }
+
+      final data = await query
+          .order('created_at', ascending: false)
+          .range(from, from + _pageSize); // pageSize+1 to detect hasMore
+
+      final rows = List<Map<String, dynamic>>.from(data);
+      final hasMore = rows.length > _pageSize;
+
       if (mounted) {
         setState(() {
-          _users = all;
-          _recomputeFiltered();
+          _users = hasMore ? rows.sublist(0, _pageSize) : rows;
+          _hasMore = hasMore;
+          _isLoading = false;
         });
       }
     } catch (e) {
       debugPrint('Error al cargar usuarios: $e');
       if (mounted) {
+        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('Error al cargar usuarios: $e'),
           backgroundColor: SiColors.of(context).danger,
         ));
       }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _refreshUsers() {
+    _page = 0;
+    return _fetchUsers();
+  }
+
+  void _onSearchChanged(String v) {
+    _searchDebounce?.cancel();
+    setState(() => _searchQuery = v);
+    if (v.isEmpty) {
+      _page = 0;
+      _fetchUsers();
+      return;
+    }
+    _searchDebounce = Timer(const Duration(milliseconds: 400), () {
+      _page = 0;
+      _fetchUsers();
+    });
   }
 
   Future<void> _deleteUser(String id) async {
@@ -177,31 +207,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  void _recomputeFiltered() {
-    final result = _searchQuery.isEmpty
-        ? List<Map<String, dynamic>>.from(_users)
-        : _users.where((u) {
-            final q = _searchQuery.toLowerCase();
-            return (u['nombre'] ?? '').toString().toLowerCase().contains(q) ||
-                (u['paterno'] ?? '').toString().toLowerCase().contains(q) ||
-                (u['email'] ?? '').toString().toLowerCase().contains(q) ||
-                (u['numero_empleado'] ?? '').toString().toLowerCase().contains(q);
-          }).toList();
-    result.sort((a, b) {
-      final ac = (a['status_sys'] == 'CAMBIO') ? 0 : 1;
-      final bc = (b['status_sys'] == 'CAMBIO') ? 0 : 1;
-      if (ac != bc) return ac.compareTo(bc);
-      final an = int.tryParse(a['numero_empleado']?.toString() ?? '') ?? 0;
-      final bn = int.tryParse(b['numero_empleado']?.toString() ?? '') ?? 0;
-      return bn.compareTo(an);
-    });
-    _filteredCache = result;
-  }
-
   @override
   Widget build(BuildContext context) {
     final c = SiColors.of(context);
-    final items = _filteredCache;
+    final items = _users;
 
     return Scaffold(
       backgroundColor: c.bg,
@@ -217,7 +226,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                             color: c.brand, strokeWidth: 2)),
                   )
                 : RefreshIndicator(
-                    onRefresh: _fetchUsers,
+                    onRefresh: _refreshUsers,
                     child: LayoutBuilder(
                       builder: (context, constraints) =>
                           constraints.maxWidth > 800
@@ -261,10 +270,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         icon: Icon(Icons.clear, size: 14, color: c.ink3),
                         onPressed: () {
                           _searchController.clear();
-                          setState(() {
-                            _searchQuery = '';
-                            _recomputeFiltered();
-                          });
+                          _searchDebounce?.cancel();
+                          _onSearchChanged('');
                         },
                       )
                     : null,
@@ -274,10 +281,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 contentPadding: const EdgeInsets.symmetric(vertical: 10),
                 isDense: true,
               ),
-              onChanged: (v) => setState(() {
-                _searchQuery = v;
-                _recomputeFiltered();
-              }),
+              onChanged: _onSearchChanged,
             ),
           ),
           const Spacer(),
@@ -303,165 +307,183 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   Widget _buildDesktopTable(SiColors c, List<Map<String, dynamic>> items) {
-    if (items.isEmpty) return _buildEmpty(c);
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(SiSpace.x6),
-      child: Center(
-        child: Card(
-          child: Column(
-            children: [
-              // Header
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: SiSpace.x5, vertical: SiSpace.x3),
-                decoration: BoxDecoration(
-                    border:
-                        Border(bottom: BorderSide(color: c.line, width: 1))),
-                child: Row(
-                  children: [
-                    _colHeader(c, 'USUARIO', flex: 4),
-                    _colHeader(c, 'NO. EMP.', flex: 2),
-                    _colHeader(c, 'ROL', flex: 2),
-                    _colHeader(c, 'ESTADO', flex: 2),
-                    _colHeader(c, 'PERMISOS', flex: 3),
-                    const SizedBox(width: 48),
-                  ],
-                ),
-              ),
-              // Rows
-              ...items.asMap().entries.map((e) {
-                final i = e.key;
-                final u = e.value;
-                final role = u['role'] ?? 'usuario';
-                final isBlocked = u['is_blocked'] ?? false;
-                final nombre =
-                    '${u['nombre'] ?? ''} ${u['paterno'] ?? ''}'.trim();
-                final parts = nombre
-                    .split(' ')
-                    .where((s) => s.isNotEmpty)
-                    .toList();
-                final initials = parts.length > 1
-                    ? '${parts[0][0]}${parts[1][0]}'.toUpperCase()
-                    : (parts.isNotEmpty ? parts[0][0].toUpperCase() : '?');
-
-                return Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: SiSpace.x5, vertical: SiSpace.x2 + 2),
-                  decoration: BoxDecoration(
-                    color: i.isOdd ? c.bg : c.panel,
-                    border: Border(
-                        bottom: BorderSide(color: c.line2, width: 0.5)),
-                  ),
-                  child: Row(
-                    children: [
-                      // Usuario
-                      Expanded(
-                        flex: 4,
-                        child: Row(children: [
-                          CircleAvatar(
-                            radius: 16,
-                            backgroundColor: role == 'admin'
-                                ? c.brandTint
-                                : c.hover,
-                            child: Text(initials,
-                                style: TextStyle(
-                                    color: role == 'admin' ? c.brand : c.ink3,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700)),
-                          ),
-                          const SizedBox(width: SiSpace.x3),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      children: [
+        Expanded(
+          child: items.isEmpty
+              ? _buildEmpty(c)
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.all(SiSpace.x6),
+                  child: Center(
+                    child: Card(
+                      child: Column(
+                        children: [
+                          // Header
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: SiSpace.x5, vertical: SiSpace.x3),
+                            decoration: BoxDecoration(
+                                border: Border(
+                                    bottom:
+                                        BorderSide(color: c.line, width: 1))),
+                            child: Row(
                               children: [
-                                Text(
-                                  nombre.isEmpty ? 'Sin nombre' : nombre,
-                                  style: TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 13,
-                                      color: c.ink,
-                                      decoration: isBlocked
-                                          ? TextDecoration.lineThrough
-                                          : null),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                Text(u['email'] ?? '',
-                                    style:
-                                        TextStyle(color: c.ink4, fontSize: 11),
-                                    overflow: TextOverflow.ellipsis),
+                                _colHeader(c, 'USUARIO', flex: 4),
+                                _colHeader(c, 'NO. EMP.', flex: 2),
+                                _colHeader(c, 'ROL', flex: 2),
+                                _colHeader(c, 'ESTADO', flex: 2),
+                                const SizedBox(width: 48),
                               ],
                             ),
                           ),
-                        ]),
-                      ),
-                      // No. emp
-                      Expanded(
-                        flex: 2,
-                        child: Text(u['numero_empleado'] ?? '----',
-                            style: TextStyle(fontSize: 13, color: c.ink2)),
-                      ),
-                      // Rol
-                      Expanded(
-                        flex: 2,
-                        child: _RoleBadge(role: role, c: c),
-                      ),
-                      // Estado
-                      Expanded(
-                        flex: 2,
-                        child: _StatusBadge(
-                            isBlocked: isBlocked,
-                            statusSys: u['status_sys'],
-                            c: c),
-                      ),
-                      // Permisos
-                      Expanded(
-                        flex: 3,
-                        child: _PermIcons(
-                            permissions: u['permissions'], c: c),
-                      ),
-                      // Acciones
-                      SizedBox(
-                        width: 48,
-                        child: _isAdmin
-                            ? PopupMenuButton<String>(
-                                icon: Icon(Icons.more_horiz,
-                                    size: 18, color: c.ink4),
-                                onSelected: (v) => v == 'edit'
-                                    ? _showUserForm(user: u)
-                                    : _deleteUser(u['id']),
-                                itemBuilder: (_) => [
-                                  PopupMenuItem(
-                                    value: 'edit',
+                          // Rows
+                          ...items.asMap().entries.map((e) {
+                            final i = e.key;
+                            final u = e.value;
+                            final role = u['role'] ?? 'usuario';
+                            final isBlocked = u['is_blocked'] ?? false;
+                            final nombre =
+                                '${u['nombre'] ?? ''} ${u['paterno'] ?? ''}'
+                                    .trim();
+                            final parts = nombre
+                                .split(' ')
+                                .where((s) => s.isNotEmpty)
+                                .toList();
+                            final initials = parts.length > 1
+                                ? '${parts[0][0]}${parts[1][0]}'.toUpperCase()
+                                : (parts.isNotEmpty
+                                    ? parts[0][0].toUpperCase()
+                                    : '?');
+
+                            return Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: SiSpace.x5,
+                                  vertical: SiSpace.x2 + 2),
+                              decoration: BoxDecoration(
+                                color: i.isOdd ? c.bg : c.panel,
+                                border: Border(
+                                    bottom: BorderSide(
+                                        color: c.line2, width: 0.5)),
+                              ),
+                              child: Row(
+                                children: [
+                                  // Usuario
+                                  Expanded(
+                                    flex: 4,
                                     child: Row(children: [
-                                      Icon(Icons.edit_outlined,
-                                          size: 16, color: c.ink2),
-                                      const SizedBox(width: 12),
-                                      const Text('Editar'),
+                                      CircleAvatar(
+                                        radius: 16,
+                                        backgroundColor: role == 'admin'
+                                            ? c.brandTint
+                                            : c.hover,
+                                        child: Text(initials,
+                                            style: TextStyle(
+                                                color: role == 'admin'
+                                                    ? c.brand
+                                                    : c.ink3,
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w700)),
+                                      ),
+                                      const SizedBox(width: SiSpace.x3),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              nombre.isEmpty
+                                                  ? 'Sin nombre'
+                                                  : nombre,
+                                              style: TextStyle(
+                                                  fontWeight: FontWeight.w600,
+                                                  fontSize: 13,
+                                                  color: c.ink,
+                                                  decoration: isBlocked
+                                                      ? TextDecoration
+                                                          .lineThrough
+                                                      : null),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            Text(u['email'] ?? '',
+                                                style: TextStyle(
+                                                    color: c.ink4,
+                                                    fontSize: 11),
+                                                overflow:
+                                                    TextOverflow.ellipsis),
+                                          ],
+                                        ),
+                                      ),
                                     ]),
                                   ),
-                                  PopupMenuItem(
-                                    value: 'delete',
-                                    child: Row(children: [
-                                      Icon(Icons.delete_outline,
-                                          size: 16, color: c.danger),
-                                      const SizedBox(width: 12),
-                                      Text('Eliminar',
-                                          style:
-                                              TextStyle(color: c.danger)),
-                                    ]),
+                                  // No. emp
+                                  Expanded(
+                                    flex: 2,
+                                    child: Text(
+                                        u['numero_empleado'] ?? '----',
+                                        style: TextStyle(
+                                            fontSize: 13, color: c.ink2)),
+                                  ),
+                                  // Rol
+                                  Expanded(
+                                    flex: 2,
+                                    child: _RoleBadge(role: role, c: c),
+                                  ),
+                                  // Estado
+                                  Expanded(
+                                    flex: 2,
+                                    child: _StatusBadge(
+                                        isBlocked: isBlocked,
+                                        statusSys: u['status_sys'],
+                                        c: c),
+                                  ),
+                                  // Acciones
+                                  SizedBox(
+                                    width: 48,
+                                    child: _isAdmin
+                                        ? PopupMenuButton<String>(
+                                            icon: Icon(Icons.more_horiz,
+                                                size: 18, color: c.ink4),
+                                            onSelected: (v) => v == 'edit'
+                                                ? _showUserForm(user: u)
+                                                : _deleteUser(u['id']),
+                                            itemBuilder: (_) => [
+                                              PopupMenuItem(
+                                                value: 'edit',
+                                                child: Row(children: [
+                                                  Icon(Icons.edit_outlined,
+                                                      size: 16, color: c.ink2),
+                                                  const SizedBox(width: 12),
+                                                  const Text('Editar'),
+                                                ]),
+                                              ),
+                                              PopupMenuItem(
+                                                value: 'delete',
+                                                child: Row(children: [
+                                                  Icon(Icons.delete_outline,
+                                                      size: 16,
+                                                      color: c.danger),
+                                                  const SizedBox(width: 12),
+                                                  Text('Eliminar',
+                                                      style: TextStyle(
+                                                          color: c.danger)),
+                                                ]),
+                                              ),
+                                            ],
+                                          )
+                                        : const SizedBox.shrink(),
                                   ),
                                 ],
-                              )
-                            : const SizedBox.shrink(),
+                              ),
+                            );
+                          }),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
-                );
-              }),
-            ],
-          ),
+                ),
         ),
-      ),
+        _buildPaginator(c),
+      ],
     );
   }
 
@@ -478,12 +500,17 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   Widget _buildMobileList(SiColors c, List<Map<String, dynamic>> items) {
-    if (items.isEmpty) return _buildEmpty(c);
-    return ListView.separated(
-      padding: const EdgeInsets.all(SiSpace.x4),
-      itemCount: items.length,
-      separatorBuilder: (_, __) => const SizedBox(height: SiSpace.x3),
-      itemBuilder: (context, i) {
+    return Column(
+      children: [
+        Expanded(
+          child: items.isEmpty
+              ? _buildEmpty(c)
+              : ListView.separated(
+                  padding: const EdgeInsets.all(SiSpace.x4),
+                  itemCount: items.length,
+                  separatorBuilder: (_, __) =>
+                      const SizedBox(height: SiSpace.x3),
+                  itemBuilder: (context, i) {
         final u = items[i];
         final role = u['role'] ?? 'usuario';
         final isBlocked = u['is_blocked'] ?? false;
@@ -582,9 +609,63 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     ],
                   )
                 : null,
+                  ),
+                );
+              },
+            ),
+        ),
+        _buildPaginator(c),
+      ],
+    );
+  }
+
+  Widget _buildPaginator(SiColors c) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+          horizontal: SiSpace.x6, vertical: SiSpace.x3),
+      decoration: BoxDecoration(
+        color: c.panel,
+        border: Border(top: BorderSide(color: c.line, width: 1)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            icon: Icon(Icons.chevron_left,
+                color: _page > 0 ? c.ink2 : c.line),
+            onPressed: _page > 0
+                ? () {
+                    setState(() => _page--);
+                    _fetchUsers();
+                  }
+                : null,
           ),
-        );
-      },
+          const SizedBox(width: SiSpace.x2),
+          Text(
+            'Página ${_page + 1}',
+            style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: c.ink3),
+          ),
+          if (_hasMore)
+            Text('  ›  más',
+                style: TextStyle(fontSize: 12, color: c.ink4)),
+          const SizedBox(width: SiSpace.x2),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            icon: Icon(Icons.chevron_right,
+                color: _hasMore ? c.ink2 : c.line),
+            onPressed: _hasMore
+                ? () {
+                    setState(() => _page++);
+                    _fetchUsers();
+                  }
+                : null,
+          ),
+        ],
+      ),
     );
   }
 
