@@ -1,9 +1,7 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:html' as html;
+import 'dart:ui_web' as ui_web;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:webviewx_plus/webviewx_plus.dart';
-import 'bi_web_iframe_stub.dart' if (dart.library.html) 'bi_web_iframe.dart'
-    as iframe_impl;
 import 'theme/si_theme.dart';
 
 class BiPage extends StatefulWidget {
@@ -903,6 +901,46 @@ class _UserAssignListState extends State<_UserAssignList> {
   }
 }
 
+// ── Inline iframe widget ──────────────────────────────────────────────────────
+
+class _WebIframe extends StatefulWidget {
+  final String url;
+  final double height;
+  final double width;
+
+  const _WebIframe({required this.url, required this.height, required this.width});
+
+  @override
+  State<_WebIframe> createState() => _WebIframeState();
+}
+
+class _WebIframeState extends State<_WebIframe> {
+  late final String _viewType;
+
+  @override
+  void initState() {
+    super.initState();
+    _viewType = 'bi-iframe-${DateTime.now().millisecondsSinceEpoch}';
+    ui_web.platformViewRegistry.registerViewFactory(_viewType, (int _) {
+      return html.IFrameElement()
+        ..src = widget.url
+        ..style.border = 'none'
+        ..style.width = '100%'
+        ..style.height = '100%'
+        ..allow = 'fullscreen';
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: widget.height,
+      width: widget.width,
+      child: HtmlElementView(viewType: _viewType),
+    );
+  }
+}
+
 // ── Link viewer ───────────────────────────────────────────────────────────────
 
 class _LinkViewer extends StatelessWidget {
@@ -953,20 +991,11 @@ class _LinkViewer extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: kIsWeb
-                ? iframe_impl.WebIframeWidget(
-                    url: url,
-                    height: height - headerH,
-                    width: mq.size.width,
-                  )
-                : WebViewX(
-                    key: ValueKey(url),
-                    initialContent: url,
-                    initialSourceType: SourceType.urlBypass,
-                    height: height - headerH,
-                    width: mq.size.width,
-                    javascriptMode: JavascriptMode.unrestricted,
-                  ),
+            child: _WebIframe(
+              url: url,
+              height: height - headerH,
+              width: mq.size.width,
+            ),
           ),
         ],
       ),
