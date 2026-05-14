@@ -9,7 +9,10 @@
       "Bash(git -C /d/Documents/GitHub/sistemassi diff --stat)",
       "Bash(git -C /d/Documents/GitHub/sistemassi status)",
       "Bash(git -C /d/Documents/GitHub/sistemassi diff .claude/settings.json)",
-      "Bash(git -C /d/Documents/GitHub/sistemassi add lib/bi_page.dart lib/passwords_page.dart .claude/settings.json)"
+      "Bash(git -C /d/Documents/GitHub/sistemassi add lib/bi_page.dart lib/passwords_page.dart .claude/settings.json)",
+      "Bash(git -C /d/Documents/GitHub/sistemassi push)",
+      "Bash(git -C /d/Documents/GitHub/sistemassi rm lib/bi_web_iframe.dart lib/bi_web_iframe_stub.dart)",
+      "Bash(git -C /d/Documents/GitHub/sistemassi add lib/bi_page.dart)"
     ]
   },
   "mcpServers": {

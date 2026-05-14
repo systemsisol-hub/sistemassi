@@ -39,35 +39,52 @@ Future<void> _init() async {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
   @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  final _themeMode = ValueNotifier<ThemeMode>(ThemeMode.light);
+
+  @override
+  void dispose() {
+    _themeMode.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Sistemassi',
-      debugShowCheckedModeBanner: false,
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-        SfGlobalLocalizations.delegate,
-      ],
-      supportedLocales: const [
-        Locale('es', 'MX'),
-        Locale('en', 'US'),
-      ],
-      locale: const Locale('es', 'MX'),
-      theme: SiTheme.light,
-      darkTheme: SiTheme.dark,
-      themeMode: ThemeMode.light,
-      home: const AuthRouter(),
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: _themeMode,
+      builder: (_, mode, __) => MaterialApp(
+        title: 'Sistemassi',
+        debugShowCheckedModeBanner: false,
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+          SfGlobalLocalizations.delegate,
+        ],
+        supportedLocales: const [
+          Locale('es', 'MX'),
+          Locale('en', 'US'),
+        ],
+        locale: const Locale('es', 'MX'),
+        theme: SiTheme.light,
+        darkTheme: SiTheme.dark,
+        themeMode: mode,
+        home: AuthRouter(themeNotifier: _themeMode),
+      ),
     );
   }
 }
 
 class AuthRouter extends StatefulWidget {
-  const AuthRouter({super.key});
+  final ValueNotifier<ThemeMode> themeNotifier;
+  const AuthRouter({super.key, required this.themeNotifier});
 
   @override
   State<AuthRouter> createState() => _AuthRouterState();
@@ -154,7 +171,7 @@ class _AuthRouterState extends State<AuthRouter> {
     }
 
     if (_user == null) {
-      return const LoginPage();
+      return LoginPage(themeNotifier: widget.themeNotifier);
     }
 
     // Now everything returns MainNavigation, it handles the logic internally
