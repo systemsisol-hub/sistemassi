@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:flutter/services.dart';
 import 'dart:io';
 import 'colaborador_detail_page.dart';
+import 'theme/si_theme.dart';
 
 class CssiPage extends StatefulWidget {
   final String role;
@@ -40,6 +41,7 @@ class _CssiPageState extends State<CssiPage> {
   }
 
   Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
+    final c = SiColors.of(context);
     return ClipRRect(
       borderRadius: BorderRadius.circular(30),
       child: BackdropFilter(
@@ -48,9 +50,9 @@ class _CssiPageState extends State<CssiPage> {
           padding: padding ??
               const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.85),
+            color: c.panel.withOpacity(0.85),
             borderRadius: BorderRadius.circular(30),
-            border: Border.all(color: Colors.grey.withOpacity(0.2)),
+            border: Border.all(color: c.line.withOpacity(0.4)),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.05),
@@ -66,6 +68,7 @@ class _CssiPageState extends State<CssiPage> {
   }
 
   Widget _buildControls(ThemeData theme) {
+    final c = SiColors.of(context);
     return _buildGlassPill(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: Row(
@@ -77,7 +80,7 @@ class _CssiPageState extends State<CssiPage> {
               controller: _searchController,
               decoration: InputDecoration(
                 hintText: 'Buscar...',
-                hintStyle: TextStyle(color: Colors.grey.shade400),
+                hintStyle: TextStyle(color: c.ink3),
                 prefixIcon: const Icon(Icons.search, size: 20),
                 suffixIcon: _searchQuery.isNotEmpty
                     ? IconButton(
@@ -96,7 +99,7 @@ class _CssiPageState extends State<CssiPage> {
                   borderSide: BorderSide.none,
                 ),
                 filled: true,
-                fillColor: Colors.grey.shade100,
+                fillColor: c.hover,
                 contentPadding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                 isDense: true,
@@ -112,9 +115,9 @@ class _CssiPageState extends State<CssiPage> {
               width: 1, thickness: 1, indent: 8, endIndent: 8),
           GestureDetector(
             onTap: () => _showForm(),
-            child: const Padding(
-              padding: EdgeInsets.all(8.0),
-              child: Icon(Icons.add, size: 22, color: Colors.black87),
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Icon(Icons.add, size: 22, color: c.ink),
             ),
           ),
         ],
@@ -250,6 +253,7 @@ class _CssiPageState extends State<CssiPage> {
     final isEditing = item != null;
     final screenWidth = MediaQuery.of(context).size.width;
     final isDesktop = screenWidth > 800;
+    final c = SiColors.of(context);
 
     final nombreCtrl = TextEditingController(text: item?['nombre']);
     final paternoCtrl = TextEditingController(text: item?['paterno']);
@@ -1259,7 +1263,7 @@ class _CssiPageState extends State<CssiPage> {
       return Container(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: c.panel,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
           boxShadow: [
             BoxShadow(
@@ -1273,8 +1277,8 @@ class _CssiPageState extends State<CssiPage> {
           children: [
             TextButton(
               onPressed: onCancel,
-              child: const Text('Cancelar',
-                  style: TextStyle(fontSize: 16, color: Colors.grey)),
+              child: Text('Cancelar',
+                  style: TextStyle(fontSize: 16, color: c.ink3)),
             ),
             Text(isEditing ? 'Editar Colaborador' : 'Nuevo Colaborador',
                 style:
@@ -1286,11 +1290,11 @@ class _CssiPageState extends State<CssiPage> {
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Text('Guardar',
+                  : Text('Guardar',
                       style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                          color: Colors.blue)),
+                          color: c.brand)),
             ),
           ],
         ),
@@ -1315,10 +1319,10 @@ class _CssiPageState extends State<CssiPage> {
                   builder: (context, setDialogState) {
                     bool saving = false;
                     return Container(
-                      decoration: const BoxDecoration(
-                          color: Colors.white,
+                      decoration: BoxDecoration(
+                          color: c.panel,
                           borderRadius:
-                              BorderRadius.vertical(top: Radius.circular(20))),
+                              const BorderRadius.vertical(top: Radius.circular(20))),
                       constraints: BoxConstraints(
                           maxHeight: MediaQuery.of(context).size.height * 0.9),
                       child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -1348,10 +1352,10 @@ class _CssiPageState extends State<CssiPage> {
           builder: (context, setDialogState) {
             bool saving = false;
             return Container(
-              decoration: const BoxDecoration(
-                  color: Colors.white,
+              decoration: BoxDecoration(
+                  color: c.panel,
                   borderRadius:
-                      BorderRadius.vertical(top: Radius.circular(20))),
+                      const BorderRadius.vertical(top: Radius.circular(20))),
               constraints: BoxConstraints(
                   maxHeight: MediaQuery.of(context).size.height * 0.9),
               child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -1408,13 +1412,14 @@ class _CssiPageState extends State<CssiPage> {
   }
 
   Widget _sectionTitle(String title) {
+    final c = SiColors.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(title.toUpperCase(),
-            style: const TextStyle(
+            style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF344092),
+                color: c.brand,
                 fontSize: 13,
                 letterSpacing: 1)),
         const Divider(),
@@ -1437,14 +1442,15 @@ class _CssiPageState extends State<CssiPage> {
   }
 
   Widget _buildMobileLayout(List<Map<String, dynamic>> filtered) {
+    final c = SiColors.of(context);
     if (filtered.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.badge_outlined, size: 64, color: Colors.grey[300]),
+            Icon(Icons.badge_outlined, size: 64, color: c.line2),
             const SizedBox(height: 16),
-            Text('No se encontraron colaboradores', style: TextStyle(color: Colors.grey[500])),
+            Text('No se encontraron colaboradores', style: TextStyle(color: c.ink3)),
           ],
         ),
       );
@@ -1461,7 +1467,7 @@ class _CssiPageState extends State<CssiPage> {
             elevation: 0,
             shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
-                side: BorderSide(color: Colors.grey[200]!)),
+                side: BorderSide(color: c.line)),
             child: ListTile(
               onTap: () => _onViewCollaborator(item),
               contentPadding:
@@ -1538,13 +1544,14 @@ class _CssiPageState extends State<CssiPage> {
   Widget _buildDesktopLayout(
       List<Map<String, dynamic>> filtered, ThemeData theme) {
     final screenWidth = MediaQuery.of(context).size.width;
+    final c = SiColors.of(context);
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Card(
         elevation: 0,
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: Colors.grey[200]!)),
+            side: BorderSide(color: c.line)),
         child: SizedBox(
           width: double.infinity,
           child: PaginatedDataTable(
@@ -1560,7 +1567,7 @@ class _CssiPageState extends State<CssiPage> {
                   controller: _searchController,
                   decoration: InputDecoration(
                     hintText: 'Buscar por nombre, correo, ID...',
-                    hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                    hintStyle: TextStyle(color: c.ink3, fontSize: 13),
                     prefixIcon: const Icon(Icons.search, size: 18),
                     suffixIcon: _searchQuery.isNotEmpty
                         ? IconButton(
@@ -1574,11 +1581,11 @@ class _CssiPageState extends State<CssiPage> {
                             },
                           )
                         : null,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: c.line)),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: c.line)),
                     focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: theme.colorScheme.primary)),
                     filled: true,
-                    fillColor: Colors.white,
+                    fillColor: c.panel,
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                   ),
                   style: const TextStyle(fontSize: 13),
@@ -1608,16 +1615,17 @@ class _CssiPageState extends State<CssiPage> {
                 ),
             ],
             columns: [
-              DataColumn(label: SizedBox(width: screenWidth * 0.25, child: Text('COLABORADOR', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
-              DataColumn(label: SizedBox(width: screenWidth * 0.08, child: Text('ID', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
-              DataColumn(label: SizedBox(width: screenWidth * 0.15, child: Text('PUESTO', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
-              DataColumn(label: SizedBox(width: screenWidth * 0.15, child: Text('UBICACIÓN', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
-              DataColumn(label: SizedBox(width: screenWidth * 0.12, child: Text('ESTADO', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
-              const DataColumn(label: SizedBox()), // Acciones
+              DataColumn(label: SizedBox(width: screenWidth * 0.25, child: Text('COLABORADOR', style: TextStyle(color: c.ink3, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+              DataColumn(label: SizedBox(width: screenWidth * 0.08, child: Text('ID', style: TextStyle(color: c.ink3, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+              DataColumn(label: SizedBox(width: screenWidth * 0.15, child: Text('PUESTO', style: TextStyle(color: c.ink3, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+              DataColumn(label: SizedBox(width: screenWidth * 0.15, child: Text('UBICACIÓN', style: TextStyle(color: c.ink3, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+              DataColumn(label: SizedBox(width: screenWidth * 0.12, child: Text('ESTADO', style: TextStyle(color: c.ink3, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+              const DataColumn(label: SizedBox()),
             ],
             source: _CssiDataSource(
               items: filtered,
               theme: theme,
+              siColors: c,
               isAdmin: widget.role == 'admin',
               onEdit: (item) => _showForm(item: item),
               onDelete: (id) => _deleteItem(id),
@@ -1714,6 +1722,7 @@ class _CssiPageState extends State<CssiPage> {
 class _CssiDataSource extends DataTableSource {
   final List<Map<String, dynamic>> items;
   final ThemeData theme;
+  final SiColors siColors;
   final bool isAdmin;
   final Function(Map<String, dynamic>) onEdit;
   final Function(String) onDelete;
@@ -1724,6 +1733,7 @@ class _CssiDataSource extends DataTableSource {
   _CssiDataSource({
     required this.items,
     required this.theme,
+    required this.siColors,
     required this.isAdmin,
     required this.onEdit,
     required this.onDelete,
@@ -1770,7 +1780,7 @@ class _CssiDataSource extends DataTableSource {
                     children: [
                       Text(nombre.isEmpty ? 'Sin Nombre' : nombre, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis),
                       const SizedBox(height: 2),
-                      Text(item['mail_user'] ?? item['correo_personal'] ?? '', style: TextStyle(color: Colors.grey.shade500, fontSize: 11), overflow: TextOverflow.ellipsis),
+                      Text(item['mail_user'] ?? item['correo_personal'] ?? '', style: TextStyle(color: siColors.ink3, fontSize: 11), overflow: TextOverflow.ellipsis),
                     ],
                   ),
                 ),
@@ -1778,9 +1788,9 @@ class _CssiDataSource extends DataTableSource {
             ),
           ),
         ),
-        DataCell(SizedBox(width: screenWidth * 0.08, child: Text(item['numero_empleado']?.toString() ?? '----', style: const TextStyle(fontSize: 13, color: Colors.black87)))),
-        DataCell(SizedBox(width: screenWidth * 0.15, child: Text(item['puesto'] ?? '---', style: const TextStyle(fontSize: 13, color: Colors.black87), overflow: TextOverflow.ellipsis))),
-        DataCell(SizedBox(width: screenWidth * 0.15, child: Text(item['ubicacion'] ?? '---', style: const TextStyle(fontSize: 13, color: Colors.black87), overflow: TextOverflow.ellipsis))),
+        DataCell(SizedBox(width: screenWidth * 0.08, child: Text(item['numero_empleado']?.toString() ?? '----', style: TextStyle(fontSize: 13, color: siColors.ink)))),
+        DataCell(SizedBox(width: screenWidth * 0.15, child: Text(item['puesto'] ?? '---', style: TextStyle(fontSize: 13, color: siColors.ink), overflow: TextOverflow.ellipsis))),
+        DataCell(SizedBox(width: screenWidth * 0.15, child: Text(item['ubicacion'] ?? '---', style: TextStyle(fontSize: 13, color: siColors.ink), overflow: TextOverflow.ellipsis))),
         DataCell(
           SizedBox(
             width: screenWidth * 0.12,
@@ -1794,7 +1804,7 @@ class _CssiDataSource extends DataTableSource {
           Align(
             alignment: Alignment.centerRight,
             child: isAdmin ? PopupMenuButton<String>(
-              icon: const Icon(Icons.more_horiz, color: Colors.grey),
+              icon: Icon(Icons.more_horiz, color: siColors.ink3),
               onSelected: (v) {
                 if (v == 'edit') onEdit(item);
                 if (v == 'delete') onDelete(item['id']);
