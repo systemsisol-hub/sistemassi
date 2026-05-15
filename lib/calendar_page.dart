@@ -873,13 +873,8 @@ class _CalendarPageState extends State<CalendarPage> {
                               cellBorderColor: Colors.transparent,
                               backgroundColor: c.bg,
                               todayHighlightColor: c.brand,
-                              selectionDecoration: BoxDecoration(
-                                color: Colors.transparent,
-                                border: Border.all(
-                                    color: c.brand.withValues(alpha: 0.5),
-                                    width: 2),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
+                              selectionDecoration:
+                                  const BoxDecoration(color: Colors.transparent),
                               viewHeaderStyle: ViewHeaderStyle(
                                 backgroundColor: c.bg,
                                 dayTextStyle: TextStyle(
@@ -893,7 +888,7 @@ class _CalendarPageState extends State<CalendarPage> {
                                 showAgenda: !isDesktop,
                                 showTrailingAndLeadingDates: false,
                                 appointmentDisplayMode:
-                                    MonthAppointmentDisplayMode.appointment,
+                                    MonthAppointmentDisplayMode.none,
                                 agendaStyle: AgendaStyle(
                                   backgroundColor: c.panel,
                                   appointmentTextStyle:
@@ -926,7 +921,8 @@ class _CalendarPageState extends State<CalendarPage> {
                                   return const SizedBox.shrink();
                                 }
 
-                                return Container(
+                                return ClipRect(
+                                  child: Container(
                                   decoration: BoxDecoration(
                                     border: Border(
                                         top: BorderSide(color: c.line)),
@@ -1004,6 +1000,7 @@ class _CalendarPageState extends State<CalendarPage> {
                                           ),
                                         ),
                                     ],
+                                  ),
                                   ),
                                 );
                               },
