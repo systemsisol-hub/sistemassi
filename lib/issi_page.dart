@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'theme/si_theme.dart';
 
 class IssiPage extends StatefulWidget {
   const IssiPage({super.key});
@@ -69,6 +70,7 @@ class _IssiPageState extends State<IssiPage> {
   }
 
   Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
+    final c = SiColors.of(context);
     return ClipRRect(
       borderRadius: BorderRadius.circular(30),
       child: BackdropFilter(
@@ -77,9 +79,9 @@ class _IssiPageState extends State<IssiPage> {
           padding: padding ??
               const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.85),
+            color: c.panel.withOpacity(0.85),
             borderRadius: BorderRadius.circular(30),
-            border: Border.all(color: Colors.grey.withOpacity(0.2)),
+            border: Border.all(color: c.line.withOpacity(0.4)),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.05),
@@ -95,6 +97,7 @@ class _IssiPageState extends State<IssiPage> {
   }
 
   Widget _buildControls(ThemeData theme) {
+    final c = SiColors.of(context);
     return _buildGlassPill(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: Row(
@@ -106,7 +109,7 @@ class _IssiPageState extends State<IssiPage> {
               controller: _searchController,
               decoration: InputDecoration(
                 hintText: 'Buscar...',
-                hintStyle: TextStyle(color: Colors.grey.shade400),
+                hintStyle: TextStyle(color: c.ink3),
                 prefixIcon: const Icon(Icons.search, size: 20),
                 suffixIcon: _searchQuery.isNotEmpty
                     ? IconButton(
@@ -125,7 +128,7 @@ class _IssiPageState extends State<IssiPage> {
                   borderSide: BorderSide.none,
                 ),
                 filled: true,
-                fillColor: Colors.grey.shade100,
+                fillColor: c.hover,
                 contentPadding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                 isDense: true,
@@ -141,9 +144,9 @@ class _IssiPageState extends State<IssiPage> {
               width: 1, thickness: 1, indent: 8, endIndent: 8),
           GestureDetector(
             onTap: () => _showItemForm(),
-            child: const Padding(
-              padding: EdgeInsets.all(8.0),
-              child: Icon(Icons.add, size: 22, color: Colors.black87),
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Icon(Icons.add, size: 22, color: c.ink),
             ),
           ),
         ],
@@ -528,11 +531,12 @@ class _IssiPageState extends State<IssiPage> {
                 width: screenWidth,
                 child: StatefulBuilder(
                   builder: (context, setDialogState) {
+                    final c = SiColors.of(context);
                     return Container(
-                      decoration: const BoxDecoration(
-                          color: Colors.white,
+                      decoration: BoxDecoration(
+                          color: c.panel,
                           borderRadius:
-                              BorderRadius.vertical(top: Radius.circular(20))),
+                              const BorderRadius.vertical(top: Radius.circular(20))),
                       constraints: BoxConstraints(
                           maxHeight: MediaQuery.of(context).size.height * 0.9),
                       child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -540,7 +544,7 @@ class _IssiPageState extends State<IssiPage> {
                           padding: const EdgeInsets.symmetric(
                               vertical: 12, horizontal: 16),
                           decoration: BoxDecoration(
-                            color: Colors.white,
+                            color: c.panel,
                             borderRadius: const BorderRadius.vertical(
                                 top: Radius.circular(20)),
                             boxShadow: [
@@ -555,17 +559,18 @@ class _IssiPageState extends State<IssiPage> {
                             children: [
                               TextButton(
                                 onPressed: () => Navigator.pop(dialogContext),
-                                child: const Text('Cancelar',
+                                child: Text('Cancelar',
                                     style: TextStyle(
-                                        fontSize: 16, color: Colors.grey)),
+                                        fontSize: 16, color: c.ink3)),
                               ),
                               Text(
                                   isEditing
                                       ? 'Editar Elemento'
                                       : 'Nuevo Inventario',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                       fontSize: 18,
-                                      fontWeight: FontWeight.bold)),
+                                      fontWeight: FontWeight.bold,
+                                      color: c.ink)),
                               TextButton(
                                 onPressed: () async {
                                   if (ubicacionController.text.isEmpty ||
@@ -669,10 +674,10 @@ class _IssiPageState extends State<IssiPage> {
                                   }
                                 },
                                 child: Text(isEditing ? 'Guardar' : 'Guardar',
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.bold,
-                                        color: Colors.blue)),
+                                        color: c.brand)),
                               ),
                             ],
                           ),
@@ -699,11 +704,12 @@ class _IssiPageState extends State<IssiPage> {
         backgroundColor: Colors.transparent,
         builder: (sheetContext) => StatefulBuilder(
           builder: (context, setDialogState) {
+            final c = SiColors.of(context);
             return Container(
-              decoration: const BoxDecoration(
-                  color: Colors.white,
+              decoration: BoxDecoration(
+                  color: c.panel,
                   borderRadius:
-                      BorderRadius.vertical(top: Radius.circular(20))),
+                      const BorderRadius.vertical(top: Radius.circular(20))),
               constraints: BoxConstraints(
                   maxHeight: MediaQuery.of(context).size.height * 0.9),
               child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -711,7 +717,7 @@ class _IssiPageState extends State<IssiPage> {
                   padding:
                       const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: c.panel,
                     borderRadius:
                         const BorderRadius.vertical(top: Radius.circular(20)),
                     boxShadow: [
@@ -726,12 +732,14 @@ class _IssiPageState extends State<IssiPage> {
                     children: [
                       TextButton(
                         onPressed: () => Navigator.pop(sheetContext),
-                        child: const Text('Cancelar',
-                            style: TextStyle(fontSize: 16, color: Colors.grey)),
+                        child: Text('Cancelar',
+                            style: TextStyle(fontSize: 16, color: c.ink3)),
                       ),
                       Text(isEditing ? 'Editar Elemento' : 'Nuevo Inventario',
-                          style: const TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.bold)),
+                          style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: c.ink)),
                       TextButton(
                         onPressed: () async {
                           if (ubicacionController.text.isEmpty ||
@@ -818,10 +826,10 @@ class _IssiPageState extends State<IssiPage> {
                           }
                         },
                         child: Text(isEditing ? 'Guardar' : 'Guardar',
-                            style: const TextStyle(
+                            style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
-                                color: Colors.blue)),
+                                color: c.brand)),
                       ),
                     ],
                   ),
@@ -884,18 +892,19 @@ class _IssiPageState extends State<IssiPage> {
   }
 
   Widget _buildMobileLayout(List<Map<String, dynamic>> items, ThemeData theme) {
+    final c = SiColors.of(context);
     if (items.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.inventory_2_outlined, size: 64, color: Colors.grey[300]),
+            Icon(Icons.inventory_2_outlined, size: 64, color: c.line2),
             const SizedBox(height: 16),
             Text(
               _searchQuery.isNotEmpty
                   ? 'Sin resultados para la búsqueda'
                   : 'No hay elementos en el inventario',
-              style: TextStyle(color: Colors.grey[500]),
+              style: TextStyle(color: c.ink3),
             ),
           ],
         ),
@@ -911,7 +920,7 @@ class _IssiPageState extends State<IssiPage> {
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: Colors.grey[200]!),
+            side: BorderSide(color: c.line),
           ),
           child: ExpansionTile(
             tilePadding:
@@ -1028,6 +1037,7 @@ class _IssiPageState extends State<IssiPage> {
 
   Widget _buildDesktopLayout(
       List<Map<String, dynamic>> filtered, ThemeData theme) {
+    final c = SiColors.of(context);
     final screenWidth = MediaQuery.of(context).size.width;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -1041,7 +1051,7 @@ class _IssiPageState extends State<IssiPage> {
               elevation: 0,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
-                  side: BorderSide(color: Colors.grey[200]!)),
+                  side: BorderSide(color: c.line)),
               child: Theme(
                 data: theme.copyWith(
                   cardColor: Colors.transparent,
@@ -1059,7 +1069,7 @@ class _IssiPageState extends State<IssiPage> {
                         controller: _searchController,
                         decoration: InputDecoration(
                           hintText: 'Buscar marca, modelo, ubicación, usuario...',
-                          hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                          hintStyle: TextStyle(color: c.ink3, fontSize: 13),
                           prefixIcon: const Icon(Icons.search, size: 18),
                           suffixIcon: _searchQuery.isNotEmpty
                               ? IconButton(
@@ -1070,11 +1080,11 @@ class _IssiPageState extends State<IssiPage> {
                                   },
                                 )
                               : null,
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: c.line)),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: c.line)),
                           focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: theme.colorScheme.primary)),
                           filled: true,
-                          fillColor: Colors.white,
+                          fillColor: c.panel,
                           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                         ),
                         style: const TextStyle(fontSize: 13),
@@ -1101,17 +1111,18 @@ class _IssiPageState extends State<IssiPage> {
                       ),
                   ],
                   columns: [
-                    DataColumn(label: SizedBox(width: screenWidth * 0.2, child: Text('USUARIO / UBICACIÓN', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
-                    DataColumn(label: SizedBox(width: screenWidth * 0.15, child: Text('EQUIPO', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
-                    DataColumn(label: SizedBox(width: screenWidth * 0.1, child: Text('MARCA', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
-                    DataColumn(label: SizedBox(width: screenWidth * 0.1, child: Text('SERIE', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
-                    DataColumn(label: SizedBox(width: screenWidth * 0.1, child: Text('CONDICIÓN', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+                    DataColumn(label: SizedBox(width: screenWidth * 0.2, child: Text('USUARIO / UBICACIÓN', style: TextStyle(color: c.ink3, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+                    DataColumn(label: SizedBox(width: screenWidth * 0.15, child: Text('EQUIPO', style: TextStyle(color: c.ink3, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+                    DataColumn(label: SizedBox(width: screenWidth * 0.1, child: Text('MARCA', style: TextStyle(color: c.ink3, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+                    DataColumn(label: SizedBox(width: screenWidth * 0.1, child: Text('SERIE', style: TextStyle(color: c.ink3, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+                    DataColumn(label: SizedBox(width: screenWidth * 0.1, child: Text('CONDICIÓN', style: TextStyle(color: c.ink3, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
                     const DataColumn(label: SizedBox()), // Acciones
                   ],
                   source: _IssiDataSource(
                     items: filtered,
                     theme: theme,
                     isAdmin: _isAdmin,
+                    siColors: c,
                     onEdit: (item) => _showItemForm(item: item),
                     onDelete: (id) => _deleteItem(id),
                     buildConditionChip: (condicion) {
@@ -1235,11 +1246,12 @@ class _IssiPageState extends State<IssiPage> {
       required IconData icon,
       required Color accent,
       required Widget child}) {
+    final c = SiColors.of(context);
     return Card(
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.grey[200]!),
+        side: BorderSide(color: c.line),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -1278,6 +1290,7 @@ class _IssiPageState extends State<IssiPage> {
 
   // --- TIPO card: icon + name + progress bar ---
   Widget _buildTipoCard(List<MapEntry<String, int>> entries, ThemeData theme) {
+    final c = SiColors.of(context);
     final maxVal = entries.isEmpty ? 1 : entries.first.value;
     final color = theme.colorScheme.primary;
 
@@ -1311,7 +1324,7 @@ class _IssiPageState extends State<IssiPage> {
                     child: LinearProgressIndicator(
                       value: fraction,
                       minHeight: 8,
-                      backgroundColor: Colors.grey[100],
+                      backgroundColor: c.hover,
                       valueColor: AlwaysStoppedAnimation(
                           color.withOpacity(0.6 + 0.4 * fraction)),
                     ),
@@ -1340,6 +1353,7 @@ class _IssiPageState extends State<IssiPage> {
   // --- CONDICIÓN card: horizontal colored bars ---
   Widget _buildCondicionCard(
       List<MapEntry<String, int>> entries, ThemeData theme) {
+    final c = SiColors.of(context);
     final total = _items.length;
     final condColors = <String, Color>{
       'NUEVO': const Color(0xFF4CAF50),
@@ -1391,7 +1405,7 @@ class _IssiPageState extends State<IssiPage> {
                           fontSize: 11, fontWeight: FontWeight.w500)),
                   const Spacer(),
                   Text('$pct%',
-                      style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+                      style: TextStyle(fontSize: 11, color: c.ink3)),
                   const SizedBox(width: 6),
                   Text('${e.value}',
                       style: TextStyle(
@@ -1490,6 +1504,7 @@ class _IssiPageState extends State<IssiPage> {
   }
 
   Widget _buildDetailRow(String label, String value) {
+    final c = SiColors.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -1501,7 +1516,7 @@ class _IssiPageState extends State<IssiPage> {
               label,
               style: TextStyle(
                 fontSize: 12,
-                color: Colors.grey[600],
+                color: c.ink3,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -1560,6 +1575,7 @@ class _IssiDataSource extends DataTableSource {
   final List<Map<String, dynamic>> items;
   final ThemeData theme;
   final bool isAdmin;
+  final SiColors siColors;
   final Function(Map<String, dynamic>) onEdit;
   final Function(String) onDelete;
   final Widget Function(String) buildConditionChip;
@@ -1571,6 +1587,7 @@ class _IssiDataSource extends DataTableSource {
     required this.items,
     required this.theme,
     required this.isAdmin,
+    required this.siColors,
     required this.onEdit,
     required this.onDelete,
     required this.buildConditionChip,
@@ -1600,7 +1617,7 @@ class _IssiDataSource extends DataTableSource {
                 ),
                 Text(
                   item['ubicacion']?.toString() ?? '---',
-                  style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
+                  style: TextStyle(color: siColors.ink3, fontSize: 11),
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
@@ -1627,7 +1644,7 @@ class _IssiDataSource extends DataTableSource {
                 ),
                 Text(
                   item['modelo']?.toString() ?? '---',
-                  style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
+                  style: TextStyle(color: siColors.ink3, fontSize: 11),
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
@@ -1642,7 +1659,7 @@ class _IssiDataSource extends DataTableSource {
             alignment: Alignment.centerRight,
             child: isAdmin
                 ? PopupMenuButton<String>(
-                    icon: const Icon(Icons.more_horiz, color: Colors.grey),
+                    icon: Icon(Icons.more_horiz, color: siColors.ink3),
                     tooltip: 'Acciones',
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     elevation: 4,

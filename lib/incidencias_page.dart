@@ -30,6 +30,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
   String? _selectedUserId;
 
   Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
+    final c = SiColors.of(context);
     return ClipRRect(
       borderRadius: BorderRadius.circular(30),
       child: BackdropFilter(
@@ -38,9 +39,9 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
           padding: padding ??
               const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.85),
+            color: c.panel.withOpacity(0.85),
             borderRadius: BorderRadius.circular(30),
-            border: Border.all(color: Colors.grey.withOpacity(0.2)),
+            border: Border.all(color: c.line.withOpacity(0.4)),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.05),
@@ -65,15 +66,15 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
               decoration: BoxDecoration(
-                color: Colors.grey.shade100,
+                color: c.hover,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
                   value: _selectedUserId,
                   isDense: true,
-                  icon: const Icon(Icons.keyboard_arrow_down,
-                      color: Colors.black87, size: 20),
+                  icon: Icon(Icons.keyboard_arrow_down,
+                      color: c.ink, size: 20),
                   items: _adminUserList.map((user) {
                     final name =
                         '${user['nombre']} ${user['paterno']} ${user['materno'] ?? ''}'
@@ -93,9 +94,9 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
           ],
           GestureDetector(
             onTap: () => _showIncidenciaForm(),
-            child: const Padding(
-              padding: EdgeInsets.all(8.0),
-              child: Icon(Icons.add, size: 22, color: Colors.black87),
+            child: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Icon(Icons.add, size: 22, color: c.ink),
             ),
           ),
         ],
@@ -250,6 +251,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
 
   Widget _buildLeyesVacacionesTable() {
     final theme = Theme.of(context);
+    final c = SiColors.of(context);
     const rows = [
       ['1 año', '12'],
       ['2 años', '14'],
@@ -269,7 +271,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
 
     return Container(
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey[300]!),
+        border: Border.all(color: c.line),
         borderRadius: BorderRadius.circular(12),
       ),
       clipBehavior: Clip.hardEdge,
@@ -281,7 +283,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
         children: [
           // Header
           TableRow(
-            decoration: BoxDecoration(color: Colors.grey[200]),
+            decoration: BoxDecoration(color: c.hover),
             children: const [
               Padding(
                 padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -303,7 +305,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
               decoration: BoxDecoration(
                 color: i == highlightIdx
                     ? theme.colorScheme.secondary.withOpacity(0.18)
-                    : (i.isEven ? Colors.white : Colors.grey[50]),
+                    : (i.isEven ? c.panel : c.bg),
               ),
               children: [
                 Padding(
@@ -354,6 +356,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
     bool expanded = false,
     Widget? table,
   }) {
+    final c = SiColors.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -376,7 +379,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                   children: [
                     Text(label,
                         style:
-                            const TextStyle(fontSize: 11, color: Colors.grey)),
+                            TextStyle(fontSize: 11, color: c.ink3)),
                     Text(_calcAntiguedad(),
                         style: TextStyle(
                             fontSize: 16,
@@ -384,7 +387,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                             color: theme.colorScheme.secondary)),
                     Text('Desde: $dateStr',
                         style:
-                            const TextStyle(fontSize: 11, color: Colors.grey)),
+                            TextStyle(fontSize: 11, color: c.ink3)),
                   ],
                 ),
               ),
@@ -509,6 +512,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
 
     final now = DateTime.now();
     final theme = Theme.of(context);
+    final c = SiColors.of(context);
     final completedYears = _calcYears();
 
     final String targetUserId = _selectedUserId ?? '';
@@ -626,7 +630,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
 
     return Container(
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey[300]!),
+        border: Border.all(color: c.line),
         borderRadius: BorderRadius.circular(12),
       ),
       clipBehavior: Clip.hardEdge,
@@ -636,7 +640,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
         children: [
           // Title (Fixed)
           Container(
-            color: Colors.grey[100],
+            color: c.hover,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: Row(
               children: [
@@ -674,7 +678,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                       children: [
                         // Header row
                         TableRow(
-                          decoration: BoxDecoration(color: Colors.grey[200]),
+                          decoration: BoxDecoration(color: c.hover),
                           children: [
                             _cellTable('Período',
                                 weight: FontWeight.bold, align: TextAlign.left),
@@ -710,7 +714,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                           else if (isUpcoming)
                             bgColor = Colors.orange.withOpacity(0.07);
                           else
-                            bgColor = i.isEven ? Colors.white : Colors.grey[50]!;
+                            bgColor = i.isEven ? c.panel : c.bg;
 
                           return TableRow(
                             decoration: BoxDecoration(color: bgColor),
@@ -740,7 +744,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                         }),
                         // Grand Total row
                         TableRow(
-                          decoration: BoxDecoration(color: Colors.grey[200]),
+                          decoration: BoxDecoration(color: c.hover),
                           children: [
                             _cellTable('Saldo Actual Total',
                                 weight: FontWeight.bold, align: TextAlign.left),
@@ -771,13 +775,14 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
       {Color? color,
       FontWeight? weight,
       TextAlign align = TextAlign.center}) {
+    final c = SiColors.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Text(
         text,
         textAlign: align,
         style: TextStyle(
-          color: color ?? Colors.black87,
+          color: color ?? c.ink,
           fontWeight: weight,
           fontSize: 12,
         ),
@@ -912,10 +917,12 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) => Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        builder: (context, setModalState) {
+          final c = SiColors.of(context);
+          return Container(
+          decoration: BoxDecoration(
+            color: c.panel,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
           ),
           child: SingleChildScrollView(
             padding: EdgeInsets.only(
@@ -933,13 +940,13 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                   children: [
                     TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancelar',
-                          style: TextStyle(fontSize: 16, color: Colors.grey)),
+                      child: Text('Cancelar',
+                          style: TextStyle(fontSize: 16, color: c.ink3)),
                     ),
                     Text(
                       isEditing ? 'Editar Incidencia' : 'Nueva Incidencia',
-                      style: const TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold, color: c.ink),
                     ),
                     TextButton(
                       onPressed: () async {
@@ -990,10 +997,10 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                       },
                       child: Text(
                         'Guardar',
-                        style: const TextStyle(
+                        style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
-                            color: Colors.blue),
+                            color: c.brand),
                       ),
                     ),
                   ],
@@ -1003,8 +1010,8 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                   isEditing
                       ? (incidencia['nombre_usuario'] ?? '...')
                       : (_userFullName ?? '...'),
-                  style: const TextStyle(
-                      fontWeight: FontWeight.bold, fontSize: 16),
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 16, color: c.ink),
                 ),
                 const SizedBox(height: 20),
                 DropdownButtonFormField<String>(
@@ -1050,7 +1057,8 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
               ],
             ),
           ),
-        ),
+        );
+        },
       ),
     );
   }
@@ -1081,6 +1089,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
   }
 
   Widget _buildMobileList(ThemeData theme) {
+    final c = SiColors.of(context);
     return ListView.separated(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -1093,7 +1102,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: Colors.grey[200]!),
+            side: BorderSide(color: c.line),
           ),
           child: ListTile(
             contentPadding:
@@ -1224,11 +1233,11 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
           ),
           const Divider(height: 1),
           if (_allIncidencias.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(32),
+            Padding(
+              padding: const EdgeInsets.all(32),
               child: Center(
                 child: Text('Sin solicitudes pendientes',
-                    style: TextStyle(color: Colors.grey)),
+                    style: TextStyle(color: c.ink3)),
               ),
             )
           else
@@ -1407,7 +1416,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                     width: screenWidth * 0.12,
                     child: Text('PERIODO',
                         style: TextStyle(
-                            color: Colors.grey.shade500,
+                            color: c.ink3,
                             fontWeight: FontWeight.bold,
                             fontSize: 11,
                             letterSpacing: 1)))),
@@ -1416,7 +1425,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                     width: screenWidth * 0.03,
                     child: Text('DÍAS',
                         style: TextStyle(
-                            color: Colors.grey.shade500,
+                            color: c.ink3,
                             fontWeight: FontWeight.bold,
                             fontSize: 11,
                             letterSpacing: 1)))),
@@ -1425,7 +1434,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                     width: screenWidth * 0.07,
                     child: Text('CREADO',
                         style: TextStyle(
-                            color: Colors.grey.shade500,
+                            color: c.ink3,
                             fontWeight: FontWeight.bold,
                             fontSize: 11,
                             letterSpacing: 1)))),
@@ -1434,7 +1443,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                     width: screenWidth * 0.07,
                     child: Text('FECHA INICIO',
                         style: TextStyle(
-                            color: Colors.grey.shade500,
+                            color: c.ink3,
                             fontWeight: FontWeight.bold,
                             fontSize: 11,
                             letterSpacing: 1)))),
@@ -1443,7 +1452,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                     width: screenWidth * 0.07,
                     child: Text('FECHA FIN',
                         style: TextStyle(
-                            color: Colors.grey.shade500,
+                            color: c.ink3,
                             fontWeight: FontWeight.bold,
                             fontSize: 11,
                             letterSpacing: 1)))),
@@ -1452,7 +1461,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                     width: screenWidth * 0.07,
                     child: Text('ESTATUS',
                         style: TextStyle(
-                            color: Colors.grey.shade500,
+                            color: c.ink3,
                             fontWeight: FontWeight.bold,
                             fontSize: 11,
                             letterSpacing: 1)))),
@@ -1467,6 +1476,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
             isAdmin: _userRole == 'admin',
             userProfile: _selectedUserProfile,
             formatDate: _formatDate,
+            siColors: c,
             getStatusColor: _getStatusColor,
             onEdit: (inc) => _showIncidenciaForm(incidencia: inc),
             onStatusChange: (inc, status) async {
@@ -1501,17 +1511,17 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
   Widget _buildTableUserSelector(SiColors c) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: c.panel,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.grey.shade300),
+        border: Border.all(color: c.line),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: _selectedUserId,
           isExpanded: true,
-          icon: Icon(Icons.keyboard_arrow_down_rounded, color: Colors.grey.shade600, size: 20),
+          icon: Icon(Icons.keyboard_arrow_down_rounded, color: c.ink3, size: 20),
           padding: const EdgeInsets.symmetric(horizontal: 12),
-          style: const TextStyle(fontSize: 13, color: Colors.black87),
+          style: TextStyle(fontSize: 13, color: c.ink),
           items: _adminUserList.map((user) {
             final name = '${user['nombre'] ?? ''} ${user['paterno'] ?? ''}'.trim();
             return DropdownMenuItem(
@@ -1650,6 +1660,7 @@ class _IncidenciasDataSource extends DataTableSource {
   final bool isAdmin;
   final Map<String, dynamic>? userProfile;
   final String Function(String) formatDate;
+  final SiColors siColors;
 
   final Color Function(String) getStatusColor;
   final Function(Map<String, dynamic>) onEdit;
@@ -1661,6 +1672,7 @@ class _IncidenciasDataSource extends DataTableSource {
     required this.isAdmin,
     this.userProfile,
     required this.formatDate,
+    required this.siColors,
     required this.getStatusColor,
     required this.onEdit,
     required this.onStatusChange,
@@ -1711,7 +1723,7 @@ class _IncidenciasDataSource extends DataTableSource {
           Align(
             alignment: Alignment.centerRight,
             child: PopupMenuButton<String>(
-              icon: const Icon(Icons.more_horiz, color: Colors.grey),
+              icon: Icon(Icons.more_horiz, color: siColors.ink3),
             tooltip: 'Acciones',
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

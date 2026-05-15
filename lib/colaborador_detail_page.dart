@@ -278,7 +278,7 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
               children: [
                 Text(
                   fullName,
-                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, letterSpacing: -0.5),
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, letterSpacing: -0.5, color: c.ink),
                 ),
                 const SizedBox(height: 4),
                 Row(
@@ -397,7 +397,7 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
                 const SizedBox(height: 2),
                 Text(
                   value?.toString() ?? '---',
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: c.ink),
                 ),
               ],
             ),

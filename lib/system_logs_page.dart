@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'theme/si_theme.dart';
 
 class SystemLogsPage extends StatefulWidget {
   const SystemLogsPage({super.key});
@@ -36,6 +37,7 @@ class _SystemLogsPageState extends State<SystemLogsPage> {
   }
 
   Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
+    final c = SiColors.of(context);
     return ClipRRect(
       borderRadius: BorderRadius.circular(30),
       child: BackdropFilter(
@@ -44,9 +46,9 @@ class _SystemLogsPageState extends State<SystemLogsPage> {
           padding: padding ??
               const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.85),
+            color: c.panel.withOpacity(0.85),
             borderRadius: BorderRadius.circular(30),
-            border: Border.all(color: Colors.grey.withOpacity(0.2)),
+            border: Border.all(color: c.line.withOpacity(0.4)),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.05),
@@ -162,6 +164,7 @@ class _SystemLogsPageState extends State<SystemLogsPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final c = SiColors.of(context);
 
     final isDesktop = MediaQuery.of(context).size.width > 800;
 
@@ -262,10 +265,10 @@ class _SystemLogsPageState extends State<SystemLogsPage> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(Icons.history_toggle_off,
-                              size: 64, color: Colors.grey[300]),
+                              size: 64, color: c.line2),
                           const SizedBox(height: 16),
                           Text('No hay logs registrados aún',
-                              style: TextStyle(color: Colors.grey[500])),
+                              style: TextStyle(color: c.ink3)),
                         ],
                       ),
                     )
@@ -279,13 +282,14 @@ class _SystemLogsPageState extends State<SystemLogsPage> {
 
   Widget _buildChartCard(ThemeData theme) {
     if (_dailyLogins.isEmpty) return const SizedBox.shrink();
+    final c = SiColors.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       child: Card(
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: Colors.grey[200]!),
+          side: BorderSide(color: c.line),
         ),
         child: Container(
           padding: const EdgeInsets.all(16),
@@ -455,6 +459,7 @@ class _SystemLogsPageState extends State<SystemLogsPage> {
       {required String label,
       required IconData icon,
       required VoidCallback onTap}) {
+    final c = SiColors.of(context);
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
@@ -462,18 +467,17 @@ class _SystemLogsPageState extends State<SystemLogsPage> {
         height: 38,
         padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: c.panel,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.grey[300]!),
+          border: Border.all(color: c.line),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 16, color: const Color(0xFF344092)),
+            Icon(icon, size: 16, color: c.brand),
             const SizedBox(width: 8),
             Text(label,
-                style:
-                    const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: c.ink)),
           ],
         ),
       ),
@@ -504,6 +508,7 @@ class _SystemLogsPageState extends State<SystemLogsPage> {
   }
 
   Widget _buildMobileList(ThemeData theme) {
+    final c = SiColors.of(context);
     return RefreshIndicator(
       onRefresh: _fetchLogs,
       child: ListView.separated(
@@ -520,15 +525,15 @@ class _SystemLogsPageState extends State<SystemLogsPage> {
             leading: _getIconForAction(action, theme),
             title: Text(
               action,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: c.ink),
             ),
             subtitle: Text(
               target,
-              style: const TextStyle(fontSize: 12),
+              style: TextStyle(fontSize: 12, color: c.ink2),
             ),
             trailing: Text(
               _formatTime(date),
-              style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+              style: TextStyle(fontSize: 11, color: c.ink3),
             ),
           );
         },
@@ -537,6 +542,7 @@ class _SystemLogsPageState extends State<SystemLogsPage> {
   }
 
   Widget _buildDesktopTable(ThemeData theme, List<Map<String, dynamic>> filteredLogs) {
+    final c = SiColors.of(context);
     final screenWidth = MediaQuery.of(context).size.width;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -546,7 +552,7 @@ class _SystemLogsPageState extends State<SystemLogsPage> {
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: Colors.grey[200]!),
+            side: BorderSide(color: c.line),
           ),
           child: PaginatedDataTable(
             dataRowMaxHeight: 54,
@@ -565,7 +571,7 @@ class _SystemLogsPageState extends State<SystemLogsPage> {
                       controller: _searchController,
                       decoration: InputDecoration(
                         hintText: 'Buscar en logs...',
-                        hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                        hintStyle: TextStyle(color: c.ink3, fontSize: 13),
                         prefixIcon: const Icon(Icons.search, size: 18),
                         suffixIcon: _searchQuery.isNotEmpty
                             ? IconButton(
@@ -576,14 +582,14 @@ class _SystemLogsPageState extends State<SystemLogsPage> {
                                 },
                               )
                             : null,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: theme.colorScheme.primary)),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: c.line)),
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: c.line)),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: c.brand)),
                         filled: true,
-                        fillColor: Colors.white,
+                        fillColor: c.panel,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
                       ),
-                      style: const TextStyle(fontSize: 13),
+                      style: TextStyle(fontSize: 13, color: c.ink),
                       onChanged: (value) => setState(() => _searchQuery = value),
                     ),
                   ),
@@ -616,14 +622,15 @@ class _SystemLogsPageState extends State<SystemLogsPage> {
               ],
             ),
             columns: [
-              DataColumn(label: SizedBox(width: screenWidth * 0.1, child: Text('FECHA', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
-              DataColumn(label: SizedBox(width: screenWidth * 0.25, child: Text('USUARIO', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
-              DataColumn(label: SizedBox(width: screenWidth * 0.15, child: Text('ACCIÓN', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
-              DataColumn(label: SizedBox(width: screenWidth * 0.25, child: Text('DETALLE', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+              DataColumn(label: SizedBox(width: screenWidth * 0.1, child: Text('FECHA', style: TextStyle(color: c.ink3, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+              DataColumn(label: SizedBox(width: screenWidth * 0.25, child: Text('USUARIO', style: TextStyle(color: c.ink3, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+              DataColumn(label: SizedBox(width: screenWidth * 0.15, child: Text('ACCIÓN', style: TextStyle(color: c.ink3, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+              DataColumn(label: SizedBox(width: screenWidth * 0.25, child: Text('DETALLE', style: TextStyle(color: c.ink3, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
             ],
             source: _LogsDataSource(
               items: filteredLogs,
               theme: theme,
+              siColors: c,
               formatTime: _formatTime,
               getProfileName: _getProfileName,
               getProfileEmail: _getProfileEmail,
@@ -652,6 +659,7 @@ class _SystemLogsPageState extends State<SystemLogsPage> {
 class _LogsDataSource extends DataTableSource {
   final List<Map<String, dynamic>> items;
   final ThemeData theme;
+  final SiColors siColors;
   final String Function(DateTime) formatTime;
   final String Function(Map<String, dynamic>) getProfileName;
   final String Function(Map<String, dynamic>) getProfileEmail;
@@ -660,6 +668,7 @@ class _LogsDataSource extends DataTableSource {
   _LogsDataSource({
     required this.items,
     required this.theme,
+    required this.siColors,
     required this.formatTime,
     required this.getProfileName,
     required this.getProfileEmail,
@@ -692,7 +701,7 @@ class _LogsDataSource extends DataTableSource {
     return DataRow.byIndex(
       index: index,
       cells: [
-        DataCell(SizedBox(width: screenWidth * 0.1, child: Text(formatTime(date), style: TextStyle(fontSize: 12, color: Colors.grey[600])))),
+        DataCell(SizedBox(width: screenWidth * 0.1, child: Text(formatTime(date), style: TextStyle(fontSize: 12, color: siColors.ink3)))),
         DataCell(
           SizedBox(
             width: screenWidth * 0.25,
@@ -700,8 +709,8 @@ class _LogsDataSource extends DataTableSource {
               children: [
                 CircleAvatar(
                   radius: 16,
-                  backgroundColor: const Color(0xFF344092).withOpacity(0.15),
-                  child: Text(initials, style: const TextStyle(color: Color(0xFF344092), fontSize: 12, fontWeight: FontWeight.bold)),
+                  backgroundColor: siColors.brand.withOpacity(0.15),
+                  child: Text(initials, style: TextStyle(color: siColors.brand, fontSize: 12, fontWeight: FontWeight.bold)),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -709,9 +718,9 @@ class _LogsDataSource extends DataTableSource {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(nombre.isEmpty ? 'Sin Nombre' : nombre, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis),
+                      Text(nombre.isEmpty ? 'Sin Nombre' : nombre, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: siColors.ink), overflow: TextOverflow.ellipsis),
                       const SizedBox(height: 2),
-                      Text(email, style: TextStyle(color: Colors.grey.shade500, fontSize: 11), overflow: TextOverflow.ellipsis),
+                      Text(email, style: TextStyle(color: siColors.ink3, fontSize: 11), overflow: TextOverflow.ellipsis),
                     ],
                   ),
                 ),
@@ -743,7 +752,7 @@ class _LogsDataSource extends DataTableSource {
             ),
           ),
         ),
-        DataCell(SizedBox(width: screenWidth * 0.25, child: Text(target, style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis, maxLines: 2))),
+        DataCell(SizedBox(width: screenWidth * 0.25, child: Text(target, style: TextStyle(fontSize: 12, color: siColors.ink2), overflow: TextOverflow.ellipsis, maxLines: 2))),
       ],
     );
   }
