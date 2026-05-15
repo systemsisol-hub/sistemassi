@@ -43,7 +43,7 @@ class AdminDashboard extends StatefulWidget {
 }
 
 class _AdminDashboardState extends State<AdminDashboard> {
-  static const _pageSize = 25;
+  static const _pageSize = 10;
   List<Map<String, dynamic>> _users = [];
   bool _isLoading = true;
   bool _hasMore = false;
