@@ -247,7 +247,8 @@ class _DesktopShellState extends State<_DesktopShell>
     super.dispose();
   }
 
-  List<Widget> _buildGroupedItems(bool labelVisible, double labelOpacity) {
+  List<Widget> _buildGroupedItems(bool labelVisible, double labelOpacity,
+      {bool onDark = true}) {
     final items = <Widget>[];
     bool firstNonEmpty = true;
 
@@ -263,10 +264,10 @@ class _DesktopShellState extends State<_DesktopShell>
 
       if (labelVisible) {
         items.add(_SectionHeader(
-            label: label, visible: true, opacity: labelOpacity));
+            label: label, visible: true, opacity: labelOpacity, onDark: onDark));
       } else if (!firstNonEmpty) {
         items.add(_SectionHeader(
-            label: label, visible: false, opacity: 0));
+            label: label, visible: false, opacity: 0, onDark: onDark));
       }
       firstNonEmpty = false;
 
@@ -279,7 +280,7 @@ class _DesktopShellState extends State<_DesktopShell>
           showLabel: labelVisible,
           labelOpacity: labelOpacity,
           onTap: () => widget.onSelect(i),
-          onDark: true,
+          onDark: onDark,
         ));
       }
     }
@@ -290,6 +291,7 @@ class _DesktopShellState extends State<_DesktopShell>
   @override
   Widget build(BuildContext context) {
     final c = SiColors.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final userEmail =
         Supabase.instance.client.auth.currentUser?.email ?? '';
     final initials = _initials(userEmail);
@@ -317,10 +319,12 @@ class _DesktopShellState extends State<_DesktopShell>
                   width: w,
                   height: double.infinity,
                   decoration: BoxDecoration(
-                    color: c.brand,
+                    color: isDark ? c.panel : c.brand,
                     border: Border(
                       right: BorderSide(
-                        color: Colors.white.withValues(alpha: 0.08),
+                        color: isDark
+                            ? c.line
+                            : Colors.white.withValues(alpha: 0.08),
                         width: 1,
                       ),
                     ),
@@ -354,11 +358,11 @@ class _DesktopShellState extends State<_DesktopShell>
                                 const SizedBox(width: SiSpace.x2),
                                 Opacity(
                                   opacity: labelOpacity,
-                                  child: const Text('Sistemassi',
+                                  child: Text('Sistemassi',
                                       style: TextStyle(
                                           fontSize: 14,
                                           fontWeight: FontWeight.w600,
-                                          color: Colors.white,
+                                          color: isDark ? c.ink : Colors.white,
                                           letterSpacing: -0.14)),
                                 ),
                               ],
@@ -368,7 +372,9 @@ class _DesktopShellState extends State<_DesktopShell>
                       ),
                       Container(
                           height: 1,
-                          color: Colors.white.withValues(alpha: 0.08)),
+                          color: isDark
+                              ? c.line
+                              : Colors.white.withValues(alpha: 0.08)),
 
                       // Nav items (grouped)
                       Expanded(
@@ -376,15 +382,18 @@ class _DesktopShellState extends State<_DesktopShell>
                           padding: const EdgeInsets.symmetric(
                               vertical: SiSpace.x2,
                               horizontal: SiSpace.x1),
-                          children:
-                              _buildGroupedItems(labelVisible, labelOpacity),
+                          children: _buildGroupedItems(
+                              labelVisible, labelOpacity,
+                              onDark: !isDark),
                         ),
                       ),
 
                       // User footer
                       Container(
                           height: 1,
-                          color: Colors.white.withValues(alpha: 0.10)),
+                          color: isDark
+                              ? c.line
+                              : Colors.white.withValues(alpha: 0.10)),
                       Padding(
                         padding: const EdgeInsets.symmetric(
                             horizontal: SiSpace.x2,
@@ -395,7 +404,7 @@ class _DesktopShellState extends State<_DesktopShell>
                                 initials: initials,
                                 size: 28,
                                 c: c,
-                                onDark: true),
+                                onDark: !isDark),
                             if (labelVisible) ...[
                               const SizedBox(width: SiSpace.x2),
                               Expanded(
@@ -409,16 +418,20 @@ class _DesktopShellState extends State<_DesktopShell>
                                       Text(userEmail,
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                               fontSize: 12,
-                                              color: Colors.white,
+                                              color: isDark
+                                                  ? c.ink2
+                                                  : Colors.white,
                                               fontWeight:
                                                   FontWeight.w500)),
                                       Text(widget.role.toUpperCase(),
                                           style: TextStyle(
                                               fontSize: 11,
-                                              color: Colors.white
-                                                  .withValues(alpha: 0.55),
+                                              color: isDark
+                                                  ? c.ink4
+                                                  : Colors.white.withValues(
+                                                      alpha: 0.55),
                                               letterSpacing: 0.5)),
                                     ],
                                   ),
@@ -448,8 +461,10 @@ class _DesktopShellState extends State<_DesktopShell>
                                         const EdgeInsets.all(SiSpace.x1),
                                     child: Icon(Icons.logout,
                                         size: 16,
-                                        color: Colors.white
-                                            .withValues(alpha: 0.70)),
+                                        color: isDark
+                                            ? c.ink3
+                                            : Colors.white.withValues(
+                                                alpha: 0.70)),
                                   ),
                                 ),
                               ),
@@ -819,9 +834,9 @@ class _SectionHeader extends StatelessWidget {
         height: 1,
         margin: const EdgeInsets.symmetric(
             vertical: SiSpace.x2, horizontal: SiSpace.x2),
-        color: onDark 
+        color: onDark
             ? Colors.white.withValues(alpha: 0.08)
-            : SiColors.light.line,
+            : SiColors.of(context).line,
       );
     }
     return Opacity(
@@ -835,9 +850,9 @@ class _SectionHeader extends StatelessWidget {
             fontSize: 10.5,
             fontWeight: FontWeight.w600,
             letterSpacing: 10.5 * 0.08,
-            color: onDark 
+            color: onDark
                 ? Colors.white.withValues(alpha: 0.45)
-                : SiColors.light.ink3,
+                : SiColors.of(context).ink3,
             height: 1,
           ),
         ),
