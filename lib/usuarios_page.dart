@@ -48,6 +48,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   bool _isLoading = true;
   bool _hasMore = false;
   int _page = 0;
+  int? _totalCount;
   final _searchController = TextEditingController();
   String _searchQuery = '';
   bool _isAdmin = false;
@@ -82,19 +83,28 @@ class _AdminDashboardState extends State<AdminDashboard> {
     setState(() => _isLoading = true);
     try {
       final from = _page * _pageSize;
-      var query = Supabase.instance.client
+      final q = _searchQuery.trim();
+      final filter =
+          'nombre.ilike.%$q%,paterno.ilike.%$q%,email.ilike.%$q%,numero_empleado.ilike.%$q%';
+
+      var dataQuery = Supabase.instance.client
           .from('profiles')
           .select('id, nombre, paterno, materno, email, numero_empleado, role, is_blocked, status_sys, permissions');
+      var countQuery =
+          Supabase.instance.client.from('profiles').count(CountOption.exact);
 
-      if (_searchQuery.isNotEmpty) {
-        final q = _searchQuery.trim();
-        query = query.or(
-            'nombre.ilike.%$q%,paterno.ilike.%$q%,email.ilike.%$q%,numero_empleado.ilike.%$q%');
+      if (q.isNotEmpty) {
+        dataQuery = dataQuery.or(filter);
+        countQuery = countQuery.or(filter);
       }
 
-      final data = await query
+      final dataFuture = dataQuery
           .order('created_at', ascending: false)
-          .range(from, from + _pageSize); // pageSize+1 to detect hasMore
+          .range(from, from + _pageSize);
+      final countFuture = countQuery;
+
+      final data = await dataFuture;
+      final total = await countFuture;
 
       final rows = List<Map<String, dynamic>>.from(data);
       final hasMore = rows.length > _pageSize;
@@ -103,6 +113,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
         setState(() {
           _users = hasMore ? rows.sublist(0, _pageSize) : rows;
           _hasMore = hasMore;
+          _totalCount = total;
           _isLoading = false;
         });
       }
@@ -642,16 +653,23 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 : null,
           ),
           const SizedBox(width: SiSpace.x2),
-          Text(
-            'Página ${_page + 1}',
-            style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: c.ink3),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Página ${_page + 1}${_totalCount != null ? ' de ${((_totalCount! + _pageSize - 1) ~/ _pageSize)}' : ''}',
+                style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: c.ink3),
+              ),
+              if (_totalCount != null)
+                Text(
+                  '$_totalCount usuarios',
+                  style: TextStyle(fontSize: 11, color: c.ink4),
+                ),
+            ],
           ),
-          if (_hasMore)
-            Text('  ›  más',
-                style: TextStyle(fontSize: 12, color: c.ink4)),
           const SizedBox(width: SiSpace.x2),
           IconButton(
             visualDensity: VisualDensity.compact,
