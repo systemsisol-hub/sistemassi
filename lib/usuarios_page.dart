@@ -1227,6 +1227,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
         _permSwitch(c, 'Asistencia', 'show_asistencia', Icons.fingerprint),
         _permSwitch(c, 'Power BI', 'show_powerbi', Icons.bar_chart_outlined),
         _permSwitch(c, 'Contraseñas', 'show_passwords', Icons.vpn_key_outlined),
+        _permSwitch(c, 'Tablas', 'show_tablas', Icons.table_chart_outlined),
       ],
     );
   }

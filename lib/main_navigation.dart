@@ -13,6 +13,7 @@ import 'calendar_page.dart';
 import 'attendance_hub_page.dart';
 import 'bi_page.dart';
 import 'signature_generator_page.dart';
+import 'tablas_page.dart';
 import 'passwords_page.dart';
 import 'theme/si_theme.dart';
 
@@ -20,7 +21,7 @@ import 'theme/si_theme.dart';
 final _navGroups = <(String, List<String>)>[
   ('GENERAL',        ['Mi Perfil', 'Social', 'Contraseñas', 'Contactos', 'Firmas', 'Calendario']),
   ('OPERACIÓN',      ['Incidencias', 'Inventario', 'Colaborador', 'Asistencia']),
-  ('ANÁLISIS',       ['BI', 'Logs']),
+  ('ANÁLISIS',       ['BI', 'Logs', 'Tablas']),
   ('ADMINISTRACIÓN', ['Usuarios']),
 ];
 
@@ -145,6 +146,14 @@ class _MainNavigationState extends State<MainNavigation> {
         'icon': Icons.bar_chart_outlined,
         'activeIcon': Icons.bar_chart,
         'widget': BiPage(role: widget.role, permissions: widget.permissions),
+      });
+    }
+    if (widget.permissions['show_tablas'] == true) {
+      pages.add({
+        'title': 'Tablas',
+        'icon': Icons.table_chart_outlined,
+        'activeIcon': Icons.table_chart,
+        'widget': const TablasPage(),
       });
     }
 
