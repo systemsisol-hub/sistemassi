@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:screenshot/screenshot.dart';
 import 'services/file_saver_util.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'theme/si_theme.dart';
 
 extension StringTitleCase on String {
   String toTitleCase() {
@@ -207,28 +208,33 @@ class _SignatureGeneratorPageState extends State<SignatureGeneratorPage> {
   }
 
   Widget _buildPreviewCard(ThemeData theme) {
+    final c = SiColors.of(context);
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
-          Container(
-            width: double.infinity,
-            color: Colors.grey[200],
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Screenshot(
-                controller: _screenshotController,
-                child: _buildSignaturePreview(),
+          LayoutBuilder(builder: (context, constraints) {
+            const double sigW = 787, sigH = 220;
+            final displayH = constraints.maxWidth * (sigH / sigW);
+            return SizedBox(
+              width: constraints.maxWidth,
+              height: displayH,
+              child: FittedBox(
+                fit: BoxFit.fill,
+                child: Screenshot(
+                  controller: _screenshotController,
+                  child: _buildSignaturePreview(),
+                ),
               ),
-            ),
-          ),
+            );
+          }),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Text('VISTA PREVIA', 
+            child: Text('VISTA PREVIA',
               style: theme.textTheme.labelLarge?.copyWith(
-                color: Colors.grey[700],
+                color: c.ink2,
                 fontWeight: FontWeight.bold,
                 letterSpacing: 1.2,
               )),
@@ -239,11 +245,12 @@ class _SignatureGeneratorPageState extends State<SignatureGeneratorPage> {
   }
 
   Widget _buildConfigurationForm(ThemeData theme) {
+    final c = SiColors.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Brand Selector
-        Text('Selecciona la Marca', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+        Text('Selecciona la Marca', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: c.ink)),
         const SizedBox(height: 12),
         SizedBox(
           height: 100,
@@ -263,7 +270,7 @@ class _SignatureGeneratorPageState extends State<SignatureGeneratorPage> {
                       height: 64,
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: isSelected ? theme.colorScheme.primary : Colors.grey[300]!, width: 2),
+                        border: Border.all(color: isSelected ? c.brand : c.line, width: 2),
                         image: DecorationImage(
                           image: AssetImage(brand.background),
                           fit: BoxFit.cover,
@@ -273,9 +280,9 @@ class _SignatureGeneratorPageState extends State<SignatureGeneratorPage> {
                     ),
                     const SizedBox(height: 4),
                     Text(brand.name, style: TextStyle(
-                      fontSize: 10, 
+                      fontSize: 10,
                       fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                      color: isSelected ? theme.colorScheme.primary : Colors.black,
+                      color: isSelected ? c.brand : c.ink2,
                     )),
                   ],
                 ),
@@ -285,8 +292,8 @@ class _SignatureGeneratorPageState extends State<SignatureGeneratorPage> {
         ),
 
         const SizedBox(height: 24),
-        Text('Haz clic en la firma para editar tus datos directamente.', 
-          style: theme.textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic, color: Colors.grey[600])),
+        Text('Haz clic en la firma para editar tus datos directamente.',
+          style: theme.textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic, color: c.ink3)),
       ],
     );
   }

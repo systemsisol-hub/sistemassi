@@ -199,18 +199,7 @@ class _LoginPageState extends State<LoginPage>
   // ── Shared form content ────────────────────────────────────────────────────
 
   List<Widget> _formContent(SiColors c, bool isDark) => [
-    Text(
-      'Bienvenido\nde vuelta.',
-      style: SiType.sans(
-        size: 28, weight: FontWeight.w600,
-        color: c.ink, height: 1.1, letterSpacing: -0.84,
-      ),
-    ),
-    const SizedBox(height: SiSpace.x2),
-    Text(
-      'Accede con tus credenciales corporativas de Sisol.',
-      style: SiType.sans(size: 13.5, color: c.ink3, height: 1.6),
-    ),
+    Image.asset('assets/logo.png', height: 60),
     const SizedBox(height: SiSpace.x6),
 
     _LoginField(
@@ -672,6 +661,7 @@ class _LoginField extends StatelessWidget {
                     border: InputBorder.none,
                     isDense: true,
                     contentPadding: EdgeInsets.zero,
+                    filled: false,
                   ),
                 ),
               ),
