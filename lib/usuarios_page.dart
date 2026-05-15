@@ -1233,15 +1233,25 @@ class _UserFormSheetState extends State<_UserFormSheet> {
 
   Widget _permSwitch(
       SiColors c, String label, String key, IconData icon) {
-    return ListTile(
-      dense: true,
-      contentPadding: EdgeInsets.zero,
-      leading: Icon(icon, size: 18, color: c.ink3),
-      title: Text(label, style: TextStyle(fontSize: 13, color: c.ink)),
-      trailing: Switch(
-        value: _permissions[key] ?? false,
-        onChanged: (v) => setState(() => _permissions[key] = v),
-        activeColor: c.brand,
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Transform.scale(
+            scale: 0.72,
+            alignment: Alignment.centerLeft,
+            child: Switch(
+              value: _permissions[key] ?? false,
+              onChanged: (v) => setState(() => _permissions[key] = v),
+              activeColor: c.brand,
+            ),
+          ),
+          Icon(icon, size: 16, color: c.ink3),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(label, style: TextStyle(fontSize: 13, color: c.ink)),
+          ),
+        ],
       ),
     );
   }
