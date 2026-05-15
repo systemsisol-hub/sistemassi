@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_calendar/calendar.dart';
+import 'package:syncfusion_flutter_core/theme.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
 import 'calendar_event_form_dialog.dart';
@@ -856,7 +857,52 @@ class _CalendarPageState extends State<CalendarPage> {
                       Expanded(
                         child: Stack(
                           children: [
-                            SfCalendar(
+                            SfCalendarTheme(
+                              data: SfCalendarThemeData(
+                                backgroundColor: c.bg,
+                                headerBackgroundColor: c.bg,
+                                viewHeaderBackgroundColor: c.bg,
+                                agendaBackgroundColor: c.panel,
+                                allDayPanelColor: c.panel,
+                                cellBorderColor: c.line,
+                                activeDatesBackgroundColor: c.bg,
+                                todayBackgroundColor: c.brand,
+                                trailingDatesBackgroundColor: c.bg,
+                                leadingDatesBackgroundColor: c.bg,
+                                selectionBorderColor: Colors.transparent,
+                                todayHighlightColor: c.brand,
+                                viewHeaderDayTextStyle: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: c.ink3,
+                                    letterSpacing: 0.5),
+                                viewHeaderDateTextStyle:
+                                    TextStyle(color: c.ink, fontSize: 11),
+                                activeDatesTextStyle:
+                                    TextStyle(color: c.ink, fontSize: 12),
+                                todayTextStyle: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12),
+                                trailingDatesTextStyle:
+                                    TextStyle(color: c.ink4, fontSize: 12),
+                                leadingDatesTextStyle:
+                                    TextStyle(color: c.ink4, fontSize: 12),
+                                timeTextStyle:
+                                    TextStyle(color: c.ink3, fontSize: 11),
+                                timeIndicatorTextStyle:
+                                    TextStyle(color: c.brand, fontSize: 10),
+                                agendaDayTextStyle: TextStyle(
+                                    color: c.ink,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 22),
+                                agendaDateTextStyle:
+                                    TextStyle(color: c.ink3, fontSize: 11),
+                                weekNumberBackgroundColor: c.hover,
+                                weekNumberTextStyle:
+                                    TextStyle(color: c.ink3, fontSize: 11),
+                              ),
+                              child: SfCalendar(
                               key: ValueKey('calendar_$isDesktop'),
                               controller: _calendarController,
                               view: CalendarView.month,
@@ -875,14 +921,6 @@ class _CalendarPageState extends State<CalendarPage> {
                               todayHighlightColor: c.brand,
                               selectionDecoration:
                                   const BoxDecoration(color: Colors.transparent),
-                              viewHeaderStyle: ViewHeaderStyle(
-                                backgroundColor: c.bg,
-                                dayTextStyle: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    color: c.ink3,
-                                    letterSpacing: 0.5),
-                              ),
                               monthViewSettings: MonthViewSettings(
                                 dayFormat: 'EEE',
                                 showAgenda: !isDesktop,
@@ -901,9 +939,11 @@ class _CalendarPageState extends State<CalendarPage> {
                                       fontSize: 22),
                                 ),
                               ),
-                              timeSlotViewSettings:
-                                  const TimeSlotViewSettings(
-                                      startHour: 0, endHour: 24),
+                              timeSlotViewSettings: TimeSlotViewSettings(
+                                  startHour: 0,
+                                  endHour: 24,
+                                  timeTextStyle:
+                                      TextStyle(color: c.ink3, fontSize: 11)),
                               monthCellBuilder: (context, details) {
                                 final isSelected =
                                     details.date.year == _selectedDate.year &&
@@ -1004,7 +1044,8 @@ class _CalendarPageState extends State<CalendarPage> {
                                   ),
                                 );
                               },
-                            ),
+                            ), // SfCalendar
+                            ), // SfCalendarTheme
                             if (_isLoading)
                               Positioned.fill(
                                 child: Container(
