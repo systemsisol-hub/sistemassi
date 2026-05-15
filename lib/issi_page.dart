@@ -1353,7 +1353,7 @@ class _IssiPageState extends State<IssiPage> {
   // --- CONDICIÓN card: horizontal colored bars ---
   Widget _buildCondicionCard(
       List<MapEntry<String, int>> entries, ThemeData theme) {
-    final c = SiColors.of(context);
+    final si = SiColors.of(context);
     final total = _items.length;
     final condColors = <String, Color>{
       'NUEVO': const Color(0xFF4CAF50),
@@ -1405,7 +1405,7 @@ class _IssiPageState extends State<IssiPage> {
                           fontSize: 11, fontWeight: FontWeight.w500)),
                   const Spacer(),
                   Text('$pct%',
-                      style: TextStyle(fontSize: 11, color: c.ink3)),
+                      style: TextStyle(fontSize: 11, color: si.ink3)),
                   const SizedBox(width: 6),
                   Text('${e.value}',
                       style: TextStyle(
