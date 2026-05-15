@@ -99,7 +99,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       }
 
       final dataFuture = dataQuery
-          .order('created_at', ascending: false)
+          .order('numero_empleado', ascending: false, nullsFirst: false)
           .range(from, from + _pageSize);
       final countFuture = countQuery;
 
