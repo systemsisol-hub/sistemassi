@@ -29,7 +29,7 @@ dependencies:
   printing: ^5.14.3
   path_provider: ^2.1.2
   screenshot: ^3.0.0
-  font_awesome_flutter: ^10.7.0
+  font_awesome_flutter: ^11.0.0
   share_plus: ^7.2.2
 
 dev_dependencies:
