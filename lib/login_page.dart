@@ -639,7 +639,6 @@ class _LoginField extends StatelessWidget {
           height: 40,
           decoration: BoxDecoration(
             color: c.hover,
-            border: Border.all(color: c.line, width: 1.5),
             borderRadius: SiRadius.rMd,
           ),
           child: Row(
