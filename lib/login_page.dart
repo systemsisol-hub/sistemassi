@@ -640,6 +640,7 @@ class _LoginField extends StatelessWidget {
           decoration: BoxDecoration(
             color: c.hover,
             borderRadius: SiRadius.rMd,
+            border: Border.all(color: c.line),
           ),
           child: Row(
             children: [
@@ -658,6 +659,11 @@ class _LoginField extends StatelessWidget {
                   style: SiType.sans(size: 13, color: c.ink),
                   decoration: const InputDecoration(
                     border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    errorBorder: InputBorder.none,
+                    focusedErrorBorder: InputBorder.none,
+                    disabledBorder: InputBorder.none,
                     isDense: true,
                     contentPadding: EdgeInsets.zero,
                     filled: false,
