@@ -137,6 +137,8 @@ class _CssiPageState extends State<CssiPage> {
             .from('profiles')
             .select()
             .or('nombre.not.is.null,full_name.not.is.null')
+            .neq('status_rh', 'BAJA')
+            .neq('status_sys', 'BAJA')
             .order('created_at', ascending: false)
             .range(offset, offset + limit - 1);
 
@@ -364,12 +366,16 @@ class _CssiPageState extends State<CssiPage> {
               .select('nombre, paterno, materno')
               .eq('status_rh', 'ACTIVO')
               .order('nombre')
-              .then((data) => (data as List).map((e) {
-                    final n = e['nombre'] ?? '';
-                    final p = e['paterno'] ?? '';
-                    final m = e['materno'] ?? '';
-                    return '$n $p $m'.trim().toUpperCase();
-                  }).toList()),
+              .then((data) {
+                final list = (data as List).map((e) {
+                  final n = e['nombre'] ?? '';
+                  final p = e['paterno'] ?? '';
+                  final m = e['materno'] ?? '';
+                  return '$n $p $m'.trim().toUpperCase();
+                }).toList();
+                list.sort(); // Orden ascendente A-Z
+                return list;
+              }),
           builder: (context, snapshot) {
             final list = snapshot.data ?? [];
             final items = [

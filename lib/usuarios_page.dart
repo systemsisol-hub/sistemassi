@@ -54,10 +54,17 @@ class _AdminDashboardState extends State<AdminDashboard> {
   bool _isAdmin = false;
   Timer? _searchDebounce;
 
+  // Estadísticas del Dashboard
+  Map<String, int> _statusSysCounts = {};
+  Map<String, int> _statusRhCounts = {};
+  int _authAccountCount = 0;
+  bool _isLoadingStats = true;
+
   @override
   void initState() {
     super.initState();
     _checkAdminRole();
+    _fetchStats();
     _fetchUsers();
   }
 
@@ -76,6 +83,43 @@ class _AdminDashboardState extends State<AdminDashboard> {
       }
     } catch (e) {
       debugPrint('Error checking admin role: $e');
+    }
+  }
+
+  Future<void> _fetchStats() async {
+    try {
+      final data = await Supabase.instance.client
+          .from('profiles')
+          .select('status_sys, status_rh, role');
+      
+      final sysCounts = <String, int>{};
+      final rhCounts = <String, int>{};
+      int authCount = 0;
+
+      for (var row in data) {
+        final sys = row['status_sys'] as String? ?? 'NO APLICA';
+        final rh = row['status_rh'] as String? ?? 'BAJA';
+        final role = row['role'] as String?;
+
+        sysCounts[sys] = (sysCounts[sys] ?? 0) + 1;
+        rhCounts[rh] = (rhCounts[rh] ?? 0) + 1;
+        // Consideramos que si tiene un rol asignado, es una cuenta de acceso
+        if (role != null && role.isNotEmpty) {
+          authCount++;
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _statusSysCounts = sysCounts;
+          _statusRhCounts = rhCounts;
+          _authAccountCount = authCount;
+          _isLoadingStats = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching stats: $e');
+      if (mounted) setState(() => _isLoadingStats = false);
     }
   }
 
@@ -131,6 +175,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   Future<void> _refreshUsers() {
     _page = 0;
+    _fetchStats();
     return _fetchUsers();
   }
 
@@ -226,8 +271,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
     return Scaffold(
       backgroundColor: c.bg,
       body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _buildToolbar(c),
+          _buildDashboardSummary(c),
           Expanded(
             child: _isLoading
                 ? Center(
@@ -247,6 +294,100 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildDashboardSummary(SiColors c) {
+    if (_isLoadingStats) {
+      return const SizedBox(
+        height: 100,
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    Widget statCard(String title, List<Widget> children) {
+      return Container(
+        width: 260,
+        margin: const EdgeInsets.only(right: SiSpace.x4),
+        padding: const EdgeInsets.all(SiSpace.x4),
+        decoration: BoxDecoration(
+          color: c.panel,
+          borderRadius: SiRadius.rLg,
+          border: Border.all(color: c.line),
+          boxShadow: SiShadows.sm,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: c.brand, letterSpacing: 0.5)),
+            const SizedBox(height: SiSpace.x3),
+            ...children,
+          ],
+        ),
+      );
+    }
+
+    Widget rowStat(String label, int value, Color color) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label, style: TextStyle(fontSize: 12, color: c.ink3, fontWeight: FontWeight.w500)),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: SiRadius.rPill),
+              child: Text(value.toString(), style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: color)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: c.bg,
+        border: Border(bottom: BorderSide(color: c.line, width: 1)),
+      ),
+      padding: const EdgeInsets.all(SiSpace.x6),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            statCard('ESTATUS DE SISTEMA', [
+              rowStat('ACTIVO', _statusSysCounts['ACTIVO'] ?? 0, c.success),
+              rowStat('BAJA', _statusSysCounts['BAJA'] ?? 0, c.danger),
+              rowStat('NO APLICA', _statusSysCounts['NO APLICA'] ?? 0, c.ink3),
+            ]),
+            statCard('ESTATUS DE RH', [
+              rowStat('ACTIVO', _statusRhCounts['ACTIVO'] ?? 0, c.success),
+              rowStat('BAJA', _statusRhCounts['BAJA'] ?? 0, c.danger),
+              rowStat('REINGRESO / CAMBIO', (_statusRhCounts['REINGRESO'] ?? 0) + (_statusRhCounts['CAMBIO'] ?? 0), c.warn),
+            ]),
+            statCard('AUTENTICACIÓN', [
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(color: c.brandTint, borderRadius: SiRadius.rMd),
+                    child: Icon(Icons.shield_outlined, size: 28, color: c.brand),
+                  ),
+                  const SizedBox(width: 16),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('CUENTAS ACTIVAS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: c.ink4, letterSpacing: 0.5)),
+                      Text(_authAccountCount.toString(), style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: c.ink, height: 1.1)),
+                    ],
+                  ),
+                ],
+              ),
+            ]),
+          ],
+        ),
       ),
     );
   }
