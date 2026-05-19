@@ -137,8 +137,6 @@ class _CssiPageState extends State<CssiPage> {
             .from('profiles')
             .select()
             .or('nombre.not.is.null,full_name.not.is.null')
-            .neq('status_rh', 'BAJA')
-            .neq('status_sys', 'BAJA')
             .order('created_at', ascending: false)
             .range(offset, offset + limit - 1);
 

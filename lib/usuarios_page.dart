@@ -287,22 +287,15 @@ class _AdminDashboardState extends State<AdminDashboard> {
         children: [
           _buildDashboardSummary(c),
           Expanded(
-            child: _isLoading
-                ? Center(
-                    child: Image.asset('assets/sisol_loader.gif',
-                        width: 150,
-                        errorBuilder: (_, __, ___) => CircularProgressIndicator(
-                            color: c.brand, strokeWidth: 2)),
-                  )
-                : RefreshIndicator(
-                    onRefresh: _refreshUsers,
-                    child: LayoutBuilder(
-                      builder: (context, constraints) =>
-                          constraints.maxWidth > 800
-                              ? _buildDesktopTable(c, items)
-                              : _buildMobileList(c, items),
-                    ),
-                  ),
+            child: RefreshIndicator(
+              onRefresh: _refreshUsers,
+              child: LayoutBuilder(
+                builder: (context, constraints) =>
+                    constraints.maxWidth > 800
+                        ? _buildDesktopTable(c, items)
+                        : _buildMobileList(c, items),
+              ),
+            ),
           ),
         ],
       ),
@@ -506,7 +499,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         ),
                       ),
                       // Rows
-                      ...items.asMap().entries.map((e) {
+                      if (_isLoading)
+                        const Padding(
+                          padding: EdgeInsets.all(40),
+                          child: Center(child: CircularProgressIndicator()),
+                        )
+                      else
+                        ...items.asMap().entries.map((e) {
                             final i = e.key;
                             final u = e.value;
                             final role = u['role'] ?? 'usuario';
@@ -678,7 +677,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
         child: Column(
           children: [
             _buildToolbar(c),
-            if (items.isEmpty)
+            if (_isLoading)
+              const Padding(
+                padding: EdgeInsets.all(40),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (items.isEmpty)
               SizedBox(height: 300, child: _buildEmpty(c))
             else
               ListView.separated(
