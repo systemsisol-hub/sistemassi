@@ -202,6 +202,7 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
                               _infoRow(context, Icons.event_available, 'Fecha Ingreso', colab['fecha_ingreso']),
                               _infoRow(context, Icons.history, 'Fecha Reingreso', colab['fecha_reingreso']),
                               _infoRow(context, Icons.sync, 'Fecha Cambio', colab['fecha_cambio']),
+                              _infoRow(context, Icons.event_busy, 'Fecha Baja', colab['fecha_baja']),
                             ]),
                           ],
                         ),

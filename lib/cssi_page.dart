@@ -288,6 +288,7 @@ class _CssiPageState extends State<CssiPage> {
     final fechaReingresoCtrl =
         TextEditingController(text: item?['fecha_reingreso']);
     final fechaCambioCtrl = TextEditingController(text: item?['fecha_cambio']);
+    final fechaBajaCtrl = TextEditingController(text: item?['fecha_baja']);
     final obsCtrl = TextEditingController(text: item?['observaciones']);
     final refNombreCtrl =
         TextEditingController(text: item?['referencia_nombre']);
@@ -1095,6 +1096,22 @@ class _CssiPageState extends State<CssiPage> {
                       fechaCambioCtrl.text = d.toString().split(' ').first);
               })),
           fieldColumn(TextField(
+              controller: fechaBajaCtrl,
+              decoration: const InputDecoration(
+                  labelText: 'Fecha Baja',
+                  suffixIcon: Icon(Icons.calendar_today)),
+              readOnly: true,
+              onTap: () async {
+                final d = await showDatePicker(
+                    context: context,
+                    initialDate: DateTime.now(),
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime(2101));
+                if (d != null)
+                  setDialogState(() =>
+                      fechaBajaCtrl.text = d.toString().split(' ').first);
+              })),
+          fieldColumn(TextField(
               controller: obsCtrl,
               decoration: const InputDecoration(labelText: 'Observaciones'),
               maxLines: 5,
@@ -1210,6 +1227,7 @@ class _CssiPageState extends State<CssiPage> {
             fechaReingresoCtrl.text.isEmpty ? null : fechaReingresoCtrl.text,
         'fecha_cambio':
             fechaCambioCtrl.text.isEmpty ? null : fechaCambioCtrl.text,
+        'fecha_baja': fechaBajaCtrl.text.isEmpty ? null : fechaBajaCtrl.text,
         'observaciones': toUpper(obsCtrl.text),
         'referencia_nombre': toUpper(refNombreCtrl.text),
         'referencia_telefono': toUpper(refTelCtrl.text),
