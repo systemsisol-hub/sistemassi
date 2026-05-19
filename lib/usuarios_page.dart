@@ -88,23 +88,35 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   Future<void> _fetchStats() async {
     try {
-      final data = await Supabase.instance.client
-          .from('profiles')
-          .select('status_sys, status_rh, role');
+      final List<Map<String, dynamic>> allData = [];
+      int offset = 0;
+      const int limit = 1000;
+
+      // Obtener todos los registros paginados porque Supabase tiene un límite de 1000 por request
+      while (true) {
+        final data = await Supabase.instance.client
+            .from('profiles')
+            .select('status_sys, status_rh, has_auth_account')
+            .range(offset, offset + limit - 1);
+            
+        allData.addAll(List<Map<String, dynamic>>.from(data));
+        if (data.length < limit) break;
+        offset += limit;
+      }
       
       final sysCounts = <String, int>{};
       final rhCounts = <String, int>{};
       int authCount = 0;
 
-      for (var row in data) {
+      for (var row in allData) {
         final sys = row['status_sys'] as String? ?? 'NO APLICA';
         final rh = row['status_rh'] as String? ?? 'BAJA';
-        final role = row['role'] as String?;
+        final hasAuth = row['has_auth_account'] == true;
 
         sysCounts[sys] = (sysCounts[sys] ?? 0) + 1;
         rhCounts[rh] = (rhCounts[rh] ?? 0) + 1;
-        // Consideramos que si tiene un rol asignado, es una cuenta de acceso
-        if (role != null && role.isNotEmpty) {
+        
+        if (hasAuth) {
           authCount++;
         }
       }
