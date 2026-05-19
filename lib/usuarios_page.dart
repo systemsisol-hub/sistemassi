@@ -565,11 +565,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                               style: TextStyle(
                                                   fontWeight: FontWeight.w600,
                                                   fontSize: 13,
-                                                  color: c.ink,
-                                                  decoration: isBlocked
-                                                      ? TextDecoration
-                                                          .lineThrough
-                                                      : null),
+                                                  color: isBlocked ? c.danger : c.ink,
+                                                  decoration: null),
                                               overflow: TextOverflow.ellipsis,
                                             ),
                                             Text(u['email'] ?? '',
@@ -724,8 +721,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
               style: TextStyle(
                 fontWeight: FontWeight.w600,
                 fontSize: 13,
-                color: c.ink,
-                decoration: isBlocked ? TextDecoration.lineThrough : null,
+                color: isBlocked ? c.danger : c.ink,
+                decoration: null,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
