@@ -285,7 +285,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildToolbar(c),
           _buildDashboardSummary(c),
           Expanded(
             child: _isLoading
@@ -411,44 +410,46 @@ class _AdminDashboardState extends State<AdminDashboard> {
         border: Border(bottom: BorderSide(color: c.line, width: 1)),
       ),
       padding: const EdgeInsets.symmetric(
-          horizontal: SiSpace.x6, vertical: SiSpace.x3),
+          horizontal: SiSpace.x4, vertical: SiSpace.x3),
       child: Row(
         children: [
-          Container(
-            width: 280,
-            height: 36,
-            decoration: BoxDecoration(
-              color: c.bg,
-              borderRadius: SiRadius.rMd,
-              border: Border.all(color: c.line),
-            ),
-            child: TextField(
-              controller: _searchController,
-              style: const TextStyle(fontSize: 13),
-              decoration: InputDecoration(
-                hintText: 'Buscar por nombre, correo, ID...',
-                hintStyle: TextStyle(fontSize: 13, color: c.ink4),
-                prefixIcon: Icon(Icons.search, size: 16, color: c.ink3),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: Icon(Icons.clear, size: 14, color: c.ink3),
-                        onPressed: () {
-                          _searchController.clear();
-                          _searchDebounce?.cancel();
-                          _onSearchChanged('');
-                        },
-                      )
-                    : null,
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                isDense: true,
+          Expanded(
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 280),
+              height: 36,
+              decoration: BoxDecoration(
+                color: c.bg,
+                borderRadius: SiRadius.rMd,
+                border: Border.all(color: c.line),
               ),
-              onChanged: _onSearchChanged,
+              child: TextField(
+                controller: _searchController,
+                style: const TextStyle(fontSize: 13),
+                decoration: InputDecoration(
+                  hintText: 'Buscar por nombre, correo, ID...',
+                  hintStyle: TextStyle(fontSize: 13, color: c.ink4),
+                  prefixIcon: Icon(Icons.search, size: 16, color: c.ink3),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: Icon(Icons.clear, size: 14, color: c.ink3),
+                          onPressed: () {
+                            _searchController.clear();
+                            _searchDebounce?.cancel();
+                            _onSearchChanged('');
+                          },
+                        )
+                      : null,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                  isDense: true,
+                ),
+                onChanged: _onSearchChanged,
+              ),
             ),
           ),
-          const Spacer(),
+          const SizedBox(width: SiSpace.x3),
           if (_isAdmin)
             ElevatedButton.icon(
               onPressed: () => _showUserForm(),
@@ -474,34 +475,38 @@ class _AdminDashboardState extends State<AdminDashboard> {
     return Column(
       children: [
         Expanded(
-          child: items.isEmpty
-              ? _buildEmpty(c)
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.all(SiSpace.x6),
-                  child: Center(
-                    child: Card(
-                      child: Column(
-                        children: [
-                          // Header
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: SiSpace.x5, vertical: SiSpace.x3),
-                            decoration: BoxDecoration(
-                                border: Border(
-                                    bottom:
-                                        BorderSide(color: c.line, width: 1))),
-                            child: Row(
-                              children: [
-                                _colHeader(c, 'USUARIO', flex: 4),
-                                _colHeader(c, 'NO. EMP.', flex: 2),
-                                _colHeader(c, 'ROL', flex: 2),
-                                _colHeader(c, 'ESTADO', flex: 2),
-                                const SizedBox(width: 48),
-                              ],
-                            ),
-                          ),
-                          // Rows
-                          ...items.asMap().entries.map((e) {
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(SiSpace.x6),
+            child: Center(
+              child: Card(
+                clipBehavior: Clip.antiAlias,
+                margin: EdgeInsets.zero,
+                child: Column(
+                  children: [
+                    _buildToolbar(c),
+                    if (items.isEmpty)
+                      SizedBox(height: 300, child: _buildEmpty(c))
+                    else ...[
+                      // Header
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: SiSpace.x5, vertical: SiSpace.x3),
+                        decoration: BoxDecoration(
+                            border: Border(
+                                bottom:
+                                    BorderSide(color: c.line, width: 1))),
+                        child: Row(
+                          children: [
+                            _colHeader(c, 'USUARIO', flex: 4),
+                            _colHeader(c, 'NO. EMP.', flex: 2),
+                            _colHeader(c, 'ROL', flex: 2),
+                            _colHeader(c, 'ESTADO', flex: 2),
+                            const SizedBox(width: 48),
+                          ],
+                        ),
+                      ),
+                      // Rows
+                      ...items.asMap().entries.map((e) {
                             final i = e.key;
                             final u = e.value;
                             final role = u['role'] ?? 'usuario';
@@ -639,14 +644,15 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                 ],
                               ),
                             );
-                          }),
-                        ],
-                      ),
-                    ),
-                  ),
+                      }),
+                    ],
+                    _buildPaginator(c),
+                  ],
                 ),
+              ),
+            ),
+          ),
         ),
-        _buildPaginator(c),
       ],
     );
   }
@@ -664,18 +670,25 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   Widget _buildMobileList(SiColors c, List<Map<String, dynamic>> items) {
-    return Column(
-      children: [
-        Expanded(
-          child: items.isEmpty
-              ? _buildEmpty(c)
-              : ListView.separated(
-                  padding: const EdgeInsets.all(SiSpace.x4),
-                  itemCount: items.length,
-                  separatorBuilder: (_, __) =>
-                      const SizedBox(height: SiSpace.x3),
-                  itemBuilder: (context, i) {
-        final u = items[i];
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(SiSpace.x4),
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        margin: EdgeInsets.zero,
+        child: Column(
+          children: [
+            _buildToolbar(c),
+            if (items.isEmpty)
+              SizedBox(height: 300, child: _buildEmpty(c))
+            else
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(SiSpace.x4),
+                itemCount: items.length,
+                separatorBuilder: (_, __) => const SizedBox(height: SiSpace.x3),
+                itemBuilder: (context, i) {
+                  final u = items[i];
         final role = u['role'] ?? 'usuario';
         final isBlocked = u['is_blocked'] ?? false;
         final nombre =
@@ -777,9 +790,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 );
               },
             ),
+            _buildPaginator(c),
+          ],
         ),
-        _buildPaginator(c),
-      ],
+      ),
     );
   }
 
