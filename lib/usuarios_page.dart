@@ -141,11 +141,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
       final from = _page * _pageSize;
       final q = _searchQuery.trim();
       final filter =
-          'nombre.ilike.%$q%,paterno.ilike.%$q%,email.ilike.%$q%,numero_empleado.ilike.%$q%';
+          'nombre.ilike.%$q%,paterno.ilike.%$q%,email.ilike.%$q%,numero_empleado.ilike.%$q%,full_name.ilike.%$q%';
 
       var dataQuery = Supabase.instance.client
           .from('profiles')
-          .select('id, nombre, paterno, materno, email, numero_empleado, role, is_blocked, status_sys, permissions');
+          .select('id, nombre, paterno, materno, email, numero_empleado, role, is_blocked, status_sys, permissions, full_name');
       var countQuery =
           Supabase.instance.client.from('profiles').count(CountOption.exact);
 
