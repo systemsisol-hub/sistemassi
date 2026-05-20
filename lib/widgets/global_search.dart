@@ -269,33 +269,6 @@ class _GlobalSearchDialogState extends State<_GlobalSearchDialog> {
     }
   }
 
-  Future<List<_Result>> _searchIncidencias(String q) async {
-    try {
-      final rows = await Supabase.instance.client
-          .from('incidencias')
-          .select('nombre_usuario, status, periodo')
-          .or('nombre_usuario.ilike.%$q%'
-              ',periodo.ilike.%$q%,status.ilike.%$q%')
-          .limit(5);
-      return (rows as List).map((r) {
-        final parts = <String>[
-          if (r['status'] != null) r['status'] as String,
-          if (r['periodo'] != null) r['periodo'] as String,
-        ];
-        return _Result(
-          category: 'Incidencias',
-          icon: Icons.description_outlined,
-          title: r['nombre_usuario'] ?? '---',
-          subtitle: parts.isEmpty ? null : parts.join(' · '),
-          onTap: () => widget.onSelectPage(widget.pages
-              .indexWhere((p) => p['title'] == 'Incidencias')),
-        );
-      }).toList();
-    } catch (_) {
-      return [];
-    }
-  }
-
   Future<List<_Result>> _searchContactos(String q) async {
     try {
       final rows = await Supabase.instance.client
@@ -492,7 +465,6 @@ const _categoryIcons = <String, IconData>{
   'Páginas': Icons.grid_view_outlined,
   'Colaboradores': Icons.group_outlined,
   'Inventario': Icons.inventory_2_outlined,
-  'Incidencias': Icons.description_outlined,
   'Contactos': Icons.contact_phone_outlined,
 };
 
