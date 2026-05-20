@@ -181,8 +181,6 @@ class _GlobalSearchDialogState extends State<_GlobalSearchDialog> {
       _searchColaboradores(lower),
       if (widget.permissions['show_issi'] == true)
         _searchInventario(lower),
-      if (widget.permissions['show_incidencias'] == true)
-        _searchIncidencias(lower),
       if (widget.permissions['show_external_contacts'] == true)
         _searchContactos(lower),
     ];
