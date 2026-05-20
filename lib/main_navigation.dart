@@ -410,15 +410,16 @@ class _DesktopShellState extends State<_DesktopShell>
                               horizontal: SiSpace.x3),
                           child: Align(
                             alignment: Alignment.centerLeft,
-                            child: ClipRect(
-                              child: Align(
+                            child: AnimatedSwitcher(
+                              duration: SiMotion.normal,
+                              child: Image.asset(
+                                labelVisible
+                                    ? 'assets/logo.png'
+                                    : 'assets/logo_ico.png',
+                                key: ValueKey(labelVisible),
+                                height: 28,
+                                fit: BoxFit.contain,
                                 alignment: Alignment.centerLeft,
-                                child: Image.asset(
-                                  'assets/logo.png',
-                                  height: 28,
-                                  fit: BoxFit.contain,
-                                  alignment: Alignment.centerLeft,
-                                ),
                               ),
                             ),
                           ),
