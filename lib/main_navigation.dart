@@ -420,14 +420,26 @@ class _DesktopShellState extends State<_DesktopShell>
                                       fit: BoxFit.contain,
                                       alignment: Alignment.centerLeft,
                                     )
-                                  : Image.asset(
-                                      'assets/logo_ico.png',
+                                  : Container(
                                       key: const ValueKey('ico'),
-                                      width: 28,
-                                      height: 28,
-                                      fit: BoxFit.contain,
-                                      color: Colors.white,
-                                      colorBlendMode: BlendMode.srcIn,
+                                      width: 32,
+                                      height: 32,
+                                      decoration: BoxDecoration(
+                                        color: Colors.white
+                                            .withValues(alpha: 0.15),
+                                        borderRadius: SiRadius.rSm,
+                                      ),
+                                      padding: const EdgeInsets.all(4),
+                                      child: ColorFiltered(
+                                        colorFilter: const ColorFilter.mode(
+                                          Colors.white,
+                                          BlendMode.srcIn,
+                                        ),
+                                        child: Image.asset(
+                                          'assets/logo_ico.png',
+                                          fit: BoxFit.contain,
+                                        ),
+                                      ),
                                     ),
                             ),
                           ),
