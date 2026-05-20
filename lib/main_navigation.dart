@@ -412,15 +412,23 @@ class _DesktopShellState extends State<_DesktopShell>
                             alignment: Alignment.centerLeft,
                             child: AnimatedSwitcher(
                               duration: SiMotion.normal,
-                              child: Image.asset(
-                                labelVisible
-                                    ? 'assets/logo.png'
-                                    : 'assets/logo_ico.png',
-                                key: ValueKey(labelVisible),
-                                height: 28,
-                                fit: BoxFit.contain,
-                                alignment: Alignment.centerLeft,
-                              ),
+                              child: labelVisible
+                                  ? Image.asset(
+                                      'assets/logo.png',
+                                      key: const ValueKey('full'),
+                                      height: 28,
+                                      fit: BoxFit.contain,
+                                      alignment: Alignment.centerLeft,
+                                    )
+                                  : Image.asset(
+                                      'assets/logo_ico.png',
+                                      key: const ValueKey('ico'),
+                                      width: 28,
+                                      height: 28,
+                                      fit: BoxFit.contain,
+                                      color: Colors.white,
+                                      colorBlendMode: BlendMode.srcIn,
+                                    ),
                             ),
                           ),
                         ),
