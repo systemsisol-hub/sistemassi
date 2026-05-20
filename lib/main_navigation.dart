@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'widgets/global_search.dart';
 import 'user_dashboard.dart';
 import 'usuarios_page.dart';
 import 'system_logs_page.dart';
@@ -16,6 +18,10 @@ import 'signature_generator_page.dart';
 import 'tablas_page.dart';
 import 'passwords_page.dart';
 import 'theme/si_theme.dart';
+
+class _OpenSearchIntent extends Intent {
+  const _OpenSearchIntent();
+}
 
 // Visual-only nav group definitions — order here is render order.
 final _navGroups = <(String, List<String>)>[
@@ -330,6 +336,38 @@ class _DesktopShellState extends State<_DesktopShell>
     final initials = _initials(userEmail);
     final currentPage = widget.pages[widget.selectedIndex];
 
+    return Shortcuts(
+      shortcuts: const <ShortcutActivator, Intent>{
+        SingleActivator(LogicalKeyboardKey.keyK, control: true):
+            _OpenSearchIntent(),
+        SingleActivator(LogicalKeyboardKey.keyK, meta: true):
+            _OpenSearchIntent(),
+      },
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          _OpenSearchIntent: CallbackAction<_OpenSearchIntent>(
+            onInvoke: (_) {
+              showGlobalSearch(
+                context: context,
+                role: widget.role,
+                permissions: widget.permissions,
+                pages: widget.pages,
+                onSelectPage: widget.onSelect,
+              );
+              return null;
+            },
+          ),
+        },
+        child: Focus(
+          autofocus: true,
+          child: _buildScaffold(context, c, isDark, initials, userEmail, currentPage),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildScaffold(BuildContext context, SiColors c, bool isDark,
+      String initials, String userEmail, Map<String, dynamic> currentPage) {
     return Scaffold(
       backgroundColor: c.bg,
       body: Row(
@@ -522,6 +560,8 @@ class _DesktopShellState extends State<_DesktopShell>
                   role: widget.role,
                   permissions: widget.permissions,
                   themeNotifier: widget.themeNotifier,
+                  pages: widget.pages,
+                  onSelectPage: widget.onSelect,
                   onNavigateToCalendar: widget.onNavigateToCalendar,
                   onSelectHome: () => widget.onSelect(0),
                 ),
@@ -708,6 +748,8 @@ class _Header extends StatelessWidget {
   final String role;
   final Map<String, dynamic> permissions;
   final ValueNotifier<ThemeMode> themeNotifier;
+  final List<Map<String, dynamic>> pages;
+  final ValueChanged<int> onSelectPage;
   final ValueChanged<String?> onNavigateToCalendar;
   final VoidCallback onSelectHome;
 
@@ -716,6 +758,8 @@ class _Header extends StatelessWidget {
     required this.role,
     required this.permissions,
     required this.themeNotifier,
+    required this.pages,
+    required this.onSelectPage,
     required this.onNavigateToCalendar,
     required this.onSelectHome,
   });
@@ -752,7 +796,14 @@ class _Header extends StatelessWidget {
           const SizedBox(width: 16),
           // Search bar — absorbs remaining space, centered
           Expanded(
-            child: Center(child: _SearchBar()),
+            child: Center(
+              child: _SearchBar(
+                role: role,
+                permissions: permissions,
+                pages: pages,
+                onSelectPage: onSelectPage,
+              ),
+            ),
           ),
           const SizedBox(width: 8),
           ValueListenableBuilder<ThemeMode>(
@@ -789,55 +840,81 @@ class _Header extends StatelessWidget {
 // ── Search bar ────────────────────────────────────────────────────────────────
 
 class _SearchBar extends StatelessWidget {
-  const _SearchBar();
+  final String role;
+  final Map<String, dynamic> permissions;
+  final List<Map<String, dynamic>> pages;
+  final ValueChanged<int> onSelectPage;
+
+  const _SearchBar({
+    required this.role,
+    required this.permissions,
+    required this.pages,
+    required this.onSelectPage,
+  });
 
   @override
   Widget build(BuildContext context) {
     final c = SiColors.of(context);
     final isMac = Theme.of(context).platform == TargetPlatform.macOS;
     final shortcut = isMac ? '⌘K' : 'Ctrl K';
+    final isAdmin = role == 'admin';
 
-    return Container(
-      height: 32,
-      constraints: const BoxConstraints(maxWidth: 420),
-      decoration: BoxDecoration(
-        color: c.hover,
-        border: Border.all(color: c.line, width: 1),
-        borderRadius: SiRadius.rMd,
-      ),
-      child: Row(
-        children: [
-          const SizedBox(width: 10),
-          Icon(Icons.search, size: 14, color: c.ink3),
-          const SizedBox(width: 6),
-          Expanded(
-            child: TextField(
-              style: TextStyle(fontSize: 13, color: c.ink),
-              decoration: InputDecoration(
-                hintText: 'Buscar colaborador, evento, activo...',
-                hintStyle: TextStyle(fontSize: 13, color: c.ink4),
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                isDense: true,
-                contentPadding: EdgeInsets.zero,
+    void openSearch() {
+      if (!isAdmin) return;
+      showGlobalSearch(
+        context: context,
+        role: role,
+        permissions: permissions,
+        pages: pages,
+        onSelectPage: onSelectPage,
+      );
+    }
+
+    return MouseRegion(
+      cursor:
+          isAdmin ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      child: GestureDetector(
+        onTap: openSearch,
+        child: Container(
+          height: 32,
+          constraints: const BoxConstraints(maxWidth: 420),
+          decoration: BoxDecoration(
+            color: c.hover,
+            border: Border.all(color: c.line, width: 1),
+            borderRadius: SiRadius.rMd,
+          ),
+          child: Row(
+            children: [
+              const SizedBox(width: 10),
+              Icon(Icons.search,
+                  size: 14,
+                  color: isAdmin ? c.ink3 : c.ink4),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  isAdmin
+                      ? 'Buscar colaborador, activo, incidencia...'
+                      : 'Búsqueda disponible para administradores',
+                  style: TextStyle(fontSize: 13, color: c.ink4),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-            ),
+              if (isAdmin)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 4, vertical: 2),
+                  margin: const EdgeInsets.only(right: 6),
+                  decoration: BoxDecoration(
+                    color: c.panel,
+                    border: Border.all(color: c.line, width: 1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(shortcut,
+                      style: SiType.mono(size: 10, color: c.ink3)),
+                ),
+            ],
           ),
-          // Keyboard shortcut chip
-          Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-            margin: const EdgeInsets.only(right: 6),
-            decoration: BoxDecoration(
-              color: c.panel,
-              border: Border.all(color: c.line, width: 1),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(shortcut,
-                style: SiType.mono(size: 10, color: c.ink3)),
-          ),
-        ],
+        ),
       ),
     );
   }
