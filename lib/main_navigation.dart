@@ -522,7 +522,6 @@ class _DesktopShellState extends State<_DesktopShell>
                   role: widget.role,
                   permissions: widget.permissions,
                   themeNotifier: widget.themeNotifier,
-                  fotoUrl: widget.fotoUrl,
                   onNavigateToCalendar: widget.onNavigateToCalendar,
                   onSelectHome: () => widget.onSelect(0),
                 ),
@@ -709,7 +708,6 @@ class _Header extends StatelessWidget {
   final String role;
   final Map<String, dynamic> permissions;
   final ValueNotifier<ThemeMode> themeNotifier;
-  final String? fotoUrl;
   final ValueChanged<String?> onNavigateToCalendar;
   final VoidCallback onSelectHome;
 
@@ -718,7 +716,6 @@ class _Header extends StatelessWidget {
     required this.role,
     required this.permissions,
     required this.themeNotifier,
-    this.fotoUrl,
     required this.onNavigateToCalendar,
     required this.onSelectHome,
   });
@@ -726,9 +723,6 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = SiColors.of(context);
-    final userEmail =
-        Supabase.instance.client.auth.currentUser?.email ?? '';
-    final initials = _initials(userEmail);
 
     return Container(
       height: SiLayout.headerHeight,
@@ -785,8 +779,6 @@ class _Header extends StatelessWidget {
                 Supabase.instance.client.auth.currentUser?.id ?? '',
             onNavigateToCalendar: onNavigateToCalendar,
           ),
-          const SizedBox(width: SiSpace.x2),
-          _Avatar(initials: initials, size: 28, c: c),
           const SizedBox(width: SiSpace.x3),
         ],
       ),
