@@ -79,7 +79,16 @@ class _AdminDashboardState extends State<AdminDashboard> {
     try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user != null) {
-        setState(() => _isAdmin = (user.userMetadata?['role'] ?? '') == 'admin');
+        final profile = await Supabase.instance.client
+            .from('profiles')
+            .select('role')
+            .eq('id', user.id)
+            .maybeSingle();
+        if (profile != null && mounted) {
+          setState(() => _isAdmin = profile['role'] == 'admin');
+        } else {
+          setState(() => _isAdmin = (user.userMetadata?['role'] ?? '') == 'admin');
+        }
       }
     } catch (e) {
       debugPrint('Error checking admin role: $e');
@@ -145,7 +154,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
       var dataQuery = Supabase.instance.client
           .from('profiles')
-          .select('id, nombre, paterno, materno, email, numero_empleado, role, is_blocked, status_sys, permissions, full_name');
+          .select('id, nombre, paterno, materno, email, numero_empleado, role, is_blocked, status_sys, status_rh, permissions, full_name, has_auth_account, mail_user, mail_pass');
       var countQuery =
           Supabase.instance.client.from('profiles').count(CountOption.exact);
 
@@ -269,6 +278,24 @@ class _AdminDashboardState extends State<AdminDashboard> {
           if (mounted) {
             ScaffoldMessenger.of(context)
                 .showSnackBar(const SnackBar(content: Text('Operación exitosa')));
+          }
+        },
+      ),
+    );
+  }
+
+  void _showAccessDialog(Map<String, dynamic> user) {
+    showFullWidthModal(
+      context: context,
+      builder: (ctx) => _AccessSheet(
+        user: user,
+        onSaved: () {
+          _fetchUsers();
+          _fetchStats();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Acceso actualizado')),
+            );
           }
         },
       ),
@@ -494,6 +521,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                             _colHeader(c, 'NO. EMP.', flex: 2),
                             _colHeader(c, 'ROL', flex: 2),
                             _colHeader(c, 'ESTADO', flex: 2),
+                            _colHeader(c, 'ACCESO', flex: 2),
                             const SizedBox(width: 48),
                           ],
                         ),
@@ -601,6 +629,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                         statusSys: u['status_sys'],
                                         c: c),
                                   ),
+                                  // Acceso
+                                  Expanded(
+                                    flex: 2,
+                                    child: _AuthBadge(
+                                        hasAuth: u['has_auth_account'] == true,
+                                        c: c),
+                                  ),
                                   // Acciones
                                   SizedBox(
                                     width: 48,
@@ -608,9 +643,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                         ? PopupMenuButton<String>(
                                             icon: Icon(Icons.more_horiz,
                                                 size: 18, color: c.ink4),
-                                            onSelected: (v) => v == 'edit'
-                                                ? _showUserForm(user: u)
-                                                : _deleteUser(u['id']),
+                                            onSelected: (v) {
+                                              if (v == 'edit') _showUserForm(user: u);
+                                              else if (v == 'access') _showAccessDialog(u);
+                                              else _deleteUser(u['id']);
+                                            },
                                             itemBuilder: (_) => [
                                               PopupMenuItem(
                                                 value: 'edit',
@@ -619,6 +656,16 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                                       size: 16, color: c.ink2),
                                                   const SizedBox(width: 12),
                                                   const Text('Editar'),
+                                                ]),
+                                              ),
+                                              PopupMenuItem(
+                                                value: 'access',
+                                                child: Row(children: [
+                                                  Icon(Icons.shield_outlined,
+                                                      size: 16, color: c.brand),
+                                                  const SizedBox(width: 12),
+                                                  Text('Acceso',
+                                                      style: TextStyle(color: c.brand)),
                                                 ]),
                                               ),
                                               PopupMenuItem(
@@ -762,9 +809,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
             trailing: _isAdmin
                 ? PopupMenuButton<String>(
                     icon: Icon(Icons.more_vert, size: 18, color: c.ink4),
-                    onSelected: (v) => v == 'edit'
-                        ? _showUserForm(user: u)
-                        : _deleteUser(u['id']),
+                    onSelected: (v) {
+                      if (v == 'edit') _showUserForm(user: u);
+                      else if (v == 'access') _showAccessDialog(u);
+                      else _deleteUser(u['id']);
+                    },
                     itemBuilder: (_) => [
                       PopupMenuItem(
                         value: 'edit',
@@ -772,6 +821,15 @@ class _AdminDashboardState extends State<AdminDashboard> {
                           Icon(Icons.edit_outlined, size: 16, color: c.ink2),
                           const SizedBox(width: 12),
                           const Text('Editar'),
+                        ]),
+                      ),
+                      PopupMenuItem(
+                        value: 'access',
+                        child: Row(children: [
+                          Icon(Icons.shield_outlined, size: 16, color: c.brand),
+                          const SizedBox(width: 12),
+                          Text('Acceso',
+                              style: TextStyle(color: c.brand)),
                         ]),
                       ),
                       PopupMenuItem(
@@ -954,6 +1012,39 @@ class _StatusBadge extends StatelessWidget {
   }
 }
 
+class _AuthBadge extends StatelessWidget {
+  final bool hasAuth;
+  final SiColors c;
+  const _AuthBadge({required this.hasAuth, required this.c});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: hasAuth ? c.successTint : c.hover,
+        borderRadius: SiRadius.rPill,
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(
+          hasAuth ? Icons.shield_outlined : Icons.no_accounts_outlined,
+          size: 12,
+          color: hasAuth ? c.success : c.ink4,
+        ),
+        const SizedBox(width: 4),
+        Text(
+          hasAuth ? 'Activo' : 'Sin acceso',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            color: hasAuth ? c.success : c.ink4,
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
 class _PermIcons extends StatelessWidget {
   final dynamic permissions;
   final SiColors c;
@@ -1027,6 +1118,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
 
   late String _role;
   late String? _statusSys;
+  late String? _statusRh;
   late bool _isBlocked;
   late Map<String, bool> _permissions;
   final Map<String, bool> _obscure = {
@@ -1063,6 +1155,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
     _otroPass = TextEditingController(text: u?['otro_pass']);
     _role = u?['role'] ?? 'usuario';
     _statusSys = u?['status_sys'] ?? 'ACTIVO';
+    _statusRh = u?['status_rh'] ?? 'ACTIVO';
     _isBlocked = u?['is_blocked'] ?? false;
     _permissions = Map<String, bool>.from(u?['permissions'] ?? {
       'show_calendar': false,
@@ -1127,6 +1220,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
               : _passCtrl.text.trim(),
         });
         await Supabase.instance.client.from('profiles').update({
+          'status_rh': _statusRh,
           'mail_user': _mailUser.text.trim(),
           'mail_pass': _mailPass.text.trim(),
           'drp_user': _drpUser.text.trim(),
@@ -1277,6 +1371,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
                       Divider(color: c.line),
                       const SizedBox(height: SiSpace.x6),
                       _buildCredentialsSection(c),
+                      const SizedBox(height: SiSpace.x6),
                     ]),
             ),
           ),
@@ -1302,6 +1397,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _buildSectionTitle(c, 'CONTROL'),
+        // Status Sys
         DropdownButtonFormField<String>(
           value: _statusSys,
           decoration: const InputDecoration(
@@ -1313,6 +1409,19 @@ class _UserFormSheetState extends State<_UserFormSheet> {
           onChanged: (v) => setState(() => _statusSys = v),
         ),
         const SizedBox(height: SiSpace.x4),
+        // Status RH
+        DropdownButtonFormField<String>(
+          value: _statusRh,
+          decoration: const InputDecoration(
+              labelText: 'Status RH',
+              prefixIcon: Icon(Icons.person_outlined)),
+          items: ['ACTIVO', 'BAJA', 'REINGRESO', 'CAMBIO', 'PENDIENTE']
+              .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+              .toList(),
+          onChanged: (v) => setState(() => _statusRh = v),
+        ),
+        const SizedBox(height: SiSpace.x4),
+        // Email
         TextField(
           controller: _emailCtrl,
           keyboardType: TextInputType.emailAddress,
@@ -1321,6 +1430,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
               prefixIcon: Icon(Icons.email_outlined)),
         ),
         const SizedBox(height: SiSpace.x4),
+        // Password (siempre visible pero opcional en edición)
         TextField(
           controller: _passCtrl,
           obscureText: true,
@@ -1331,6 +1441,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
               prefixIcon: const Icon(Icons.lock_outlined)),
         ),
         const SizedBox(height: SiSpace.x4),
+        // Rol
         DropdownButtonFormField<String>(
           value: _role,
           isExpanded: true,
@@ -1344,6 +1455,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
           onChanged: (v) => setState(() => _role = v!),
         ),
         const SizedBox(height: SiSpace.x4),
+        // Bloqueado toggle
         Container(
           padding: const EdgeInsets.symmetric(
               horizontal: SiSpace.x3, vertical: SiSpace.x2),
@@ -1475,6 +1587,312 @@ class _UserFormSheetState extends State<_UserFormSheet> {
           ),
         ),
       ]),
+    );
+  }
+}
+
+// ── Access sheet ─────────────────────────────────────────────────────────────
+
+class _AccessSheet extends StatefulWidget {
+  final Map<String, dynamic> user;
+  final VoidCallback onSaved;
+  const _AccessSheet({required this.user, required this.onSaved});
+
+  @override
+  State<_AccessSheet> createState() => _AccessSheetState();
+}
+
+class _AccessSheetState extends State<_AccessSheet> {
+  late final TextEditingController _emailCtrl;
+  late final TextEditingController _passCtrl;
+  bool _saving = false;
+  bool _hasAuth = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _hasAuth = widget.user['has_auth_account'] == true;
+    _emailCtrl = TextEditingController(
+      text: widget.user['mail_user'] ?? widget.user['email'] ?? '',
+    );
+    _passCtrl = TextEditingController(
+      text: widget.user['mail_pass'] ?? '',
+    );
+  }
+
+  @override
+  void dispose() {
+    _emailCtrl.dispose();
+    _passCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _grantAccess() async {
+    if (_emailCtrl.text.trim().isEmpty || _passCtrl.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Correo y contraseña son requeridos')),
+      );
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await Supabase.instance.client.rpc('create_user_admin', params: {
+        'email': _emailCtrl.text.trim(),
+        'password': _passCtrl.text.trim(),
+        'full_name': widget.user['full_name'] ?? '',
+        'user_role': widget.user['role'] ?? 'usuario',
+        'user_id_param': widget.user['id'],
+      });
+      await Supabase.instance.client.from('profiles').update({
+        'has_auth_account': true,
+        'mail_user': _emailCtrl.text.trim(),
+      }).eq('id', widget.user['id']);
+      if (mounted) {
+        Navigator.pop(context);
+        widget.onSaved();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: SiColors.of(context).danger,
+        ));
+      }
+    }
+  }
+
+  Future<void> _revokeAccess() async {
+    final c = SiColors.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(children: [
+          Icon(Icons.warning_amber_rounded, color: c.danger, size: 22),
+          const SizedBox(width: 8),
+          const Text('Revocar acceso'),
+        ]),
+        content: const Text(
+            '¿Deseas revocar el acceso de inicio de sesión? El perfil del colaborador se conservará.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: c.danger),
+            child: const Text('Revocar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    setState(() => _saving = true);
+    try {
+      await Supabase.instance.client.rpc('delete_user_admin',
+          params: {'user_id': widget.user['id']});
+      await Supabase.instance.client.from('profiles').update({
+        'has_auth_account': false,
+      }).eq('id', widget.user['id']);
+      if (mounted) {
+        Navigator.pop(context);
+        widget.onSaved();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Error al revocar: $e'),
+          backgroundColor: SiColors.of(context).danger,
+        ));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = SiColors.of(context);
+    final nombre = widget.user['full_name'] ??
+        '${widget.user['nombre'] ?? ''} ${widget.user['paterno'] ?? ''}'.trim();
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: c.panel,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      constraints:
+          BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.symmetric(
+                vertical: SiSpace.x3, horizontal: SiSpace.x4),
+            decoration: BoxDecoration(
+              color: c.panel,
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(20)),
+              border: Border(bottom: BorderSide(color: c.line, width: 1)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('Cancelar',
+                      style: TextStyle(fontSize: 15, color: c.ink3)),
+                ),
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.shield_outlined, size: 18, color: c.brand),
+                  const SizedBox(width: 8),
+                  Text('Acceso al sistema',
+                      style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                          color: c.ink)),
+                ]),
+                if (_saving)
+                  const SizedBox(
+                    width: 60,
+                    child: Center(
+                        child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2))),
+                  )
+                else
+                  const SizedBox(width: 60),
+              ],
+            ),
+          ),
+          // Body
+          Flexible(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.only(
+                left: SiSpace.x6,
+                right: SiSpace.x6,
+                top: SiSpace.x5,
+                bottom: MediaQuery.of(context).viewInsets.bottom + SiSpace.x6,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Estado actual
+                  Container(
+                    padding: const EdgeInsets.all(SiSpace.x4),
+                    decoration: BoxDecoration(
+                      color: _hasAuth ? c.successTint : c.warnTint,
+                      borderRadius: SiRadius.rMd,
+                      border: Border.all(
+                          color: _hasAuth ? c.success : c.warn,
+                          width: 1),
+                    ),
+                    child: Row(children: [
+                      Icon(
+                        _hasAuth
+                            ? Icons.verified_user_outlined
+                            : Icons.person_off_outlined,
+                        color: _hasAuth ? c.success : c.warn,
+                        size: 24,
+                      ),
+                      const SizedBox(width: SiSpace.x3),
+                      Expanded(
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(nombre,
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14,
+                                      color: c.ink)),
+                              Text(
+                                _hasAuth
+                                    ? 'Cuenta de acceso activa'
+                                    : 'Sin cuenta de acceso al sistema',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: _hasAuth ? c.success : c.warn),
+                              ),
+                            ]),
+                      ),
+                    ]),
+                  ),
+                  const SizedBox(height: SiSpace.x5),
+                  if (!_hasAuth) ...[
+                    Text('CREAR ACCESO',
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: c.brand,
+                            letterSpacing: 0.8)),
+                    const SizedBox(height: SiSpace.x4),
+                    TextField(
+                      controller: _emailCtrl,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: const InputDecoration(
+                        labelText: 'Correo de acceso *',
+                        prefixIcon: Icon(Icons.email_outlined),
+                      ),
+                    ),
+                    const SizedBox(height: SiSpace.x4),
+                    TextField(
+                      controller: _passCtrl,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Contraseña *',
+                        prefixIcon: Icon(Icons.lock_outlined),
+                      ),
+                    ),
+                    const SizedBox(height: SiSpace.x5),
+                    FilledButton.icon(
+                      onPressed: _saving ? null : _grantAccess,
+                      icon: const Icon(Icons.shield_outlined, size: 18),
+                      label: const Text('Crear acceso',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: c.brand,
+                        minimumSize: const Size(double.infinity, 48),
+                        shape: const RoundedRectangleBorder(
+                            borderRadius: SiRadius.rMd),
+                      ),
+                    ),
+                  ] else ...[
+                    Text('GESTIONAR ACCESO',
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: c.brand,
+                            letterSpacing: 0.8)),
+                    const SizedBox(height: SiSpace.x3),
+                    Text(
+                      'El colaborador ya tiene acceso al sistema. Puedes revocar su acceso si es necesario.',
+                      style: TextStyle(fontSize: 13, color: c.ink3),
+                    ),
+                    const SizedBox(height: SiSpace.x5),
+                    OutlinedButton.icon(
+                      onPressed: _saving ? null : _revokeAccess,
+                      icon: Icon(Icons.no_accounts_outlined,
+                          size: 18, color: c.danger),
+                      label: Text('Revocar acceso',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w600, color: c.danger)),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: c.danger),
+                        minimumSize: const Size(double.infinity, 48),
+                        shape: const RoundedRectangleBorder(
+                            borderRadius: SiRadius.rMd),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

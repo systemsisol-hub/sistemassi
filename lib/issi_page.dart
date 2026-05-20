@@ -158,7 +158,17 @@ class _IssiPageState extends State<IssiPage> {
     try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user != null) {
-        final role = user.userMetadata?['role'] ?? 'usuario';
+        String role = 'usuario';
+        final profile = await Supabase.instance.client
+            .from('profiles')
+            .select('role')
+            .eq('id', user.id)
+            .maybeSingle();
+        if (profile != null) {
+          role = profile['role'] ?? 'usuario';
+        } else {
+          role = user.userMetadata?['role'] ?? 'usuario';
+        }
         setState(() => _isAdmin = role == 'admin');
       }
     } catch (e) {
