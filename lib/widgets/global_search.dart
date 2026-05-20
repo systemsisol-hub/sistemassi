@@ -232,7 +232,7 @@ class _GlobalSearchDialogState extends State<_GlobalSearchDialog> {
           title: nombre.isEmpty ? '---' : nombre,
           subtitle: parts.isEmpty ? null : parts.join(' · '),
           onTap: () => widget.onSelectPage(
-              widget.pages.indexWhere((p) => p['title'] == 'Usuarios')),
+              widget.pages.indexWhere((p) => p['title'] == 'Colaborador')),
         );
       }).toList();
     } catch (_) {
