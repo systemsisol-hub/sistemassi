@@ -408,36 +408,19 @@ class _DesktopShellState extends State<_DesktopShell>
                         child: Padding(
                           padding: const EdgeInsets.symmetric(
                               horizontal: SiSpace.x3),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 28,
-                                height: 28,
-                                decoration: const BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: SiRadius.rSm,
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: ClipRect(
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: Image.asset(
+                                  'assets/logo.png',
+                                  height: 28,
+                                  fit: BoxFit.contain,
+                                  alignment: Alignment.centerLeft,
                                 ),
-                                alignment: Alignment.center,
-                                child: Text('S',
-                                    style: TextStyle(
-                                        color: c.brand,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w700,
-                                        height: 1)),
                               ),
-                              if (labelVisible) ...[
-                                const SizedBox(width: SiSpace.x2),
-                                Opacity(
-                                  opacity: labelOpacity,
-                                  child: Text('Sistemassi',
-                                      style: TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                          color: isDark ? c.ink : Colors.white,
-                                          letterSpacing: -0.14)),
-                                ),
-                              ],
-                            ],
+                            ),
                           ),
                         ),
                       ),
@@ -650,28 +633,11 @@ class _MobileShell extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(
                   SiSpace.x4, SiSpace.x5, SiSpace.x4, SiSpace.x4),
-              child: Row(
-                children: [
-                  Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                        color: c.brand, borderRadius: SiRadius.rSm),
-                    alignment: Alignment.center,
-                    child: const Text('S',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            height: 1)),
-                  ),
-                  const SizedBox(width: SiSpace.x2),
-                  Text('Sistemassi',
-                      style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: c.ink)),
-                ],
+              child: Image.asset(
+                'assets/logo.png',
+                height: 28,
+                fit: BoxFit.contain,
+                alignment: Alignment.centerLeft,
               ),
             ),
             Divider(color: c.line, height: 1),
