@@ -1388,8 +1388,17 @@ class _UserFormSheetState extends State<_UserFormSheet> {
                 bottom:
                     MediaQuery.of(context).viewInsets.bottom + SiSpace.x6,
               ),
-              child: isDesktop
-                  ? Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_isEditing) ...[
+                    _buildUserInfoCard(c),
+                    const SizedBox(height: SiSpace.x6),
+                    Divider(color: c.line),
+                    const SizedBox(height: SiSpace.x6),
+                  ],
+                  if (isDesktop)
+                    Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(child: _buildGeneralSection(c)),
@@ -1399,7 +1408,8 @@ class _UserFormSheetState extends State<_UserFormSheet> {
                         Expanded(child: _buildCredentialsSection(c)),
                       ],
                     )
-                  : Column(children: [
+                  else
+                    Column(children: [
                       _buildGeneralSection(c),
                       const SizedBox(height: SiSpace.x6),
                       Divider(color: c.line),
@@ -1411,10 +1421,109 @@ class _UserFormSheetState extends State<_UserFormSheet> {
                       _buildCredentialsSection(c),
                       const SizedBox(height: SiSpace.x6),
                     ]),
+                ],
+              ),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  // ── User info card (read-only, shown only in edit mode) ──────────────────────
+
+  Widget _buildUserInfoCard(SiColors c) {
+    final u = widget.user!;
+    final nombre = '${u['nombre'] ?? ''} ${u['paterno'] ?? ''} ${u['materno'] ?? ''}'
+        .trim()
+        .replaceAll(RegExp(r'\s+'), ' ');
+    final avatarUrl = u['avatar_url'] as String?;
+    final parts    = nombre.split(' ').where((s) => s.isNotEmpty).toList();
+    final initials = parts.length >= 2
+        ? '${parts[0][0]}${parts[1][0]}'.toUpperCase()
+        : parts.isNotEmpty ? parts[0][0].toUpperCase() : '?';
+
+    final items = <(IconData, String)>[
+      if ((u['tipo_empresa'] ?? '').toString().isNotEmpty)
+        (Icons.business_outlined,    u['tipo_empresa'].toString()),
+      if ((u['puesto'] ?? '').toString().isNotEmpty)
+        (Icons.work_outline_rounded, u['puesto'].toString()),
+      if ((u['ubicacion'] ?? '').toString().isNotEmpty)
+        (Icons.location_on_outlined, u['ubicacion'].toString()),
+    ];
+
+    return Container(
+      padding: const EdgeInsets.all(SiSpace.x4),
+      decoration: BoxDecoration(
+        color: c.bg,
+        borderRadius: SiRadius.rLg,
+        border: Border.all(color: c.line),
+      ),
+      child: Row(
+        children: [
+          // Avatar
+          CircleAvatar(
+            radius: 30,
+            backgroundColor: c.brandTint,
+            backgroundImage:
+                avatarUrl != null && avatarUrl.isNotEmpty
+                    ? NetworkImage(avatarUrl)
+                    : null,
+            child: avatarUrl == null || avatarUrl.isEmpty
+                ? Text(initials,
+                    style: TextStyle(
+                        color: c.brand,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 17))
+                : null,
+          ),
+          const SizedBox(width: SiSpace.x4),
+          // Datos
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  nombre.isEmpty ? 'Sin nombre' : nombre,
+                  style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                      color: c.ink),
+                ),
+                if ((u['email'] ?? '').toString().isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      u['email'].toString(),
+                      style: TextStyle(fontSize: 12, color: c.ink4),
+                    ),
+                  ),
+                if (items.isNotEmpty) ...[
+                  const SizedBox(height: SiSpace.x2),
+                  Wrap(
+                    spacing: SiSpace.x4,
+                    runSpacing: SiSpace.x1,
+                    children: items
+                        .map((t) => _infoChip(c, t.$1, t.$2))
+                        .toList(),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _infoChip(SiColors c, IconData icon, String text) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 13, color: c.ink4),
+        const SizedBox(width: 4),
+        Text(text, style: TextStyle(fontSize: 12, color: c.ink3)),
+      ],
     );
   }
 
