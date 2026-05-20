@@ -413,12 +413,21 @@ class _DesktopShellState extends State<_DesktopShell>
                             child: AnimatedSwitcher(
                               duration: SiMotion.normal,
                               child: labelVisible
-                                  ? Image.asset(
-                                      'assets/logo.png',
+                                  ? ColorFiltered(
                                       key: const ValueKey('full'),
-                                      height: 28,
-                                      fit: BoxFit.contain,
-                                      alignment: Alignment.centerLeft,
+                                      colorFilter: isDark
+                                          ? const ColorFilter.mode(
+                                              Colors.transparent,
+                                              BlendMode.dst)
+                                          : const ColorFilter.mode(
+                                              Colors.white,
+                                              BlendMode.srcIn),
+                                      child: Image.asset(
+                                        'assets/logo.png',
+                                        height: 28,
+                                        fit: BoxFit.contain,
+                                        alignment: Alignment.centerLeft,
+                                      ),
                                     )
                                   : Container(
                                       key: const ValueKey('ico'),
