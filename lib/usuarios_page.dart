@@ -1173,8 +1173,6 @@ class _UserFormSheetState extends State<_UserFormSheet> {
   bool _saving = false;
 
   bool get _isEditing => widget.user != null;
-  bool get _isGrantingAccess =>
-      _isEditing && (widget.user!['has_auth_account'] != true);
 
   @override
   void initState() {
@@ -1240,32 +1238,36 @@ class _UserFormSheetState extends State<_UserFormSheet> {
   }
 
   Future<void> _submit() async {
-    if (_emailCtrl.text.trim().isEmpty ||
-        (!_isEditing && _passCtrl.text.trim().isEmpty)) {
+    if (!_isEditing &&
+        (_emailCtrl.text.trim().isEmpty || _passCtrl.text.trim().isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Email y contraseña son obligatorios')),
+        const SnackBar(content: Text('Email y contraseña son obligatorios')),
       );
       return;
     }
     setState(() => _saving = true);
     try {
-      if (_isEditing && !_isGrantingAccess) {
-        await Supabase.instance.client.rpc('update_user_admin', params: {
-          'user_id_param': widget.user!['id'],
-          'new_email': _emailCtrl.text.trim(),
-          'new_full_name':
-              '${_nombreCtrl.text} ${_paternoCtrl.text}'.trim(),
-          'new_role': _role,
-          'new_status_sys': _statusSys,
-          'is_blocked_param': _isBlocked,
-          'new_permissions': _permissions,
-          'new_password': _passCtrl.text.trim().isEmpty
-              ? null
-              : _passCtrl.text.trim(),
-        });
+      if (_isEditing) {
+        // Si tiene cuenta de auth, sincronizamos rol/status/permisos en auth.users
+        if (widget.user!['has_auth_account'] == true) {
+          await Supabase.instance.client.rpc('update_user_admin', params: {
+            'user_id_param': widget.user!['id'],
+            'new_email': widget.user!['email'] ?? '',
+            'new_full_name': widget.user!['full_name'] ?? '',
+            'new_role': _role,
+            'new_status_sys': _statusSys,
+            'is_blocked_param': _isBlocked,
+            'new_permissions': _permissions,
+            'new_password': null,
+          });
+        }
+        // Actualizamos el perfil directamente
         await Supabase.instance.client.from('profiles').update({
+          'role': _role,
+          'status_sys': _statusSys,
           'status_rh': _statusRh,
+          'is_blocked': _isBlocked,
+          'permissions': _permissions,
           'mail_user': _mailUser.text.trim(),
           'mail_pass': _mailPass.text.trim(),
           'drp_user': _drpUser.text.trim(),
@@ -1280,30 +1282,23 @@ class _UserFormSheetState extends State<_UserFormSheet> {
           'otro_pass': _otroPass.text.trim(),
         }).eq('id', widget.user!['id']);
       } else {
+        // Nuevo usuario desde botón +: crea cuenta auth + perfil
         final res = await Supabase.instance.client
             .rpc('create_user_admin', params: {
           'email': _emailCtrl.text.trim(),
           'password': _passCtrl.text.trim(),
-          'full_name':
-              '${_nombreCtrl.text} ${_paternoCtrl.text}'.trim(),
+          'full_name': '',
           'user_role': _role,
-          if (_isGrantingAccess)
-            'user_id_param': widget.user!['id'],
         });
         if (res != null) {
-          final newId = _isGrantingAccess ? widget.user!['id'] : res;
           await Supabase.instance.client.from('profiles').update({
-            'nombre': _nombreCtrl.text.trim(),
-            'paterno': _paternoCtrl.text.trim(),
-            'materno': _maternoCtrl.text.trim(),
-            'email': _emailCtrl.text.trim(),
-            'numero_empleado': _empNumCtrl.text.trim(),
-            'status_sys': 'ACTIVO',
+            'status_sys': _statusSys,
+            'status_rh': _statusRh,
             'permissions': _permissions,
             'role': _role,
             'mail_user': _mailUser.text.trim(),
             'mail_pass': _mailPass.text.trim(),
-          }).eq('id', newId);
+          }).eq('id', res);
         }
       }
       if (mounted) {
@@ -1326,11 +1321,9 @@ class _UserFormSheetState extends State<_UserFormSheet> {
     final c = SiColors.of(context);
     final isDesktop = MediaQuery.of(context).size.width > 800;
 
-    final title = _isGrantingAccess
-        ? 'Conceder acceso'
-        : (_isEditing
-            ? 'Editar ${widget.user!['nombre'] ?? ''}'
-            : 'Nuevo usuario');
+    final title = _isEditing
+        ? 'Editar ${widget.user!['nombre'] ?? ''}'
+        : 'Nuevo usuario';
 
     return Container(
       width: double.infinity,
@@ -1466,26 +1459,25 @@ class _UserFormSheetState extends State<_UserFormSheet> {
           onChanged: (v) => setState(() => _statusRh = v),
         ),
         const SizedBox(height: SiSpace.x4),
-        // Email
-        TextField(
-          controller: _emailCtrl,
-          keyboardType: TextInputType.emailAddress,
-          decoration: const InputDecoration(
-              labelText: 'Correo electrónico *',
-              prefixIcon: Icon(Icons.email_outlined)),
-        ),
-        const SizedBox(height: SiSpace.x4),
-        // Password (siempre visible pero opcional en edición)
-        TextField(
-          controller: _passCtrl,
-          obscureText: true,
-          decoration: InputDecoration(
-              labelText: _isEditing
-                  ? 'Contraseña (dejar vacío para no cambiar)'
-                  : 'Contraseña *',
-              prefixIcon: const Icon(Icons.lock_outlined)),
-        ),
-        const SizedBox(height: SiSpace.x4),
+        // Email y contraseña solo al crear un usuario nuevo (botón +)
+        if (!_isEditing) ...[
+          TextField(
+            controller: _emailCtrl,
+            keyboardType: TextInputType.emailAddress,
+            decoration: const InputDecoration(
+                labelText: 'Correo electrónico *',
+                prefixIcon: Icon(Icons.email_outlined)),
+          ),
+          const SizedBox(height: SiSpace.x4),
+          TextField(
+            controller: _passCtrl,
+            obscureText: true,
+            decoration: const InputDecoration(
+                labelText: 'Contraseña *',
+                prefixIcon: Icon(Icons.lock_outlined)),
+          ),
+          const SizedBox(height: SiSpace.x4),
+        ],
         // Rol
         DropdownButtonFormField<String>(
           value: _role,
