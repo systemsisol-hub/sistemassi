@@ -43,6 +43,26 @@ class MainNavigation extends StatefulWidget {
 class _MainNavigationState extends State<MainNavigation> {
   int _selectedIndex = 0;
   String? _selectedEventId;
+  String? _fotoUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchFotoUrl();
+  }
+
+  Future<void> _fetchFotoUrl() async {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+    if (userId == null) return;
+    try {
+      final data = await Supabase.instance.client
+          .from('profiles')
+          .select('foto_url')
+          .eq('id', userId)
+          .single();
+      if (mounted) setState(() => _fotoUrl = data['foto_url'] as String?);
+    } catch (_) {}
+  }
 
   List<Map<String, dynamic>> get _availablePages {
     final pages = <Map<String, dynamic>>[];
@@ -186,6 +206,7 @@ class _MainNavigationState extends State<MainNavigation> {
                 role: widget.role,
                 permissions: widget.permissions,
                 themeNotifier: widget.themeNotifier,
+                fotoUrl: _fotoUrl,
                 onSelect: (i) => setState(() {
                   _selectedIndex = i;
                   _selectedEventId = null;
@@ -199,6 +220,7 @@ class _MainNavigationState extends State<MainNavigation> {
                 role: widget.role,
                 permissions: widget.permissions,
                 themeNotifier: widget.themeNotifier,
+                fotoUrl: _fotoUrl,
                 onSelect: (i) => setState(() {
                   _selectedIndex = i;
                   _selectedEventId = null;
@@ -219,6 +241,7 @@ class _DesktopShell extends StatefulWidget {
   final String role;
   final Map<String, dynamic> permissions;
   final ValueNotifier<ThemeMode> themeNotifier;
+  final String? fotoUrl;
   final ValueChanged<int> onSelect;
   final ValueChanged<String?> onNavigateToCalendar;
 
@@ -228,6 +251,7 @@ class _DesktopShell extends StatefulWidget {
     required this.role,
     required this.permissions,
     required this.themeNotifier,
+    this.fotoUrl,
     required this.onSelect,
     required this.onNavigateToCalendar,
   });
@@ -413,7 +437,8 @@ class _DesktopShellState extends State<_DesktopShell>
                                 initials: initials,
                                 size: 28,
                                 c: c,
-                                onDark: !isDark),
+                                onDark: !isDark,
+                                fotoUrl: widget.fotoUrl),
                             if (labelVisible) ...[
                               const SizedBox(width: SiSpace.x2),
                               Expanded(
@@ -497,6 +522,7 @@ class _DesktopShellState extends State<_DesktopShell>
                   role: widget.role,
                   permissions: widget.permissions,
                   themeNotifier: widget.themeNotifier,
+                  fotoUrl: widget.fotoUrl,
                   onNavigateToCalendar: widget.onNavigateToCalendar,
                   onSelectHome: () => widget.onSelect(0),
                 ),
@@ -518,6 +544,7 @@ class _MobileShell extends StatelessWidget {
   final String role;
   final Map<String, dynamic> permissions;
   final ValueNotifier<ThemeMode> themeNotifier;
+  final String? fotoUrl;
   final ValueChanged<int> onSelect;
   final ValueChanged<String?> onNavigateToCalendar;
 
@@ -527,6 +554,7 @@ class _MobileShell extends StatelessWidget {
     required this.role,
     required this.permissions,
     required this.themeNotifier,
+    this.fotoUrl,
     required this.onSelect,
     required this.onNavigateToCalendar,
   });
@@ -564,12 +592,12 @@ class _MobileShell extends StatelessWidget {
           ),
         ],
       ),
-      drawer: _buildDrawer(context, c),
+      drawer: _buildDrawer(context, c, fotoUrl),
       body: currentPage['widget'],
     );
   }
 
-  Widget _buildDrawer(BuildContext context, SiColors c) {
+  Widget _buildDrawer(BuildContext context, SiColors c, String? fotoUrl) {
     final userEmail =
         Supabase.instance.client.auth.currentUser?.email ?? '';
     final initials = _initials(userEmail);
@@ -617,7 +645,7 @@ class _MobileShell extends StatelessWidget {
             ),
             Divider(color: c.line, height: 1),
             ListTile(
-              leading: _Avatar(initials: initials, size: 28, c: c),
+              leading: _Avatar(initials: initials, size: 28, c: c, fotoUrl: fotoUrl),
               title: Text(userEmail,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -681,6 +709,7 @@ class _Header extends StatelessWidget {
   final String role;
   final Map<String, dynamic> permissions;
   final ValueNotifier<ThemeMode> themeNotifier;
+  final String? fotoUrl;
   final ValueChanged<String?> onNavigateToCalendar;
   final VoidCallback onSelectHome;
 
@@ -689,6 +718,7 @@ class _Header extends StatelessWidget {
     required this.role,
     required this.permissions,
     required this.themeNotifier,
+    this.fotoUrl,
     required this.onNavigateToCalendar,
     required this.onSelectHome,
   });
@@ -756,7 +786,7 @@ class _Header extends StatelessWidget {
             onNavigateToCalendar: onNavigateToCalendar,
           ),
           const SizedBox(width: SiSpace.x2),
-          _Avatar(initials: initials, size: 28, c: c),
+          _Avatar(initials: initials, size: 28, c: c, fotoUrl: fotoUrl),
           const SizedBox(width: SiSpace.x3),
         ],
       ),
@@ -988,34 +1018,46 @@ class _Avatar extends StatelessWidget {
   final double size;
   final SiColors c;
   final bool onDark;
+  final String? fotoUrl;
 
   const _Avatar({
     required this.initials,
     required this.size,
     required this.c,
     this.onDark = false,
+    this.fotoUrl,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
+    final hasPhoto = fotoUrl != null && fotoUrl!.isNotEmpty;
+    return ClipOval(
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: hasPhoto
+            ? Image.network(
+                fotoUrl!,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => _fallback(),
+              )
+            : _fallback(),
+      ),
+    );
+  }
+
+  Widget _fallback() => Container(
         color: onDark
             ? Colors.white.withValues(alpha: 0.18)
             : c.brandTint,
-        shape: BoxShape.circle,
-      ),
-      alignment: Alignment.center,
-      child: Text(initials,
-          style: TextStyle(
-              fontSize: size * 0.4,
-              fontWeight: FontWeight.w600,
-              color: onDark ? Colors.white : c.brand,
-              height: 1)),
-    );
-  }
+        alignment: Alignment.center,
+        child: Text(initials,
+            style: TextStyle(
+                fontSize: size * 0.4,
+                fontWeight: FontWeight.w600,
+                color: onDark ? Colors.white : c.brand,
+                height: 1)),
+      );
 }
 
 String _initials(String email) {
