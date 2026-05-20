@@ -1437,7 +1437,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
     final nombre = '${u['nombre'] ?? ''} ${u['paterno'] ?? ''} ${u['materno'] ?? ''}'
         .trim()
         .replaceAll(RegExp(r'\s+'), ' ');
-    final avatarUrl = u['avatar_url'] as String?;
+    final avatarUrl = u['foto_url'] as String?;
     final parts    = nombre.split(' ').where((s) => s.isNotEmpty).toList();
     final initials = parts.length >= 2
         ? '${parts[0][0]}${parts[1][0]}'.toUpperCase()
