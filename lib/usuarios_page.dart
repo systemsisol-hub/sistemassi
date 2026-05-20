@@ -520,7 +520,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                             _colHeader(c, 'USUARIO', flex: 4),
                             _colHeader(c, 'NO. EMP.', flex: 2),
                             _colHeader(c, 'ROL', flex: 2),
-                            _colHeader(c, 'ESTADO', flex: 2),
+                            _colHeader(c, 'STATUS SYS', flex: 2),
+                            _colHeader(c, 'STATUS RH', flex: 2),
                             _colHeader(c, 'ACCESO', flex: 2),
                             const SizedBox(width: 48),
                           ],
@@ -621,12 +622,19 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                     flex: 2,
                                     child: _RoleBadge(role: role, c: c),
                                   ),
-                                  // Estado
+                                  // Status Sys
                                   Expanded(
                                     flex: 2,
                                     child: _StatusBadge(
                                         isBlocked: isBlocked,
                                         statusSys: u['status_sys'],
+                                        c: c),
+                                  ),
+                                  // Status RH
+                                  Expanded(
+                                    flex: 2,
+                                    child: _StatusRhBadge(
+                                        statusRh: u['status_rh'],
                                         c: c),
                                   ),
                                   // Acceso
@@ -1005,6 +1013,43 @@ class _StatusBadge extends StatelessWidget {
                 BoxDecoration(color: fg, shape: BoxShape.circle)),
         const SizedBox(width: 5),
         Text(label,
+            style: TextStyle(
+                fontSize: 11, fontWeight: FontWeight.w500, color: fg)),
+      ]),
+    );
+  }
+}
+
+class _StatusRhBadge extends StatelessWidget {
+  final String? statusRh;
+  final SiColors c;
+  const _StatusRhBadge({required this.statusRh, required this.c});
+
+  @override
+  Widget build(BuildContext context) {
+    final Color bg;
+    final Color fg;
+    switch (statusRh) {
+      case 'ACTIVO':
+        bg = c.successTint; fg = c.success;
+      case 'BAJA':
+        bg = c.dangerTint;  fg = c.danger;
+      case 'REINGRESO':
+      case 'CAMBIO':
+      case 'PENDIENTE':
+        bg = c.warnTint;    fg = c.warn;
+      default:
+        bg = c.hover;       fg = c.ink4;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(color: bg, borderRadius: SiRadius.rPill),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Container(
+            width: 5, height: 5,
+            decoration: BoxDecoration(color: fg, shape: BoxShape.circle)),
+        const SizedBox(width: 5),
+        Text(statusRh ?? '---',
             style: TextStyle(
                 fontSize: 11, fontWeight: FontWeight.w500, color: fg)),
       ]),
