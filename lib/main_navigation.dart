@@ -786,7 +786,7 @@ class _Header extends StatelessWidget {
             onNavigateToCalendar: onNavigateToCalendar,
           ),
           const SizedBox(width: SiSpace.x2),
-          _Avatar(initials: initials, size: 28, c: c, fotoUrl: fotoUrl),
+          _Avatar(initials: initials, size: 28, c: c),
           const SizedBox(width: SiSpace.x3),
         ],
       ),
