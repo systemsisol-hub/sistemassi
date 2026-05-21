@@ -1882,7 +1882,8 @@ class _AccessSheetState extends State<_AccessSheet> {
     if (confirmed != true) return;
     setState(() => _saving = true);
     try {
-      await Supabase.instance.client.rpc('delete_user_admin',
+      // Solo elimina la cuenta auth; el perfil se conserva
+      await Supabase.instance.client.rpc('revoke_user_access',
           params: {'user_id_param': widget.user['id']});
       await Supabase.instance.client.from('profiles').update({
         'has_auth_account': false,
