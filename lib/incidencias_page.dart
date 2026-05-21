@@ -585,10 +585,12 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
     final totalSaldo =
         tableRows.fold<double>(0, (s, r) => s + (r['saldo'] as double));
 
-    // Column widths
-    const double wDias = 90;       // Días/Prop fusionado
-    const double wPedidos = 95;    // Solicitados
-    const double wDisp = 100;      // Disponible
+    // Column widths — keep totals small so all fit without scrolling
+    const double wPeriodo = 120;   // Período fijo (suficiente p/"2025 - 2026")
+    const double wDias = 70;       // Días/Prop fusionado
+    const double wPedidos = 88;    // Solicitados
+    const double wDisp = 88;       // Disponible
+    // Total fijo: 120+70+88+88 = 366 → cabe en el panel lateral (~360px)
 
     Widget _cell(String text,
         {Color? color,
@@ -639,28 +641,25 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
               ],
             ),
           ),
-          // Scrollable Table Content
+          // Table Content — width = max(container, 366) to avoid scroll on
+          // the lateral panel while still supporting very small screens.
           LayoutBuilder(
             builder: (context, tableConstraints) {
-              final double tableWidth = tableConstraints.maxWidth > 520
+              const double minW = wPeriodo + wDias + wPedidos + wDisp; // 366
+              final double tableWidth = tableConstraints.maxWidth > minW
                   ? tableConstraints.maxWidth
-                  : 520;
+                  : minW;
 
-              return Scrollbar(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Padding(
-                    // Extra right padding so the border-radius doesn't clip
-                    // the last column when scrolled to the end.
-                    padding: const EdgeInsets.only(right: 16),
-                    child: SizedBox(
+              return SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(
                       width: tableWidth,
                       child: Table(
                       columnWidths: const {
-                        0: FlexColumnWidth(2), // Periodo gets more space
-                        1: FixedColumnWidth(wDias),     // Días/Prop fusionado
-                        2: FixedColumnWidth(wPedidos),  // Solicitados
-                        3: FixedColumnWidth(wDisp),     // Disponible
+                        0: FixedColumnWidth(wPeriodo),
+                        1: FixedColumnWidth(wDias),
+                        2: FixedColumnWidth(wPedidos),
+                        3: FixedColumnWidth(wDisp),
                       },
                       children: [
                         // Header row
@@ -749,11 +748,9 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                           ],
                         ),
                       ],
-                    ),      // Table
-                  ),        // SizedBox
-                  ),        // Padding
-                ),          // SingleChildScrollView
-              );            // Scrollbar
+                    ),   // Table
+                  ),    // SizedBox
+                );      // SingleChildScrollView
             },
           ),
         ],
