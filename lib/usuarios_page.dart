@@ -1756,8 +1756,10 @@ class _AccessSheet extends StatefulWidget {
 class _AccessSheetState extends State<_AccessSheet> {
   late final TextEditingController _emailCtrl;
   late final TextEditingController _passCtrl;
+  final TextEditingController _newPassCtrl = TextEditingController();
   bool _saving = false;
   bool _hasAuth = false;
+  bool _obscureNew = true;
 
   @override
   void initState() {
@@ -1775,6 +1777,7 @@ class _AccessSheetState extends State<_AccessSheet> {
   void dispose() {
     _emailCtrl.dispose();
     _passCtrl.dispose();
+    _newPassCtrl.dispose();
     super.dispose();
   }
 
@@ -1801,6 +1804,44 @@ class _AccessSheetState extends State<_AccessSheet> {
       if (mounted) {
         Navigator.pop(context);
         widget.onSaved();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: SiColors.of(context).danger,
+        ));
+      }
+    }
+  }
+
+  Future<void> _changePassword() async {
+    final pw = _newPassCtrl.text.trim();
+    if (pw.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ingresa la nueva contraseña')),
+      );
+      return;
+    }
+    if (pw.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('La contraseña debe tener al menos 6 caracteres')),
+      );
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await Supabase.instance.client.rpc('update_user_password', params: {
+        'user_id_param': widget.user['id'],
+        'new_password': pw,
+      });
+      _newPassCtrl.clear();
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Contraseña actualizada correctamente')),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -2011,18 +2052,58 @@ class _AccessSheetState extends State<_AccessSheet> {
                       ),
                     ),
                   ] else ...[
-                    Text('GESTIONAR ACCESO',
+                    // ── Cambiar contraseña ──────────────────────────────────
+                    Text('CAMBIAR CONTRASEÑA',
                         style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
                             color: c.brand,
                             letterSpacing: 0.8)),
-                    const SizedBox(height: SiSpace.x3),
-                    Text(
-                      'El colaborador ya tiene acceso al sistema. Puedes revocar su acceso si es necesario.',
-                      style: TextStyle(fontSize: 13, color: c.ink3),
+                    const SizedBox(height: SiSpace.x4),
+                    TextField(
+                      controller: _newPassCtrl,
+                      obscureText: _obscureNew,
+                      decoration: InputDecoration(
+                        labelText: 'Nueva contraseña',
+                        prefixIcon: const Icon(Icons.lock_reset_outlined),
+                        suffixIcon: IconButton(
+                          icon: Icon(_obscureNew
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined),
+                          onPressed: () =>
+                              setState(() => _obscureNew = !_obscureNew),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: SiSpace.x4),
+                    FilledButton.icon(
+                      onPressed: _saving ? null : _changePassword,
+                      icon: const Icon(Icons.lock_reset_outlined, size: 18),
+                      label: const Text('Actualizar contraseña',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: c.brand,
+                        minimumSize: const Size(double.infinity, 48),
+                        shape: const RoundedRectangleBorder(
+                            borderRadius: SiRadius.rMd),
+                      ),
                     ),
                     const SizedBox(height: SiSpace.x5),
+                    Divider(color: c.line),
+                    const SizedBox(height: SiSpace.x4),
+                    // ── Revocar acceso ──────────────────────────────────────
+                    Text('REVOCAR ACCESO',
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: c.danger,
+                            letterSpacing: 0.8)),
+                    const SizedBox(height: SiSpace.x3),
+                    Text(
+                      'Elimina la cuenta de inicio de sesión. El perfil del colaborador se conservará.',
+                      style: TextStyle(fontSize: 13, color: c.ink3),
+                    ),
+                    const SizedBox(height: SiSpace.x4),
                     OutlinedButton.icon(
                       onPressed: _saving ? null : _revokeAccess,
                       icon: Icon(Icons.no_accounts_outlined,
