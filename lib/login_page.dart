@@ -24,6 +24,7 @@ class _LoginPageState extends State<LoginPage>
   bool _isLoading      = false;
   bool _obscurePassword = true;
   bool _rememberMe     = true;
+  int  _activeCount    = 0;
 
   late final AnimationController _fadeCtrl;
   late final Animation<double>   _fadeAnim;
@@ -34,6 +35,15 @@ class _LoginPageState extends State<LoginPage>
     _fadeCtrl = AnimationController(vsync: this, duration: SiMotion.normal)
       ..forward();
     _fadeAnim = CurvedAnimation(parent: _fadeCtrl, curve: SiMotion.easeOut);
+    _fetchActiveCount();
+  }
+
+  Future<void> _fetchActiveCount() async {
+    try {
+      final result = await Supabase.instance.client
+          .rpc('get_active_users_count');
+      if (mounted) setState(() => _activeCount = (result as int?) ?? 0);
+    } catch (_) {}
   }
 
   @override
@@ -129,8 +139,8 @@ class _LoginPageState extends State<LoginPage>
                     child: AnimatedSwitcher(
                       duration: SiMotion.slow,
                       child: isDark
-                          ? _DarkPanel(c: c, key: const ValueKey('dark'))
-                          : const _LightPanel(key: ValueKey('light')),
+                          ? _DarkPanel(c: c, key: const ValueKey('dark'), activeCount: _activeCount)
+                          : _LightPanel(key: const ValueKey('light'), activeCount: _activeCount),
                     ),
                   ),
                 ],
@@ -289,17 +299,12 @@ class _LoginPageState extends State<LoginPage>
 // _LightPanel — right panel, light theme (navy background)
 // ─────────────────────────────────────────────────────────────────────────────
 class _LightPanel extends StatelessWidget {
-  const _LightPanel({super.key});
+  final int activeCount;
+  const _LightPanel({super.key, required this.activeCount});
 
   static const _modules = [
     'MI PERFIL', 'CALENDARIO', 'INCIDENCIAS', 'INVENTARIO',
     'ASISTENCIA', 'BI', 'FIRMAS', 'LOGS', 'USUARIOS', 'CONTACTOS',
-  ];
-
-  static const _stats = [
-    _Stat('248',    'Colaboradores activos', false),
-    _Stat('12.4k',  'Eventos · últimos 30d', false),
-    _Stat('99.98%', 'Uptime · 30d',          true),
   ];
 
   @override
@@ -315,7 +320,7 @@ class _LightPanel extends StatelessWidget {
             right: -24, top: 0, bottom: 0,
             child: Center(
               child: Text(
-                '248',
+                activeCount > 0 ? activeCount.toString() : '',
                 style: SiType.mono(
                   size: 280, weight: FontWeight.w700,
                   color: Colors.white.withValues(alpha: 0.032),
@@ -391,7 +396,11 @@ class _LightPanel extends StatelessWidget {
                   ),
                   child: IntrinsicHeight(
                     child: Row(
-                      children: _stats.asMap().entries.map((e) {
+                      children: [
+                        _Stat(activeCount > 0 ? activeCount.toString() : '—', 'Colaboradores activos', false),
+                        const _Stat('12.4k',  'Eventos · últimos 30d', false),
+                        const _Stat('99.98%', 'Uptime · 30d',          true),
+                      ].asMap().entries.map((e) {
                         final idx = e.key;
                         final s   = e.value;
                         return Expanded(
@@ -454,12 +463,13 @@ class _Stat {
 // ─────────────────────────────────────────────────────────────────────────────
 class _DarkPanel extends StatelessWidget {
   final SiColors c;
-  const _DarkPanel({required this.c, super.key});
+  final int activeCount;
+  const _DarkPanel({required this.c, required this.activeCount, super.key});
 
   @override
   Widget build(BuildContext context) {
     final bands = [
-      (n: '248',    label: 'COLABORADORES ACTIVOS',     color: c.brand),
+      (n: activeCount > 0 ? activeCount.toString() : '—', label: 'COLABORADORES ACTIVOS', color: c.brand),
       (n: '12.4k',  label: 'EVENTOS · ÚLTIMOS 30 DÍAS', color: c.warn),
       (n: '99.98%', label: 'UPTIME · ÚLTIMOS 30 DÍAS',  color: c.success),
     ];
