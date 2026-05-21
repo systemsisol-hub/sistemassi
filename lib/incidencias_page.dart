@@ -28,6 +28,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
 
   List<Map<String, dynamic>> _adminUserList = [];
   String? _selectedUserId;
+  _IncidenciasDataSource? _dataSource;
 
   Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
     final c = SiColors.of(context);
@@ -86,6 +87,12 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
   void initState() {
     super.initState();
     _fetchInitialData();
+  }
+
+  @override
+  void dispose() {
+    _dataSource?.dispose();
+    super.dispose();
   }
 
   Future<void> _fetchInitialData() async {
@@ -780,17 +787,23 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
           .order('created_at', ascending: false);
 
       if (mounted) {
+        final sorted = List<Map<String, dynamic>>.from(response)
+          ..sort((a, b) {
+            const order = {'PENDIENTE': 0, 'APROBADA': 1, 'CANCELADA': 2};
+            final aOrder = order[a['status']] ?? 99;
+            final bOrder = order[b['status']] ?? 99;
+            if (aOrder != bOrder) return aOrder.compareTo(bOrder);
+            return (b['created_at'] as String)
+                .compareTo(a['created_at'] as String);
+          });
         setState(() {
-          _incidencias = List<Map<String, dynamic>>.from(response)
-            ..sort((a, b) {
-              const order = {'PENDIENTE': 0, 'APROBADA': 1, 'CANCELADA': 2};
-              final aOrder = order[a['status']] ?? 99;
-              final bOrder = order[b['status']] ?? 99;
-              if (aOrder != bOrder) return aOrder.compareTo(bOrder);
-              return (b['created_at'] as String)
-                  .compareTo(a['created_at'] as String);
-            });
+          _incidencias = sorted;
           _isLoading = false;
+          // Reutiliza el DataSource existente para que PaginatedDataTable
+          // detecte el cambio vía notifyListeners()
+          if (_dataSource != null) {
+            _dataSource!.updateItems(sorted);
+          }
         });
       }
     } catch (e) {
@@ -1441,39 +1454,40 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                             fontSize: 11,
                             letterSpacing: 1)))),
             DataColumn(
-                label: SizedBox(
-                    width: screenWidth * 0.04,
-                    child: const SizedBox())), // Acciones
+                label: const SizedBox(width: 48)), // Acciones
           ],
-          source: _IncidenciasDataSource(
-            items: _incidencias,
-            theme: theme,
-            isAdmin: _userRole == 'admin',
-            userProfile: _selectedUserProfile,
-            formatDate: _formatDate,
-            siColors: c,
-            getStatusColor: _getStatusColor,
-            onEdit: (inc) => _showIncidenciaForm(incidencia: inc),
-            onStatusChange: (inc, status) async {
-              if (status == 'PDF') {
-                if (_selectedUserProfile != null) {
-                  IncidenciasPdfService.generateVacationRequest(
-                      _selectedUserProfile!, inc);
+          source: () {
+            _dataSource ??= _IncidenciasDataSource(
+              items: _incidencias,
+              theme: theme,
+              isAdmin: _userRole == 'admin',
+              userProfile: _selectedUserProfile,
+              formatDate: _formatDate,
+              siColors: c,
+              getStatusColor: _getStatusColor,
+              onEdit: (inc) => _showIncidenciaForm(incidencia: inc),
+              onStatusChange: (inc, status) async {
+                if (status == 'PDF') {
+                  if (_selectedUserProfile != null) {
+                    IncidenciasPdfService.generateVacationRequest(
+                        _selectedUserProfile!, inc);
+                  }
+                } else {
+                  await Supabase.instance.client
+                      .from('incidencias')
+                      .update({'status': status}).eq('id', inc['id']);
+                  await NotificationService.send(
+                    title: 'Tu incidencia fue $status',
+                    message: 'El estado de tu petición ha cambiado a $status.',
+                    userId: inc['usuario_id'],
+                    type: 'incidencia_status',
+                  );
+                  _fetchIncidencias();
                 }
-              } else {
-                await Supabase.instance.client
-                    .from('incidencias')
-                    .update({'status': status}).eq('id', inc['id']);
-                await NotificationService.send(
-                  title: 'Tu incidencia fue $status',
-                  message: 'El estado de tu petición ha cambiado a $status.',
-                  userId: inc['usuario_id'],
-                  type: 'incidencia_status',
-                );
-                _fetchIncidencias();
-              }
-            },
-          ),
+              },
+            );
+            return _dataSource!;
+          }(),
           rowsPerPage: _incidencias.isEmpty
               ? 1
               : (_incidencias.length > 5 ? 5 : _incidencias.length),
@@ -1729,7 +1743,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
 }
 
 class _IncidenciasDataSource extends DataTableSource {
-  final List<Map<String, dynamic>> items;
+  List<Map<String, dynamic>> items;
   final ThemeData theme;
   final bool isAdmin;
   final Map<String, dynamic>? userProfile;
@@ -1794,21 +1808,21 @@ class _IncidenciasDataSource extends DataTableSource {
           ),
         ),
         DataCell(
-          Align(
-            alignment: Alignment.centerRight,
+          SizedBox(
+            width: 48,
             child: PopupMenuButton<String>(
-              icon: Icon(Icons.more_horiz, color: siColors.ink3),
-            tooltip: 'Acciones',
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            elevation: 4,
-            onSelected: (val) {
-              if (val == 'EDIT') {
-                onEdit(inc);
-              } else {
-                onStatusChange(inc, val);
-              }
-            },
+              icon: Icon(Icons.more_horiz, color: siColors.ink3, size: 20),
+              tooltip: 'Acciones',
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+              elevation: 4,
+              onSelected: (val) {
+                if (val == 'EDIT') {
+                  onEdit(inc);
+                } else {
+                  onStatusChange(inc, val);
+                }
+              },
             itemBuilder: (ctx) => [
               PopupMenuItem(
                 value: 'PDF',
@@ -1864,6 +1878,12 @@ class _IncidenciasDataSource extends DataTableSource {
       ),
     ],
     );
+  }
+
+  /// Actualiza los datos y notifica a PaginatedDataTable para que se redibuje.
+  void updateItems(List<Map<String, dynamic>> newItems) {
+    items = newItems;
+    notifyListeners();
   }
 
   @override
