@@ -187,27 +187,26 @@ class _CssiPageState extends State<CssiPage> {
   List<Map<String, dynamic>> get _filteredItems {
     var result = List<Map<String, dynamic>>.from(_items);
     if (_searchQuery.isNotEmpty) {
-      final query = _searchQuery.toLowerCase();
-      result = result.where((item) {
-        final name =
-            '${item['nombre']} ${item['paterno']} ${item['materno'] ?? ''}'
-                .toLowerCase();
-        final curp = (item['curp'] ?? '').toString().toLowerCase();
-        final rfc = (item['rfc'] ?? '').toString().toLowerCase();
-        final area = (item['area'] ?? '').toString().toLowerCase();
-        final puesto = (item['puesto'] ?? '').toString().toLowerCase();
-        final numEmp = (item['numero_empleado'] ?? '').toString().toLowerCase();
-        final emailPers = (item['correo_personal'] ?? '').toString().toLowerCase();
-        final emailUser = (item['mail_user'] ?? '').toString().toLowerCase();
-        return name.contains(query) ||
-            curp.contains(query) ||
-            rfc.contains(query) ||
-            area.contains(query) ||
-            puesto.contains(query) ||
-            numEmp.contains(query) ||
-            emailPers.contains(query) ||
-            emailUser.contains(query);
-      }).toList();
+      final words = _searchQuery
+          .toLowerCase()
+          .split(RegExp(r'\s+'))
+          .where((w) => w.isNotEmpty)
+          .toList();
+      if (words.isNotEmpty) {
+        result = result.where((item) {
+          final haystack = [
+            '${item['nombre']} ${item['paterno']} ${item['materno'] ?? ''}',
+            item['curp'] ?? '',
+            item['rfc'] ?? '',
+            item['area'] ?? '',
+            item['puesto'] ?? '',
+            item['numero_empleado'] ?? '',
+            item['correo_personal'] ?? '',
+            item['mail_user'] ?? '',
+          ].join(' ').toLowerCase();
+          return words.every((w) => haystack.contains(w));
+        }).toList();
+      }
     }
     result.sort((a, b) {
       final numA = int.tryParse(a['numero_empleado']?.toString() ?? '0') ?? 0;
