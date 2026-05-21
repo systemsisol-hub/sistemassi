@@ -247,7 +247,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     if (confirmed != true) return;
     try {
       await Supabase.instance.client
-          .rpc('delete_user_admin', params: {'user_id': id});
+          .rpc('delete_user_admin', params: {'user_id_param': id});
       _fetchUsers();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1883,7 +1883,7 @@ class _AccessSheetState extends State<_AccessSheet> {
     setState(() => _saving = true);
     try {
       await Supabase.instance.client.rpc('delete_user_admin',
-          params: {'user_id': widget.user['id']});
+          params: {'user_id_param': widget.user['id']});
       await Supabase.instance.client.from('profiles').update({
         'has_auth_account': false,
       }).eq('id', widget.user['id']);
