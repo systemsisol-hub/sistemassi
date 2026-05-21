@@ -531,7 +531,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                             _colHeader(c, 'ROL', flex: 2, sortKey: 'role'),
                             _colHeader(c, 'STATUS SYS', flex: 2, sortKey: 'status_sys'),
                             _colHeader(c, 'STATUS RH', flex: 2, sortKey: 'status_rh'),
-                            _colHeader(c, 'ACCESO', flex: 2),
+                            _colHeader(c, 'ACCESO', flex: 2, sortKey: 'has_auth_account'),
                             const SizedBox(width: 48),
                           ],
                         ),
@@ -739,6 +739,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
         va = int.tryParse(va?.toString() ?? '') ?? 0;
         vb = int.tryParse(vb?.toString() ?? '') ?? 0;
         return _sortAsc ? (va as int).compareTo(vb) : (vb as int).compareTo(va);
+      }
+      // Booleano: true (activo) primero en ascendente
+      if (_sortField == 'has_auth_account') {
+        final ia = (va == true) ? 1 : 0;
+        final ib = (vb == true) ? 1 : 0;
+        return _sortAsc ? ib.compareTo(ia) : ia.compareTo(ib);
       }
       // Texto para el resto
       final sa = (va ?? '').toString().toLowerCase();
