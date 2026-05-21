@@ -545,7 +545,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                             final role = u['role'] ?? 'usuario';
                             final isBlocked = u['is_blocked'] ?? false;
                             final nombre =
-                                '${u['nombre'] ?? ''} ${u['paterno'] ?? ''}'
+                                '${u['nombre'] ?? ''} ${u['paterno'] ?? ''} ${u['materno'] ?? ''}'
                                     .trim();
                             final parts = nombre
                                 .split(' ')
