@@ -1396,56 +1396,46 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
           ],
           dataRowMaxHeight: 54,
           dataRowMinHeight: 54,
-          columnSpacing: 20,
-          horizontalMargin: 16,
+          columnSpacing: 12,
+          horizontalMargin: 12,
           columns: [
             DataColumn(
-                label: SizedBox(
-                    width: screenWidth * 0.08,
-                    child: Text('PERIODO',
-                        style: TextStyle(
-                            color: c.ink3,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 11,
-                            letterSpacing: 1)))),
+                label: Text('PERIODO',
+                    style: TextStyle(
+                        color: c.ink3,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                        letterSpacing: 1))),
             DataColumn(
-                label: SizedBox(
-                    width: screenWidth * 0.03,
-                    child: Text('DÍAS',
-                        style: TextStyle(
-                            color: c.ink3,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 11,
-                            letterSpacing: 1)))),
+                label: Text('DÍAS',
+                    style: TextStyle(
+                        color: c.ink3,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                        letterSpacing: 1))),
             DataColumn(
-                label: SizedBox(
-                    width: screenWidth * 0.07,
-                    child: Text('CREADO',
-                        style: TextStyle(
-                            color: c.ink3,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 11,
-                            letterSpacing: 1)))),
+                label: Text('CREADO',
+                    style: TextStyle(
+                        color: c.ink3,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                        letterSpacing: 1))),
             DataColumn(
-                label: SizedBox(
-                    width: screenWidth * 0.13,
-                    child: Text('INICIO → FIN',
-                        style: TextStyle(
-                            color: c.ink3,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 11,
-                            letterSpacing: 1)))),
+                label: Text('INICIO → FIN',
+                    style: TextStyle(
+                        color: c.ink3,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                        letterSpacing: 1))),
             DataColumn(
-                label: SizedBox(
-                    width: screenWidth * 0.07,
-                    child: Text('ESTATUS',
-                        style: TextStyle(
-                            color: c.ink3,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 11,
-                            letterSpacing: 1)))),
+                label: Text('ESTATUS',
+                    style: TextStyle(
+                        color: c.ink3,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                        letterSpacing: 1))),
             DataColumn(
-                label: const SizedBox(width: 48)), // Acciones
+                label: const SizedBox(width: 40)), // Acciones
           ],
           source: () {
             _dataSource ??= _IncidenciasDataSource(
@@ -1767,10 +1757,12 @@ class _IncidenciasDataSource extends DataTableSource {
       cells: [
         DataCell(
           Text(inc['periodo'] ?? '---',
-              style: const TextStyle(fontWeight: FontWeight.w500)),
+              style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13)),
         ),
-        DataCell(Text('${inc['dias'] ?? '-'}')),
-        DataCell(Text(formatDate(inc['created_at']))),
+        DataCell(Text('${inc['dias'] ?? '-'}',
+            style: const TextStyle(fontSize: 13))),
+        DataCell(Text(formatDate(inc['created_at']),
+            style: const TextStyle(fontSize: 13))),
         DataCell(
           Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -1778,7 +1770,7 @@ class _IncidenciasDataSource extends DataTableSource {
             children: [
               Text(
                 inc['fecha_inicio'] != null ? formatDate(inc['fecha_inicio']) : '-',
-                style: const TextStyle(fontSize: 12),
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
               ),
               Text(
                 inc['fecha_fin'] != null ? formatDate(inc['fecha_fin']) : '-',
@@ -1811,7 +1803,7 @@ class _IncidenciasDataSource extends DataTableSource {
         ),
         DataCell(
           SizedBox(
-            width: 48,
+            width: 40,
             child: PopupMenuButton<String>(
               icon: Icon(Icons.more_horiz, color: siColors.ink3, size: 20),
               tooltip: 'Acciones',
