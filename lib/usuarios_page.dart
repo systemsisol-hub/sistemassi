@@ -1788,6 +1788,7 @@ class _AccessSheetState extends State<_AccessSheet> {
       );
       return;
     }
+    final navigator = Navigator.of(context);
     setState(() => _saving = true);
     try {
       await Supabase.instance.client.rpc('create_user_admin', params: {
@@ -1802,7 +1803,7 @@ class _AccessSheetState extends State<_AccessSheet> {
         'mail_user': _emailCtrl.text.trim(),
       }).eq('id', widget.user['id']);
       if (mounted) {
-        Navigator.pop(context);
+        navigator.pop();
         widget.onSaved();
       }
     } catch (e) {
@@ -1856,6 +1857,9 @@ class _AccessSheetState extends State<_AccessSheet> {
 
   Future<void> _revokeAccess() async {
     final c = SiColors.of(context);
+    // Capturar navigator antes de cualquier operación async para evitar
+    // usar un contexto stale que pueda popear la pantalla incorrecta
+    final navigator = Navigator.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1889,7 +1893,7 @@ class _AccessSheetState extends State<_AccessSheet> {
         'has_auth_account': false,
       }).eq('id', widget.user['id']);
       if (mounted) {
-        Navigator.pop(context);
+        navigator.pop();
         widget.onSaved();
       }
     } catch (e) {
