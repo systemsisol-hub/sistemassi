@@ -63,31 +63,9 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (_userRole == 'admin' && _adminUserList.isNotEmpty) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-              decoration: BoxDecoration(
-                color: c.hover,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: _selectedUserId,
-                  isDense: true,
-                  icon: Icon(Icons.keyboard_arrow_down,
-                      color: c.ink, size: 20),
-                  items: _adminUserList.map((user) {
-                    final name =
-                        '${user['nombre']} ${user['paterno']} ${user['materno'] ?? ''}'
-                            .trim();
-                    return DropdownMenuItem(
-                      value: user['id'] as String,
-                      child: Text(name.isEmpty ? 'Usuario' : name,
-                          style: const TextStyle(fontSize: 13)),
-                    );
-                  }).toList(),
-                  onChanged: _onUserSelected,
-                ),
-              ),
+            SizedBox(
+              width: 220,
+              child: _buildUserAutocomplete(c, maxWidth: 280),
             ),
             const VerticalDivider(
                 width: 1, thickness: 1, indent: 8, endIndent: 8),
@@ -1391,12 +1369,9 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
           header: Row(
             children: [
               if (_userRole == 'admin' && _adminUserList.isNotEmpty)
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 300),
-                  child: SizedBox(
-                    height: 38,
-                    child: _buildTableUserSelector(c),
-                  ),
+                SizedBox(
+                  width: 320,
+                  child: _buildTableUserSelector(c),
                 ),
             ],
           ),
@@ -1508,31 +1483,130 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
     );
   }
 
-  Widget _buildTableUserSelector(SiColors c) {
-    return Container(
-      decoration: BoxDecoration(
-        color: c.panel,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: c.line),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: _selectedUserId,
-          isExpanded: true,
-          icon: Icon(Icons.keyboard_arrow_down_rounded, color: c.ink3, size: 20),
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          style: TextStyle(fontSize: 13, color: c.ink),
-          items: _adminUserList.map((user) {
-            final name = '${user['nombre'] ?? ''} ${user['paterno'] ?? ''}'.trim();
-            return DropdownMenuItem(
-              value: user['id'] as String,
-              child: Text(name.isEmpty ? 'Seleccionar Usuario' : name, overflow: TextOverflow.ellipsis),
-            );
-          }).toList(),
-          onChanged: _onUserSelected,
-        ),
-      ),
+  /// Widget de autocomplete compartido para móvil y escritorio
+  Widget _buildUserAutocomplete(SiColors c, {double maxWidth = 300}) {
+    String _fullName(Map<String, dynamic> u) =>
+        '${u['nombre'] ?? ''} ${u['paterno'] ?? ''} ${u['materno'] ?? ''}'
+            .replaceAll(RegExp(r'\s+'), ' ')
+            .trim();
+
+    final selectedUser = _adminUserList.isEmpty
+        ? null
+        : _adminUserList.firstWhere(
+            (u) => u['id'] == _selectedUserId,
+            orElse: () => _adminUserList.first,
+          );
+    final initialText = selectedUser != null ? _fullName(selectedUser) : '';
+
+    return Autocomplete<Map<String, dynamic>>(
+      key: ValueKey(_selectedUserId),
+      initialValue: TextEditingValue(text: initialText),
+      optionsBuilder: (textEditingValue) {
+        final q = textEditingValue.text.trim().toLowerCase();
+        if (q.isEmpty) return _adminUserList;
+        return _adminUserList.where(
+          (u) => _fullName(u).toLowerCase().contains(q),
+        );
+      },
+      displayStringForOption: _fullName,
+      onSelected: (user) => _onUserSelected(user['id'] as String),
+      fieldViewBuilder: (context, controller, focusNode, onSubmitted) {
+        return SizedBox(
+          height: 38,
+          child: TextField(
+            controller: controller,
+            focusNode: focusNode,
+            style: TextStyle(fontSize: 13, color: c.ink),
+            decoration: InputDecoration(
+              hintText: 'Buscar colaborador…',
+              hintStyle: TextStyle(fontSize: 13, color: c.ink3),
+              isDense: true,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: c.line),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: c.line),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: c.brand, width: 1.5),
+              ),
+              prefixIcon: Icon(Icons.search_rounded, size: 16, color: c.ink3),
+              suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                valueListenable: controller,
+                builder: (_, val, __) => val.text.isNotEmpty
+                    ? IconButton(
+                        icon: Icon(Icons.close_rounded,
+                            size: 14, color: c.ink3),
+                        padding: EdgeInsets.zero,
+                        onPressed: () {
+                          controller.clear();
+                          focusNode.requestFocus();
+                        },
+                      )
+                    : const SizedBox.shrink(),
+              ),
+            ),
+          ),
+        );
+      },
+      optionsViewBuilder: (context, onSelected, options) {
+        return Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            elevation: 6,
+            borderRadius: BorderRadius.circular(10),
+            color: c.panel,
+            shadowColor: Colors.black26,
+            child: ConstrainedBox(
+              constraints:
+                  BoxConstraints(maxHeight: 260, maxWidth: maxWidth),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  itemCount: options.length,
+                  itemBuilder: (context, index) {
+                    final user = options.elementAt(index);
+                    final name = _fullName(user);
+                    final isSelected = user['id'] == _selectedUserId;
+                    return InkWell(
+                      onTap: () => onSelected(user),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                        color: isSelected
+                            ? c.brand.withOpacity(0.08)
+                            : Colors.transparent,
+                        child: Text(
+                          name,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isSelected ? c.brand : c.ink,
+                            fontWeight: isSelected
+                                ? FontWeight.w600
+                                : FontWeight.normal,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
+  }
+
+  Widget _buildTableUserSelector(SiColors c) {
+    return _buildUserAutocomplete(c, maxWidth: 320);
   }
 
   Widget _buildTableAddButton(SiColors c) {
