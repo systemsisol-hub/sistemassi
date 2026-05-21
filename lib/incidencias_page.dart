@@ -1124,9 +1124,9 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                       return DropdownMenuItem<String>(
                         value: label,
                         child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(label),
+                            Expanded(child: Text(label)),
+                            const SizedBox(width: 8),
                             Text(
                               '$disp días',
                               style: TextStyle(
