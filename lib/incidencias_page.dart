@@ -586,9 +586,9 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
         tableRows.fold<double>(0, (s, r) => s + (r['saldo'] as double));
 
     // Column widths
-    const double wDias = 90;      // Días/Prop fusionado
-    const double wPedidos = 85;   // Solicitados
-    const double wDisp = 90;      // Disponible
+    const double wDias = 90;       // Días/Prop fusionado
+    const double wPedidos = 95;    // Solicitados
+    const double wDisp = 100;      // Disponible
 
     Widget _cell(String text,
         {Color? color,
@@ -649,9 +649,13 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
               return Scrollbar(
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
-                  child: SizedBox(
-                    width: tableWidth,
-                    child: Table(
+                  child: Padding(
+                    // Extra right padding so the border-radius doesn't clip
+                    // the last column when scrolled to the end.
+                    padding: const EdgeInsets.only(right: 16),
+                    child: SizedBox(
+                      width: tableWidth,
+                      child: Table(
                       columnWidths: const {
                         0: FlexColumnWidth(2), // Periodo gets more space
                         1: FixedColumnWidth(wDias),     // Días/Prop fusionado
@@ -745,10 +749,11 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                           ],
                         ),
                       ],
-                    ),
-                  ),
-                ),
-              );
+                    ),      // Table
+                  ),        // SizedBox
+                  ),        // Padding
+                ),          // SingleChildScrollView
+              );            // Scrollbar
             },
           ),
         ],
