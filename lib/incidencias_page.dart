@@ -490,6 +490,69 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
     return 32;
   }
 
+  /// Returns all vacation periods for the current user.
+  /// When [onlyWithDays] is true (default), only periods with días
+  /// disponibles > 0 are included. Each entry has:
+  ///   { 'label': '2025 - 2026', 'disponible': 13, 'days': 24 }
+  List<Map<String, dynamic>> _getAvailablePeriods({bool onlyWithDays = true}) {
+    final base = _fechaReingreso ?? _fechaIngreso;
+    if (base == null) return [];
+
+    final now = DateTime.now();
+    final completedYears = _calcYears();
+    final targetId = _selectedUserId ??
+        Supabase.instance.client.auth.currentUser?.id ??
+        '';
+
+    String norm(String? p) => (p ?? '').replaceAll(RegExp(r'\D'), '');
+
+    // Días usados por período (solo APROBADA + PENDIENTE = reservados)
+    final used = <String, int>{};
+    for (final inc in _incidencias) {
+      if (inc['usuario_id'] == targetId &&
+          (inc['status'] == 'APROBADA' || inc['status'] == 'PENDIENTE')) {
+        final k = norm(inc['periodo'] as String?);
+        if (k.isNotEmpty) {
+          used[k] = (used[k] ?? 0) + (inc['dias'] as int? ?? 0);
+        }
+      }
+    }
+
+    double calcProp(int days, DateTime start, DateTime end) {
+      if (start.isAfter(now)) return days.toDouble();
+      if (end.isBefore(now) || end.isAtSameMomentAs(now)) return days.toDouble();
+      final elapsed = now.difference(start).inDays + 1;
+      return (days / 365) * elapsed;
+    }
+
+    final list = <Map<String, dynamic>>[];
+    for (int y = 1; y <= completedYears + 1; y++) {
+      final end   = DateTime(base.year + y,     base.month, base.day);
+      final start = DateTime(base.year + y - 1, base.month, base.day);
+      final label = '${start.year} - ${end.year}';
+
+      final int days;
+      if (start.year >= 2023) {
+        days = _getDaysByYears(y);
+      } else {
+        final cutoff = DateTime(2017, 5, 2);
+        days = base.isBefore(cutoff)
+            ? (6 + (y - 1) * 2).clamp(0, 14)
+            : (8 + (y - 1) * 2).clamp(0, 16);
+      }
+
+      final requested = used[norm(label)] ?? 0;
+      final prop      = calcProp(days, start, end);
+      final disp      = (prop - requested).floor();
+
+      if (!onlyWithDays || disp > 0) {
+        list.add({'label': label, 'disponible': disp, 'days': days});
+      }
+    }
+    return list;
+  }
+
+
   /// Tabla de historial de vacaciones por periodo
   Widget _buildHistorialVacaciones() {
     final base = _fechaReingreso ?? _fechaIngreso;
@@ -892,8 +955,28 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
       }
     }
 
-    final periodController =
-        TextEditingController(text: incidencia?['periodo'] ?? '2025 – 2026');
+    // Períodos disponibles (filtra solo los que tienen días cuando es alta nueva)
+    final availablePeriods = _getAvailablePeriods(onlyWithDays: !isEditing);
+    String norm(String? p) => (p ?? '').replaceAll(RegExp(r'\D'), '');
+
+    // Valor inicial del período: para edición usa el guardado, para alta el
+    // primer período con días disponibles.
+    String initPeriod = '';
+    if (isEditing) {
+      final raw = incidencia?['periodo'] as String? ?? '';
+      // Busca coincidencia por dígitos (cubre diferencias de guión/em-dash)
+      final match = availablePeriods.cast<Map<String, dynamic>?>().firstWhere(
+        (p) => norm(p!['label']) == norm(raw),
+        orElse: () => null,
+      );
+      initPeriod = match != null ? match['label'] as String : raw;
+    } else {
+      initPeriod = availablePeriods.isNotEmpty
+          ? availablePeriods.first['label'] as String
+          : '';
+    }
+
+    final periodController = TextEditingController(text: initPeriod);
     final diasController =
         TextEditingController(text: incidencia?['dias']?.toString() ?? '');
     DateTime fechaInicio = incidencia != null
@@ -1008,17 +1091,62 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                       fontWeight: FontWeight.bold, fontSize: 16, color: c.ink),
                 ),
                 const SizedBox(height: 20),
-                DropdownButtonFormField<String>(
-                  value: periodController.text,
-                  items: ['2024 – 2025', '2025 – 2026']
-                      .map((p) => DropdownMenuItem(value: p, child: Text(p)))
-                      .toList(),
-                  onChanged: (val) => periodController.text = val!,
-                  decoration: const InputDecoration(
-                    labelText: 'Periodo',
-                    border: OutlineInputBorder(),
+                if (availablePeriods.isEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.orange.shade300),
+                      borderRadius: BorderRadius.circular(8),
+                      color: Colors.orange.shade50,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline,
+                            color: Colors.orange.shade700, size: 18),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text(
+                            'Sin períodos con días disponibles.',
+                            style: TextStyle(fontSize: 13),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  DropdownButtonFormField<String>(
+                    value: periodController.text.isEmpty
+                        ? null
+                        : periodController.text,
+                    items: availablePeriods.map((p) {
+                      final label = p['label'] as String;
+                      final disp  = p['disponible'] as int;
+                      return DropdownMenuItem<String>(
+                        value: label,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(label),
+                            Text(
+                              '$disp días',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: disp <= 5
+                                      ? Colors.orange[700]
+                                      : Colors.green[700]),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val != null) periodController.text = val;
+                    },
+                    decoration: const InputDecoration(
+                      labelText: 'Período',
+                      border: OutlineInputBorder(),
+                    ),
                   ),
-                ),
                 const SizedBox(height: 16),
                 TextField(
                   controller: diasController,
