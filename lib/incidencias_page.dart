@@ -1401,7 +1401,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
           columns: [
             DataColumn(
                 label: SizedBox(
-                    width: screenWidth * 0.12,
+                    width: screenWidth * 0.08,
                     child: Text('PERIODO',
                         style: TextStyle(
                             color: c.ink3,
@@ -1428,17 +1428,8 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                             letterSpacing: 1)))),
             DataColumn(
                 label: SizedBox(
-                    width: screenWidth * 0.07,
-                    child: Text('FECHA INICIO',
-                        style: TextStyle(
-                            color: c.ink3,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 11,
-                            letterSpacing: 1)))),
-            DataColumn(
-                label: SizedBox(
-                    width: screenWidth * 0.07,
-                    child: Text('FECHA FIN',
+                    width: screenWidth * 0.13,
+                    child: Text('INICIO → FIN',
                         style: TextStyle(
                             color: c.ink3,
                             fontWeight: FontWeight.bold,
@@ -1780,11 +1771,22 @@ class _IncidenciasDataSource extends DataTableSource {
         ),
         DataCell(Text('${inc['dias'] ?? '-'}')),
         DataCell(Text(formatDate(inc['created_at']))),
-        DataCell(Text(inc['fecha_inicio'] != null
-            ? formatDate(inc['fecha_inicio'])
-            : '-')),
-        DataCell(Text(
-            inc['fecha_fin'] != null ? formatDate(inc['fecha_fin']) : '-')),
+        DataCell(
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                inc['fecha_inicio'] != null ? formatDate(inc['fecha_inicio']) : '-',
+                style: const TextStyle(fontSize: 12),
+              ),
+              Text(
+                inc['fecha_fin'] != null ? formatDate(inc['fecha_fin']) : '-',
+                style: TextStyle(fontSize: 11, color: siColors.ink3),
+              ),
+            ],
+          ),
+        ),
         DataCell(
           Row(
             mainAxisSize: MainAxisSize.min,
