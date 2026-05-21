@@ -116,14 +116,18 @@ class _MailsActivosTableState extends State<_MailsActivosTable> {
 
   List<Map<String, dynamic>> get _filtered {
     if (_searchQuery.isEmpty) return _all;
-    final q = _searchQuery.toLowerCase();
+    final words = _searchQuery
+        .toLowerCase()
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .toList();
+    if (words.isEmpty) return _all;
     return _all.where((r) {
-      final name =
-          '${r['nombre'] ?? ''} ${r['paterno'] ?? ''} ${r['materno'] ?? ''}'
+      final haystack =
+          '${r['nombre'] ?? ''} ${r['paterno'] ?? ''} ${r['materno'] ?? ''} '
+          '${r['mail_user'] ?? ''} ${r['numero_empleado'] ?? ''}'
               .toLowerCase();
-      final mail = (r['mail_user'] ?? '').toString().toLowerCase();
-      final num = (r['numero_empleado'] ?? '').toString().toLowerCase();
-      return name.contains(q) || mail.contains(q) || num.contains(q);
+      return words.every((w) => haystack.contains(w));
     }).toList();
   }
 
