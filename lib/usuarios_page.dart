@@ -149,8 +149,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
     try {
       final from = _page * _pageSize;
       final q = _searchQuery.trim();
-      final filter =
-          'nombre.ilike.%$q%,paterno.ilike.%$q%,email.ilike.%$q%,numero_empleado.ilike.%$q%,full_name.ilike.%$q%';
+
+      // Divide la búsqueda en palabras para soportar "nombre apellido"
+      // Cada palabra debe aparecer en al menos uno de los campos (AND entre palabras)
+      final words = q.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
 
       var dataQuery = Supabase.instance.client
           .from('profiles')
@@ -158,9 +160,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
       var countQuery =
           Supabase.instance.client.from('profiles').count(CountOption.exact);
 
-      if (q.isNotEmpty) {
-        dataQuery = dataQuery.or(filter);
-        countQuery = countQuery.or(filter);
+      if (words.isNotEmpty) {
+        for (final word in words) {
+          final f = 'nombre.ilike.%$word%,paterno.ilike.%$word%,materno.ilike.%$word%,email.ilike.%$word%,numero_empleado.ilike.%$word%,full_name.ilike.%$word%,mail_user.ilike.%$word%';
+          dataQuery = dataQuery.or(f);
+          countQuery = countQuery.or(f);
+        }
       }
 
       final dataFuture = dataQuery
