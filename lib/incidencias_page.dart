@@ -586,10 +586,9 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
         tableRows.fold<double>(0, (s, r) => s + (r['saldo'] as double));
 
     // Column widths
-    const double wProp = 95;
-    const double wPedidos = 95;
-    const double wSaldo = 100;
-    const double wLey = 60;
+    const double wDias = 90;      // Días/Prop fusionado
+    const double wPedidos = 85;   // Solicitados
+    const double wDisp = 90;      // Disponible
 
     Widget _cell(String text,
         {Color? color,
@@ -655,10 +654,9 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                     child: Table(
                       columnWidths: const {
                         0: FlexColumnWidth(2), // Periodo gets more space
-                        1: FixedColumnWidth(wLey),
-                        2: FixedColumnWidth(wProp),
-                        3: FixedColumnWidth(wPedidos),
-                        4: FixedColumnWidth(wSaldo),
+                        1: FixedColumnWidth(wDias),     // Días/Prop fusionado
+                        2: FixedColumnWidth(wPedidos),  // Solicitados
+                        3: FixedColumnWidth(wDisp),     // Disponible
                       },
                       children: [
                         // Header row
@@ -667,10 +665,9 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                           children: [
                             _cellTable('Período',
                                 weight: FontWeight.bold, align: TextAlign.left),
-                            _cellTable('Dias', weight: FontWeight.bold),
-                            _cellTable('Proporcional', weight: FontWeight.bold),
+                            _cellTable('Días', weight: FontWeight.bold),
                             _cellTable('Solicitados', weight: FontWeight.bold),
-                            _cellTable('Actual', weight: FontWeight.bold),
+                            _cellTable('Disponible', weight: FontWeight.bold),
                           ],
                         ),
                         // Data rows
@@ -701,6 +698,12 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                           else
                             bgColor = i.isEven ? c.panel : c.bg;
 
+                          final int propInt = proporcional.toInt();
+                          final int daysInt = row['days'] as int;
+                          final String diasText = propInt == daysInt
+                              ? '$propInt'
+                              : '$propInt de $daysInt';
+
                           return TableRow(
                             decoration: BoxDecoration(color: bgColor),
                             children: [
@@ -708,9 +711,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                                   color: textColor,
                                   weight: weight,
                                   align: TextAlign.left),
-                              _cellTable('${row['days']}',
-                                  color: textColor, weight: weight),
-                              _cellTable('${proporcional.toInt()}',
+                              _cellTable(diasText,
                                   color: textColor, weight: weight),
                               _cellTable(
                                   row['requested'] > 0
@@ -731,12 +732,12 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                         TableRow(
                           decoration: BoxDecoration(color: c.hover),
                           children: [
-                            _cellTable('Saldo Actual Total',
+                            _cellTable('Total disponible',
                                 weight: FontWeight.bold, align: TextAlign.left),
                             _cellTable(''),
-                            _cellTable(''),
-                            _cellTable(''),
-                            _cellTable('${totalSaldo.toInt()} días.',
+                            _cellTable('$totalReq',
+                                weight: FontWeight.bold),
+                            _cellTable('${totalSaldo.toInt()} días',
                                 weight: FontWeight.bold,
                                 color: totalSaldo < 0
                                     ? Colors.red
