@@ -54,6 +54,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
   bool _isAdmin = false;
   Timer? _searchDebounce;
 
+  // Ordenamiento de la tabla
+  String? _sortField;
+  bool _sortAsc = true;
+
   // Estadísticas del Dashboard
   Map<String, int> _statusSysCounts = {};
   Map<String, int> _statusRhCounts = {};
@@ -522,11 +526,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                     BorderSide(color: c.line, width: 1))),
                         child: Row(
                           children: [
-                            _colHeader(c, 'USUARIO', flex: 4),
-                            _colHeader(c, 'NO. EMP.', flex: 2),
-                            _colHeader(c, 'ROL', flex: 2),
-                            _colHeader(c, 'STATUS SYS', flex: 2),
-                            _colHeader(c, 'STATUS RH', flex: 2),
+                            _colHeader(c, 'USUARIO', flex: 4, sortKey: 'paterno'),
+                            _colHeader(c, 'NO. EMP.', flex: 2, sortKey: 'numero_empleado'),
+                            _colHeader(c, 'ROL', flex: 2, sortKey: 'role'),
+                            _colHeader(c, 'STATUS SYS', flex: 2, sortKey: 'status_sys'),
+                            _colHeader(c, 'STATUS RH', flex: 2, sortKey: 'status_rh'),
                             _colHeader(c, 'ACCESO', flex: 2),
                             const SizedBox(width: 48),
                           ],
@@ -539,7 +543,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                           child: Center(child: CircularProgressIndicator()),
                         )
                       else
-                        ...items.asMap().entries.map((e) {
+                        ..._sortedItems(items).asMap().entries.map((e) {
                             final i = e.key;
                             final u = e.value;
                             final role = u['role'] ?? 'usuario';
@@ -713,15 +717,76 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  Widget _colHeader(SiColors c, String label, {int flex = 1}) {
+  void _onSort(String field) {
+    setState(() {
+      if (_sortField == field) {
+        _sortAsc = !_sortAsc;
+      } else {
+        _sortField = field;
+        _sortAsc = true;
+      }
+    });
+  }
+
+  List<Map<String, dynamic>> _sortedItems(List<Map<String, dynamic>> items) {
+    if (_sortField == null) return items;
+    final sorted = [...items];
+    sorted.sort((a, b) {
+      dynamic va = a[_sortField];
+      dynamic vb = b[_sortField];
+      // Numérico para numero_empleado
+      if (_sortField == 'numero_empleado') {
+        va = int.tryParse(va?.toString() ?? '') ?? 0;
+        vb = int.tryParse(vb?.toString() ?? '') ?? 0;
+        return _sortAsc ? (va as int).compareTo(vb) : (vb as int).compareTo(va);
+      }
+      // Texto para el resto
+      final sa = (va ?? '').toString().toLowerCase();
+      final sb = (vb ?? '').toString().toLowerCase();
+      return _sortAsc ? sa.compareTo(sb) : sb.compareTo(sa);
+    });
+    return sorted;
+  }
+
+  Widget _colHeader(SiColors c, String label, {int flex = 1, String? sortKey}) {
+    final isActive = _sortField == sortKey;
     return Expanded(
       flex: flex,
-      child: Text(label,
-          style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: c.ink4,
-              letterSpacing: 0.8)),
+      child: sortKey == null
+          ? Text(label,
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: c.ink4,
+                  letterSpacing: 0.8))
+          : InkWell(
+              onTap: () => _onSort(sortKey),
+              borderRadius: BorderRadius.circular(4),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(label,
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: isActive ? c.brand : c.ink4,
+                            letterSpacing: 0.8)),
+                    const SizedBox(width: 3),
+                    Icon(
+                      isActive
+                          ? (_sortAsc
+                              ? Icons.arrow_upward_rounded
+                              : Icons.arrow_downward_rounded)
+                          : Icons.unfold_more_rounded,
+                      size: 13,
+                      color: isActive ? c.brand : c.ink4,
+                    ),
+                  ],
+                ),
+              ),
+            ),
     );
   }
 
