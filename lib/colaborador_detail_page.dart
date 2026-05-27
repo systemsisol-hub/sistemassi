@@ -228,6 +228,11 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
                     ],
                   ),
 
+                if (_hasAccessData()) ...[
+                  const SizedBox(height: SiSpace.x4),
+                  _buildAccessCard(context),
+                ],
+
                 if (colab['observaciones'] != null && colab['observaciones'].toString().isNotEmpty) ...[
                   const SizedBox(height: SiSpace.x4),
                   _buildInfoCard(context, 'Observaciones', [
@@ -417,6 +422,52 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
       else
         ..._assignedEquipment!.map((item) => _EquipmentRow(item: item, c: c)),
     ]);
+  }
+
+  bool _hasAccessData() {
+    final colab = widget.colab;
+    const keys = [
+      'mail_user', 'mail_pass',
+      'drp_user',  'drp_pass',
+      'gp_user',   'gp_pass',
+      'bitrix_user','bitrix_pass',
+      'ek_user',   'ek_pass',
+      'otro_user', 'otro_pass',
+    ];
+    return keys.any((k) => (colab[k] as String?)?.trim().isNotEmpty == true);
+  }
+
+  Widget _buildAccessCard(BuildContext context) {
+    final colab = widget.colab;
+
+    final systems = <Map<String, Object?>>[
+      {'label': 'Correo',  'icon': Icons.email_outlined,        'user': colab['mail_user'],    'pass': colab['mail_pass']},
+      {'label': 'DRP',     'icon': Icons.storage_outlined,      'user': colab['drp_user'],     'pass': colab['drp_pass']},
+      {'label': 'GP',      'icon': Icons.apps_outlined,         'user': colab['gp_user'],      'pass': colab['gp_pass']},
+      {'label': 'Bitrix',  'icon': Icons.cloud_outlined,        'user': colab['bitrix_user'],  'pass': colab['bitrix_pass']},
+      {'label': 'EK',      'icon': Icons.receipt_long_outlined, 'user': colab['ek_user'],      'pass': colab['ek_pass']},
+      {'label': 'Otro',    'icon': Icons.lock_outline,          'user': colab['otro_user'],    'pass': colab['otro_pass']},
+    ];
+
+    final active = systems.where((s) =>
+      (s['user'] as String?)?.trim().isNotEmpty == true ||
+      (s['pass'] as String?)?.trim().isNotEmpty == true,
+    ).toList();
+
+    return _buildInfoCard(
+      context,
+      'Acceso del Sistema',
+      active.asMap().entries.map<Widget>((entry) {
+        final isLast = entry.key == active.length - 1;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _AccessSystemRow(system: entry.value),
+            if (!isLast) const Divider(height: 20),
+          ],
+        );
+      }).toList(),
+    );
   }
 
   Future<void> _printFicha(BuildContext context) async {
@@ -743,6 +794,162 @@ class _EquipmentRow extends StatelessWidget {
       case 'dañado': return 'danger';
       default: return 'default';
     }
+  }
+}
+
+// ──────────────────────────────────────────────
+// Access section widgets
+// ──────────────────────────────────────────────
+
+class _AccessSystemRow extends StatelessWidget {
+  final Map<String, Object?> system;
+  const _AccessSystemRow({required this.system});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = SiColors.of(context);
+    final label = system['label'] as String;
+    final icon  = system['icon']  as IconData;
+    final user  = (system['user'] as String?)?.trim();
+    final pass  = (system['pass'] as String?)?.trim();
+    final hasUser = user != null && user.isNotEmpty;
+    final hasPass = pass != null && pass.isNotEmpty;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // System label row
+          Row(
+            children: [
+              Icon(icon, size: 14, color: c.brand),
+              const SizedBox(width: 8),
+              Text(
+                label.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: c.ink2,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          // Indented credentials
+          Padding(
+            padding: const EdgeInsets.only(left: 22),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (hasUser)
+                  _CredRow(
+                    icon: Icons.alternate_email,
+                    label: 'Usuario',
+                    value: user!,
+                    isPassword: false,
+                  ),
+                if (hasPass)
+                  _CredRow(
+                    icon: Icons.key_outlined,
+                    label: 'Contraseña',
+                    value: pass!,
+                    isPassword: true,
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CredRow extends StatefulWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final bool isPassword;
+  const _CredRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.isPassword,
+  });
+
+  @override
+  State<_CredRow> createState() => _CredRowState();
+}
+
+class _CredRowState extends State<_CredRow> {
+  bool _visible = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = SiColors.of(context);
+    final obscured = widget.isPassword && !_visible;
+    final displayed = obscured
+        ? '•' * widget.value.length.clamp(6, 18)
+        : widget.value;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          Icon(widget.icon, size: 12, color: c.ink3),
+          const SizedBox(width: 6),
+          Text(
+            '${widget.label}: ',
+            style: TextStyle(fontSize: 11, color: c.ink3),
+          ),
+          Expanded(
+            child: SelectableText(
+              displayed,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: obscured ? c.ink3 : c.ink,
+                letterSpacing: obscured ? 2 : 0,
+              ),
+            ),
+          ),
+          // Eye toggle (passwords only)
+          if (widget.isPassword)
+            GestureDetector(
+              onTap: () => setState(() => _visible = !_visible),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Icon(
+                  _visible
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined,
+                  size: 15,
+                  color: c.ink3,
+                ),
+              ),
+            ),
+          // Copy button
+          GestureDetector(
+            onTap: () {
+              Clipboard.setData(ClipboardData(text: widget.value));
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('${widget.label} copiado'),
+                  duration: const Duration(seconds: 1),
+                  behavior: SnackBarBehavior.floating,
+                  width: 240,
+                ),
+              );
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Icon(Icons.copy_outlined, size: 14, color: c.ink3),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
