@@ -151,20 +151,20 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
                           _infoRow(context, Icons.call, 'Ref. Teléfono', colab['referencia_telefono']),
                           _infoRow(context, Icons.family_restroom, 'Ref. Relación', colab['referencia_relacion']),
                         ]),
-                        if (_hasAccessData()) ...[
-                          const SizedBox(height: SiSpace.x4),
-                          _buildAccessCard(context),
-                        ],
-                        const SizedBox(height: SiSpace.x4),
-                        _buildEquipmentCard(context, c),
                       ],
                     ),
                   ),
                   const SizedBox(width: SiSpace.x4),
-                  // Col 2 — Datos Bancarios
+                  // Col 2 — Acceso + Equipo + Bancarios
                   Expanded(
                     child: Column(
                       children: [
+                        if (_hasAccessData()) ...[
+                          _buildAccessCard(context),
+                          const SizedBox(height: SiSpace.x4),
+                        ],
+                        _buildEquipmentCard(context, c),
+                        const SizedBox(height: SiSpace.x4),
                         _buildInfoCard(context, 'Datos Bancarios', [
                           _infoRow(context, Icons.account_balance, 'Banco', colab['banco']),
                           _infoRow(context, Icons.credit_card, 'Cuenta', colab['cuenta']),
