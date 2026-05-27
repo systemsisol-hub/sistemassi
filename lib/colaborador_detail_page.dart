@@ -112,141 +112,140 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(SiSpace.x6),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 1200),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildHeader(context, c),
-                const SizedBox(height: SiSpace.x6),
-                
-                if (isDesktop)
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Left Column
-                      Expanded(
-                        flex: 1,
-                        child: Column(
-                          children: [
-                            _buildInfoCard(context, 'Datos Personales', [
-                              _infoRow(context, Icons.wc, 'Género', colab['genero']),
-                              _infoRow(context, Icons.calendar_today, 'Fecha Nac.', colab['fecha_nacimiento']),
-                              _infoRow(context, Icons.location_city, 'Lugar Nac.', colab['lugar_nacimiento']),
-                              _infoRow(context, Icons.favorite, 'Estado Civil', colab['estado_civil']),
-                              _infoRow(context, Icons.straighten, 'Talla', colab['talla']),
-                              _infoRow(context, Icons.school, 'Escolaridad', colab['escolaridad']),
-                              _infoRow(context, Icons.info_outline, 'Detalle Esc.', colab['detalle_escolaridad']),
-                            ]),
-                            const SizedBox(height: SiSpace.x4),
-                            _buildInfoCard(context, 'Datos Bancarios', [
-                              _infoRow(context, Icons.account_balance, 'Banco', colab['banco']),
-                              _infoRow(context, Icons.credit_card, 'Cuenta', colab['cuenta']),
-                              _infoRow(context, Icons.numbers, 'Clabe', colab['clabe']),
-                            ]),
-                            const SizedBox(height: SiSpace.x4),
-                            _buildEquipmentCard(context, c),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: SiSpace.x4),
-                      // Center Column
-                      Expanded(
-                        flex: 1,
-                        child: Column(
-                          children: [
-                            _buildInfoCard(context, 'Domicilio y Contacto', [
-                              _infoRow(context, Icons.home, 'Calle', '${colab['calle'] ?? ''} ${colab['no_calle'] ?? ''}'),
-                              _infoRow(context, Icons.map, 'Colonia', colab['colonia']),
-                              _infoRow(context, Icons.location_on, 'Municipio', colab['municipio_alcaldia']),
-                              _infoRow(context, Icons.public, 'Estado Fed.', colab['estado_federal']),
-                              _infoRow(context, Icons.pin_drop, 'C.P.', colab['codigo_postal']),
-                              const Divider(height: 24),
-                              _infoRow(context, Icons.phone, 'Teléfono', colab['telefono']),
-                              _infoRow(context, Icons.smartphone, 'Celular', colab['celular']),
-                              _infoRow(context, Icons.email, 'Email', colab['correo_personal']),
-                            ]),
-                            const SizedBox(height: SiSpace.x4),
-                            _buildInfoCard(context, 'Referencia', [
-                              _infoRow(context, Icons.person_outline, 'Nombre', colab['referencia_nombre']),
-                              _infoRow(context, Icons.call, 'Teléfono', colab['referencia_telefono']),
-                              _infoRow(context, Icons.family_restroom, 'Relación', colab['referencia_relacion']),
-                            ]),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: SiSpace.x4),
-                      // Right Column
-                      Expanded(
-                        flex: 1,
-                        child: Column(
-                          children: [
-                            _buildInfoCard(context, 'Datos Empresa', [
-                              _infoRow(context, Icons.business_center, 'Tipo', colab['empresa_tipo']),
-                              _infoRow(context, Icons.account_tree, 'Área', colab['area']),
-                              _infoRow(context, Icons.work, 'Puesto', colab['puesto']),
-                              _infoRow(context, Icons.place, 'Ubicación', colab['ubicacion']),
-                              _infoRow(context, Icons.business, 'Empresa', colab['empresa']),
-                              _infoRow(context, Icons.person, 'Jefe Inmediato', colab['jefe_inmediato']),
-                              _infoRow(context, Icons.group, 'Líder', colab['lider']),
-                              _infoRow(context, Icons.person_pin, 'Gerente Reg.', colab['gerente_regional']),
-                              _infoRow(context, Icons.supervisor_account, 'Director', colab['director']),
-                              _infoRow(context, Icons.schedule, 'Horario', horarioDisplay),
-                            ]),
-                            const SizedBox(height: SiSpace.x4),
-                            _buildInfoCard(context, 'Area RH', [
-                              _infoRow(context, Icons.person_search, 'Recluta', colab['recluta']),
-                              _infoRow(context, Icons.badge, 'Reclutador', colab['reclutador']),
-                              _infoRow(context, Icons.source, 'Fuente', colab['fuente_reclutamiento']),
-                              _infoRow(context, Icons.event_available, 'Fecha Ingreso', colab['fecha_ingreso']),
-                              _infoRow(context, Icons.history, 'Fecha Reingreso', colab['fecha_reingreso']),
-                              _infoRow(context, Icons.sync, 'Fecha Cambio', colab['fecha_cambio']),
-                              _infoRow(context, Icons.event_busy, 'Fecha Baja', colab['fecha_baja']),
-                            ]),
-                          ],
-                        ),
-                      ),
-                    ],
-                  )
-                else
-                  Column(
-                    children: [
-                      _buildInfoCard(context, 'Datos Personales', [
-                        _infoRow(context, Icons.wc, 'Género', colab['genero']),
-                        _infoRow(context, Icons.calendar_today, 'Fecha Nac.', colab['fecha_nacimiento']),
-                        _infoRow(context, Icons.straighten, 'Talla', colab['talla']),
-                      ]),
-                      const SizedBox(height: SiSpace.x4),
-                      _buildEquipmentCard(context, c),
-                      const SizedBox(height: SiSpace.x4),
-                      _buildInfoCard(context, 'Datos Empresa', [
-                        _infoRow(context, Icons.work, 'Puesto', colab['puesto']),
-                        _infoRow(context, Icons.business, 'Empresa', colab['empresa']),
-                        _infoRow(context, Icons.schedule, 'Horario', horarioDisplay),
-                      ]),
-                    ],
-                  ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildHeader(context, c),
+            const SizedBox(height: SiSpace.x6),
 
-                if (_hasAccessData()) ...[
-                  const SizedBox(height: SiSpace.x4),
-                  _buildAccessCard(context),
-                ],
-
-                if (colab['observaciones'] != null && colab['observaciones'].toString().isNotEmpty) ...[
-                  const SizedBox(height: SiSpace.x4),
-                  _buildInfoCard(context, 'Observaciones', [
-                    Text(
-                      colab['observaciones'].toString().replaceAll('\\n', '\n'),
-                      style: TextStyle(fontSize: 13, color: c.ink2, height: 1.5),
-                      softWrap: true,
+            if (isDesktop)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Col 1 — Datos Personales
+                  Expanded(
+                    child: Column(
+                      children: [
+                        _buildInfoCard(context, 'Datos Personales', [
+                          _infoRow(context, Icons.wc, 'Género', colab['genero']),
+                          _infoRow(context, Icons.calendar_today, 'Fecha Nac.', colab['fecha_nacimiento']),
+                          _infoRow(context, Icons.location_city, 'Lugar Nac.', colab['lugar_nacimiento']),
+                          _infoRow(context, Icons.favorite, 'Estado Civil', colab['estado_civil']),
+                          _infoRow(context, Icons.straighten, 'Talla', colab['talla']),
+                          _infoRow(context, Icons.school, 'Escolaridad', colab['escolaridad']),
+                          _infoRow(context, Icons.info_outline, 'Detalle Esc.', colab['detalle_escolaridad']),
+                        ]),
+                      ],
                     ),
+                  ),
+                  const SizedBox(width: SiSpace.x4),
+                  // Col 2 — Domicilio + Referencia
+                  Expanded(
+                    child: Column(
+                      children: [
+                        _buildInfoCard(context, 'Domicilio y Contacto', [
+                          _infoRow(context, Icons.home, 'Calle', '${colab['calle'] ?? ''} ${colab['no_calle'] ?? ''}'),
+                          _infoRow(context, Icons.map, 'Colonia', colab['colonia']),
+                          _infoRow(context, Icons.location_on, 'Municipio', colab['municipio_alcaldia']),
+                          _infoRow(context, Icons.public, 'Estado Fed.', colab['estado_federal']),
+                          _infoRow(context, Icons.pin_drop, 'C.P.', colab['codigo_postal']),
+                          const Divider(height: 24),
+                          _infoRow(context, Icons.phone, 'Teléfono', colab['telefono']),
+                          _infoRow(context, Icons.smartphone, 'Celular', colab['celular']),
+                          _infoRow(context, Icons.email, 'Email', colab['correo_personal']),
+                        ]),
+                        const SizedBox(height: SiSpace.x4),
+                        _buildInfoCard(context, 'Referencia', [
+                          _infoRow(context, Icons.person_outline, 'Nombre', colab['referencia_nombre']),
+                          _infoRow(context, Icons.call, 'Teléfono', colab['referencia_telefono']),
+                          _infoRow(context, Icons.family_restroom, 'Relación', colab['referencia_relacion']),
+                        ]),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: SiSpace.x4),
+                  // Col 3 — Datos Empresa
+                  Expanded(
+                    child: Column(
+                      children: [
+                        _buildInfoCard(context, 'Datos Empresa', [
+                          _infoRow(context, Icons.business_center, 'Tipo', colab['empresa_tipo']),
+                          _infoRow(context, Icons.account_tree, 'Área', colab['area']),
+                          _infoRow(context, Icons.work, 'Puesto', colab['puesto']),
+                          _infoRow(context, Icons.place, 'Ubicación', colab['ubicacion']),
+                          _infoRow(context, Icons.business, 'Empresa', colab['empresa']),
+                          _infoRow(context, Icons.person, 'Jefe Inmediato', colab['jefe_inmediato']),
+                          _infoRow(context, Icons.group, 'Líder', colab['lider']),
+                          _infoRow(context, Icons.person_pin, 'Gerente Reg.', colab['gerente_regional']),
+                          _infoRow(context, Icons.supervisor_account, 'Director', colab['director']),
+                          _infoRow(context, Icons.schedule, 'Horario', horarioDisplay),
+                        ]),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: SiSpace.x4),
+                  // Col 4 — Area RH + Bancarios + Equipo
+                  Expanded(
+                    child: Column(
+                      children: [
+                        _buildInfoCard(context, 'Area RH', [
+                          _infoRow(context, Icons.person_search, 'Recluta', colab['recluta']),
+                          _infoRow(context, Icons.badge, 'Reclutador', colab['reclutador']),
+                          _infoRow(context, Icons.source, 'Fuente', colab['fuente_reclutamiento']),
+                          _infoRow(context, Icons.event_available, 'Fecha Ingreso', colab['fecha_ingreso']),
+                          _infoRow(context, Icons.history, 'Fecha Reingreso', colab['fecha_reingreso']),
+                          _infoRow(context, Icons.sync, 'Fecha Cambio', colab['fecha_cambio']),
+                          _infoRow(context, Icons.event_busy, 'Fecha Baja', colab['fecha_baja']),
+                        ]),
+                        const SizedBox(height: SiSpace.x4),
+                        _buildInfoCard(context, 'Datos Bancarios', [
+                          _infoRow(context, Icons.account_balance, 'Banco', colab['banco']),
+                          _infoRow(context, Icons.credit_card, 'Cuenta', colab['cuenta']),
+                          _infoRow(context, Icons.numbers, 'Clabe', colab['clabe']),
+                        ]),
+                        const SizedBox(height: SiSpace.x4),
+                        _buildEquipmentCard(context, c),
+                      ],
+                    ),
+                  ),
+                ],
+              )
+            else
+              Column(
+                children: [
+                  _buildInfoCard(context, 'Datos Personales', [
+                    _infoRow(context, Icons.wc, 'Género', colab['genero']),
+                    _infoRow(context, Icons.calendar_today, 'Fecha Nac.', colab['fecha_nacimiento']),
+                    _infoRow(context, Icons.straighten, 'Talla', colab['talla']),
+                  ]),
+                  const SizedBox(height: SiSpace.x4),
+                  _buildEquipmentCard(context, c),
+                  const SizedBox(height: SiSpace.x4),
+                  _buildInfoCard(context, 'Datos Empresa', [
+                    _infoRow(context, Icons.work, 'Puesto', colab['puesto']),
+                    _infoRow(context, Icons.business, 'Empresa', colab['empresa']),
+                    _infoRow(context, Icons.schedule, 'Horario', horarioDisplay),
                   ]),
                 ],
-                const SizedBox(height: 40),
-              ],
-            ),
-          ),
+              ),
+
+            if (_hasAccessData()) ...[
+              const SizedBox(height: SiSpace.x4),
+              _buildAccessCard(context),
+            ],
+
+            if (colab['observaciones'] != null && colab['observaciones'].toString().isNotEmpty) ...[
+              const SizedBox(height: SiSpace.x4),
+              _buildInfoCard(context, 'Observaciones', [
+                Text(
+                  colab['observaciones'].toString().replaceAll('\\n', '\n'),
+                  style: TextStyle(fontSize: 13, color: c.ink2, height: 1.5),
+                  softWrap: true,
+                ),
+              ]),
+            ],
+            const SizedBox(height: 40),
+          ],
         ),
       ),
     );
