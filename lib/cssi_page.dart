@@ -357,11 +357,99 @@ class _CssiPageState extends State<CssiPage> {
 
       // FutureBuilder for active collaborators
       Widget supervisorDropdowns(StateSetter setDialogState) {
+        // Autocomplete con búsqueda multi-palabra para campos de supervisor
+        Widget supervisorAutocomplete({
+          required String label,
+          required String? currentValue,
+          required List<String> list,
+          required void Function(String?) onChanged,
+        }) {
+          final c = SiColors.of(context);
+          return fieldColumn(
+            Autocomplete<String>(
+              key: ValueKey('$label-$currentValue'),
+              initialValue: TextEditingValue(text: currentValue ?? ''),
+              optionsBuilder: (textEditingValue) {
+                final q = textEditingValue.text.trim().toLowerCase();
+                if (q.isEmpty) return list;
+                final words = q.split(' ').where((w) => w.isNotEmpty).toList();
+                return list.where((name) {
+                  final hay = name.toLowerCase();
+                  return words.every((w) => hay.contains(w));
+                });
+              },
+              displayStringForOption: (option) => option,
+              onSelected: (value) => setDialogState(() => onChanged(value)),
+              fieldViewBuilder: (context, controller, focusNode, onSubmitted) {
+                return TextField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  decoration: InputDecoration(
+                    labelText: label,
+                    prefixIcon: const Icon(Icons.search, size: 18),
+                    suffixIcon: ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: controller,
+                      builder: (_, val, __) => val.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.close, size: 16),
+                              padding: EdgeInsets.zero,
+                              tooltip: 'Limpiar',
+                              onPressed: () {
+                                controller.clear();
+                                focusNode.requestFocus();
+                                setDialogState(() => onChanged(null));
+                              },
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                  ),
+                  onSubmitted: (_) => onSubmitted(),
+                );
+              },
+              optionsViewBuilder: (context, onSelected, options) {
+                return Align(
+                  alignment: Alignment.topLeft,
+                  child: Material(
+                    elevation: 6,
+                    borderRadius: BorderRadius.circular(10),
+                    color: c.panel,
+                    shadowColor: Colors.black26,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 220, maxWidth: 360),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: ListView.builder(
+                          shrinkWrap: true,
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          itemCount: options.length,
+                          itemBuilder: (context, index) {
+                            final name = options.elementAt(index);
+                            return InkWell(
+                              onTap: () => onSelected(name),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                child: Text(
+                                  name,
+                                  style: TextStyle(fontSize: 13, color: c.ink),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          );
+        }
+
         return FutureBuilder<List<String>>(
           future: Supabase.instance.client
               .from('profiles')
               .select('nombre, paterno, materno')
-              .eq('status_rh', 'ACTIVO')
+              .neq('status_rh', 'BAJA')
               .order('nombre')
               .then((data) {
                 final list = (data as List).map((e) {
@@ -370,42 +458,37 @@ class _CssiPageState extends State<CssiPage> {
                   final m = e['materno'] ?? '';
                   return '$n $p $m'.trim().toUpperCase();
                 }).toList();
-                list.sort(); // Orden ascendente A-Z
+                list.sort();
                 return list;
               }),
           builder: (context, snapshot) {
             final list = snapshot.data ?? [];
-            final items = [
-              const DropdownMenuItem<String>(value: null, child: Text('Ninguno')),
-              ...list.map((e) => DropdownMenuItem(value: e, child: Text(e)))
-            ];
-
             return Column(
               children: [
-                fieldColumn(DropdownButtonFormField<String>(
-                  value: list.contains(jefeInmediato) ? jefeInmediato : null,
-                  decoration: const InputDecoration(labelText: 'Jefe Inmediato'),
-                  items: items,
-                  onChanged: (v) => setDialogState(() => jefeInmediato = v),
-                )),
-                fieldColumn(DropdownButtonFormField<String>(
-                  value: list.contains(liderValue) ? liderValue : null,
-                  decoration: const InputDecoration(labelText: 'Líder'),
-                  items: items,
-                  onChanged: (v) => setDialogState(() => liderValue = v),
-                )),
-                fieldColumn(DropdownButtonFormField<String>(
-                  value: list.contains(gerenteRegional) ? gerenteRegional : null,
-                  decoration: const InputDecoration(labelText: 'Gerente Regional'),
-                  items: items,
-                  onChanged: (v) => setDialogState(() => gerenteRegional = v),
-                )),
-                fieldColumn(DropdownButtonFormField<String>(
-                  value: list.contains(directorValue) ? directorValue : null,
-                  decoration: const InputDecoration(labelText: 'Director'),
-                  items: items,
-                  onChanged: (v) => setDialogState(() => directorValue = v),
-                )),
+                supervisorAutocomplete(
+                  label: 'Jefe Inmediato',
+                  currentValue: list.contains(jefeInmediato) ? jefeInmediato : null,
+                  list: list,
+                  onChanged: (v) => jefeInmediato = v,
+                ),
+                supervisorAutocomplete(
+                  label: 'Líder',
+                  currentValue: list.contains(liderValue) ? liderValue : null,
+                  list: list,
+                  onChanged: (v) => liderValue = v,
+                ),
+                supervisorAutocomplete(
+                  label: 'Gerente Regional',
+                  currentValue: list.contains(gerenteRegional) ? gerenteRegional : null,
+                  list: list,
+                  onChanged: (v) => gerenteRegional = v,
+                ),
+                supervisorAutocomplete(
+                  label: 'Director',
+                  currentValue: list.contains(directorValue) ? directorValue : null,
+                  list: list,
+                  onChanged: (v) => directorValue = v,
+                ),
               ],
             );
           },
