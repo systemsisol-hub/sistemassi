@@ -1741,7 +1741,7 @@ class _CssiPageState extends State<CssiPage> {
               DataColumn(label: SizedBox(width: screenWidth * 0.15, child: Text('PUESTO', style: TextStyle(color: c.ink3, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
               DataColumn(label: SizedBox(width: screenWidth * 0.15, child: Text('UBICACIÓN', style: TextStyle(color: c.ink3, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
               DataColumn(label: SizedBox(width: screenWidth * 0.12, child: Text('ESTADO', style: TextStyle(color: c.ink3, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
-              const DataColumn(label: SizedBox()),
+              DataColumn(label: SizedBox(width: 48)),
             ],
             source: _CssiDataSource(
               items: filtered,
@@ -1922,8 +1922,8 @@ class _CssiDataSource extends DataTableSource {
           ),
         ),
         DataCell(
-          Align(
-            alignment: Alignment.centerRight,
+          SizedBox(
+            width: 48,
             child: isAdmin ? PopupMenuButton<String>(
               icon: Icon(Icons.more_horiz, color: siColors.ink3),
               onSelected: (v) {
