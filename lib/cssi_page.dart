@@ -262,6 +262,23 @@ class _CssiPageState extends State<CssiPage> {
     final imssCtrl = TextEditingController(text: item?['imss']);
     final numeroEmpleadoCtrl =
         TextEditingController(text: item?['numero_empleado']);
+
+    // Al crear un nuevo registro, precarga el siguiente número de empleado
+    if (!isEditing) {
+      Supabase.instance.client
+          .from('profiles')
+          .select('numero_empleado')
+          .then((data) {
+            final nums = (data as List)
+                .map((e) => int.tryParse(e['numero_empleado']?.toString() ?? '') ?? 0)
+                .where((n) => n > 0)
+                .toList();
+            if (nums.isNotEmpty) {
+              final next = (nums.reduce((a, b) => a > b ? a : b) + 1).toString();
+              numeroEmpleadoCtrl.text = next;
+            }
+          });
+    }
     final fechaNacCtrl = TextEditingController(text: item?['fecha_nacimiento']);
     final detalleEscolCtrl =
         TextEditingController(text: item?['detalle_escolaridad']);
