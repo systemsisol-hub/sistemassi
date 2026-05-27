@@ -122,7 +122,7 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Col 1 — Datos Personales
+                  // Col 1 — Personal + Domicilio+Referencia + Acceso + Equipo
                   Expanded(
                     child: Column(
                       children: [
@@ -135,14 +135,7 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
                           _infoRow(context, Icons.school, 'Escolaridad', colab['escolaridad']),
                           _infoRow(context, Icons.info_outline, 'Detalle Esc.', colab['detalle_escolaridad']),
                         ]),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: SiSpace.x4),
-                  // Col 2 — Domicilio + Referencia
-                  Expanded(
-                    child: Column(
-                      children: [
+                        const SizedBox(height: SiSpace.x4),
                         _buildInfoCard(context, 'Domicilio y Contacto', [
                           _infoRow(context, Icons.home, 'Calle', '${colab['calle'] ?? ''} ${colab['no_calle'] ?? ''}'),
                           _infoRow(context, Icons.map, 'Colonia', colab['colonia']),
@@ -153,12 +146,29 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
                           _infoRow(context, Icons.phone, 'Teléfono', colab['telefono']),
                           _infoRow(context, Icons.smartphone, 'Celular', colab['celular']),
                           _infoRow(context, Icons.email, 'Email', colab['correo_personal']),
+                          const Divider(height: 24),
+                          _infoRow(context, Icons.person_outline, 'Ref. Nombre', colab['referencia_nombre']),
+                          _infoRow(context, Icons.call, 'Ref. Teléfono', colab['referencia_telefono']),
+                          _infoRow(context, Icons.family_restroom, 'Ref. Relación', colab['referencia_relacion']),
                         ]),
+                        if (_hasAccessData()) ...[
+                          const SizedBox(height: SiSpace.x4),
+                          _buildAccessCard(context),
+                        ],
                         const SizedBox(height: SiSpace.x4),
-                        _buildInfoCard(context, 'Referencia', [
-                          _infoRow(context, Icons.person_outline, 'Nombre', colab['referencia_nombre']),
-                          _infoRow(context, Icons.call, 'Teléfono', colab['referencia_telefono']),
-                          _infoRow(context, Icons.family_restroom, 'Relación', colab['referencia_relacion']),
+                        _buildEquipmentCard(context, c),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: SiSpace.x4),
+                  // Col 2 — Datos Bancarios
+                  Expanded(
+                    child: Column(
+                      children: [
+                        _buildInfoCard(context, 'Datos Bancarios', [
+                          _infoRow(context, Icons.account_balance, 'Banco', colab['banco']),
+                          _infoRow(context, Icons.credit_card, 'Cuenta', colab['cuenta']),
+                          _infoRow(context, Icons.numbers, 'Clabe', colab['clabe']),
                         ]),
                       ],
                     ),
@@ -184,7 +194,7 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
                     ),
                   ),
                   const SizedBox(width: SiSpace.x4),
-                  // Col 4 — Area RH + Bancarios + Equipo
+                  // Col 4 — Area RH
                   Expanded(
                     child: Column(
                       children: [
@@ -197,14 +207,6 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
                           _infoRow(context, Icons.sync, 'Fecha Cambio', colab['fecha_cambio']),
                           _infoRow(context, Icons.event_busy, 'Fecha Baja', colab['fecha_baja']),
                         ]),
-                        const SizedBox(height: SiSpace.x4),
-                        _buildInfoCard(context, 'Datos Bancarios', [
-                          _infoRow(context, Icons.account_balance, 'Banco', colab['banco']),
-                          _infoRow(context, Icons.credit_card, 'Cuenta', colab['cuenta']),
-                          _infoRow(context, Icons.numbers, 'Clabe', colab['clabe']),
-                        ]),
-                        const SizedBox(height: SiSpace.x4),
-                        _buildEquipmentCard(context, c),
                       ],
                     ),
                   ),
@@ -219,6 +221,18 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
                     _infoRow(context, Icons.straighten, 'Talla', colab['talla']),
                   ]),
                   const SizedBox(height: SiSpace.x4),
+                  _buildInfoCard(context, 'Domicilio y Contacto', [
+                    _infoRow(context, Icons.home, 'Calle', '${colab['calle'] ?? ''} ${colab['no_calle'] ?? ''}'),
+                    _infoRow(context, Icons.map, 'Colonia', colab['colonia']),
+                    _infoRow(context, Icons.phone, 'Teléfono', colab['telefono']),
+                    _infoRow(context, Icons.smartphone, 'Celular', colab['celular']),
+                    _infoRow(context, Icons.email, 'Email', colab['correo_personal']),
+                  ]),
+                  const SizedBox(height: SiSpace.x4),
+                  if (_hasAccessData()) ...[
+                    _buildAccessCard(context),
+                    const SizedBox(height: SiSpace.x4),
+                  ],
                   _buildEquipmentCard(context, c),
                   const SizedBox(height: SiSpace.x4),
                   _buildInfoCard(context, 'Datos Empresa', [
@@ -228,11 +242,6 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
                   ]),
                 ],
               ),
-
-            if (_hasAccessData()) ...[
-              const SizedBox(height: SiSpace.x4),
-              _buildAccessCard(context),
-            ],
 
             if (colab['observaciones'] != null && colab['observaciones'].toString().isNotEmpty) ...[
               const SizedBox(height: SiSpace.x4),
