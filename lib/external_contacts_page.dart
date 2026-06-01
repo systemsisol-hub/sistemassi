@@ -352,9 +352,7 @@ class _ExternalContactsPageState extends State<ExternalContactsPage> {
               child:
                   CircularProgressIndicator(color: c.brand, strokeWidth: 2),
             )
-          : filtered.isEmpty
-              ? _buildEmptyState(c)
-              : _buildMainTable(c, filtered),
+          : _buildMainTable(c, filtered),
     );
   }
 
@@ -384,35 +382,41 @@ class _ExternalContactsPageState extends State<ExternalContactsPage> {
                   ),
                 ),
                 const Divider(height: 1),
-                // Grid Content
-                GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                    maxCrossAxisExtent: 466,
-                    mainAxisExtent: 180,
-                    crossAxisSpacing: 1,
-                    mainAxisSpacing: 1,
-                  ),
-                  itemCount: items.length,
-                  itemBuilder: (context, index) {
-                    final item = items[index];
-                    return Container(
-                      decoration: BoxDecoration(
-                        color: c.panel,
-                        border: Border(
-                          right: BorderSide(color: c.line2, width: 0.5),
-                          bottom: BorderSide(color: c.line2, width: 0.5),
+                // Grid Content or empty state
+                if (items.isEmpty)
+                  SizedBox(
+                    height: 300,
+                    child: _buildEmptyState(c),
+                  )
+                else
+                  GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                      maxCrossAxisExtent: 466,
+                      mainAxisExtent: 180,
+                      crossAxisSpacing: 1,
+                      mainAxisSpacing: 1,
+                    ),
+                    itemCount: items.length,
+                    itemBuilder: (context, index) {
+                      final item = items[index];
+                      return Container(
+                        decoration: BoxDecoration(
+                          color: c.panel,
+                          border: Border(
+                            right: BorderSide(color: c.line2, width: 0.5),
+                            bottom: BorderSide(color: c.line2, width: 0.5),
+                          ),
                         ),
-                      ),
-                      child: _ContactGridTile(
-                        item: item,
-                        onEdit: () => _showContactForm(contact: item),
-                        onDelete: () => _deleteContact(item['id']),
-                      ),
-                    );
-                  },
-                ),
+                        child: _ContactGridTile(
+                          item: item,
+                          onEdit: () => _showContactForm(contact: item),
+                          onDelete: () => _deleteContact(item['id']),
+                        ),
+                      );
+                    },
+                  ),
               ],
             ),
         ),
