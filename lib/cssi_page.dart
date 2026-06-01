@@ -1067,6 +1067,7 @@ class _CssiPageState extends State<CssiPage> {
                 'PROMOTORA_ZUMPANGO',
                 'PROYECTO_VIDAMAR',
                 'PUEBLA',
+                'PUNTA_PACIFICO',
                 'QUERETARO',
                 'QUINTANA_ROO',
                 'SALTO_DEL_AGUA',
