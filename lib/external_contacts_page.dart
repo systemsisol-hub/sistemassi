@@ -554,7 +554,7 @@ class _ContactGridTile extends StatelessWidget {
           if (phone.isNotEmpty)
             _buildDetailRow(Icons.phone_outlined, phone, c),
           if (email.isNotEmpty)
-            _buildDetailRow(Icons.mail_outline, email, c),
+            _buildDetailRow(Icons.mail_outline, email, c, copyable: true),
           
           SizedBox(height: SiSpace.x3),
           // Tag
@@ -587,22 +587,43 @@ class _ContactGridTile extends StatelessWidget {
     );
   }
 
-  Widget _buildDetailRow(IconData icon, String text, SiColors c) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 2),
-      child: Row(
-        children: [
-          Icon(icon, size: 14, color: c.ink4),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              text,
-              style: TextStyle(fontSize: 13, color: c.ink2),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
+  Widget _buildDetailRow(IconData icon, String text, SiColors c, {bool copyable = false}) {
+    final content = Row(
+      children: [
+        Icon(icon, size: 14, color: c.ink4),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(fontSize: 13, color: c.ink2),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
-        ],
+        ),
+        if (copyable)
+          Icon(Icons.copy_outlined, size: 13, color: c.ink4),
+      ],
+    );
+
+    if (!copyable) {
+      return Padding(padding: const EdgeInsets.only(bottom: 2), child: content);
+    }
+
+    return Builder(
+      builder: (context) => InkWell(
+        borderRadius: BorderRadius.circular(4),
+        onTap: () {
+          Clipboard.setData(ClipboardData(text: text));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Correo copiado: $text'),
+              duration: const Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+              width: 320,
+            ),
+          );
+        },
+        child: Padding(padding: const EdgeInsets.only(bottom: 2), child: content),
       ),
     );
   }
