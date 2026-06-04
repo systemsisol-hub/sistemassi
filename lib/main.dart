@@ -1,15 +1,19 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'main_navigation.dart';
 import 'login_page.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:syncfusion_localizations/syncfusion_localizations.dart';
 import 'theme/si_theme.dart';
+
+// Importación condicional para web
+import 'web_url_strategy_stub.dart'
+    if (dart.library.html) 'package:flutter_web_plugins/url_strategy.dart';
 
 void main() {
   runZonedGuarded(_init, (error, stack) {
@@ -18,7 +22,9 @@ void main() {
 }
 
 Future<void> _init() async {
-  usePathUrlStrategy();
+  if (kIsWeb) {
+    usePathUrlStrategy();
+  }
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('es_MX', null);
 
@@ -26,11 +32,16 @@ Future<void> _init() async {
   var supabaseUrl = const String.fromEnvironment('SB_URL');
   var supabaseAnonKey = const String.fromEnvironment('SB_TOKEN');
 
-  try {
-    await dotenv.load(fileName: ".env");
-    supabaseUrl = dotenv.maybeGet('SB_URL')?.trim() ?? supabaseUrl;
-    supabaseAnonKey = dotenv.maybeGet('SB_TOKEN')?.trim() ?? supabaseAnonKey;
-  } catch (_) {}
+  // Try the asset-bundled .env first (works on all platforms including Android)
+  // then fall back to a root .env for local web dev.
+  for (final path in ['assets/.env', '.env']) {
+    try {
+      await dotenv.load(fileName: path);
+      supabaseUrl = dotenv.maybeGet('SB_URL')?.trim() ?? supabaseUrl;
+      supabaseAnonKey = dotenv.maybeGet('SB_TOKEN')?.trim() ?? supabaseAnonKey;
+      if (supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty) break;
+    } catch (_) {}
+  }
 
   if (supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty) {
     await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
