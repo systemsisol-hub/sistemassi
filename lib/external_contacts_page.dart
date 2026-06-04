@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/services.dart';
@@ -23,82 +22,6 @@ class _ExternalContactsPageState extends State<ExternalContactsPage> {
     _fetchContacts();
   }
 
-  Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(30),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: Container(
-          padding: padding ??
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.85),
-            borderRadius: BorderRadius.circular(30),
-            border: Border.all(color: Colors.grey.withOpacity(0.2)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              )
-            ],
-          ),
-          child: child,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildControls(SiColors c) {
-    return _buildGlassPill(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 200),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Buscar...',
-                hintStyle: TextStyle(color: Colors.grey.shade400),
-                prefixIcon: const Icon(Icons.search, size: 20),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, size: 20),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() => _searchQuery = '');
-                        },
-                      )
-                    : null,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
-                ),
-                filled: true,
-                fillColor: Colors.grey.shade100,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                isDense: true,
-              ),
-              style: const TextStyle(fontSize: 14),
-              onChanged: (v) => setState(() => _searchQuery = v),
-            ),
-          ),
-          const VerticalDivider(
-              width: 1, thickness: 1, indent: 8, endIndent: 8),
-          GestureDetector(
-            onTap: () => _showContactForm(),
-            child: const Padding(
-              padding: EdgeInsets.all(8.0),
-              child: Icon(Icons.add, size: 22, color: Colors.black87),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildEmptyState(SiColors c) {
     return Center(
@@ -343,10 +266,20 @@ class _ExternalContactsPageState extends State<ExternalContactsPage> {
   }  @override
   Widget build(BuildContext context) {
     final c = SiColors.of(context);
+    final isNarrow = MediaQuery.of(context).size.width < 600;
     final filtered = _filteredContacts;
 
     return Scaffold(
       backgroundColor: c.bg,
+      floatingActionButton: isNarrow
+          ? FloatingActionButton(
+              onPressed: () => _showContactForm(),
+              backgroundColor: c.brand,
+              foregroundColor: Colors.white,
+              elevation: 2,
+              child: const Icon(Icons.person_add),
+            )
+          : null,
       body: _isLoading
           ? Center(
               child:
@@ -357,76 +290,9 @@ class _ExternalContactsPageState extends State<ExternalContactsPage> {
   }
 
   Widget _buildMainTable(SiColors c, List<Map<String, dynamic>> items) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(SiSpace.x6),
-      child: Center(
-        child: Card(
-          elevation: 0,
-          clipBehavior: Clip.antiAlias,
-          shape: RoundedRectangleBorder(
-            borderRadius: SiRadius.rLg,
-            side: BorderSide(color: c.line),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Header (Search & Actions)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                  child: Row(
-                    children: [
-                      _buildTableSearchBar(c),
-                      const Spacer(),
-                      _buildAddButton(c),
-                    ],
-                  ),
-                ),
-                const Divider(height: 1),
-                // Grid Content or empty state
-                if (items.isEmpty)
-                  SizedBox(
-                    height: 300,
-                    child: _buildEmptyState(c),
-                  )
-                else
-                  GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                      maxCrossAxisExtent: 466,
-                      mainAxisExtent: 180,
-                      crossAxisSpacing: 1,
-                      mainAxisSpacing: 1,
-                    ),
-                    itemCount: items.length,
-                    itemBuilder: (context, index) {
-                      final item = items[index];
-                      return Container(
-                        decoration: BoxDecoration(
-                          color: c.panel,
-                          border: Border(
-                            right: BorderSide(color: c.line2, width: 0.5),
-                            bottom: BorderSide(color: c.line2, width: 0.5),
-                          ),
-                        ),
-                        child: _ContactGridTile(
-                          item: item,
-                          onEdit: () => _showContactForm(contact: item),
-                          onDelete: () => _deleteContact(item['id']),
-                        ),
-                      );
-                    },
-                  ),
-              ],
-            ),
-        ),
-      ),
-    );
-  }
+    final isNarrow = MediaQuery.of(context).size.width < 600;
 
-  Widget _buildTableSearchBar(SiColors c) {
-    return Container(
-      width: 320,
+    final searchField = Container(
       height: 38,
       decoration: BoxDecoration(
         color: c.bg,
@@ -440,6 +306,15 @@ class _ExternalContactsPageState extends State<ExternalContactsPage> {
           hintText: 'Buscar contacto, empresa...',
           hintStyle: TextStyle(fontSize: 13, color: c.ink4),
           prefixIcon: Icon(Icons.search, size: 16, color: c.ink3),
+          suffixIcon: _searchQuery.isNotEmpty
+              ? IconButton(
+                  icon: Icon(Icons.clear, size: 14, color: c.ink3),
+                  onPressed: () {
+                    _searchController.clear();
+                    setState(() => _searchQuery = '');
+                  },
+                )
+              : null,
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(vertical: 10),
           isDense: true,
@@ -447,24 +322,335 @@ class _ExternalContactsPageState extends State<ExternalContactsPage> {
         onChanged: (v) => setState(() => _searchQuery = v),
       ),
     );
-  }
 
-  Widget _buildAddButton(SiColors c) {
-    return ElevatedButton.icon(
-      onPressed: () => _showContactForm(),
-      icon: const Icon(Icons.add, size: 16),
-      label: const Text('Contacto', style: TextStyle(fontWeight: FontWeight.w600)),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: c.brand,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        minimumSize: const Size(0, 38),
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        shape: const RoundedRectangleBorder(borderRadius: SiRadius.rMd),
+    // ── Mobile layout ──────────────────────────────────────────────────
+    if (isNarrow) {
+      return Column(
+        children: [
+          // Toolbar: buscador full-width
+          Container(
+            decoration: BoxDecoration(
+              color: c.panel,
+              border: Border(bottom: BorderSide(color: c.line)),
+            ),
+            padding: const EdgeInsets.fromLTRB(
+                SiSpace.x4, SiSpace.x3, SiSpace.x4, SiSpace.x3),
+            child: searchField,
+          ),
+          // List
+          Expanded(
+            child: items.isEmpty
+                ? _buildEmptyState(c)
+                : RefreshIndicator(
+                    onRefresh: _fetchContacts,
+                    color: c.brand,
+                    child: ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(
+                          SiSpace.x4, SiSpace.x4, SiSpace.x4, 96),
+                      itemCount: items.length,
+                      separatorBuilder: (_, __) =>
+                          const SizedBox(height: SiSpace.x3),
+                      itemBuilder: (context, index) {
+                        final item = items[index];
+                        return _ContactMobileCard(
+                          item: item,
+                          onEdit: () => _showContactForm(contact: item),
+                          onDelete: () => _deleteContact(item['id']),
+                        );
+                      },
+                    ),
+                  ),
+          ),
+        ],
+      );
+    }
+
+    // ── Desktop layout ─────────────────────────────────────────────────
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(SiSpace.x6),
+      child: Center(
+        child: Card(
+          elevation: 0,
+          clipBehavior: Clip.antiAlias,
+          shape: RoundedRectangleBorder(
+            borderRadius: SiRadius.rLg,
+            side: BorderSide(color: c.line),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                child: Row(
+                  children: [
+                    SizedBox(width: 320, child: searchField),
+                    const Spacer(),
+                    ElevatedButton.icon(
+                      onPressed: () => _showContactForm(),
+                      icon: const Icon(Icons.add, size: 16),
+                      label: const Text('Contacto',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: c.brand,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        minimumSize: const Size(0, 38),
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 16),
+                        shape: const RoundedRectangleBorder(
+                            borderRadius: SiRadius.rMd),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              if (items.isEmpty)
+                SizedBox(height: 300, child: _buildEmptyState(c))
+              else
+                GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate:
+                      const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 466,
+                    mainAxisExtent: 180,
+                    crossAxisSpacing: 1,
+                    mainAxisSpacing: 1,
+                  ),
+                  itemCount: items.length,
+                  itemBuilder: (context, index) {
+                    final item = items[index];
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: c.panel,
+                        border: Border(
+                          right: BorderSide(color: c.line2, width: 0.5),
+                          bottom: BorderSide(color: c.line2, width: 0.5),
+                        ),
+                      ),
+                      child: _ContactGridTile(
+                        item: item,
+                        onEdit: () => _showContactForm(contact: item),
+                        onDelete: () => _deleteContact(item['id']),
+                      ),
+                    );
+                  },
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
 }
+
+// ── Mobile contact card ───────────────────────────────────────────────────────
+
+class _ContactMobileCard extends StatelessWidget {
+  final Map<String, dynamic> item;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  const _ContactMobileCard({
+    required this.item,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = SiColors.of(context);
+    final name     = item['nombre']   ?? 'Sin Nombre';
+    final company  = item['empresa']  ?? '';
+    final email    = item['correo']   ?? '';
+    final phone    = item['telefono'] ?? '';
+    final category = item['otro']     ?? '';
+    final initials = (name as String).split(' ').take(2)
+        .map((e) => e.isNotEmpty ? e[0] : '')
+        .join()
+        .toUpperCase();
+
+    void copyText(String text, String label) {
+      Clipboard.setData(ClipboardData(text: text));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('$label copiado'),
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+        width: 240,
+      ));
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: c.panel,
+        borderRadius: SiRadius.rLg,
+        border: Border.all(color: c.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Header ──────────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+                SiSpace.x4, SiSpace.x4, SiSpace.x2, SiSpace.x3),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: c.brandTint,
+                    borderRadius: SiRadius.rMd,
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    initials,
+                    style: TextStyle(
+                      color: c.brand,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: SiSpace.x3),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(name,
+                          style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: c.ink),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
+                      if ((company as String).isNotEmpty)
+                        Text(company,
+                            style: TextStyle(fontSize: 13, color: c.ink3),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis),
+                    ],
+                  ),
+                ),
+                PopupMenuButton<String>(
+                  icon: Icon(Icons.more_vert, size: 18, color: c.ink4),
+                  onSelected: (v) {
+                    if (v == 'edit') onEdit();
+                    if (v == 'delete') onDelete();
+                  },
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      value: 'edit',
+                      child: Row(children: [
+                        Icon(Icons.edit_outlined, size: 16, color: c.ink2),
+                        const SizedBox(width: 12),
+                        const Text('Editar'),
+                      ]),
+                    ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Row(children: [
+                        Icon(Icons.delete_outline, size: 16, color: c.danger),
+                        const SizedBox(width: 12),
+                        Text('Eliminar',
+                            style: TextStyle(color: c.danger)),
+                      ]),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          Divider(height: 1, color: c.line),
+
+          // ── Phone (tap to copy) ──────────────────────────────────────
+          if ((phone as String).isNotEmpty)
+            InkWell(
+              onTap: () => copyText(phone, 'Teléfono'),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: SiSpace.x4, vertical: 14),
+                child: Row(
+                  children: [
+                    Icon(Icons.phone_outlined, size: 17, color: c.ink3),
+                    const SizedBox(width: SiSpace.x3),
+                    Expanded(
+                      child: Text(phone,
+                          style: TextStyle(fontSize: 14, color: c.ink2),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
+                    ),
+                    Icon(Icons.copy_outlined, size: 17, color: c.ink4),
+                  ],
+                ),
+              ),
+            ),
+
+          // ── Email (tap to copy) ──────────────────────────────────────
+          if ((email as String).isNotEmpty)
+            InkWell(
+              onTap: () => copyText(email, 'Correo'),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: SiSpace.x4, vertical: 14),
+                child: Row(
+                  children: [
+                    Icon(Icons.mail_outline, size: 17, color: c.ink3),
+                    const SizedBox(width: SiSpace.x3),
+                    Expanded(
+                      child: Text(email,
+                          style: TextStyle(fontSize: 14, color: c.ink2),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
+                    ),
+                    Icon(Icons.copy_outlined, size: 17, color: c.ink4),
+                  ],
+                ),
+              ),
+            ),
+
+          // ── Category tag ─────────────────────────────────────────────
+          if ((category as String).isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  SiSpace.x4, 0, SiSpace.x4, SiSpace.x3),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: c.bg,
+                  borderRadius: SiRadius.rPill,
+                  border: Border.all(color: c.line),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 4,
+                      height: 4,
+                      decoration: BoxDecoration(
+                          color: c.ink4, shape: BoxShape.circle),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(category,
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: c.ink3,
+                            fontWeight: FontWeight.w500)),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Desktop grid tile ─────────────────────────────────────────────────────────
 
 class _ContactGridTile extends StatelessWidget {
   final Map<String, dynamic> item;
