@@ -17,6 +17,7 @@ import 'bi_page.dart';
 import 'signature_generator_page.dart';
 import 'tablas_page.dart';
 import 'passwords_page.dart';
+import 'ai_page.dart';
 import 'theme/si_theme.dart';
 
 class _OpenSearchIntent extends Intent {
@@ -28,7 +29,7 @@ final _navGroups = <(String, List<String>)>[
   ('GENERAL',        ['Mi Perfil', 'Social', 'Contraseñas', 'Contactos', 'Firmas', 'Calendario']),
   ('OPERACIÓN',      ['Incidencias', 'Inventario', 'Colaborador', 'Asistencia']),
   ('ANÁLISIS',       ['BI', 'Logs', 'Tablas']),
-  ('ADMINISTRACIÓN', ['Usuarios']),
+  ('ADMINISTRACIÓN', ['Usuarios', 'IA']),
 ];
 
 class MainNavigation extends StatefulWidget {
@@ -180,6 +181,14 @@ class _MainNavigationState extends State<MainNavigation> {
         'icon': Icons.table_chart_outlined,
         'activeIcon': Icons.table_chart,
         'widget': const TablasPage(),
+      });
+    }
+    if (widget.role == 'admin') {
+      pages.add({
+        'title': 'IA',
+        'icon': Icons.smart_toy_outlined,
+        'activeIcon': Icons.smart_toy,
+        'widget': const AiPage(),
       });
     }
 
@@ -395,7 +404,7 @@ class _DesktopShellState extends State<_DesktopShell>
                       right: BorderSide(
                         color: isDark
                             ? c.line
-                            : Colors.white.withValues(alpha: 0.08),
+                            : Colors.white.withOpacity(0.08),
                         width: 1,
                       ),
                     ),
@@ -435,7 +444,7 @@ class _DesktopShellState extends State<_DesktopShell>
                                       height: 32,
                                       decoration: BoxDecoration(
                                         color: Colors.white
-                                            .withValues(alpha: 0.15),
+                                            .withOpacity(0.15),
                                         borderRadius: SiRadius.rSm,
                                       ),
                                       padding: const EdgeInsets.all(4),
@@ -458,7 +467,7 @@ class _DesktopShellState extends State<_DesktopShell>
                           height: 1,
                           color: isDark
                               ? c.line
-                              : Colors.white.withValues(alpha: 0.08)),
+                              : Colors.white.withOpacity(0.08)),
 
                       // Nav items (grouped)
                       Expanded(
@@ -477,7 +486,7 @@ class _DesktopShellState extends State<_DesktopShell>
                           height: 1,
                           color: isDark
                               ? c.line
-                              : Colors.white.withValues(alpha: 0.10)),
+                              : Colors.white.withOpacity(0.10)),
                       Padding(
                         padding: const EdgeInsets.symmetric(
                             horizontal: SiSpace.x2,
@@ -515,8 +524,7 @@ class _DesktopShellState extends State<_DesktopShell>
                                               fontSize: 11,
                                               color: isDark
                                                   ? c.ink4
-                                                  : Colors.white.withValues(
-                                                      alpha: 0.55),
+                                                  : Colors.white.withOpacity(0.55),
                                               letterSpacing: 0.5)),
                                     ],
                                   ),
@@ -548,8 +556,7 @@ class _DesktopShellState extends State<_DesktopShell>
                                         size: 16,
                                         color: isDark
                                             ? c.ink3
-                                            : Colors.white.withValues(
-                                                alpha: 0.70)),
+                                            : Colors.white.withOpacity(0.70)),
                                   ),
                                 ),
                               ),
@@ -939,7 +946,7 @@ class _SectionHeader extends StatelessWidget {
         margin: const EdgeInsets.symmetric(
             vertical: SiSpace.x2, horizontal: SiSpace.x2),
         color: onDark
-            ? Colors.white.withValues(alpha: 0.08)
+            ? Colors.white.withOpacity(0.08)
             : SiColors.of(context).line,
       );
     }
@@ -955,7 +962,7 @@ class _SectionHeader extends StatelessWidget {
             fontWeight: FontWeight.w600,
             letterSpacing: 10.5 * 0.08,
             color: onDark
-                ? Colors.white.withValues(alpha: 0.45)
+                ? Colors.white.withOpacity(0.45)
                 : SiColors.of(context).ink3,
             height: 1,
           ),
@@ -1003,16 +1010,16 @@ class _RailItemState extends State<_RailItem> {
 
     if (widget.onDark) {
       bg = widget.isActive
-          ? Colors.white.withValues(alpha: 0.14)
+          ? Colors.white.withOpacity(0.14)
           : _hovered
-              ? Colors.white.withValues(alpha: 0.08)
+              ? Colors.white.withOpacity(0.08)
               : Colors.transparent;
       iconColor = widget.isActive
           ? Colors.white
-          : Colors.white.withValues(alpha: 0.65);
+          : Colors.white.withOpacity(0.65);
       textColor = widget.isActive
           ? Colors.white
-          : Colors.white.withValues(alpha: 0.75);
+          : Colors.white.withOpacity(0.75);
     } else {
       bg = widget.isActive
           ? c.brandTint
@@ -1113,7 +1120,7 @@ class _Avatar extends StatelessWidget {
 
   Widget _fallback() => Container(
         color: onDark
-            ? Colors.white.withValues(alpha: 0.18)
+            ? Colors.white.withOpacity(0.18)
             : c.brandTint,
         alignment: Alignment.center,
         child: Text(initials,
