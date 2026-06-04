@@ -1184,6 +1184,7 @@ class _PermIcons extends StatelessWidget {
       _PermIcon(Icons.fingerprint, perms['show_asistencia'] == true),
       _PermIcon(Icons.bar_chart_outlined, perms['show_powerbi'] == true),
       _PermIcon(Icons.vpn_key_outlined, perms['show_passwords'] == true),
+      _PermIcon(Icons.smart_toy_outlined, perms['show_ai'] == true),
     ];
     return Wrap(
       spacing: 3,
@@ -1287,6 +1288,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
       'show_asistencia': false,
       'show_powerbi': false,
       'show_passwords': false,
+      'show_ai': false,
     });
   }
 
@@ -1730,6 +1732,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
         _permSwitch(c, 'Power BI', 'show_powerbi', Icons.bar_chart_outlined),
         _permSwitch(c, 'Contraseñas', 'show_passwords', Icons.vpn_key_outlined),
         _permSwitch(c, 'Tablas', 'show_tablas', Icons.table_chart_outlined),
+        _permSwitch(c, 'Asistente IA', 'show_ai', Icons.smart_toy_outlined),
       ],
     );
   }

@@ -183,7 +183,7 @@ class _MainNavigationState extends State<MainNavigation> {
         'widget': const TablasPage(),
       });
     }
-    if (widget.role == 'admin') {
+    if (widget.role == 'admin' || widget.permissions['show_ai'] == true) {
       pages.add({
         'title': 'IA',
         'icon': Icons.smart_toy_outlined,
