@@ -397,7 +397,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
   Widget _buildMissingDateFallback({bool isDesktop = false}) {
     return Container(
       margin: !isDesktop
-          ? const EdgeInsets.fromLTRB(16, 12, 16, 4)
+          ? const EdgeInsets.only(top: 12, bottom: 4)
           : EdgeInsets.zero,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -431,7 +431,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
         '${base.day.toString().padLeft(2, '0')}/${base.month.toString().padLeft(2, '0')}/${base.year}';
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      padding: const EdgeInsets.only(top: 12, bottom: 4),
       child: GestureDetector(
         onTap: () => setState(() => _antiguedadExpanded = !_antiguedadExpanded),
         child: AnimatedSize(
@@ -1215,13 +1215,14 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
     return ListView.separated(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.only(bottom: 16),
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemCount: _incidencias.length,
       itemBuilder: (context, index) {
         final inc = _incidencias[index];
         return Card(
           elevation: 0,
+          margin: EdgeInsets.zero,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
             side: BorderSide(color: c.line),
@@ -1809,11 +1810,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                           children: [
                             _buildAntiguedadMobile(),
                             SizedBox(height: SiSpace.x4),
-                            Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 16),
-                              child: _buildHistorialVacaciones(),
-                            ),
+                            _buildHistorialVacaciones(),
                             SizedBox(height: SiSpace.x6),
                             _incidencias.isEmpty
                                 ? const Padding(
