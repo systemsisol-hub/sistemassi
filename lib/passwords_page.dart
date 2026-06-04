@@ -194,6 +194,7 @@ class _PasswordsPageState extends State<PasswordsPage>
   @override
   Widget build(BuildContext context) {
     final c = SiColors.of(context);
+    final isNarrow = MediaQuery.of(context).size.width < 600;
     if (_isLoading) {
       return Scaffold(
         backgroundColor: c.bg,
@@ -206,6 +207,15 @@ class _PasswordsPageState extends State<PasswordsPage>
 
     return Scaffold(
       backgroundColor: c.bg,
+      floatingActionButton: isNarrow
+          ? FloatingActionButton(
+              onPressed: () => _showPasswordForm(),
+              backgroundColor: c.brand,
+              foregroundColor: Colors.white,
+              elevation: 2,
+              child: const Icon(Icons.add),
+            )
+          : null,
       body: Column(
         children: [
           _buildToolbar(c, myItems.length, sharedItems.length),
@@ -224,6 +234,90 @@ class _PasswordsPageState extends State<PasswordsPage>
   }
 
   Widget _buildToolbar(SiColors c, int mineCount, int sharedCount) {
+    final isNarrow = MediaQuery.of(context).size.width < 600;
+
+    final segTabs = AnimatedBuilder(
+      animation: _tabController,
+      builder: (context, _) => Container(
+        height: 36,
+        decoration: BoxDecoration(color: c.hover, borderRadius: SiRadius.rMd),
+        padding: const EdgeInsets.all(3),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _SegTab(
+              label: 'Mis contraseñas',
+              count: mineCount,
+              isActive: _tabController.index == 0,
+              c: c,
+              onTap: () => _tabController.animateTo(0),
+            ),
+            _SegTab(
+              label: 'Compartidas',
+              count: sharedCount,
+              isActive: _tabController.index == 1,
+              c: c,
+              onTap: () => _tabController.animateTo(1),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final searchField = Container(
+      height: 36,
+      decoration: BoxDecoration(
+        color: c.bg,
+        borderRadius: SiRadius.rMd,
+        border: Border.all(color: c.line),
+      ),
+      child: TextField(
+        controller: _searchController,
+        style: const TextStyle(fontSize: 13),
+        decoration: InputDecoration(
+          hintText: 'Buscar contraseña...',
+          hintStyle: TextStyle(fontSize: 13, color: c.ink4),
+          prefixIcon: Icon(Icons.search, size: 16, color: c.ink3),
+          suffixIcon: _searchQuery.isNotEmpty
+              ? IconButton(
+                  icon: Icon(Icons.clear, size: 14, color: c.ink3),
+                  onPressed: () {
+                    _searchController.clear();
+                    setState(() => _searchQuery = '');
+                  },
+                )
+              : null,
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(vertical: 10),
+          isDense: true,
+        ),
+        onChanged: (v) => setState(() => _searchQuery = v),
+      ),
+    );
+
+    // ── Mobile toolbar: 2 rows ─────────────────────────────────────────
+    if (isNarrow) {
+      return Container(
+        decoration: BoxDecoration(
+          color: c.panel,
+          border: Border(bottom: BorderSide(color: c.line, width: 1)),
+        ),
+        padding: const EdgeInsets.fromLTRB(
+            SiSpace.x4, SiSpace.x3, SiSpace.x4, SiSpace.x3),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(children: [segTabs, const Spacer()]),
+            const SizedBox(height: SiSpace.x3),
+            searchField,
+          ],
+        ),
+      );
+    }
+
+    // ── Desktop toolbar: single row ────────────────────────────────────
     return Container(
       decoration: BoxDecoration(
         color: c.panel,
@@ -233,72 +327,9 @@ class _PasswordsPageState extends State<PasswordsPage>
           horizontal: SiSpace.x6, vertical: SiSpace.x3),
       child: Row(
         children: [
-          // Segment tabs
-          AnimatedBuilder(
-            animation: _tabController,
-            builder: (context, _) {
-              return Container(
-                height: 36,
-                decoration:
-                    BoxDecoration(color: c.hover, borderRadius: SiRadius.rMd),
-                padding: const EdgeInsets.all(3),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _SegTab(
-                      label: 'Mis contraseñas',
-                      count: mineCount,
-                      isActive: _tabController.index == 0,
-                      c: c,
-                      onTap: () => _tabController.animateTo(0),
-                    ),
-                    _SegTab(
-                      label: 'Compartidas',
-                      count: sharedCount,
-                      isActive: _tabController.index == 1,
-                      c: c,
-                      onTap: () => _tabController.animateTo(1),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
+          segTabs,
           const Spacer(),
-          // Search
-          Container(
-            width: 260,
-            height: 36,
-            decoration: BoxDecoration(
-              color: c.bg,
-              borderRadius: SiRadius.rMd,
-              border: Border.all(color: c.line),
-            ),
-            child: TextField(
-              controller: _searchController,
-              style: const TextStyle(fontSize: 13),
-              decoration: InputDecoration(
-                hintText: 'Buscar contraseña...',
-                hintStyle: TextStyle(fontSize: 13, color: c.ink4),
-                prefixIcon: Icon(Icons.search, size: 16, color: c.ink3),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: Icon(Icons.clear, size: 14, color: c.ink3),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() => _searchQuery = '');
-                        },
-                      )
-                    : null,
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                isDense: true,
-              ),
-              onChanged: (v) => setState(() => _searchQuery = v),
-            ),
-          ),
+          SizedBox(width: 260, child: searchField),
           const SizedBox(width: SiSpace.x3),
           ElevatedButton.icon(
             onPressed: () => _showPasswordForm(),
@@ -311,8 +342,7 @@ class _PasswordsPageState extends State<PasswordsPage>
               elevation: 0,
               minimumSize: const Size(0, 36),
               padding: const EdgeInsets.symmetric(horizontal: 14),
-              shape:
-                  const RoundedRectangleBorder(borderRadius: SiRadius.rMd),
+              shape: const RoundedRectangleBorder(borderRadius: SiRadius.rMd),
             ),
           ),
         ],
@@ -322,6 +352,8 @@ class _PasswordsPageState extends State<PasswordsPage>
 
   Widget _buildGrid(SiColors c, List<Map<String, dynamic>> items,
       {required bool isShared}) {
+    final isNarrow = MediaQuery.of(context).size.width < 600;
+
     if (items.isEmpty) {
       return Center(
         child: Column(
@@ -347,6 +379,37 @@ class _PasswordsPageState extends State<PasswordsPage>
       );
     }
 
+    // ── Mobile: compact list with pull-to-refresh ──────────────────────
+    if (isNarrow) {
+      return RefreshIndicator(
+        onRefresh: _fetchPasswords,
+        color: c.brand,
+        child: ListView.separated(
+          padding: const EdgeInsets.fromLTRB(
+              SiSpace.x4, SiSpace.x4, SiSpace.x4, 96),
+          itemCount: items.length,
+          separatorBuilder: (_, __) => const SizedBox(height: SiSpace.x3),
+          itemBuilder: (context, i) {
+            final item = items[i];
+            return _PasswordMobileCard(
+              item: item,
+              isShared: isShared,
+              visible: _visibilityMap[item['id']] ?? false,
+              onToggleVisibility: () =>
+                  _toggleVisibility(item['id'] as String),
+              onCopy: _copyToClipboard,
+              onEdit: isShared ? null : () => _showPasswordForm(item: item),
+              onDelete: isShared
+                  ? null
+                  : () => _deletePassword(item['id'] as String),
+              onShare: isShared ? null : () => _showShareDialog(item),
+            );
+          },
+        ),
+      );
+    }
+
+    // ── Desktop: grid ──────────────────────────────────────────────────
     return SingleChildScrollView(
       padding: const EdgeInsets.all(SiSpace.x6),
       child: Center(
@@ -393,6 +456,236 @@ class _PasswordsPageState extends State<PasswordsPage>
               );
             },
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Mobile password card ──────────────────────────────────────────────────────
+
+class _PasswordMobileCard extends StatelessWidget {
+  final Map<String, dynamic> item;
+  final bool isShared;
+  final bool visible;
+  final VoidCallback onToggleVisibility;
+  final Future<void> Function(String, String) onCopy;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
+  final VoidCallback? onShare;
+
+  const _PasswordMobileCard({
+    required this.item,
+    required this.isShared,
+    required this.visible,
+    required this.onToggleVisibility,
+    required this.onCopy,
+    this.onEdit,
+    this.onDelete,
+    this.onShare,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = SiColors.of(context);
+    final name     = (item['name']        ?? 'Sin nombre') as String;
+    final url      = (item['url']         ?? '') as String;
+    final username = (item['username']    ?? '') as String;
+    final password = (item['password']    ?? '') as String;
+    final desc     = (item['description'] ?? '') as String;
+    final initials = name.trim().isNotEmpty ? name.trim()[0].toUpperCase() : '?';
+
+    return Container(
+      decoration: BoxDecoration(
+        color: c.panel,
+        borderRadius: SiRadius.rLg,
+        border: Border.all(color: c.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Header ────────────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+                SiSpace.x4, SiSpace.x4, SiSpace.x2, SiSpace.x3),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: isShared ? c.warnTint : c.brandTint,
+                    borderRadius: SiRadius.rMd,
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    initials,
+                    style: TextStyle(
+                      color: isShared ? c.warn : c.brand,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 18,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: SiSpace.x3),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: c.ink),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (url.isNotEmpty)
+                        Text(url,
+                            style: TextStyle(fontSize: 12, color: c.brand),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis),
+                    ],
+                  ),
+                ),
+                _ActionsMenu(
+                    c: c, onShare: onShare, onEdit: onEdit, onDelete: onDelete),
+              ],
+            ),
+          ),
+
+          Divider(height: 1, color: c.line),
+
+          // ── Username ──────────────────────────────────────────────────
+          if (username.isNotEmpty)
+            _MobileCopyRow(
+              icon: Icons.person_outline,
+              displayValue: username,
+              copyValue: username,
+              copyLabel: 'Usuario',
+              mono: false,
+              c: c,
+              onCopy: onCopy,
+            ),
+
+          // ── Password ──────────────────────────────────────────────────
+          _MobileCopyRow(
+            icon: Icons.lock_outline,
+            displayValue: visible ? password : '••••••••',
+            copyValue: password,
+            copyLabel: 'Contraseña',
+            mono: visible,
+            c: c,
+            onCopy: onCopy,
+            trailing: GestureDetector(
+              onTap: onToggleVisibility,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: SiSpace.x3),
+                child: Icon(
+                  visible
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined,
+                  size: 20,
+                  color: c.ink3,
+                ),
+              ),
+            ),
+          ),
+
+          // ── Description / badge ───────────────────────────────────────
+          if (desc.isNotEmpty || isShared)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  SiSpace.x4, 0, SiSpace.x4, SiSpace.x3),
+              child: Row(
+                children: [
+                  if (desc.isNotEmpty)
+                    Expanded(
+                      child: Text(desc,
+                          style:
+                              TextStyle(fontSize: 12, color: c.ink4),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
+                    ),
+                  if (isShared)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                          color: c.warnTint,
+                          borderRadius: SiRadius.rPill),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.group_outlined,
+                              size: 11, color: c.warn),
+                          const SizedBox(width: 4),
+                          Text('Compartida',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: c.warn,
+                                  fontWeight: FontWeight.w500)),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Mobile copy row (full-row tap to copy) ────────────────────────────────────
+
+class _MobileCopyRow extends StatelessWidget {
+  final IconData icon;
+  final String displayValue;
+  final String copyValue;
+  final String copyLabel;
+  final bool mono;
+  final SiColors c;
+  final Future<void> Function(String, String) onCopy;
+  final Widget? trailing;
+
+  const _MobileCopyRow({
+    required this.icon,
+    required this.displayValue,
+    required this.copyValue,
+    required this.copyLabel,
+    required this.mono,
+    required this.c,
+    required this.onCopy,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () => onCopy(copyValue, copyLabel),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+            horizontal: SiSpace.x4, vertical: 14),
+        child: Row(
+          children: [
+            Icon(icon, size: 17, color: c.ink3),
+            const SizedBox(width: SiSpace.x3),
+            Expanded(
+              child: Text(
+                displayValue,
+                style: mono
+                    ? SiType.mono(size: 13, color: c.ink)
+                    : TextStyle(fontSize: 14, color: c.ink2),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (trailing != null) trailing!,
+            Icon(Icons.copy_outlined, size: 17, color: c.ink4),
+          ],
         ),
       ),
     );
