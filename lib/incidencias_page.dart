@@ -1401,16 +1401,10 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                                 style: TextStyle(fontWeight: FontWeight.bold))),
                       ],
                       rows: _allIncidencias.map((inc) {
-                        final profile =
-                            inc['profiles'] as Map<String, dynamic>? ?? {};
                         final nombre =
-                            '${profile['nombre'] ?? ''} ${profile['paterno'] ?? ''}'
-                                .trim();
+                            inc['nombre_usuario']?.toString().trim() ?? '---';
                         return DataRow(cells: [
-                          DataCell(Text(nombre.isEmpty
-                              ? inc['usuario_id']?.toString().substring(0, 8) ??
-                                  '---'
-                              : nombre)),
+                          DataCell(Text(nombre.isEmpty ? '---' : nombre)),
                           DataCell(Text(inc['periodo']?.toString() ?? '---')),
                           DataCell(Text(inc['dias']?.toString() ?? '---')),
                           DataCell(Text(inc['fecha_inicio'] != null
