@@ -1,7 +1,10 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:excel/excel.dart' as xl;
 import 'theme/si_theme.dart';
 
 class AiPage extends StatefulWidget {
@@ -16,6 +19,7 @@ class _AiPageState extends State<AiPage> {
   final _scrollCtrl = ScrollController();
   final List<_ChatMsg> _messages = [];
   bool _isLoading = false;
+  _AttachedFile? _attachedFile;
 
   static const _fnUrl =
       'https://zkmbebybyyefmqcxjqrg.supabase.co/functions/v1/ai-assistant';
@@ -36,6 +40,80 @@ class _AiPageState extends State<AiPage> {
     super.dispose();
   }
 
+  // ── File attachment ──────────────────────────────────────────────────────────
+
+  Future<void> _pickFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['csv', 'tsv', 'txt', 'md', 'xlsx', 'xls'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+
+    final file = result.files.first;
+    final bytes = file.bytes;
+    if (bytes == null) return;
+
+    final ext = (file.extension ?? '').toLowerCase();
+    String content;
+
+    try {
+      if (ext == 'xlsx' || ext == 'xls') {
+        content = _parseExcel(bytes);
+      } else {
+        // CSV, TSV, MD, TXT — leer como texto
+        content = utf8.decode(bytes, allowMalformed: true);
+      }
+    } catch (e) {
+      content = 'Error al leer el archivo: $e';
+    }
+
+    // Limitar a 40 000 caracteres para no saturar el contexto del modelo
+    const maxChars = 40000;
+    final truncated = content.length > maxChars;
+    if (truncated) content = content.substring(0, maxChars);
+
+    if (mounted) {
+      setState(() {
+        _attachedFile = _AttachedFile(
+          name: file.name,
+          ext: ext,
+          content: content,
+          truncated: truncated,
+        );
+      });
+    }
+  }
+
+  String _parseExcel(Uint8List bytes) {
+    final excel = xl.Excel.decodeBytes(bytes);
+    final buf = StringBuffer();
+    for (final sheetName in excel.tables.keys) {
+      final sheet = excel.tables[sheetName]!;
+      if (excel.tables.length > 1) buf.writeln('### Hoja: $sheetName\n');
+      for (final row in sheet.rows) {
+        buf.writeln(row.map((c) => c?.value?.toString() ?? '').join('\t'));
+      }
+      buf.writeln();
+    }
+    return buf.toString();
+  }
+
+  IconData _iconForExt(String ext) {
+    switch (ext) {
+      case 'csv':
+      case 'tsv':
+        return Icons.table_chart_outlined;
+      case 'xlsx':
+      case 'xls':
+        return Icons.grid_on_outlined;
+      case 'md':
+        return Icons.article_outlined;
+      default:
+        return Icons.insert_drive_file_outlined;
+    }
+  }
+
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollCtrl.hasClients) {
@@ -50,11 +128,33 @@ class _AiPageState extends State<AiPage> {
 
   Future<void> _send(String text) async {
     final trimmed = text.trim();
-    if (trimmed.isEmpty || _isLoading) return;
+    if ((trimmed.isEmpty && _attachedFile == null) || _isLoading) return;
     _inputCtrl.clear();
 
+    // Build the message content, prepending file data if attached
+    final file = _attachedFile;
+    String userText = trimmed;
+    String displayText = trimmed;
+
+    if (file != null) {
+      final truncNote = file.truncated
+          ? '\n\n⚠️ Archivo truncado a los primeros 40 000 caracteres.'
+          : '';
+      userText =
+          '📎 Archivo adjunto: ${file.name}\n\n'
+          '```\n${file.content}\n```$truncNote'
+          '${trimmed.isNotEmpty ? '\n\n$trimmed' : ''}';
+      displayText = trimmed.isNotEmpty ? trimmed : 'Analiza este archivo.';
+    }
+
     setState(() {
-      _messages.add(_ChatMsg(role: 'user', text: trimmed));
+      _messages.add(_ChatMsg(
+        role: 'user',
+        text: displayText,
+        attachedFileName: file?.name,
+        attachedFileExt: file?.ext,
+      ));
+      _attachedFile = null;
       _isLoading = true;
     });
     _scrollToBottom();
@@ -63,11 +163,16 @@ class _AiPageState extends State<AiPage> {
       final session = Supabase.instance.client.auth.currentSession;
       if (session == null) throw Exception('Sin sesión activa');
 
-      // Build history (only text messages)
+      // Build history — use displayText for older messages, userText is already
+      // included in the last user message we just added with file content embedded
       final history = _messages
           .where((m) => m.text.isNotEmpty)
           .map((m) => {'role': m.role, 'content': m.text})
           .toList();
+      // Replace the last user message text with the full content (file + question)
+      if (history.isNotEmpty && history.last['role'] == 'user') {
+        history[history.length - 1] = {'role': 'user', 'content': userText};
+      }
 
       final resp = await http.post(
         Uri.parse(_fnUrl),
@@ -206,55 +311,131 @@ class _AiPageState extends State<AiPage> {
         border: Border(top: BorderSide(color: c.line)),
       ),
       padding: EdgeInsets.fromLTRB(
-        16, 12, 16,
-        MediaQuery.of(context).viewInsets.bottom + 12,
+        16, 10, 16,
+        MediaQuery.of(context).viewInsets.bottom + 10,
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: c.bg,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: c.line),
+          // ── Archivo adjunto chip ──────────────────────────────────────
+          if (_attachedFile != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: c.brandTint,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: c.brand.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(_iconForExt(_attachedFile!.ext), size: 16, color: c.brand),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _attachedFile!.name,
+                              style: TextStyle(fontSize: 13, color: c.brand, fontWeight: FontWeight.w500),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (_attachedFile!.truncated)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 6),
+                              child: Text('truncado', style: TextStyle(fontSize: 11, color: c.warn)),
+                            ),
+                          GestureDetector(
+                            onTap: () => setState(() => _attachedFile = null),
+                            child: Icon(Icons.close, size: 16, color: c.brand),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              child: TextField(
-                controller: _inputCtrl,
-                maxLines: 4,
-                minLines: 1,
-                textInputAction: TextInputAction.newline,
-                decoration: InputDecoration(
-                  hintText: 'Escribe un mensaje...',
-                  hintStyle: TextStyle(color: c.ink4, fontSize: 14),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-                  isDense: true,
+            ),
+
+          // ── Input row ─────────────────────────────────────────────────
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              // Botón adjuntar archivo
+              GestureDetector(
+                onTap: _isLoading ? null : _pickFile,
+                child: Container(
+                  width: 38,
+                  height: 38,
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(
+                    color: _attachedFile != null ? c.brandTint : c.hover,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: _attachedFile != null
+                          ? c.brand.withOpacity(0.4)
+                          : c.line,
+                    ),
+                  ),
+                  child: Icon(
+                    Icons.attach_file_rounded,
+                    size: 18,
+                    color: _attachedFile != null ? c.brand : c.ink3,
+                  ),
                 ),
-                style: TextStyle(fontSize: 14, color: c.ink),
               ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          GestureDetector(
-            onTap: _isLoading ? null : () => _send(_inputCtrl.text),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: _isLoading ? c.brand.withOpacity(0.4) : c.brand,
-                shape: BoxShape.circle,
+              // Campo de texto
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: c.bg,
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(color: c.line),
+                  ),
+                  child: TextField(
+                    controller: _inputCtrl,
+                    maxLines: 4,
+                    minLines: 1,
+                    textInputAction: TextInputAction.newline,
+                    decoration: InputDecoration(
+                      hintText: _attachedFile != null
+                          ? 'Pregunta sobre el archivo...'
+                          : 'Escribe un mensaje...',
+                      hintStyle: TextStyle(color: c.ink4, fontSize: 14),
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 10),
+                      isDense: true,
+                    ),
+                    style: TextStyle(fontSize: 14, color: c.ink),
+                  ),
+                ),
               ),
-              child: _isLoading
-                  ? Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
-                    )
-                  : const Icon(Icons.arrow_upward_rounded,
-                      color: Colors.white, size: 20),
-            ),
+              const SizedBox(width: 8),
+              // Botón enviar
+              GestureDetector(
+                onTap: _isLoading ? null : () => _send(_inputCtrl.text),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: _isLoading ? c.brand.withOpacity(0.4) : c.brand,
+                    shape: BoxShape.circle,
+                  ),
+                  child: _isLoading
+                      ? const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.arrow_upward_rounded,
+                          color: Colors.white, size: 20),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -295,6 +476,39 @@ class _AiPageState extends State<AiPage> {
                         color: c.ink3,
                         fontWeight: FontWeight.w600)),
               ]),
+            ),
+          if (isUser && msg.attachedFileName != null)
+            Container(
+              constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.78),
+              margin: const EdgeInsets.only(bottom: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white.withOpacity(0.3)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _iconForExt(msg.attachedFileExt ?? ''),
+                    size: 15,
+                    color: Colors.white,
+                  ),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      msg.attachedFileName!,
+                      style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w500),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
             ),
           if (msg.text.isNotEmpty)
             Container(
@@ -382,19 +596,37 @@ class _AiPageState extends State<AiPage> {
   }
 }
 
-// ── Data model ────────────────────────────────────────────────────────────────
+// ── Data models ───────────────────────────────────────────────────────────────
 
 class _ChatMsg {
   final String role;
   final String text;
   final Map<String, dynamic>? structured;
   final bool isError;
+  final String? attachedFileName;
+  final String? attachedFileExt;
 
   const _ChatMsg({
     required this.role,
     required this.text,
     this.structured,
     this.isError = false,
+    this.attachedFileName,
+    this.attachedFileExt,
+  });
+}
+
+class _AttachedFile {
+  final String name;
+  final String ext;
+  final String content;
+  final bool truncated;
+
+  const _AttachedFile({
+    required this.name,
+    required this.ext,
+    required this.content,
+    required this.truncated,
   });
 }
 
