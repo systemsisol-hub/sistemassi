@@ -666,6 +666,15 @@ class _AiPageState extends State<AiPage> {
       );
     }
 
+    if (type == 'vacaciones') {
+      final data = s['data'] as Map<String, dynamic>?;
+      if (data == null) return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: _VacationCard(data: data, c: c),
+      );
+    }
+
     if (type == 'success') {
       return Padding(
         padding: const EdgeInsets.only(top: 8),
@@ -936,4 +945,228 @@ class _CollaboratorCard extends StatelessWidget {
       ),
     );
   }
+}
+
+// ── Vacation card ─────────────────────────────────────────────────────────────
+
+class _VacationCard extends StatelessWidget {
+  final Map<String, dynamic> data;
+  final SiColors c;
+  const _VacationCard({required this.data, required this.c});
+
+  @override
+  Widget build(BuildContext context) {
+    final nombre        = data['colaborador'] as String? ?? '';
+    final numero        = data['numero_empleado'] as String?;
+    final total         = data['total_disponible'] as int? ?? 0;
+    final usaReingreso  = data['usa_fecha_reingreso'] as bool? ?? false;
+    final periodos      = (data['periodos'] as List?)
+            ?.cast<Map<String, dynamic>>() ?? [];
+
+    return Container(
+      decoration: BoxDecoration(
+        color: c.bg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: c.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Cabecera ──────────────────────────────────────────────────
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: c.panel,
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(12)),
+              border: Border(bottom: BorderSide(color: c.line)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: c.brandTint,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.beach_access_outlined,
+                      size: 16, color: c.brand),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        nombre.isEmpty ? 'Historial de Vacaciones' : nombre,
+                        style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: c.ink),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        [
+                          if (numero != null) 'Empleado #$numero',
+                          if (usaReingreso) 'Cálculo desde reingreso',
+                        ].join(' · '),
+                        style: TextStyle(fontSize: 11, color: c.ink3),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: total > 0 ? c.successTint : c.hover,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                        color: total > 0
+                            ? c.success.withOpacity(0.3)
+                            : c.line),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('$total',
+                          style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: total > 0 ? c.success : c.ink3,
+                              height: 1.1)),
+                      Text('disponibles',
+                          style: TextStyle(
+                              fontSize: 9,
+                              color: total > 0 ? c.success : c.ink4)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // ── Encabezado de columnas ──────────────────────────────────────
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            color: c.hover,
+            child: Row(
+              children: [
+                Expanded(
+                    flex: 3,
+                    child: Text('Período',
+                        style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: c.ink3))),
+                _colHeader('Ley', c),
+                _colHeader('Usados', c),
+                _colHeader('Disponibles', c),
+              ],
+            ),
+          ),
+          // ── Filas de periodos ───────────────────────────────────────────
+          ...periodos.map((p) {
+            final esCurrent = p['es_periodo_actual'] as bool? ?? false;
+            final disp      = p['dias_disponibles'] as int? ?? 0;
+            final sol       = p['dias_solicitados'] as int? ?? 0;
+            final ley       = p['dias_ley'] as int? ?? 0;
+            final periodo   = p['periodo'] as String? ?? '';
+
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+              decoration: BoxDecoration(
+                color: esCurrent
+                    ? c.brand.withOpacity(0.05)
+                    : Colors.transparent,
+                border: Border(
+                    bottom: BorderSide(color: c.line, width: 0.5)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: Row(children: [
+                      if (esCurrent)
+                        Container(
+                          width: 6,
+                          height: 6,
+                          margin: const EdgeInsets.only(right: 6),
+                          decoration: BoxDecoration(
+                              color: c.brand, shape: BoxShape.circle),
+                        ),
+                      Text(
+                        periodo,
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: esCurrent
+                                ? FontWeight.w600
+                                : FontWeight.normal,
+                            color: esCurrent ? c.brand : c.ink),
+                      ),
+                    ]),
+                  ),
+                  _colVal('$ley', c.ink2, c),
+                  _colVal('$sol', sol > 0 ? c.warn : c.ink4, c),
+                  _colVal(
+                    '$disp',
+                    disp > 0 ? c.success : disp < 0 ? c.danger : c.ink3,
+                    c,
+                    bold: true,
+                  ),
+                ],
+              ),
+            );
+          }),
+          // ── Pie ─────────────────────────────────────────────────────────
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: c.panel,
+              borderRadius:
+                  const BorderRadius.vertical(bottom: Radius.circular(12)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.info_outline, size: 12, color: c.ink4),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    'Días según Ley Federal del Trabajo. '
+                    'Proporcional al tiempo transcurrido del periodo actual. '
+                    'Se descuentan incidencias APROBADAS y PENDIENTES.',
+                    style:
+                        TextStyle(fontSize: 10, color: c.ink4, height: 1.4),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _colHeader(String text, SiColors c) => SizedBox(
+        width: 68,
+        child: Text(text,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: c.ink3)),
+      );
+
+  Widget _colVal(String text, Color color, SiColors c,
+          {bool bold = false}) =>
+      SizedBox(
+        width: 68,
+        child: Text(text,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight:
+                    bold ? FontWeight.w600 : FontWeight.normal,
+                color: color)),
+      );
 }
