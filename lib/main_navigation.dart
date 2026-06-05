@@ -18,6 +18,7 @@ import 'signature_generator_page.dart';
 import 'tablas_page.dart';
 import 'passwords_page.dart';
 import 'ai_page.dart';
+import 'knowledge_page.dart';
 import 'theme/si_theme.dart';
 
 class _OpenSearchIntent extends Intent {
@@ -26,7 +27,7 @@ class _OpenSearchIntent extends Intent {
 
 // Visual-only nav group definitions — order here is render order.
 final _navGroups = <(String, List<String>)>[
-  ('GENERAL',        ['Mi Perfil', 'Social', 'Contraseñas', 'Contactos', 'Firmas', 'Calendario']),
+  ('GENERAL',        ['Mi Perfil', 'Social', 'Conocimientos', 'Contraseñas', 'Contactos', 'Firmas', 'Calendario']),
   ('OPERACIÓN',      ['Incidencias', 'Inventario', 'Colaborador', 'Asistencia']),
   ('ANÁLISIS',       ['BI', 'Logs', 'Tablas']),
   ('ADMINISTRACIÓN', ['Usuarios', 'IA']),
@@ -85,6 +86,12 @@ class _MainNavigationState extends State<MainNavigation> {
       'icon': Icons.diversity_3_outlined,
       'activeIcon': Icons.diversity_3,
       'widget': const SocialPage(),
+    });
+    pages.add({
+      'title': 'Conocimientos',
+      'icon': Icons.library_books_outlined,
+      'activeIcon': Icons.library_books,
+      'widget': KnowledgePage(role: widget.role),
     });
     pages.add({
       'title': 'Firmas',
