@@ -308,9 +308,29 @@ class _KnowledgePageState extends State<KnowledgePage>
       color: c.panel,
       child: TabBar(
         controller: _tabCtrl!,
-        tabs: const [
-          Tab(icon: Icon(Icons.people_outline, size: 16), text: 'Colaboradores'),
-          Tab(icon: Icon(Icons.admin_panel_settings_outlined, size: 16), text: 'Administradores'),
+        tabs: [
+          Tab(
+            height: 36,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.people_outline, size: 15, color: _tabCtrl!.index == 0 ? c.brand : c.ink3),
+                const SizedBox(width: 6),
+                Text('Colaboradores'),
+              ],
+            ),
+          ),
+          Tab(
+            height: 36,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.admin_panel_settings_outlined, size: 15, color: _tabCtrl!.index == 1 ? c.brand : c.ink3),
+                const SizedBox(width: 6),
+                Text('Administradores'),
+              ],
+            ),
+          ),
         ],
         labelColor: c.brand,
         unselectedLabelColor: c.ink3,
