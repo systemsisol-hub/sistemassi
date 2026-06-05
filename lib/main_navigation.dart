@@ -188,7 +188,7 @@ class _MainNavigationState extends State<MainNavigation> {
         'title': 'IA',
         'icon': Icons.smart_toy_outlined,
         'activeIcon': Icons.smart_toy,
-        'widget': const AiPage(),
+        'widget': AiPage(role: widget.role, permissions: widget.permissions),
       });
     }
 

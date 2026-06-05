@@ -8,7 +8,14 @@ import 'package:excel/excel.dart' as xl;
 import 'theme/si_theme.dart';
 
 class AiPage extends StatefulWidget {
-  const AiPage({super.key});
+  final String role;
+  final Map<String, dynamic> permissions;
+
+  const AiPage({
+    super.key,
+    this.role = 'usuario',
+    this.permissions = const {},
+  });
 
   @override
   State<AiPage> createState() => _AiPageState();
@@ -25,12 +32,8 @@ class _AiPageState extends State<AiPage> {
       'https://zkmbebybyyefmqcxjqrg.supabase.co/functions/v1/ai-assistant';
 
   static const _quickActions = [
-    (Icons.people_outline,      'Empleados activos',         'Muéstrame los colaboradores con status ACTIVO'),
-    (Icons.search,              'Buscar colaborador',        'Quiero buscar a un colaborador específico'),
-    (Icons.event_note_outlined, 'Nueva incidencia',          'Quiero crear una solicitud de vacaciones'),
-    (Icons.person_add_outlined, 'Nuevo colaborador',         'Quiero dar de alta a un nuevo colaborador'),
-    (Icons.bar_chart_outlined,  'Resumen por área',          '¿Cuántos colaboradores hay por área?'),
-    (Icons.location_on_outlined,'Por ubicación',             'Muéstrame colaboradores por ubicación'),
+    (Icons.search,              'Buscar colaborador',  'Quiero buscar a un colaborador específico'),
+    (Icons.event_note_outlined, 'Nueva incidencia',    'Quiero crear una solicitud de vacaciones'),
   ];
 
   @override
@@ -247,34 +250,131 @@ class _AiPageState extends State<AiPage> {
 
   Widget _buildWelcome(SiColors c) {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 72,
-            height: 72,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [c.brand, c.brand.withOpacity(0.7)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [c.brand, c.brand.withOpacity(0.7)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.smart_toy_outlined, size: 36, color: Colors.white),
               ),
-              shape: BoxShape.circle,
+              const SizedBox(height: 20),
+              Text(
+                'Asistente de RRHH',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: c.ink),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Consulta información del equipo, gestiona incidencias\ny comunícate con lenguaje natural.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 14, color: c.ink3, height: 1.6),
+              ),
+              const SizedBox(height: 24),
+              _buildCapabilitiesCard(c),
+              const SizedBox(height: 100),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCapabilitiesCard(SiColors c) {
+    final isAdmin = widget.role == 'admin';
+
+    final List<(IconData, String)> items = isAdmin
+        ? [
+            (Icons.people_outline,          'Consultar todos los colaboradores con datos completos'),
+            (Icons.person_add_outlined,     'Dar de alta nuevos colaboradores'),
+            (Icons.edit_outlined,           'Actualizar información de colaboradores'),
+            (Icons.description_outlined,    'Ver y crear incidencias de cualquier usuario'),
+            (Icons.inventory_2_outlined,    'Consultar el inventario completo de equipos'),
+            (Icons.notifications_outlined,  'Enviar notificaciones al equipo'),
+            (Icons.bar_chart_outlined,      'Generar reportes por área y ubicación'),
+          ]
+        : [
+            (Icons.people_outline,         'Buscar colaboradores (nombre, área, puesto, ubicación)'),
+            (Icons.description_outlined,   'Crear y consultar mis propias incidencias'),
+            (Icons.inventory_2_outlined,   'Ver el equipo asignado a mi perfil'),
+            (Icons.notifications_outlined, 'Enviar notificaciones'),
+          ];
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: c.panel,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: c.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: c.brandTint,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                isAdmin
+                    ? Icons.admin_panel_settings_outlined
+                    : Icons.person_outline,
+                size: 15,
+                color: c.brand,
+              ),
             ),
-            child: const Icon(Icons.smart_toy_outlined, size: 36, color: Colors.white),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            'Asistente de RRHH',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: c.ink),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Consulta colaboradores, gestiona incidencias\ny administra el equipo con lenguaje natural.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: c.ink3, height: 1.6),
-          ),
-          const SizedBox(height: 120),
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isAdmin ? 'Acceso de Administrador' : 'Acceso de Usuario',
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: c.ink),
+                ),
+                Text(
+                  isAdmin ? 'Puedes hacer todo lo siguiente:' : 'Puedes hacer lo siguiente:',
+                  style: TextStyle(fontSize: 11, color: c.ink3),
+                ),
+              ],
+            ),
+          ]),
+          const SizedBox(height: 14),
+          ...items.map((item) => Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 1),
+                  child: Icon(item.$1, size: 15, color: c.brand),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    item.$2,
+                    style: TextStyle(fontSize: 13, color: c.ink2, height: 1.4),
+                  ),
+                ),
+              ],
+            ),
+          )),
         ],
       ),
     );
