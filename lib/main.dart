@@ -118,13 +118,21 @@ class _AuthRouterState extends State<AuthRouter> {
         final session = data.session;
         if (mounted) {
           setState(() {
-            _user = session?.user;
-            if (_user == null) {
+            final newUser = session?.user;
+            if (newUser == null) {
+              // Sign-out: clear everything
+              _user = null;
               _role = null;
               _permissions = null;
               _isLoading = false;
-            } else {
+            } else if (_user?.id != newUser.id) {
+              // Different user logged in: fetch fresh data
+              _user = newUser;
               _fetchData();
+            } else {
+              // Same user — token refresh or minor event: just update the user
+              // object without re-fetching or showing loading (preserves navigation)
+              _user = newUser;
             }
           });
         }
@@ -139,7 +147,8 @@ class _AuthRouterState extends State<AuthRouter> {
     final userId = _user?.id;
     if (userId == null) return;
 
-    setState(() => _isLoading = true);
+    // Only show loading spinner on the very first load (no role yet)
+    if (_role == null) setState(() => _isLoading = true);
     try {
       final data = await Supabase.instance.client
           .from('profiles')
