@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:http/http.dart' as http;
 import '../theme/si_theme.dart';
 
@@ -197,6 +198,9 @@ class _SoporteChatState extends State<SoporteChat>
 // FAB button
 // ─────────────────────────────────────────────────────────────────────────────
 
+const _kWaGreen      = Color(0xFF25D366);
+const _kWaGreenDark  = Color(0xFF1DA851);
+
 class _Fab extends StatelessWidget {
   final bool _open;
   final SiColors _c;
@@ -211,15 +215,22 @@ class _Fab extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        width: 50,
-        height: 50,
+        width: 54,
+        height: 54,
         decoration: BoxDecoration(
-          color: _open ? _c.ink2 : _c.brand,
+          gradient: _open
+              ? null
+              : const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [_kWaGreen, _kWaGreenDark],
+                ),
+          color: _open ? _c.ink2 : null,
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
-              color: (_open ? _c.ink : _c.brand).withOpacity(0.28),
-              blurRadius: 14,
+              color: (_open ? _c.ink : _kWaGreen).withOpacity(0.35),
+              blurRadius: 16,
               offset: const Offset(0, 5),
             ),
           ],
@@ -227,14 +238,17 @@ class _Fab extends StatelessWidget {
         child: Center(
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 180),
-            child: Icon(
-              _open
-                  ? Icons.close_rounded
-                  : Icons.support_agent_rounded,
-              key: ValueKey(_open),
-              color: Colors.white,
-              size: 22,
-            ),
+            child: _open
+                ? const Icon(Icons.close_rounded,
+                    key: ValueKey(true),
+                    color: Colors.white,
+                    size: 22)
+                : const FaIcon(
+                    FontAwesomeIcons.whatsapp,
+                    key: ValueKey(false),
+                    color: Colors.white,
+                    size: 26,
+                  ),
           ),
         ),
       ),
