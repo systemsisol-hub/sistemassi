@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'theme/si_theme.dart';
@@ -903,7 +904,12 @@ class _ForgotPasswordDialogState extends State<_ForgotPasswordDialog> {
     }
     setState(() { _loading = true; _error = null; });
     try {
-      await Supabase.instance.client.auth.resetPasswordForEmail(email);
+      // redirectTo apunta a la URL real de la app (no al Site URL del dashboard)
+      final redirectTo = kIsWeb ? Uri.base.origin : null;
+      await Supabase.instance.client.auth.resetPasswordForEmail(
+        email,
+        redirectTo: redirectTo,
+      );
       if (mounted) setState(() { _loading = false; _sent = true; });
     } on AuthException catch (e) {
       if (mounted) setState(() { _loading = false; _error = e.message; });

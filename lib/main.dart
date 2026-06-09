@@ -112,6 +112,26 @@ class _AuthRouterState extends State<AuthRouter> {
   void initState() {
     super.initState();
     _listenToAuth();
+    // Procesar el ?code= del enlace de recuperación (flujo PKCE en web)
+    if (kIsWeb) _handleWebAuthCallback();
+  }
+
+  /// Intercambia el `?code=` del enlace de recuperación por una sesión.
+  /// Cubre el caso en que supabase_flutter no detectó el parámetro automáticamente.
+  Future<void> _handleWebAuthCallback() async {
+    final code = Uri.base.queryParameters['code'];
+    if (code == null || code.isEmpty) return;
+    try {
+      // Esto dispara onAuthStateChange con AuthChangeEvent.passwordRecovery
+      await Supabase.instance.client.auth.exchangeCodeForSession(code);
+    } catch (_) {
+      // Si el SDK ya procesó el código automáticamente y hay sesión activa,
+      // marcamos como recuperación de contraseña.
+      final session = Supabase.instance.client.auth.currentSession;
+      if (session != null && mounted) {
+        setState(() { _isRecovery = true; _isLoading = false; });
+      }
+    }
   }
 
   void _listenToAuth() {
@@ -202,7 +222,12 @@ class _AuthRouterState extends State<AuthRouter> {
     if (_isRecovery) {
       return ResetPasswordPage(
         themeNotifier: widget.themeNotifier,
-        onDone: () => setState(() { _isRecovery = false; }),
+        onDone: () => setState(() {
+          _isRecovery  = false;
+          _user        = null;
+          _role        = null;
+          _permissions = null;
+        }),
       );
     }
 
