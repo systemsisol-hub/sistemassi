@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'theme/si_theme.dart';
+import 'widgets/soporte_chat.dart';
 
 // Navy constants used only by the light visual panel
 const _navyBg    = Color(0xFF1A2466);
@@ -165,6 +166,9 @@ class _LoginPageState extends State<LoginPage>
                 right: 22,
                 child: _ThemeToggle(isDark: isDark, c: c, onTap: _toggleTheme),
               ),
+
+            // Chat de soporte técnico (esquina inferior derecha)
+            const Positioned.fill(child: SoporteChat()),
           ],
         ),
       ),
