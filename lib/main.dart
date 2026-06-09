@@ -157,7 +157,9 @@ class _AuthRouterState extends State<AuthRouter> {
             } else if (_user?.id != newUser.id) {
               // Different user logged in: fetch fresh data
               _user = newUser;
-              _fetchData();
+              // No llamar _fetchData durante la recuperación: evita que
+              // _isLoading=true destruya ResetPasswordPage y borre _done=true
+              if (!_isRecovery) _fetchData();
             } else {
               // Same user — token refresh or minor event: just update the user
               // object without re-fetching or showing loading (preserves navigation)

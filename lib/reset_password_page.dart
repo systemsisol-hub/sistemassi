@@ -291,8 +291,8 @@ class _ResetPasswordPageState extends State<ResetPasswordPage>
       width: double.infinity,
       height: 42,
       child: ElevatedButton(
-        onPressed: () {
-          Supabase.instance.client.auth.signOut();
+        onPressed: () async {
+          await Supabase.instance.client.auth.signOut();
           widget.onDone();
         },
         style: ElevatedButton.styleFrom(
