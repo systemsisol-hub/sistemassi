@@ -60,6 +60,16 @@ class _LoginPageState extends State<LoginPage>
     n.value = n.value == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
   }
 
+  void _showForgotPasswordDialog(SiColors c) {
+    showDialog(
+      context: context,
+      builder: (_) => _ForgotPasswordDialog(
+        c: c,
+        initialEmail: _emailController.text.trim(),
+      ),
+    );
+  }
+
   Future<void> _authenticate() async {
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -232,7 +242,7 @@ class _LoginPageState extends State<LoginPage>
       onSubmitted: (_) => _authenticate(),
       c: c,
       labelAction: GestureDetector(
-        onTap: () {},
+        onTap: () => _showForgotPasswordDialog(c),
         child: Text(
           '¿Olvidaste?',
           style: SiType.sans(
@@ -323,7 +333,7 @@ class _LightPanel extends StatelessWidget {
                 activeCount > 0 ? activeCount.toString() : '',
                 style: SiType.mono(
                   size: 280, weight: FontWeight.w700,
-                  color: Colors.white.withValues(alpha: 0.032),
+                  color: Colors.white.withOpacity(0.032),
                   letterSpacing: -16.8,
                 ),
               ),
@@ -336,13 +346,13 @@ class _LightPanel extends StatelessWidget {
               Row(children: [
                 Container(
                     width: 20, height: 1,
-                    color: Colors.white.withValues(alpha: 0.18)),
+                    color: Colors.white.withOpacity(0.18)),
                 const SizedBox(width: 10),
                 Text(
                   'Sistema interno · Release 2026.Q2',
                   style: SiType.mono(
                       size: 10,
-                      color: Colors.white.withValues(alpha: 0.24),
+                      color: Colors.white.withOpacity(0.24),
                       letterSpacing: 1.8),
                 ),
               ]),
@@ -360,7 +370,7 @@ class _LightPanel extends StatelessWidget {
                 'Incidencias, inventario, asistencia, BI y más.\nCentralizado, rápido y siempre disponible.',
                 style: SiType.sans(
                     size: 14,
-                    color: Colors.white.withValues(alpha: 0.34),
+                    color: Colors.white.withOpacity(0.34),
                     height: 1.65),
               ),
               const SizedBox(height: SiSpace.x5),
@@ -373,13 +383,13 @@ class _LightPanel extends StatelessWidget {
                               horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
                             border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.09)),
+                                color: Colors.white.withOpacity(0.09)),
                             borderRadius: SiRadius.rSm,
                           ),
                           child: Text(m,
                               style: SiType.mono(
                                   size: 9.5,
-                                  color: Colors.white.withValues(alpha: 0.24),
+                                  color: Colors.white.withOpacity(0.24),
                                   letterSpacing: 0.7)),
                         ))
                     .toList(),
@@ -392,7 +402,7 @@ class _LightPanel extends StatelessWidget {
                   decoration: BoxDecoration(
                     borderRadius: SiRadius.rLg,
                     border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.07)),
+                        color: Colors.white.withOpacity(0.07)),
                   ),
                   child: IntrinsicHeight(
                     child: Row(
@@ -409,13 +419,13 @@ class _LightPanel extends StatelessWidget {
                                 horizontal: 20, vertical: 14),
                             decoration: BoxDecoration(
                               color: s.hi
-                                  ? _navyBrand.withValues(alpha: 0.14)
-                                  : Colors.white.withValues(alpha: 0.05),
+                                  ? _navyBrand.withOpacity(0.14)
+                                  : Colors.white.withOpacity(0.05),
                               border: idx < 2
                                   ? Border(
                                       right: BorderSide(
                                           color: Colors.white
-                                              .withValues(alpha: 0.06)))
+                                              .withOpacity(0.06)))
                                   : null,
                             ),
                             child: Column(
@@ -434,7 +444,7 @@ class _LightPanel extends StatelessWidget {
                                     style: SiType.sans(
                                         size: 11,
                                         color: Colors.white
-                                            .withValues(alpha: 0.26))),
+                                            .withOpacity(0.26))),
                               ],
                             ),
                           ),
@@ -539,7 +549,7 @@ class _DarkPanel extends StatelessWidget {
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                      color: c.success.withValues(alpha: 0.5),
+                      color: c.success.withOpacity(0.5),
                       blurRadius: 8)
                 ],
               ),
@@ -726,17 +736,17 @@ class _LoginButton extends StatelessWidget {
           boxShadow: isDark
               ? [
                   BoxShadow(
-                      color: c.brand.withValues(alpha: 0.38),
+                      color: c.brand.withOpacity(0.38),
                       blurRadius: 24,
                       offset: const Offset(0, 4))
                 ]
               : [
                   BoxShadow(
-                      color: c.brandInk.withValues(alpha: 1),
+                      color: c.brandInk.withOpacity(1),
                       offset: const Offset(0, 1),
                       blurRadius: 0),
                   BoxShadow(
-                      color: c.brand.withValues(alpha: 0.22),
+                      color: c.brand.withOpacity(0.22),
                       blurRadius: 14,
                       offset: const Offset(0, 4)),
                 ],
@@ -795,14 +805,14 @@ class _ThemeToggle extends StatelessWidget {
             const EdgeInsets.only(left: 8, right: 12, top: 6, bottom: 6),
         decoration: BoxDecoration(
           color: isDark
-              ? c.panel.withValues(alpha: 0.88)
-              : Colors.white.withValues(alpha: 0.90),
+              ? c.panel.withOpacity(0.88)
+              : Colors.white.withOpacity(0.90),
           borderRadius: SiRadius.rPill,
           border: Border.all(color: c.line),
           boxShadow: [
             BoxShadow(
               color:
-                  Colors.black.withValues(alpha: isDark ? 0.35 : 0.10),
+                  Colors.black.withOpacity(isDark ? 0.35 : 0.10),
               blurRadius: isDark ? 16 : 12,
               offset: const Offset(0, 2),
             ),
@@ -854,11 +864,250 @@ class _ThemeToggle extends StatelessWidget {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// _ForgotPasswordDialog
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ForgotPasswordDialog extends StatefulWidget {
+  final SiColors c;
+  final String initialEmail;
+  const _ForgotPasswordDialog({required this.c, required this.initialEmail});
+
+  @override
+  State<_ForgotPasswordDialog> createState() => _ForgotPasswordDialogState();
+}
+
+class _ForgotPasswordDialogState extends State<_ForgotPasswordDialog> {
+  late final TextEditingController _ctrl;
+  bool    _loading = false;
+  bool    _sent    = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(text: widget.initialEmail);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    final email = _ctrl.text.trim();
+    if (email.isEmpty) {
+      setState(() => _error = 'Ingresa tu correo electrónico');
+      return;
+    }
+    setState(() { _loading = true; _error = null; });
+    try {
+      await Supabase.instance.client.auth.resetPasswordForEmail(email);
+      if (mounted) setState(() { _loading = false; _sent = true; });
+    } on AuthException catch (e) {
+      if (mounted) setState(() { _loading = false; _error = e.message; });
+    } catch (e) {
+      if (mounted) setState(() { _loading = false; _error = e.toString(); });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.c;
+    return Dialog(
+      backgroundColor: c.panel,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 380),
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 300),
+            child: _sent ? _buildSuccess(c) : _buildForm(c),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildForm(SiColors c) {
+    return Column(
+      key: const ValueKey('form'),
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Icon header
+        Row(children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: c.brandTint,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(Icons.lock_reset_outlined, size: 22, color: c.brand),
+          ),
+          const Spacer(),
+          GestureDetector(
+            onTap: () => Navigator.pop(context),
+            child: Icon(Icons.close, size: 18, color: c.ink4),
+          ),
+        ]),
+        const SizedBox(height: 16),
+        Text('Recuperar contraseña',
+            style: SiType.sans(
+                size: 18, weight: FontWeight.w700,
+                color: c.ink, letterSpacing: -0.4)),
+        const SizedBox(height: 6),
+        Text(
+          'Ingresa tu correo y te enviaremos un enlace para restablecer tu contraseña.',
+          style: SiType.sans(size: 13, color: c.ink3, height: 1.55),
+        ),
+        const SizedBox(height: 22),
+
+        // Error
+        if (_error != null) ...[
+          Container(
+            padding: const EdgeInsets.all(10),
+            margin: const EdgeInsets.only(bottom: 14),
+            decoration: BoxDecoration(
+              color: c.dangerTint,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: c.danger.withOpacity(0.3)),
+            ),
+            child: Row(children: [
+              Icon(Icons.error_outline, size: 14, color: c.danger),
+              const SizedBox(width: 8),
+              Expanded(child: Text(_error!,
+                  style: TextStyle(fontSize: 12, color: c.danger))),
+            ]),
+          ),
+        ],
+
+        // Email label
+        Text('CORREO CORPORATIVO',
+            style: SiType.mono(size: 10, color: c.ink3, letterSpacing: 1.0)),
+        const SizedBox(height: 6),
+
+        // Email field
+        AnimatedContainer(
+          duration: SiMotion.fast,
+          height: 40,
+          decoration: BoxDecoration(
+            color: c.hover,
+            borderRadius: SiRadius.rMd,
+            border: Border.all(color: c.line),
+          ),
+          child: Row(children: [
+            const SizedBox(width: 12),
+            Icon(Icons.mail_outline_rounded, size: 14, color: c.ink4),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextField(
+                controller: _ctrl,
+                keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _send(),
+                autocorrect: false,
+                enableSuggestions: false,
+                style: SiType.sans(size: 13, color: c.ink),
+                decoration: const InputDecoration(
+                  border: InputBorder.none,
+                  isDense: true,
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ]),
+        ),
+        const SizedBox(height: 22),
+
+        // Send button
+        SizedBox(
+          width: double.infinity,
+          height: 42,
+          child: ElevatedButton(
+            onPressed: _loading ? null : _send,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: c.brand,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: SiRadius.rMd),
+              elevation: 0,
+            ),
+            child: _loading
+                ? const SizedBox(width: 18, height: 18,
+                    child: CircularProgressIndicator(
+                        color: Colors.white, strokeWidth: 2))
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Enviar enlace',
+                          style: SiType.sans(
+                              size: 14,
+                              weight: FontWeight.w600,
+                              color: Colors.white)),
+                      const Icon(Icons.send_rounded,
+                          size: 16, color: Colors.white),
+                    ],
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSuccess(SiColors c) {
+    return Column(
+      key: const ValueKey('success'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: c.successTint,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(Icons.mark_email_read_outlined, size: 32, color: c.success),
+        ),
+        const SizedBox(height: 20),
+        Text('¡Correo enviado!',
+            style: SiType.sans(
+                size: 18, weight: FontWeight.w700,
+                color: c.ink, letterSpacing: -0.4)),
+        const SizedBox(height: 8),
+        Text(
+          'Si tu correo está registrado, recibirás un enlace para restablecer tu contraseña en breve.\n\nRevisa también tu carpeta de spam.',
+          textAlign: TextAlign.center,
+          style: SiType.sans(size: 13, color: c.ink3, height: 1.6),
+        ),
+        const SizedBox(height: 24),
+        SizedBox(
+          width: double.infinity,
+          height: 42,
+          child: ElevatedButton(
+            onPressed: () => Navigator.pop(context),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: c.brand,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: SiRadius.rMd),
+              elevation: 0,
+            ),
+            child: Text('Entendido',
+                style: SiType.sans(
+                    size: 14, weight: FontWeight.w600, color: Colors.white)),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _RuledLinesPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.038)
+      ..color = Colors.white.withOpacity(0.038)
       ..strokeWidth = 1.0;
     for (double y = 0; y < size.height; y += 32.0) {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);

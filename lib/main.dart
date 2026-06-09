@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'main_navigation.dart';
 import 'login_page.dart';
+import 'reset_password_page.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:syncfusion_localizations/syncfusion_localizations.dart';
@@ -104,7 +105,8 @@ class AuthRouter extends StatefulWidget {
 class _AuthRouterState extends State<AuthRouter> {
   User? _user;
   String? _role;
-  bool _isLoading = true;
+  bool _isLoading  = true;
+  bool _isRecovery = false;
 
   @override
   void initState() {
@@ -115,6 +117,12 @@ class _AuthRouterState extends State<AuthRouter> {
   void _listenToAuth() {
     try {
       Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+        // Enlace de recuperación de contraseña clickeado
+        if (data.event == AuthChangeEvent.passwordRecovery) {
+          if (mounted) setState(() { _isRecovery = true; _isLoading = false; });
+          return;
+        }
+
         final session = data.session;
         if (mounted) {
           setState(() {
@@ -124,7 +132,8 @@ class _AuthRouterState extends State<AuthRouter> {
               _user = null;
               _role = null;
               _permissions = null;
-              _isLoading = false;
+              _isLoading   = false;
+              _isRecovery  = false;
             } else if (_user?.id != newUser.id) {
               // Different user logged in: fetch fresh data
               _user = newUser;
@@ -187,6 +196,13 @@ class _AuthRouterState extends State<AuthRouter> {
             strokeWidth: 2,
           ),
         ),
+      );
+    }
+
+    if (_isRecovery) {
+      return ResetPasswordPage(
+        themeNotifier: widget.themeNotifier,
+        onDone: () => setState(() { _isRecovery = false; }),
       );
     }
 
