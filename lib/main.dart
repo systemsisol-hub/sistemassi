@@ -117,19 +117,23 @@ class _AuthRouterState extends State<AuthRouter> {
   }
 
   /// Intercambia el `?code=` del enlace de recuperación por una sesión.
-  /// Cubre el caso en que supabase_flutter no detectó el parámetro automáticamente.
   Future<void> _handleWebAuthCallback() async {
     final code = Uri.base.queryParameters['code'];
     if (code == null || code.isEmpty) return;
     try {
-      // Esto dispara onAuthStateChange con AuthChangeEvent.passwordRecovery
       await Supabase.instance.client.auth.exchangeCodeForSession(code);
+      // exchangeCodeForSession puede disparar signedIn en vez de passwordRecovery
+      // según la versión de supabase_flutter. Forzamos el modo recuperación aquí.
+      if (mounted) setState(() { _isRecovery = true; _isLoading = false; });
     } catch (_) {
-      // Si el SDK ya procesó el código automáticamente y hay sesión activa,
-      // marcamos como recuperación de contraseña.
+      // Código ya canjeado (el SDK lo procesó en initialize) — verificar si
+      // hay sesión activa. En cualquier caso limpiar _isLoading.
       final session = Supabase.instance.client.auth.currentSession;
-      if (session != null && mounted) {
-        setState(() { _isRecovery = true; _isLoading = false; });
+      if (mounted) {
+        setState(() {
+          _isRecovery = session != null;
+          _isLoading  = false;
+        });
       }
     }
   }
