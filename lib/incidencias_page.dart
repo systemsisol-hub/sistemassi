@@ -133,7 +133,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
           }
         }
       }
-      _fetchIncidencias();
+      _fetchIncidencias(showLoader: true);
     } catch (e) {
       debugPrint('Error fetching profile: $e');
     }
@@ -181,7 +181,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
       _selectedUserProfile = selectedProfile;
     });
 
-    _fetchIncidencias();
+    _fetchIncidencias(showLoader: true);
   }
 
   /// Calcula la antigüedad a partir de la fecha efectiva (reingreso si existe, sino ingreso)
@@ -841,8 +841,8 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
     );
   }
 
-  Future<void> _fetchIncidencias() async {
-    setState(() => _isLoading = true);
+  Future<void> _fetchIncidencias({bool showLoader = false}) async {
+    if (showLoader) setState(() => _isLoading = true);
     try {
       // Fetch incidencias for the selected (or current) user
       final response = await Supabase.instance.client
@@ -1451,18 +1451,29 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                                   }
                                   return;
                                 }
-                                await Supabase.instance.client
-                                    .from('incidencias')
-                                    .update({'status': val}).eq(
-                                        'id', inc['id']);
-                                await NotificationService.send(
-                                  title: 'Tu incidencia fue $val',
-                                  message:
-                                      'El estado de tu petición ha cambiado a $val.',
-                                  userId: inc['usuario_id'],
-                                  type: 'incidencia_status',
-                                );
-                                _fetchIncidencias();
+                                // Optimistic update: remover el item de la lista
+                                // inmediatamente para que la tabla refleje el
+                                // cambio sin esperar el re-fetch.
+                                final incId = inc['id'];
+                                setState(() {
+                                  _allIncidencias.removeWhere(
+                                      (item) => item['id'] == incId);
+                                });
+                                try {
+                                  await Supabase.instance.client
+                                      .from('incidencias')
+                                      .update({'status': val}).eq('id', incId);
+                                  await NotificationService.send(
+                                    title: 'Tu incidencia fue $val',
+                                    message:
+                                        'El estado de tu petición ha cambiado a $val.',
+                                    userId: inc['usuario_id'],
+                                    type: 'incidencia_status',
+                                  );
+                                } finally {
+                                  // Siempre refrescar aunque NotificationService falle
+                                  _fetchIncidencias();
+                                }
                               },
                                 itemBuilder: (_) => const [
                                   PopupMenuItem(
