@@ -134,6 +134,10 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
                           _infoRow(context, Icons.straighten, 'Talla', colab['talla']),
                           _infoRow(context, Icons.school, 'Escolaridad', colab['escolaridad']),
                           _infoRow(context, Icons.info_outline, 'Detalle Esc.', colab['detalle_escolaridad']),
+                          const Divider(height: 24),
+                          _infoRow(context, Icons.fingerprint, 'CURP', colab['curp']),
+                          _infoRow(context, Icons.receipt_long, 'RFC', colab['rfc']),
+                          _infoRow(context, Icons.local_hospital, 'IMSS', colab['imss']),
                         ]),
                         const SizedBox(height: SiSpace.x4),
                         _buildInfoCard(context, 'Domicilio y Contacto', [
@@ -219,6 +223,10 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
                     _infoRow(context, Icons.wc, 'Género', colab['genero']),
                     _infoRow(context, Icons.calendar_today, 'Fecha Nac.', colab['fecha_nacimiento']),
                     _infoRow(context, Icons.straighten, 'Talla', colab['talla']),
+                    const Divider(height: 24),
+                    _infoRow(context, Icons.fingerprint, 'CURP', colab['curp']),
+                    _infoRow(context, Icons.receipt_long, 'RFC', colab['rfc']),
+                    _infoRow(context, Icons.local_hospital, 'IMSS', colab['imss']),
                   ]),
                   const SizedBox(height: SiSpace.x4),
                   _buildInfoCard(context, 'Domicilio y Contacto', [
