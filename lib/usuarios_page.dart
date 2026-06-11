@@ -51,6 +51,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   int? _totalCount;
   final _searchController = TextEditingController();
   String _searchQuery = '';
+  String? _filterStatusSys;
   bool _isAdmin = false;
   Timer? _searchDebounce;
 
@@ -163,6 +164,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
           .select('id, nombre, paterno, materno, email, numero_empleado, role, is_blocked, status_sys, status_rh, permissions, full_name, has_auth_account, mail_user, mail_pass');
       var countQuery =
           Supabase.instance.client.from('profiles').count(CountOption.exact);
+
+      if (_filterStatusSys != null) {
+        dataQuery  = dataQuery.eq('status_sys', _filterStatusSys!);
+        countQuery = countQuery.eq('status_sys', _filterStatusSys!);
+      }
 
       if (words.isNotEmpty) {
         for (final word in words) {
@@ -480,6 +486,40 @@ class _AdminDashboardState extends State<AdminDashboard> {
             ),
           ),
           const SizedBox(width: SiSpace.x3),
+          // Filtro por Status Sistema
+          Container(
+            height: 36,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(
+              color: _filterStatusSys != null ? c.brandTint : c.bg,
+              borderRadius: SiRadius.rMd,
+              border: Border.all(
+                  color: _filterStatusSys != null ? c.brand : c.line),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String?>(
+                value: _filterStatusSys,
+                hint: Text('Status Sys',
+                    style: TextStyle(fontSize: 12, color: c.ink3)),
+                style: TextStyle(fontSize: 12, color: c.ink),
+                icon: Icon(Icons.arrow_drop_down, size: 16, color: c.ink3),
+                isDense: true,
+                items: [
+                  DropdownMenuItem(
+                    value: null,
+                    child: Text('Todos', style: TextStyle(color: c.ink3)),
+                  ),
+                  ...['ACTIVO', 'BAJA', 'CAMBIO', 'ELIMINAR', 'NO APLICA']
+                      .map((s) => DropdownMenuItem(value: s, child: Text(s))),
+                ],
+                onChanged: (val) {
+                  setState(() { _filterStatusSys = val; _page = 0; });
+                  _fetchUsers();
+                },
+              ),
+            ),
+          ),
+          const SizedBox(width: SiSpace.x3),
           if (_isAdmin)
             ElevatedButton.icon(
               onPressed: () => _showUserForm(),
@@ -612,8 +652,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
                                                 style: TextStyle(
                                                     color: c.ink4,
                                                     fontSize: 11),
-                                                overflow:
-                                                    TextOverflow.ellipsis),
+                                                overflow: TextOverflow.ellipsis),
+                                            if ((u['mail_user'] as String?)?.isNotEmpty == true)
+                                              Text(u['mail_user'],
+                                                  style: TextStyle(
+                                                      color: c.brand.withOpacity(0.75),
+                                                      fontSize: 10),
+                                                  overflow: TextOverflow.ellipsis),
                                           ],
                                         ),
                                       ),
