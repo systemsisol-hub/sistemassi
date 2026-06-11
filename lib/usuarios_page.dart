@@ -397,9 +397,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             statCard('ESTATUS DE SISTEMA', [
-              rowStat('ACTIVO', _statusSysCounts['ACTIVO'] ?? 0, c.success),
-              rowStat('BAJA', _statusSysCounts['BAJA'] ?? 0, c.danger),
-              rowStat('NO APLICA', _statusSysCounts['NO APLICA'] ?? 0, c.ink3),
+              rowStat('ACTIVO',   _statusSysCounts['ACTIVO']   ?? 0, c.success),
+              rowStat('BAJA',     _statusSysCounts['BAJA']     ?? 0, c.danger),
+              rowStat('CAMBIO',   _statusSysCounts['CAMBIO']   ?? 0, c.warn),
+              rowStat('NO APLICA',_statusSysCounts['NO APLICA']?? 0, c.ink3),
             ]),
             statCard('ESTATUS DE RH', [
               rowStat('ACTIVO', _statusRhCounts['ACTIVO'] ?? 0, c.success),
