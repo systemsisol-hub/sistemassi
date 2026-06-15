@@ -199,7 +199,12 @@ class IssiPdfService {
                 ),
               ),
 
-              pw.SizedBox(height: 24),
+              pw.SizedBox(height: 16),
+
+              // Compromisos / Entendimiento / Aceptación
+              _termsSection(primaryColor),
+
+              pw.SizedBox(height: 16),
               pw.Spacer(),
 
               // Signatures
@@ -258,6 +263,61 @@ class IssiPdfService {
           ),
         );
       }),
+    );
+  }
+
+  static pw.Widget _termsSection(PdfColor primaryColor) {
+    const bodyStyle = pw.TextStyle(fontSize: 7.5);
+    const bulletStyle = pw.TextStyle(fontSize: 7.5);
+
+    pw.Widget section(String title, List<String> bullets) {
+      return pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(title,
+              style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8, color: primaryColor)),
+          pw.SizedBox(height: 3),
+          ...bullets.map((b) => pw.Padding(
+                padding: const pw.EdgeInsets.only(left: 8, bottom: 2),
+                child: pw.Row(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text('• ', style: bulletStyle),
+                    pw.Expanded(child: pw.Text(b, style: bodyStyle)),
+                  ],
+                ),
+              )),
+        ],
+      );
+    }
+
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(10),
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: PdfColors.grey300, width: 0.5),
+        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(6)),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          section('Compromisos', [
+            'Me comprometo a utilizar el equipo única y exclusivamente para fines laborales directamente relacionados con mis actividades dentro de la empresa.',
+            'Asumo la responsabilidad de mantener el equipo y sus accesorios en óptimas condiciones, reportando de manera inmediata cualquier falla, daño o anomalía al departamento de sistemas.',
+            'Entiendo que no está permitido instalar software no autorizado ni realizar modificaciones al equipo sin la previa autorización expresa del departamento de sistemas.',
+            'En caso de robo, extravío o daño al equipo, asumo la total responsabilidad por cualquier pérdida o daño que ocurra como resultado de negligencia, mal uso o incumplimiento de las políticas de la empresa.',
+            'Me comprometo a devolver el equipo y todos sus accesorios en las mismas condiciones en las que fueron recibidos, al momento de mi desvinculación de la empresa o cuando así sea formalmente requerido.',
+          ]),
+          pw.SizedBox(height: 8),
+          section('Entendimiento', [
+            'Reconozco y entiendo que el equipo es propiedad exclusiva de la empresa y que su uso está sujeto a las políticas y normativas internas establecidas.',
+            'Acepto que el incumplimiento de este resguardo puede acarrear sanciones disciplinarias, incluyendo el descuento del valor total o parcial del equipo en caso de pérdida o daño que sea atribuible a mi responsabilidad.',
+          ]),
+          pw.SizedBox(height: 8),
+          section('Aceptación', [
+            'Por medio de mi firma, manifiesto mi aceptación total e incondicional de los términos y condiciones estipulados en el presente resguardo.',
+          ]),
+        ],
+      ),
     );
   }
 
