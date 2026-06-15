@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'theme/si_theme.dart';
+import 'services/issi_pdf_service.dart';
 
 class IssiPage extends StatefulWidget {
   const IssiPage({super.key});
@@ -318,6 +319,28 @@ class _IssiPageState extends State<IssiPage> {
                 backgroundColor: Colors.red),
           );
         }
+      }
+    }
+  }
+
+  Future<void> _downloadPdf(Map<String, dynamic> item) async {
+    try {
+      final userId = item['usuario_id'] as String?;
+      Map<String, dynamic> profile = {};
+      if (userId != null) {
+        final result = await Supabase.instance.client
+            .from('profiles')
+            .select('*, nombre, paterno, materno, area, puesto, ubicacion, foto_url, numero_empleado, email')
+            .eq('id', userId)
+            .maybeSingle();
+        if (result != null) profile = result;
+      }
+      await IssiPdfService.generateAsignacion(profile, item);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al generar PDF: $e'), backgroundColor: Colors.red),
+        );
       }
     }
   }
@@ -991,36 +1014,45 @@ class _IssiPageState extends State<IssiPage> {
                 ],
               ),
             ),
-            trailing: _isAdmin
-                ? PopupMenuButton<String>(
-                    onSelected: (value) {
-                      if (value == 'edit') {
-                        _showItemForm(item: item);
-                      } else if (value == 'delete') {
-                        _deleteItem(item['id']);
-                      }
-                    },
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(
-                        value: 'edit',
-                        child: ListTile(
-                          leading: Icon(Icons.edit, color: Colors.blue),
-                          title: Text('Editar'),
-                          dense: true,
-                        ),
+            trailing: PopupMenuButton<String>(
+                onSelected: (value) {
+                  if (value == 'edit') {
+                    _showItemForm(item: item);
+                  } else if (value == 'delete') {
+                    _deleteItem(item['id']);
+                  } else if (value == 'pdf') {
+                    _downloadPdf(item);
+                  }
+                },
+                itemBuilder: (context) => [
+                  if (_isAdmin) ...[
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: ListTile(
+                        leading: Icon(Icons.edit, color: Colors.blue),
+                        title: Text('Editar'),
+                        dense: true,
                       ),
-                      const PopupMenuItem(
-                        value: 'delete',
-                        child: ListTile(
-                          leading: Icon(Icons.delete, color: Colors.red),
-                          title: Text('Eliminar',
-                              style: TextStyle(color: Colors.red)),
-                          dense: true,
-                        ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: ListTile(
+                        leading: Icon(Icons.delete, color: Colors.red),
+                        title: Text('Eliminar', style: TextStyle(color: Colors.red)),
+                        dense: true,
                       ),
-                    ],
-                  )
-                : null,
+                    ),
+                  ],
+                  const PopupMenuItem(
+                    value: 'pdf',
+                    child: ListTile(
+                      leading: Icon(Icons.picture_as_pdf_outlined, color: Colors.deepOrange),
+                      title: Text('Descargar PDF'),
+                      dense: true,
+                    ),
+                  ),
+                ],
+              ),
             children: [
               _buildDetailRow('Ubicación', item['ubicacion'] ?? '---'),
               if (item['n_s'] != null) _buildDetailRow('N/S', item['n_s']),
@@ -1135,6 +1167,7 @@ class _IssiPageState extends State<IssiPage> {
                     siColors: c,
                     onEdit: (item) => _showItemForm(item: item),
                     onDelete: (id) => _deleteItem(id),
+                    onPdf: (item) => _downloadPdf(item),
                     buildConditionChip: (condicion) {
                       final c = condicion ?? '';
                       return Container(
@@ -1588,6 +1621,7 @@ class _IssiDataSource extends DataTableSource {
   final SiColors siColors;
   final Function(Map<String, dynamic>) onEdit;
   final Function(String) onDelete;
+  final Function(Map<String, dynamic>) onPdf;
   final Widget Function(String) buildConditionChip;
   final IconData Function(String) getIconForType;
 
@@ -1600,6 +1634,7 @@ class _IssiDataSource extends DataTableSource {
     required this.siColors,
     required this.onEdit,
     required this.onDelete,
+    required this.onPdf,
     required this.buildConditionChip,
     required this.getIconForType,
     required this.screenWidth,
@@ -1667,32 +1702,39 @@ class _IssiDataSource extends DataTableSource {
         DataCell(
           Align(
             alignment: Alignment.centerRight,
-            child: isAdmin
-                ? PopupMenuButton<String>(
-                    icon: Icon(Icons.more_horiz, color: siColors.ink3),
-                    tooltip: 'Acciones',
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    elevation: 4,
-                    onSelected: (value) {
-                      if (value == 'edit') onEdit(item);
-                      if (value == 'delete') onDelete(item['id']);
-                    },
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(
-                          value: 'edit',
-                          child: ListTile(
-                              leading: Icon(Icons.edit_outlined, color: Colors.blue),
-                              title: Text('Editar'),
-                              dense: true)),
-                      const PopupMenuItem(
-                          value: 'delete',
-                          child: ListTile(
-                              leading: Icon(Icons.delete_outline, color: Colors.red),
-                              title: Text('Eliminar', style: TextStyle(color: Colors.red)),
-                              dense: true)),
-                    ],
-                  )
-                : const SizedBox.shrink(),
+            child: PopupMenuButton<String>(
+              icon: Icon(Icons.more_horiz, color: siColors.ink3),
+              tooltip: 'Acciones',
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              elevation: 4,
+              onSelected: (value) {
+                if (value == 'edit') onEdit(item);
+                if (value == 'delete') onDelete(item['id']);
+                if (value == 'pdf') onPdf(item);
+              },
+              itemBuilder: (context) => [
+                if (isAdmin) ...[
+                  const PopupMenuItem(
+                      value: 'edit',
+                      child: ListTile(
+                          leading: Icon(Icons.edit_outlined, color: Colors.blue),
+                          title: Text('Editar'),
+                          dense: true)),
+                  const PopupMenuItem(
+                      value: 'delete',
+                      child: ListTile(
+                          leading: Icon(Icons.delete_outline, color: Colors.red),
+                          title: Text('Eliminar', style: TextStyle(color: Colors.red)),
+                          dense: true)),
+                ],
+                const PopupMenuItem(
+                    value: 'pdf',
+                    child: ListTile(
+                        leading: Icon(Icons.picture_as_pdf_outlined, color: Colors.deepOrange),
+                        title: Text('Descargar PDF'),
+                        dense: true)),
+              ],
+            ),
           ),
         ),
       ],
