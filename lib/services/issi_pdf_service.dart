@@ -174,27 +174,7 @@ class IssiPdfService {
                     _equipRow([
                       ['GPU', item['gpu'] ?? '---'],
                       ['Condición', item['condicion'] ?? '---'],
-                      ['Valor', item['valor'] != null ? '\$${item['valor']}' : '---'],
-                      ['Fecha Actualización', item['fecha_actualizacion'] ?? '---'],
                     ]),
-                    if ((item['observaciones'] as String?) != null &&
-                        (item['observaciones'] as String).isNotEmpty) ...[
-                      pw.Divider(height: 0, thickness: 0.5, color: PdfColors.grey300),
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.all(10),
-                        child: pw.Row(
-                          crossAxisAlignment: pw.CrossAxisAlignment.start,
-                          children: [
-                            pw.Text('Observaciones: ',
-                                style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
-                            pw.Expanded(
-                              child: pw.Text(item['observaciones'],
-                                  style: const pw.TextStyle(fontSize: 8)),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ),
@@ -282,7 +262,7 @@ class IssiPdfService {
                 child: pw.Row(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Text('• ', style: bulletStyle),
+                    pw.Text('- ', style: bulletStyle),
                     pw.Expanded(child: pw.Text(b, style: bodyStyle)),
                   ],
                 ),
