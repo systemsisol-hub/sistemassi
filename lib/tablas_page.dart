@@ -110,7 +110,7 @@ class _NominaTableState extends State<_NominaTable> {
       while (true) {
         final data = await Supabase.instance.client
             .from('profiles')
-            .select('nombre, paterno, materno, numero_empleado, fecha_ingreso, mail_user, ubicacion, banco, clabe, puesto, status_rh')
+            .select('nombre, paterno, materno, numero_empleado, fecha_ingreso, mail_user, ubicacion, banco, cuenta, clabe, puesto, status_rh')
             .not('nombre', 'is', null)
             .order('numero_empleado', ascending: true, nullsFirst: false)
             .range(offset, offset + limit - 1);
@@ -161,7 +161,7 @@ class _NominaTableState extends State<_NominaTable> {
         fontColorHex: xl.ExcelColor.fromHexString('#FFFFFF'),
       );
 
-      final headers = ['Núm. Empleado', 'Nombre', 'Fecha Ingreso', 'Mail Usuario', 'Ubicación', 'Banco', 'CLABE', 'Puesto', 'Status RH'];
+      final headers = ['Núm. Empleado', 'Nombre', 'Fecha Ingreso', 'Mail Usuario', 'Ubicación', 'Banco', 'Cuenta', 'CLABE', 'Puesto', 'Status RH'];
       for (var i = 0; i < headers.length; i++) {
         final cell = sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0));
         cell.value = xl.TextCellValue(headers[i]);
@@ -178,6 +178,7 @@ class _NominaTableState extends State<_NominaTable> {
           r['mail_user'] ?? '',
           r['ubicacion'] ?? '',
           r['banco'] ?? '',
+          r['cuenta'] ?? '',
           r['clabe'] ?? '',
           r['puesto'] ?? '',
           r['status_rh'] ?? '',
@@ -320,10 +321,12 @@ class _NominaTableState extends State<_NominaTable> {
             ),
             child: Row(
               children: [
-                SizedBox(width: 44, child: Text('ID', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: c.ink3, letterSpacing: 0.6))),
-                Expanded(child: Text('NOMBRE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: c.ink3, letterSpacing: 0.6))),
-                Expanded(child: Text('PUESTO / UBICACIÓN', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: c.ink3, letterSpacing: 0.6))),
-                SizedBox(width: 54, child: Text('STATUS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: c.ink3, letterSpacing: 0.6))),
+                SizedBox(width: 40, child: Text('ID', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: c.ink3, letterSpacing: 0.6))),
+                Expanded(flex: 2, child: Text('NOMBRE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: c.ink3, letterSpacing: 0.6))),
+                Expanded(child: Text('BANCO', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: c.ink3, letterSpacing: 0.6))),
+                Expanded(child: Text('CUENTA', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: c.ink3, letterSpacing: 0.6))),
+                Expanded(child: Text('CLABE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: c.ink3, letterSpacing: 0.6))),
+                SizedBox(width: 52, child: Text('STATUS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: c.ink3, letterSpacing: 0.6))),
               ],
             ),
           ),
@@ -350,8 +353,9 @@ class _NominaTableState extends State<_NominaTable> {
                 final r = pageItems[i];
                 final nombre = '${r['nombre'] ?? ''} ${r['paterno'] ?? ''} ${r['materno'] ?? ''}'.trim();
                 final numEmp = r['numero_empleado']?.toString() ?? '—';
-                final puesto = r['puesto'] as String? ?? '—';
-                final ubicacion = r['ubicacion'] as String? ?? '';
+                final banco = r['banco'] as String? ?? '—';
+                final cuenta = r['cuenta'] as String? ?? '—';
+                final clabe = r['clabe'] as String? ?? '—';
                 final status = r['status_rh'] as String? ?? '—';
                 final statusColor = status == 'ACTIVO' ? Colors.green : Colors.red;
 
@@ -360,10 +364,11 @@ class _NominaTableState extends State<_NominaTable> {
                   child: Row(
                     children: [
                       SizedBox(
-                        width: 44,
-                        child: Text(numEmp, style: TextStyle(fontSize: 12, color: c.ink3)),
+                        width: 40,
+                        child: Text(numEmp, style: TextStyle(fontSize: 11, color: c.ink3)),
                       ),
                       Expanded(
+                        flex: 2,
                         child: Text(
                           nombre.isEmpty ? '—' : nombre,
                           style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: c.ink),
@@ -371,17 +376,16 @@ class _NominaTableState extends State<_NominaTable> {
                         ),
                       ),
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(puesto, style: TextStyle(fontSize: 11, color: c.ink2), overflow: TextOverflow.ellipsis),
-                            if (ubicacion.isNotEmpty)
-                              Text(ubicacion, style: TextStyle(fontSize: 10, color: c.ink4), overflow: TextOverflow.ellipsis),
-                          ],
-                        ),
+                        child: Text(banco, style: TextStyle(fontSize: 11, color: c.ink2), overflow: TextOverflow.ellipsis),
+                      ),
+                      Expanded(
+                        child: Text(cuenta, style: TextStyle(fontSize: 11, color: c.ink2), overflow: TextOverflow.ellipsis),
+                      ),
+                      Expanded(
+                        child: Text(clabe, style: TextStyle(fontSize: 11, color: c.ink2), overflow: TextOverflow.ellipsis),
                       ),
                       SizedBox(
-                        width: 54,
+                        width: 52,
                         child: Text(
                           status,
                           style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: statusColor),
