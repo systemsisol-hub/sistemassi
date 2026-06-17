@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:file_picker/file_picker.dart';
 import 'theme/si_theme.dart';
 import 'services/issi_pdf_service.dart';
 
@@ -340,6 +341,68 @@ class _IssiPageState extends State<IssiPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error al generar PDF: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _uploadPdf(Map<String, dynamic> item) async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+
+    final file = result.files.first;
+    const maxBytes = 400 * 1024; // 400 KB
+
+    if (file.size > maxBytes) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('El PDF no puede superar los 400 KB'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    try {
+      final bytes = file.bytes!;
+      final path = 'inventario/${item['id']}/resguardo.pdf';
+
+      await Supabase.instance.client.storage
+          .from('issi-docs')
+          .uploadBinary(
+            path,
+            bytes,
+            fileOptions: const FileOptions(upsert: true, contentType: 'application/pdf'),
+          );
+
+      await Supabase.instance.client
+          .from('issi_inventory')
+          .update({'documento_pdf': path})
+          .eq('id', item['id']);
+
+      _fetchItems();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('PDF cargado correctamente'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al cargar PDF: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -1014,42 +1077,62 @@ class _IssiPageState extends State<IssiPage> {
                 ],
               ),
             ),
-            trailing: PopupMenuButton<String>(
-                onSelected: (value) {
-                  if (value == 'edit') {
-                    _showItemForm(item: item);
-                  } else if (value == 'delete') {
-                    _deleteItem(item['id']);
-                  } else if (value == 'pdf') {
-                    _downloadPdf(item);
-                  }
-                },
-                itemBuilder: (context) => [
-                  if (_isAdmin) ...[
-                    const PopupMenuItem(
-                      value: 'edit',
-                      child: ListTile(
-                        leading: Icon(Icons.edit, color: Colors.blue),
-                        title: Text('Editar'),
-                        dense: true,
+            trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if ((item['documento_pdf'] as String?) != null)
+                    const Padding(
+                      padding: EdgeInsets.only(right: 4),
+                      child: Icon(Icons.upload_file, color: Colors.green, size: 18),
+                    ),
+                  PopupMenuButton<String>(
+                    onSelected: (value) {
+                      if (value == 'edit') {
+                        _showItemForm(item: item);
+                      } else if (value == 'delete') {
+                        _deleteItem(item['id']);
+                      } else if (value == 'pdf') {
+                        _downloadPdf(item);
+                      } else if (value == 'upload') {
+                        _uploadPdf(item);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      if (_isAdmin) ...[
+                        const PopupMenuItem(
+                          value: 'edit',
+                          child: ListTile(
+                            leading: Icon(Icons.edit, color: Colors.blue),
+                            title: Text('Editar'),
+                            dense: true,
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: ListTile(
+                            leading: Icon(Icons.delete, color: Colors.red),
+                            title: Text('Eliminar', style: TextStyle(color: Colors.red)),
+                            dense: true,
+                          ),
+                        ),
+                      ],
+                      const PopupMenuItem(
+                        value: 'pdf',
+                        child: ListTile(
+                          leading: Icon(Icons.picture_as_pdf_outlined, color: Colors.deepOrange),
+                          title: Text('Descargar PDF'),
+                          dense: true,
+                        ),
                       ),
-                    ),
-                    const PopupMenuItem(
-                      value: 'delete',
-                      child: ListTile(
-                        leading: Icon(Icons.delete, color: Colors.red),
-                        title: Text('Eliminar', style: TextStyle(color: Colors.red)),
-                        dense: true,
+                      const PopupMenuItem(
+                        value: 'upload',
+                        child: ListTile(
+                          leading: Icon(Icons.upload_file, color: Colors.green),
+                          title: Text('Cargar PDF firmado'),
+                          dense: true,
+                        ),
                       ),
-                    ),
-                  ],
-                  const PopupMenuItem(
-                    value: 'pdf',
-                    child: ListTile(
-                      leading: Icon(Icons.picture_as_pdf_outlined, color: Colors.deepOrange),
-                      title: Text('Descargar PDF'),
-                      dense: true,
-                    ),
+                    ],
                   ),
                 ],
               ),
@@ -1168,6 +1251,7 @@ class _IssiPageState extends State<IssiPage> {
                     onEdit: (item) => _showItemForm(item: item),
                     onDelete: (id) => _deleteItem(id),
                     onPdf: (item) => _downloadPdf(item),
+                    onUploadPdf: (item) => _uploadPdf(item),
                     buildConditionChip: (condicion) {
                       final c = condicion ?? '';
                       return Container(
@@ -1622,6 +1706,7 @@ class _IssiDataSource extends DataTableSource {
   final Function(Map<String, dynamic>) onEdit;
   final Function(String) onDelete;
   final Function(Map<String, dynamic>) onPdf;
+  final Function(Map<String, dynamic>) onUploadPdf;
   final Widget Function(String) buildConditionChip;
   final IconData Function(String) getIconForType;
 
@@ -1635,6 +1720,7 @@ class _IssiDataSource extends DataTableSource {
     required this.onEdit,
     required this.onDelete,
     required this.onPdf,
+    required this.onUploadPdf,
     required this.buildConditionChip,
     required this.getIconForType,
     required this.screenWidth,
@@ -1655,10 +1741,21 @@ class _IssiDataSource extends DataTableSource {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(
-                  item['usuario_nombre']?.toString().toUpperCase() ?? 'SIN USUARIO',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                  overflow: TextOverflow.ellipsis,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        item['usuario_nombre']?.toString().toUpperCase() ?? 'SIN USUARIO',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if ((item['documento_pdf'] as String?) != null)
+                      const Tooltip(
+                        message: 'PDF firmado cargado',
+                        child: Icon(Icons.upload_file, color: Colors.green, size: 14),
+                      ),
+                  ],
                 ),
                 Text(
                   item['ubicacion']?.toString() ?? '---',
@@ -1711,6 +1808,7 @@ class _IssiDataSource extends DataTableSource {
                 if (value == 'edit') onEdit(item);
                 if (value == 'delete') onDelete(item['id']);
                 if (value == 'pdf') onPdf(item);
+                if (value == 'upload') onUploadPdf(item);
               },
               itemBuilder: (context) => [
                 if (isAdmin) ...[
@@ -1732,6 +1830,12 @@ class _IssiDataSource extends DataTableSource {
                     child: ListTile(
                         leading: Icon(Icons.picture_as_pdf_outlined, color: Colors.deepOrange),
                         title: Text('Descargar PDF'),
+                        dense: true)),
+                const PopupMenuItem(
+                    value: 'upload',
+                    child: ListTile(
+                        leading: Icon(Icons.upload_file, color: Colors.green),
+                        title: Text('Cargar PDF firmado'),
                         dense: true)),
               ],
             ),
