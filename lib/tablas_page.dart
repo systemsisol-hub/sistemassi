@@ -24,9 +24,7 @@ class TablasPage extends StatelessWidget {
                     children: [
                       Expanded(child: _MailsActivosTable()),
                       const SizedBox(width: 16),
-                      Expanded(child: _NominaTable()),
-                      const SizedBox(width: 16),
-                      Expanded(child: _EmptyTablePlaceholder(c: c)),
+                      Expanded(flex: 2, child: _NominaTable()),
                     ],
                   )
                 : Column(
@@ -105,15 +103,26 @@ class _NominaTableState extends State<_NominaTable> {
   Future<void> _fetchData() async {
     setState(() => _isLoading = true);
     try {
-      final data = await Supabase.instance.client
-          .from('profiles')
-          .select('nombre, paterno, materno, numero_empleado, fecha_ingreso, mail_user, ubicacion, banco, clabe, puesto, status_rh')
-          .not('nombre', 'is', null)
-          .order('numero_empleado', ascending: true, nullsFirst: false);
+      List<Map<String, dynamic>> allData = [];
+      int offset = 0;
+      const int limit = 1000;
+
+      while (true) {
+        final data = await Supabase.instance.client
+            .from('profiles')
+            .select('nombre, paterno, materno, numero_empleado, fecha_ingreso, mail_user, ubicacion, banco, clabe, puesto, status_rh')
+            .not('nombre', 'is', null)
+            .order('numero_empleado', ascending: true, nullsFirst: false)
+            .range(offset, offset + limit - 1);
+
+        allData.addAll(List<Map<String, dynamic>>.from(data));
+        if (data.length < limit) break;
+        offset += limit;
+      }
 
       if (mounted) {
         setState(() {
-          _all = List<Map<String, dynamic>>.from(data);
+          _all = allData;
           _isLoading = false;
         });
       }
@@ -237,17 +246,26 @@ class _NominaTableState extends State<_NominaTable> {
                           style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: c.brand)),
                     ),
                     const Spacer(),
-                    if (_isExporting)
-                      SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: c.brand))
-                    else
-                      GestureDetector(
-                        onTap: _isLoading ? null : _exportExcel,
-                        child: Tooltip(
-                          message: 'Exportar Excel',
-                          child: Icon(Icons.download_outlined, size: 15, color: c.brand),
-                        ),
-                      ),
-                    const SizedBox(width: 10),
+                    SizedBox(
+                      height: 28,
+                      child: _isExporting
+                          ? Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 8),
+                              child: SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: c.brand)),
+                            )
+                          : OutlinedButton.icon(
+                              onPressed: _isLoading ? null : _exportExcel,
+                              icon: const Icon(Icons.download_outlined, size: 14),
+                              label: const Text('Excel', style: TextStyle(fontSize: 11)),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.green[700],
+                                side: BorderSide(color: Colors.green[700]!),
+                                padding: const EdgeInsets.symmetric(horizontal: 10),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ),
+                    ),
+                    const SizedBox(width: 6),
                     if (_isLoading)
                       SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: c.brand))
                     else
