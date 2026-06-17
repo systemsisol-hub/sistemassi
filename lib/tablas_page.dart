@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:excel/excel.dart' as xl;
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'theme/si_theme.dart';
 import 'services/file_saver_util.dart';
 
@@ -256,7 +257,7 @@ class _NominaTableState extends State<_NominaTable> {
                             )
                           : OutlinedButton.icon(
                               onPressed: _isLoading ? null : _exportExcel,
-                              icon: const Icon(Icons.download_outlined, size: 14),
+                              icon: const FaIcon(FontAwesomeIcons.fileExcel, size: 12),
                               label: const Text('Excel', style: TextStyle(fontSize: 11)),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: Colors.green[700],
@@ -444,6 +445,7 @@ class _MailsActivosTableState extends State<_MailsActivosTable> {
 
   List<Map<String, dynamic>> _all = [];
   bool _isLoading = true;
+  bool _isExporting = false;
   final _searchController = TextEditingController();
   String _searchQuery = '';
   int _page = 0;
@@ -479,6 +481,48 @@ class _MailsActivosTableState extends State<_MailsActivosTable> {
     } catch (e) {
       debugPrint('Error TablasPage: $e');
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _exportExcel() async {
+    setState(() => _isExporting = true);
+    try {
+      final excel = xl.Excel.createExcel();
+      final sheet = excel['Mails Activos'];
+      excel.delete('Sheet1');
+
+      final headerStyle = xl.CellStyle(
+        bold: true,
+        backgroundColorHex: xl.ExcelColor.fromHexString('#344092'),
+        fontColorHex: xl.ExcelColor.fromHexString('#FFFFFF'),
+      );
+
+      final headers = ['Núm. Empleado', 'Nombre', 'Mail Usuario'];
+      for (var i = 0; i < headers.length; i++) {
+        final cell = sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0));
+        cell.value = xl.TextCellValue(headers[i]);
+        cell.cellStyle = headerStyle;
+      }
+
+      for (var ri = 0; ri < _all.length; ri++) {
+        final r = _all[ri];
+        final nombre = '${r['nombre'] ?? ''} ${r['paterno'] ?? ''} ${r['materno'] ?? ''}'.trim();
+        final rowData = [r['numero_empleado']?.toString() ?? '', nombre, r['mail_user'] ?? ''];
+        for (var ci = 0; ci < rowData.length; ci++) {
+          sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: ci, rowIndex: ri + 1))
+              .value = xl.TextCellValue(rowData[ci]);
+        }
+      }
+
+      final bytes = excel.encode()!;
+      await FileSaverUtil.saveAndShare(
+        Uint8List.fromList(bytes),
+        'mails_activos_${DateTime.now().millisecondsSinceEpoch}.xlsx',
+      );
+    } catch (e) {
+      debugPrint('Error exportando Excel: $e');
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
     }
   }
 
@@ -554,13 +598,28 @@ class _MailsActivosTableState extends State<_MailsActivosTable> {
                               color: c.brand)),
                     ),
                     const Spacer(),
+                    SizedBox(
+                      height: 28,
+                      child: _isExporting
+                          ? Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 8),
+                              child: SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: c.brand)),
+                            )
+                          : OutlinedButton.icon(
+                              onPressed: _isLoading ? null : _exportExcel,
+                              icon: const FaIcon(FontAwesomeIcons.fileExcel, size: 12),
+                              label: const Text('Excel', style: TextStyle(fontSize: 11)),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.green[700],
+                                side: BorderSide(color: Colors.green[700]!),
+                                padding: const EdgeInsets.symmetric(horizontal: 10),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ),
+                    ),
+                    const SizedBox(width: 6),
                     if (_isLoading)
-                      SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: c.brand),
-                      )
+                      SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: c.brand))
                     else
                       GestureDetector(
                         onTap: _fetchData,
