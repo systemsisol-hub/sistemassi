@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'theme/si_theme.dart';
 import 'services/issi_pdf_service.dart';
 
@@ -403,6 +404,23 @@ class _IssiPageState extends State<IssiPage> {
             content: Text('Error al cargar PDF: $e'),
             backgroundColor: Colors.red,
           ),
+        );
+      }
+    }
+  }
+
+  Future<void> _viewUploadedPdf(Map<String, dynamic> item) async {
+    final path = item['documento_pdf'] as String?;
+    if (path == null) return;
+    try {
+      final signedUrl = await Supabase.instance.client.storage
+          .from('issi-docs')
+          .createSignedUrl(path, 300); // válido 5 minutos
+      await launchUrl(Uri.parse(signedUrl), mode: LaunchMode.externalApplication);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al abrir PDF: $e'), backgroundColor: Colors.red),
         );
       }
     }
@@ -1095,6 +1113,8 @@ class _IssiPageState extends State<IssiPage> {
                         _downloadPdf(item);
                       } else if (value == 'upload') {
                         _uploadPdf(item);
+                      } else if (value == 'view') {
+                        _viewUploadedPdf(item);
                       }
                     },
                     itemBuilder: (context) => [
@@ -1132,6 +1152,15 @@ class _IssiPageState extends State<IssiPage> {
                           dense: true,
                         ),
                       ),
+                      if ((item['documento_pdf'] as String?) != null)
+                        const PopupMenuItem(
+                          value: 'view',
+                          child: ListTile(
+                            leading: Icon(Icons.visibility_outlined, color: Colors.teal),
+                            title: Text('Ver PDF firmado'),
+                            dense: true,
+                          ),
+                        ),
                     ],
                   ),
                 ],
@@ -1252,6 +1281,7 @@ class _IssiPageState extends State<IssiPage> {
                     onDelete: (id) => _deleteItem(id),
                     onPdf: (item) => _downloadPdf(item),
                     onUploadPdf: (item) => _uploadPdf(item),
+                    onViewPdf: (item) => _viewUploadedPdf(item),
                     buildConditionChip: (condicion) {
                       final c = condicion ?? '';
                       return Container(
@@ -1707,6 +1737,7 @@ class _IssiDataSource extends DataTableSource {
   final Function(String) onDelete;
   final Function(Map<String, dynamic>) onPdf;
   final Function(Map<String, dynamic>) onUploadPdf;
+  final Function(Map<String, dynamic>) onViewPdf;
   final Widget Function(String) buildConditionChip;
   final IconData Function(String) getIconForType;
 
@@ -1721,6 +1752,7 @@ class _IssiDataSource extends DataTableSource {
     required this.onDelete,
     required this.onPdf,
     required this.onUploadPdf,
+    required this.onViewPdf,
     required this.buildConditionChip,
     required this.getIconForType,
     required this.screenWidth,
@@ -1809,6 +1841,7 @@ class _IssiDataSource extends DataTableSource {
                 if (value == 'delete') onDelete(item['id']);
                 if (value == 'pdf') onPdf(item);
                 if (value == 'upload') onUploadPdf(item);
+                if (value == 'view') onViewPdf(item);
               },
               itemBuilder: (context) => [
                 if (isAdmin) ...[
@@ -1837,6 +1870,13 @@ class _IssiDataSource extends DataTableSource {
                         leading: Icon(Icons.upload_file, color: Colors.green),
                         title: Text('Cargar PDF firmado'),
                         dense: true)),
+                if ((item['documento_pdf'] as String?) != null)
+                  const PopupMenuItem(
+                      value: 'view',
+                      child: ListTile(
+                          leading: Icon(Icons.visibility_outlined, color: Colors.teal),
+                          title: Text('Ver PDF firmado'),
+                          dense: true)),
               ],
             ),
           ),
