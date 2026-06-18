@@ -227,14 +227,33 @@ class _NotificationListModalState extends State<NotificationListModal>
   Future<void> _handleTap(Map<String, dynamic> n) async {
     final isUnread = !(n['is_read'] ?? true);
     final type = n['type'] as String? ?? '';
+    final meta = (n['metadata'] as Map<String, dynamic>?) ?? {};
 
     if (isUnread) {
-      await NotificationService.markAsRead(n['id']);
-      if (mounted) {
-        setState(() {
-          final idx = _all.indexWhere((x) => x['id'] == n['id']);
-          if (idx != -1) _all[idx] = {..._all[idx], 'is_read': true};
-        });
+      if (type == 'status_sys_alert') {
+        // Marca como leídas las notificaciones del mismo evento para todos los admins
+        final collaboratorId = meta['user_id'] as String?;
+        if (collaboratorId != null) {
+          await NotificationService.markStatusSysAlertGroupAsRead(collaboratorId);
+          if (mounted) {
+            setState(() {
+              for (var i = 0; i < _all.length; i++) {
+                if (_all[i]['type'] == 'status_sys_alert' &&
+                    ((_all[i]['metadata'] as Map?)??{})['user_id'] == collaboratorId) {
+                  _all[i] = {..._all[i], 'is_read': true};
+                }
+              }
+            });
+          }
+        }
+      } else {
+        await NotificationService.markAsRead(n['id']);
+        if (mounted) {
+          setState(() {
+            final idx = _all.indexWhere((x) => x['id'] == n['id']);
+            if (idx != -1) _all[idx] = {..._all[idx], 'is_read': true};
+          });
+        }
       }
     }
 

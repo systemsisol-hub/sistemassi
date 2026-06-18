@@ -29,6 +29,17 @@ class NotificationService {
     return List<Map<String, dynamic>>.from(response);
   }
 
+  /// Marca como leídas todas las notificaciones status_sys_alert del mismo colaborador
+  /// para todos los destinatarios (read compartido entre admins)
+  static Future<void> markStatusSysAlertGroupAsRead(String collaboratorUserId) async {
+    await client
+        .from('notifications')
+        .update({'is_read': true})
+        .eq('type', 'status_sys_alert')
+        .eq('metadata->>user_id', collaboratorUserId)
+        .eq('is_read', false);
+  }
+
   /// Marca una notificación como leída (solo del usuario actual)
   static Future<void> markAsRead(String id) async {
     final userId = client.auth.currentUser?.id;
