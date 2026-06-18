@@ -321,9 +321,9 @@ class _GlobalSearchDialogState extends State<_GlobalSearchDialog> {
     try {
       final rows = await Supabase.instance.client
           .from('issi_inventory')
-          .select('marca, modelo, n_s, tipo')
+          .select('marca, modelo, n_s, tipo, usuario_nombre')
           .or('marca.ilike.%$q%,modelo.ilike.%$q%'
-              ',n_s.ilike.%$q%,tipo.ilike.%$q%')
+              ',n_s.ilike.%$q%,tipo.ilike.%$q%,usuario_nombre.ilike.%$q%')
           .limit(5);
       return (rows as List).map((r) {
         final title =
@@ -331,6 +331,7 @@ class _GlobalSearchDialogState extends State<_GlobalSearchDialog> {
         final parts = <String>[
           if (r['tipo'] != null) r['tipo'] as String,
           if (r['n_s'] != null) 'S/N: ${r['n_s']}',
+          if (r['usuario_nombre'] != null) r['usuario_nombre'] as String,
         ];
         return _Result(
           category: 'Inventario',
