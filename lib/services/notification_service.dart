@@ -89,6 +89,33 @@ class NotificationService {
     });
   }
 
+  /// Envía una notificación a todos los usuarios con permiso show_users activos
+  static Future<void> sendToUsersPage({
+    required String title,
+    required String message,
+    String type = 'status_sys_alert',
+    Map<String, dynamic>? metadata,
+  }) async {
+    try {
+      final targets = await client
+          .from('profiles')
+          .select('id')
+          .eq('permissions->>show_users', 'true')
+          .eq('status_sys', 'ACTIVO');
+      for (final target in targets) {
+        await client.from('notifications').insert({
+          'title': title,
+          'message': message,
+          'type': type,
+          'user_id': target['id'],
+          'metadata': metadata ?? {},
+        });
+      }
+    } catch (e) {
+      // No interrumpir el flujo principal
+    }
+  }
+
   /// Envía una notificación a todos los admins activos
   static Future<void> sendToAdmins({
     required String title,
