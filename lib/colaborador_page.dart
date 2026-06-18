@@ -8,15 +8,15 @@ import 'dart:io';
 import 'colaborador_detail_page.dart';
 import 'theme/si_theme.dart';
 
-class CssiPage extends StatefulWidget {
+class ColaboradorPage extends StatefulWidget {
   final String role;
-  const CssiPage({super.key, required this.role});
+  const ColaboradorPage({super.key, required this.role});
 
   @override
-  State<CssiPage> createState() => _CssiPageState();
+  State<ColaboradorPage> createState() => _ColaboradorPageState();
 }
 
-class _CssiPageState extends State<CssiPage> {
+class _ColaboradorPageState extends State<ColaboradorPage> {
   List<Map<String, dynamic>> _items = [];
   Map<String, List<String>> _userDevices = {};
   bool _isLoading = true;

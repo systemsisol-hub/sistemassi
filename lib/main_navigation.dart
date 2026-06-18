@@ -6,7 +6,7 @@ import 'user_dashboard.dart';
 import 'usuarios_page.dart';
 import 'system_logs_page.dart';
 import 'issi_page.dart';
-import 'cssi_page.dart';
+import 'colaborador_page.dart';
 import 'incidencias_page.dart';
 import 'social_page.dart';
 import 'external_contacts_page.dart';
@@ -146,7 +146,7 @@ class _MainNavigationState extends State<MainNavigation> {
         'title': 'Colaborador',
         'icon': Icons.badge_outlined,
         'activeIcon': Icons.badge,
-        'widget': CssiPage(role: widget.role),
+        'widget': ColaboradorPage(role: widget.role),
       });
     }
     if (widget.permissions['show_logs'] == true) {
