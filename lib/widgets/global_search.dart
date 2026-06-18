@@ -185,14 +185,16 @@ class _GlobalSearchDialogState extends State<_GlobalSearchDialog> {
 
   Future<void> _runSearch(String q) async {
     final lower = q.toLowerCase();
+    final hasPage = (String title) =>
+        widget.pages.any((p) => p['title'] == title);
     final futures = <Future<List<_Result>>>[
       Future.value(_searchPages(lower)),
       _searchColaboradores(lower),
-      if (widget.permissions['show_users'] == true)
+      if (hasPage('Usuarios'))
         _searchUsuarios(lower),
-      if (widget.permissions['show_issi'] == true)
+      if (hasPage('Inventario'))
         _searchInventario(lower),
-      if (widget.permissions['show_external_contacts'] == true)
+      if (hasPage('Contactos'))
         _searchContactos(lower),
     ];
     final groups = await Future.wait(futures);
@@ -225,18 +227,25 @@ class _GlobalSearchDialogState extends State<_GlobalSearchDialog> {
     try {
       final words = q.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
       if (words.isEmpty) return [];
-      final orParts = words.expand((w) => [
-        'nombre.ilike.%$w%',
-        'paterno.ilike.%$w%',
-        'materno.ilike.%$w%',
-        'numero_empleado.ilike.%$w%',
-      ]).join(',');
-      final rows = await Supabase.instance.client
+      // Usa la palabra más larga como filtro en BD (más selectiva), luego AND en cliente
+      final anchor = words.reduce((a, b) => a.length >= b.length ? a : b);
+      final rows = (await Supabase.instance.client
           .from('profiles')
-          .select('id, nombre, paterno, numero_empleado, puesto')
-          .or(orParts)
-          .limit(5);
-      return (rows as List).map((r) {
+          .select('id, nombre, paterno, materno, numero_empleado, puesto')
+          .or('nombre.ilike.%$anchor%,paterno.ilike.%$anchor%'
+              ',materno.ilike.%$anchor%,numero_empleado.ilike.%$anchor%')
+          .limit(100)) as List;
+      // Todas las palabras deben aparecer en algún campo del nombre
+      final matched = rows.where((r) {
+        final haystack = [
+          r['nombre'] ?? '',
+          r['paterno'] ?? '',
+          r['materno'] ?? '',
+          r['numero_empleado']?.toString() ?? '',
+        ].join(' ').toLowerCase();
+        return words.every((w) => haystack.contains(w));
+      }).take(5).toList();
+      return matched.map((r) {
         final nombre =
             '${r['nombre'] ?? ''} ${r['paterno'] ?? ''}'.trim();
         final parts = <String>[
@@ -268,18 +277,23 @@ class _GlobalSearchDialogState extends State<_GlobalSearchDialog> {
     try {
       final words = q.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
       if (words.isEmpty) return [];
-      final orParts = words.expand((w) => [
-        'nombre.ilike.%$w%',
-        'paterno.ilike.%$w%',
-        'materno.ilike.%$w%',
-        'email.ilike.%$w%',
-      ]).join(',');
-      final rows = await Supabase.instance.client
+      final anchor = words.reduce((a, b) => a.length >= b.length ? a : b);
+      final rows = (await Supabase.instance.client
           .from('profiles')
-          .select('id, nombre, paterno, email, status_sys')
-          .or(orParts)
-          .limit(5);
-      return (rows as List).map((r) {
+          .select('id, nombre, paterno, materno, email, status_sys')
+          .or('nombre.ilike.%$anchor%,paterno.ilike.%$anchor%'
+              ',materno.ilike.%$anchor%,email.ilike.%$anchor%')
+          .limit(100)) as List;
+      final matched = rows.where((r) {
+        final haystack = [
+          r['nombre'] ?? '',
+          r['paterno'] ?? '',
+          r['materno'] ?? '',
+          r['email'] ?? '',
+        ].join(' ').toLowerCase();
+        return words.every((w) => haystack.contains(w));
+      }).take(5).toList();
+      return matched.map((r) {
         final nombre =
             '${r['nombre'] ?? ''} ${r['paterno'] ?? ''}'.trim();
         return _Result(
