@@ -51,9 +51,25 @@ class NotificationService {
         .eq('user_id', userId);
   }
 
-  /// Elimina una notificación
+  /// Obtiene notificaciones paginadas del usuario actual
+  static Future<List<Map<String, dynamic>>> fetchPage({int offset = 0, int limit = 30}) async {
+    final userId = client.auth.currentUser?.id;
+    if (userId == null) return [];
+    final response = await client
+        .from('notifications')
+        .select()
+        .eq('user_id', userId)
+        .order('is_read', ascending: true)
+        .order('created_at', ascending: false)
+        .range(offset, offset + limit - 1);
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  /// Elimina una notificación del usuario actual
   static Future<void> deleteNotification(String id) async {
-    await client.from('notifications').delete().eq('id', id);
+    final userId = client.auth.currentUser?.id;
+    if (userId == null) return;
+    await client.from('notifications').delete().eq('id', id).eq('user_id', userId);
   }
 
   /// Envía una nueva notificación
@@ -71,5 +87,33 @@ class NotificationService {
       'user_id': userId,
       'metadata': metadata ?? {},
     });
+  }
+
+  /// Envía una notificación a todos los admins activos
+  static Future<void> sendToAdmins({
+    required String title,
+    required String message,
+    String type = 'incidencia_alert',
+    Map<String, dynamic>? metadata,
+  }) async {
+    try {
+      final admins = await client
+          .from('profiles')
+          .select('id')
+          .eq('role', 'admin')
+          .eq('status_sys', 'ACTIVO');
+
+      for (final admin in admins) {
+        await client.from('notifications').insert({
+          'title': title,
+          'message': message,
+          'type': type,
+          'user_id': admin['id'],
+          'metadata': metadata ?? {},
+        });
+      }
+    } catch (e) {
+      // No interrumpir el flujo principal si falla
+    }
   }
 }
