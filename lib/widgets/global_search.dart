@@ -456,7 +456,7 @@ class _GlobalSearchDialogState extends State<_GlobalSearchDialog> {
                         ),
                         decoration: InputDecoration(
                           hintText:
-                              'Buscar colaborador, activo, incidencia...',
+                              'Buscar colaborador, usuario, inventario...',
                           hintStyle:
                               TextStyle(fontSize: 15, color: c.ink4),
                           border: InputBorder.none,
