@@ -72,11 +72,17 @@ class _AdminDashboardState extends State<AdminDashboard> {
     _checkAdminRole();
     _fetchStats();
     _fetchUsers();
+    // Caso: se navegó desde otra pestaña (widget nuevo → initState)
+    if (widget.pendingEditUserId != null) {
+      WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _showUserForm(user: {'id': widget.pendingEditUserId}));
+    }
   }
 
   @override
   void didUpdateWidget(AdminDashboard oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // Caso: ya estaba en este tab y cambió el pendingEditUserId
     if (widget.pendingEditUserId != null &&
         widget.pendingEditUserId != oldWidget.pendingEditUserId) {
       WidgetsBinding.instance.addPostFrameCallback(
