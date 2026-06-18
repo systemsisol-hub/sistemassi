@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'theme/si_theme.dart';
-import 'services/notification_service.dart';
 
 Future<T?> showFullWidthModal<T>({
   required BuildContext context,
@@ -1387,7 +1386,6 @@ class _UserFormSheetState extends State<_UserFormSheet> {
           });
         }
         // Actualizamos el perfil directamente
-        final oldStatusSys = widget.user!['status_sys'] as String?;
         await Supabase.instance.client.from('profiles').update({
           'role': _role,
           'status_sys': _statusSys,
@@ -1407,21 +1405,6 @@ class _UserFormSheetState extends State<_UserFormSheet> {
           'otro_user': _otroUser.text.trim(),
           'otro_pass': _otroPass.text.trim(),
         }).eq('id', widget.user!['id']);
-        // Notificación si status_sys cambió
-        if (oldStatusSys != _statusSys && _statusSys != null) {
-          final nombre = (widget.user!['full_name'] as String?)?.trim() ?? '';
-          await NotificationService.sendToUsersPage(
-            title: 'Cambio de estatus del sistema',
-            message: '${nombre.isNotEmpty ? nombre : 'Un colaborador'} cambió de ${oldStatusSys ?? '-'} a $_statusSys',
-            type: 'status_sys_alert',
-            metadata: {
-              'user_id': widget.user!['id'],
-              'nombre': nombre,
-              'old_status': oldStatusSys,
-              'new_status': _statusSys,
-            },
-          );
-        }
       } else {
         // Nuevo usuario desde botón +: crea cuenta auth + perfil
         final res = await Supabase.instance.client

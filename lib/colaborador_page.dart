@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'dart:io';
 import 'colaborador_detail_page.dart';
 import 'theme/si_theme.dart';
+import 'services/notification_service.dart';
 
 class ColaboradorPage extends StatefulWidget {
   final String role;
@@ -1356,10 +1357,25 @@ class _ColaboradorPageState extends State<ColaboradorPage> {
               .getPublicUrl(path);
         }
         if (isEditing) {
+          final oldStatusSys = item['status_sys'] as String?;
           await Supabase.instance.client
               .from('profiles')
               .update(data)
               .eq('id', item['id']);
+          if (oldStatusSys != statusSys && statusSys != null) {
+            final nombre = '${item['nombre'] ?? ''} ${item['paterno'] ?? ''}'.trim();
+            await NotificationService.sendToUsersPage(
+              title: 'Cambio de estatus del sistema',
+              message: '${nombre.isNotEmpty ? nombre : 'Un colaborador'} cambió de ${oldStatusSys ?? '-'} a $statusSys',
+              type: 'status_sys_alert',
+              metadata: {
+                'user_id': item['id'],
+                'nombre': nombre,
+                'old_status': oldStatusSys,
+                'new_status': statusSys,
+              },
+            );
+          }
         } else {
           await Supabase.instance.client.from('profiles').insert(data);
         }
