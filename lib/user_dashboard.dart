@@ -139,11 +139,9 @@ class _UserDashboardState extends State<UserDashboard> {
     return SingleChildScrollView(
       child: Padding(
         padding: const EdgeInsets.all(SiSpace.x6),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1280),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
               // Page header
               _PageHeader(
                 onChangePassword: _showChangePasswordDialog,
@@ -229,8 +227,7 @@ class _UserDashboardState extends State<UserDashboard> {
             ],
           ),
         ),
-      ),
-    );
+      );
   }
 
   // ── Change password dialog (logic unchanged) ─────────────────────────────
