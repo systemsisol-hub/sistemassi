@@ -19,6 +19,7 @@ class _PasswordsPageState extends State<PasswordsPage>
   String _searchQuery = '';
   late TabController _tabController;
   final Map<String, bool> _visibilityMap = {};
+  final Map<String, int> _shareCountMap = {};
 
   @override
   void initState() {
@@ -51,6 +52,19 @@ class _PasswordsPageState extends State<PasswordsPage>
           .select('*, passwords(*)')
           .eq('shared_with_id', userId);
 
+      final myIds = (myData as List).map((p) => p['id'] as String).toList();
+      Map<String, int> shareCountMap = {};
+      if (myIds.isNotEmpty) {
+        final shareRows = await Supabase.instance.client
+            .from('password_shares')
+            .select('password_id')
+            .inFilter('password_id', myIds);
+        for (final s in shareRows) {
+          final id = s['password_id'] as String;
+          shareCountMap[id] = (shareCountMap[id] ?? 0) + 1;
+        }
+      }
+
       if (mounted) {
         setState(() {
           _myPasswords = List<Map<String, dynamic>>.from(myData);
@@ -63,6 +77,9 @@ class _PasswordsPageState extends State<PasswordsPage>
               })
               .toList()
             ..sort((a, b) => (a['name'] ?? '').compareTo(b['name'] ?? ''));
+          _shareCountMap
+            ..clear()
+            ..addAll(shareCountMap);
           _isLoading = false;
         });
       }
@@ -187,6 +204,7 @@ class _PasswordsPageState extends State<PasswordsPage>
       builder: (ctx) => _ShareDialog(
         item: item,
         currentUserId: Supabase.instance.client.auth.currentUser!.id,
+        onSaved: _fetchPasswords,
       ),
     );
   }
@@ -395,6 +413,7 @@ class _PasswordsPageState extends State<PasswordsPage>
               item: item,
               isShared: isShared,
               visible: _visibilityMap[item['id']] ?? false,
+              shareCount: _shareCountMap[item['id'] as String] ?? 0,
               onToggleVisibility: () =>
                   _toggleVisibility(item['id'] as String),
               onCopy: _copyToClipboard,
@@ -444,6 +463,7 @@ class _PasswordsPageState extends State<PasswordsPage>
                   item: item,
                   isShared: isShared,
                   visible: _visibilityMap[item['id']] ?? false,
+                  shareCount: _shareCountMap[item['id'] as String] ?? 0,
                   onToggleVisibility: () =>
                       _toggleVisibility(item['id'] as String),
                   onCopy: _copyToClipboard,
@@ -468,6 +488,7 @@ class _PasswordMobileCard extends StatelessWidget {
   final Map<String, dynamic> item;
   final bool isShared;
   final bool visible;
+  final int shareCount;
   final VoidCallback onToggleVisibility;
   final Future<void> Function(String, String) onCopy;
   final VoidCallback? onEdit;
@@ -478,6 +499,7 @@ class _PasswordMobileCard extends StatelessWidget {
     required this.item,
     required this.isShared,
     required this.visible,
+    required this.shareCount,
     required this.onToggleVisibility,
     required this.onCopy,
     this.onEdit,
@@ -595,7 +617,7 @@ class _PasswordMobileCard extends StatelessWidget {
           ),
 
           // ── Description / badge ───────────────────────────────────────
-          if (desc.isNotEmpty || isShared)
+          if (desc.isNotEmpty || isShared || (!isShared && shareCount > 0))
             Padding(
               padding: const EdgeInsets.fromLTRB(
                   SiSpace.x4, 0, SiSpace.x4, SiSpace.x3),
@@ -608,7 +630,9 @@ class _PasswordMobileCard extends StatelessWidget {
                               TextStyle(fontSize: 12, color: c.ink4),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis),
-                    ),
+                    )
+                  else
+                    const Spacer(),
                   if (isShared)
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -626,6 +650,30 @@ class _PasswordMobileCard extends StatelessWidget {
                               style: TextStyle(
                                   fontSize: 11,
                                   color: c.warn,
+                                  fontWeight: FontWeight.w500)),
+                        ],
+                      ),
+                    ),
+                  if (!isShared && shareCount > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                          color: c.brandTint,
+                          borderRadius: SiRadius.rPill),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.group_outlined,
+                              size: 11, color: c.brand),
+                          const SizedBox(width: 4),
+                          Text(
+                              shareCount == 1
+                                  ? 'Con 1 persona'
+                                  : 'Con $shareCount personas',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: c.brand,
                                   fontWeight: FontWeight.w500)),
                         ],
                       ),
@@ -760,6 +808,7 @@ class _PasswordTile extends StatelessWidget {
   final Map<String, dynamic> item;
   final bool isShared;
   final bool visible;
+  final int shareCount;
   final VoidCallback onToggleVisibility;
   final Future<void> Function(String, String) onCopy;
   final VoidCallback? onEdit;
@@ -770,6 +819,7 @@ class _PasswordTile extends StatelessWidget {
     required this.item,
     required this.isShared,
     required this.visible,
+    required this.shareCount,
     required this.onToggleVisibility,
     required this.onCopy,
     this.onEdit,
@@ -918,6 +968,30 @@ class _PasswordTile extends StatelessWidget {
                     ],
                   ),
                 ),
+              if (!isShared && shareCount > 0) ...[
+                if (isShared) const SizedBox(width: 6),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                      color: c.brandTint, borderRadius: SiRadius.rPill),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.group_outlined, size: 11, color: c.brand),
+                      const SizedBox(width: 4),
+                      Text(
+                          shareCount == 1
+                              ? 'Con 1 persona'
+                              : 'Con $shareCount personas',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: c.brand,
+                              fontWeight: FontWeight.w500)),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
         ],
@@ -1246,8 +1320,10 @@ class _PasswordFormSheetState extends State<_PasswordFormSheet> {
 class _ShareDialog extends StatefulWidget {
   final Map<String, dynamic> item;
   final String currentUserId;
+  final VoidCallback? onSaved;
 
-  const _ShareDialog({required this.item, required this.currentUserId});
+  const _ShareDialog(
+      {required this.item, required this.currentUserId, this.onSaved});
 
   @override
   State<_ShareDialog> createState() => _ShareDialogState();
@@ -1346,6 +1422,7 @@ class _ShareDialogState extends State<_ShareDialog> {
       }
 
       nav.pop();
+      widget.onSaved?.call();
       messenger.showSnackBar(
           const SnackBar(content: Text('Compartido actualizado')));
     } catch (e) {
