@@ -1057,7 +1057,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                             await Supabase.instance.client
                                 .from('incidencias')
                                 .insert(data);
-                            await NotificationService.send(
+                            await NotificationService.sendToAdmins(
                               title: 'Nueva Incidencia',
                               message:
                                   '$_userFullName ha creado una nueva petición.',
