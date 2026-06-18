@@ -11,7 +11,8 @@ import 'services/notification_service.dart';
 
 class ColaboradorPage extends StatefulWidget {
   final String role;
-  const ColaboradorPage({super.key, required this.role});
+  final String? pendingEditUserId;
+  const ColaboradorPage({super.key, required this.role, this.pendingEditUserId});
 
   @override
   State<ColaboradorPage> createState() => _ColaboradorPageState();
@@ -39,6 +40,27 @@ class _ColaboradorPageState extends State<ColaboradorPage> {
   void initState() {
     super.initState();
     _fetchItems();
+  }
+
+  @override
+  void didUpdateWidget(ColaboradorPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.pendingEditUserId != null &&
+        widget.pendingEditUserId != oldWidget.pendingEditUserId) {
+      WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _openEditById(widget.pendingEditUserId!));
+    }
+  }
+
+  Future<void> _openEditById(String userId) async {
+    try {
+      final data = await Supabase.instance.client
+          .from('profiles')
+          .select()
+          .eq('id', userId)
+          .single();
+      if (mounted) _showForm(item: Map<String, dynamic>.from(data));
+    } catch (_) {}
   }
 
   Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {

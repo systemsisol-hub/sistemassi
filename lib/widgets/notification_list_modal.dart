@@ -8,6 +8,7 @@ class NotificationListModal extends StatefulWidget {
   final Map<String, dynamic> permissions;
   final String currentUserId;
   final Function(String?)? onNavigateToCalendar;
+  final Function(String?)? onNavigateToColaborador;
 
   const NotificationListModal({
     super.key,
@@ -15,6 +16,7 @@ class NotificationListModal extends StatefulWidget {
     required this.permissions,
     required this.currentUserId,
     this.onNavigateToCalendar,
+    this.onNavigateToColaborador,
   });
 
   @override
@@ -240,6 +242,10 @@ class _NotificationListModalState extends State<NotificationListModal>
       final meta = (n['metadata'] as Map<String, dynamic>?) ?? {};
       Navigator.pop(context);
       widget.onNavigateToCalendar?.call(meta['event_id'] as String?);
+    } else if (type == 'status_sys_alert' && mounted) {
+      final meta = (n['metadata'] as Map<String, dynamic>?) ?? {};
+      Navigator.pop(context);
+      widget.onNavigateToColaborador?.call(meta['user_id'] as String?);
     }
   }
 
