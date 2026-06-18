@@ -11,7 +11,8 @@ import 'services/notification_service.dart';
 
 class ColaboradorPage extends StatefulWidget {
   final String role;
-  const ColaboradorPage({super.key, required this.role});
+  final String? pendingEditId;
+  const ColaboradorPage({super.key, required this.role, this.pendingEditId});
 
   @override
   State<ColaboradorPage> createState() => _ColaboradorPageState();
@@ -38,7 +39,34 @@ class _ColaboradorPageState extends State<ColaboradorPage> {
   @override
   void initState() {
     super.initState();
-    _fetchItems();
+    _fetchItems().then((_) {
+      if (widget.pendingEditId != null && mounted) {
+        final found = _items.firstWhere(
+          (i) => i['id'] == widget.pendingEditId,
+          orElse: () => {},
+        );
+        if (found.isNotEmpty) {
+          WidgetsBinding.instance
+              .addPostFrameCallback((_) => _showForm(item: found));
+        }
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(ColaboradorPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.pendingEditId != null &&
+        widget.pendingEditId != oldWidget.pendingEditId) {
+      final found = _items.firstWhere(
+        (i) => i['id'] == widget.pendingEditId,
+        orElse: () => {},
+      );
+      if (found.isNotEmpty) {
+        WidgetsBinding.instance
+            .addPostFrameCallback((_) => _showForm(item: found));
+      }
+    }
   }
 
 Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {

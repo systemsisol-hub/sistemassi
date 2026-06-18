@@ -12,6 +12,7 @@ Future<void> showGlobalSearch({
   required Map<String, dynamic> permissions,
   required List<Map<String, dynamic>> pages,
   required ValueChanged<int> onSelectPage,
+  Function(String type, String id)? onOpenRecord,
 }) {
   if (role != 'admin') return Future.value();
 
@@ -19,7 +20,7 @@ Future<void> showGlobalSearch({
     context: context,
     barrierDismissible: true,
     barrierLabel: 'Cerrar búsqueda',
-    barrierColor: Colors.black.withValues(alpha: 0.45),
+    barrierColor: Colors.black.withOpacity(0.45),
     transitionDuration: SiMotion.normal,
     transitionBuilder: (ctx, anim, _, child) {
       final curved =
@@ -39,6 +40,12 @@ Future<void> showGlobalSearch({
         Navigator.of(ctx).pop();
         onSelectPage(i);
       },
+      onOpenRecord: onOpenRecord == null
+          ? null
+          : (type, id) {
+              Navigator.of(ctx).pop();
+              onOpenRecord(type, id);
+            },
     ),
   );
 }
@@ -67,11 +74,13 @@ class _GlobalSearchDialog extends StatefulWidget {
   final Map<String, dynamic> permissions;
   final List<Map<String, dynamic>> pages;
   final ValueChanged<int> onSelectPage;
+  final Function(String type, String id)? onOpenRecord;
 
   const _GlobalSearchDialog({
     required this.permissions,
     required this.pages,
     required this.onSelectPage,
+    this.onOpenRecord,
   });
 
   @override
@@ -179,6 +188,8 @@ class _GlobalSearchDialogState extends State<_GlobalSearchDialog> {
     final futures = <Future<List<_Result>>>[
       Future.value(_searchPages(lower)),
       _searchColaboradores(lower),
+      if (widget.permissions['show_users'] == true)
+        _searchUsuarios(lower),
       if (widget.permissions['show_issi'] == true)
         _searchInventario(lower),
       if (widget.permissions['show_external_contacts'] == true)
@@ -212,11 +223,18 @@ class _GlobalSearchDialogState extends State<_GlobalSearchDialog> {
 
   Future<List<_Result>> _searchColaboradores(String q) async {
     try {
+      final words = q.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+      if (words.isEmpty) return [];
+      final orParts = words.expand((w) => [
+        'nombre.ilike.%$w%',
+        'paterno.ilike.%$w%',
+        'materno.ilike.%$w%',
+        'numero_empleado.ilike.%$w%',
+      ]).join(',');
       final rows = await Supabase.instance.client
           .from('profiles')
-          .select('nombre, paterno, numero_empleado, puesto')
-          .or('nombre.ilike.%$q%,paterno.ilike.%$q%'
-              ',numero_empleado.ilike.%$q%,puesto.ilike.%$q%')
+          .select('id, nombre, paterno, numero_empleado, puesto')
+          .or(orParts)
           .limit(5);
       return (rows as List).map((r) {
         final nombre =
@@ -231,8 +249,52 @@ class _GlobalSearchDialogState extends State<_GlobalSearchDialog> {
           icon: Icons.person_outline,
           title: nombre.isEmpty ? '---' : nombre,
           subtitle: parts.isEmpty ? null : parts.join(' · '),
-          onTap: () => widget.onSelectPage(
-              widget.pages.indexWhere((p) => p['title'] == 'Colaborador')),
+          onTap: () {
+            if (widget.onOpenRecord != null) {
+              widget.onOpenRecord!('colaborador', r['id'] as String);
+            } else {
+              widget.onSelectPage(
+                  widget.pages.indexWhere((p) => p['title'] == 'Colaborador'));
+            }
+          },
+        );
+      }).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<List<_Result>> _searchUsuarios(String q) async {
+    try {
+      final words = q.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+      if (words.isEmpty) return [];
+      final orParts = words.expand((w) => [
+        'nombre.ilike.%$w%',
+        'paterno.ilike.%$w%',
+        'materno.ilike.%$w%',
+        'email.ilike.%$w%',
+      ]).join(',');
+      final rows = await Supabase.instance.client
+          .from('profiles')
+          .select('id, nombre, paterno, email, status_sys')
+          .or(orParts)
+          .limit(5);
+      return (rows as List).map((r) {
+        final nombre =
+            '${r['nombre'] ?? ''} ${r['paterno'] ?? ''}'.trim();
+        return _Result(
+          category: 'Usuarios',
+          icon: Icons.manage_accounts_outlined,
+          title: nombre.isEmpty ? r['email'] ?? '---' : nombre,
+          subtitle: r['email'] as String?,
+          onTap: () {
+            if (widget.onOpenRecord != null) {
+              widget.onOpenRecord!('usuario', r['id'] as String);
+            } else {
+              widget.onSelectPage(
+                  widget.pages.indexWhere((p) => p['title'] == 'Usuarios'));
+            }
+          },
         );
       }).toList();
     } catch (_) {
@@ -260,8 +322,14 @@ class _GlobalSearchDialogState extends State<_GlobalSearchDialog> {
           icon: Icons.inventory_2_outlined,
           title: title.isEmpty ? '---' : title,
           subtitle: parts.isEmpty ? null : parts.join(' · '),
-          onTap: () => widget.onSelectPage(widget.pages
-              .indexWhere((p) => p['title'] == 'Inventario')),
+          onTap: () {
+            if (widget.onOpenRecord != null) {
+              widget.onOpenRecord!('inventario', q);
+            } else {
+              widget.onSelectPage(
+                  widget.pages.indexWhere((p) => p['title'] == 'Inventario'));
+            }
+          },
         );
       }).toList();
     } catch (_) {
@@ -325,7 +393,7 @@ class _GlobalSearchDialogState extends State<_GlobalSearchDialog> {
             border: Border.all(color: c.line),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.15),
+                color: Colors.black.withOpacity(0.15),
                 blurRadius: 28,
                 offset: const Offset(0, 10),
               ),
@@ -464,6 +532,7 @@ class _GlobalSearchDialogState extends State<_GlobalSearchDialog> {
 const _categoryIcons = <String, IconData>{
   'Páginas': Icons.grid_view_outlined,
   'Colaboradores': Icons.group_outlined,
+  'Usuarios': Icons.manage_accounts_outlined,
   'Inventario': Icons.inventory_2_outlined,
   'Contactos': Icons.contact_phone_outlined,
 };

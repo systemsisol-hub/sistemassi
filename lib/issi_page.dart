@@ -7,7 +7,8 @@ import 'theme/si_theme.dart';
 import 'services/issi_pdf_service.dart';
 
 class IssiPage extends StatefulWidget {
-  const IssiPage({super.key});
+  final String? pendingSearchQuery;
+  const IssiPage({super.key, this.pendingSearchQuery});
 
   @override
   State<IssiPage> createState() => _IssiPageState();
@@ -70,6 +71,23 @@ class _IssiPageState extends State<IssiPage> {
     _checkAdminRole();
     _fetchItems();
     _fetchUsuarios();
+    if (widget.pendingSearchQuery != null) {
+      _searchQuery = widget.pendingSearchQuery!;
+      _searchController.text = widget.pendingSearchQuery!;
+    }
+  }
+
+  @override
+  void didUpdateWidget(IssiPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.pendingSearchQuery != null &&
+        widget.pendingSearchQuery != oldWidget.pendingSearchQuery) {
+      setState(() {
+        _searchQuery = widget.pendingSearchQuery!;
+        _searchController.text = widget.pendingSearchQuery!;
+        _currentPage = 0;
+      });
+    }
   }
 
   Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {

@@ -52,6 +52,8 @@ class _MainNavigationState extends State<MainNavigation> {
   int _selectedIndex = 0;
   String? _selectedEventId;
   String? _pendingEditUserId;
+  String? _pendingColaboradorId;
+  String? _pendingInventarioQuery;
   String? _fotoUrl;
 
   @override
@@ -139,7 +141,7 @@ class _MainNavigationState extends State<MainNavigation> {
         'title': 'Inventario',
         'icon': Icons.inventory_2_outlined,
         'activeIcon': Icons.inventory_2,
-        'widget': const IssiPage(),
+        'widget': IssiPage(pendingSearchQuery: _pendingInventarioQuery),
       });
     }
     if (widget.permissions['show_cssi'] == true) {
@@ -147,7 +149,7 @@ class _MainNavigationState extends State<MainNavigation> {
         'title': 'Colaborador',
         'icon': Icons.badge_outlined,
         'activeIcon': Icons.badge,
-        'widget': ColaboradorPage(role: widget.role),
+        'widget': ColaboradorPage(role: widget.role, pendingEditId: _pendingColaboradorId),
       });
     }
     if (widget.permissions['show_logs'] == true) {
@@ -225,6 +227,28 @@ class _MainNavigationState extends State<MainNavigation> {
     }
   }
 
+  void _onOpenRecord(String type, String id, List<Map<String, dynamic>> pages) {
+    if (type == 'colaborador') {
+      final idx = pages.indexWhere((p) => p['title'] == 'Colaborador');
+      if (idx != -1) {
+        setState(() {
+          _selectedIndex = idx;
+          _pendingColaboradorId = id;
+        });
+      }
+    } else if (type == 'usuario') {
+      _onNavigateToEditUser(id, pages);
+    } else if (type == 'inventario') {
+      final idx = pages.indexWhere((p) => p['title'] == 'Inventario');
+      if (idx != -1) {
+        setState(() {
+          _selectedIndex = idx;
+          _pendingInventarioQuery = id;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final pages = _availablePages;
@@ -245,11 +269,14 @@ class _MainNavigationState extends State<MainNavigation> {
                   _selectedIndex = i;
                   _selectedEventId = null;
                   _pendingEditUserId = null;
+                  _pendingColaboradorId = null;
+                  _pendingInventarioQuery = null;
                 }),
                 onNavigateToCalendar: (id) =>
                     _onNavigateToCalendar(id, pages),
                 onNavigateToEditUser: (id) =>
                     _onNavigateToEditUser(id, pages),
+                onOpenRecord: (type, id) => _onOpenRecord(type, id, pages),
               )
             : _MobileShell(
                 pages: pages,
@@ -262,6 +289,8 @@ class _MainNavigationState extends State<MainNavigation> {
                   _selectedIndex = i;
                   _selectedEventId = null;
                   _pendingEditUserId = null;
+                  _pendingColaboradorId = null;
+                  _pendingInventarioQuery = null;
                 }),
                 onNavigateToCalendar: (id) =>
                     _onNavigateToCalendar(id, pages),
@@ -285,6 +314,7 @@ class _DesktopShell extends StatefulWidget {
   final ValueChanged<int> onSelect;
   final ValueChanged<String?> onNavigateToCalendar;
   final ValueChanged<String?> onNavigateToEditUser;
+  final Function(String type, String id)? onOpenRecord;
 
   const _DesktopShell({
     required this.pages,
@@ -296,6 +326,7 @@ class _DesktopShell extends StatefulWidget {
     required this.onSelect,
     required this.onNavigateToCalendar,
     required this.onNavigateToEditUser,
+    this.onOpenRecord,
   });
 
   @override
@@ -389,6 +420,7 @@ class _DesktopShellState extends State<_DesktopShell>
                 permissions: widget.permissions,
                 pages: widget.pages,
                 onSelectPage: widget.onSelect,
+                onOpenRecord: widget.onOpenRecord,
               );
               return null;
             },
@@ -611,6 +643,7 @@ class _DesktopShellState extends State<_DesktopShell>
                   onSelectPage: widget.onSelect,
                   onNavigateToCalendar: widget.onNavigateToCalendar,
                   onNavigateToEditUser: widget.onNavigateToEditUser,
+                  onOpenRecord: widget.onOpenRecord,
                   onSelectHome: () => widget.onSelect(0),
                 ),
                 Expanded(child: currentPage['widget']),
@@ -786,6 +819,7 @@ class _Header extends StatelessWidget {
   final ValueChanged<int> onSelectPage;
   final ValueChanged<String?> onNavigateToCalendar;
   final ValueChanged<String?> onNavigateToEditUser;
+  final Function(String type, String id)? onOpenRecord;
   final VoidCallback onSelectHome;
 
   const _Header({
@@ -797,6 +831,7 @@ class _Header extends StatelessWidget {
     required this.onSelectPage,
     required this.onNavigateToCalendar,
     required this.onNavigateToEditUser,
+    this.onOpenRecord,
     required this.onSelectHome,
   });
 
@@ -838,6 +873,7 @@ class _Header extends StatelessWidget {
                 permissions: permissions,
                 pages: pages,
                 onSelectPage: onSelectPage,
+                onOpenRecord: onOpenRecord,
               ),
             ),
           ),
@@ -881,12 +917,14 @@ class _SearchBar extends StatelessWidget {
   final Map<String, dynamic> permissions;
   final List<Map<String, dynamic>> pages;
   final ValueChanged<int> onSelectPage;
+  final Function(String type, String id)? onOpenRecord;
 
   const _SearchBar({
     required this.role,
     required this.permissions,
     required this.pages,
     required this.onSelectPage,
+    this.onOpenRecord,
   });
 
   @override
@@ -904,6 +942,7 @@ class _SearchBar extends StatelessWidget {
         permissions: permissions,
         pages: pages,
         onSelectPage: onSelectPage,
+        onOpenRecord: onOpenRecord,
       );
     }
 
