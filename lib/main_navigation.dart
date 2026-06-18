@@ -51,7 +51,7 @@ class MainNavigation extends StatefulWidget {
 class _MainNavigationState extends State<MainNavigation> {
   int _selectedIndex = 0;
   String? _selectedEventId;
-  String? _pendingColaboradorUserId;
+  String? _pendingEditUserId;
   String? _fotoUrl;
 
   @override
@@ -131,7 +131,7 @@ class _MainNavigationState extends State<MainNavigation> {
         'title': 'Usuarios',
         'icon': Icons.group_outlined,
         'activeIcon': Icons.group,
-        'widget': const AdminDashboard(),
+        'widget': AdminDashboard(pendingEditUserId: _pendingEditUserId),
       });
     }
     if (widget.permissions['show_issi'] == true) {
@@ -147,7 +147,7 @@ class _MainNavigationState extends State<MainNavigation> {
         'title': 'Colaborador',
         'icon': Icons.badge_outlined,
         'activeIcon': Icons.badge,
-        'widget': ColaboradorPage(role: widget.role, pendingEditUserId: _pendingColaboradorUserId),
+        'widget': ColaboradorPage(role: widget.role),
       });
     }
     if (widget.permissions['show_logs'] == true) {
@@ -214,13 +214,13 @@ class _MainNavigationState extends State<MainNavigation> {
     }
   }
 
-  void _onNavigateToColaborador(
+  void _onNavigateToEditUser(
       String? userId, List<Map<String, dynamic>> pages) {
-    final idx = pages.indexWhere((p) => p['title'] == 'Colaborador');
+    final idx = pages.indexWhere((p) => p['title'] == 'Usuarios');
     if (idx != -1) {
       setState(() {
         _selectedIndex = idx;
-        _pendingColaboradorUserId = userId;
+        _pendingEditUserId = userId;
       });
     }
   }
@@ -244,12 +244,12 @@ class _MainNavigationState extends State<MainNavigation> {
                 onSelect: (i) => setState(() {
                   _selectedIndex = i;
                   _selectedEventId = null;
-                  _pendingColaboradorUserId = null;
+                  _pendingEditUserId = null;
                 }),
                 onNavigateToCalendar: (id) =>
                     _onNavigateToCalendar(id, pages),
-                onNavigateToColaborador: (id) =>
-                    _onNavigateToColaborador(id, pages),
+                onNavigateToEditUser: (id) =>
+                    _onNavigateToEditUser(id, pages),
               )
             : _MobileShell(
                 pages: pages,
@@ -261,12 +261,12 @@ class _MainNavigationState extends State<MainNavigation> {
                 onSelect: (i) => setState(() {
                   _selectedIndex = i;
                   _selectedEventId = null;
-                  _pendingColaboradorUserId = null;
+                  _pendingEditUserId = null;
                 }),
                 onNavigateToCalendar: (id) =>
                     _onNavigateToCalendar(id, pages),
-                onNavigateToColaborador: (id) =>
-                    _onNavigateToColaborador(id, pages),
+                onNavigateToEditUser: (id) =>
+                    _onNavigateToEditUser(id, pages),
               );
       },
     );
@@ -284,7 +284,7 @@ class _DesktopShell extends StatefulWidget {
   final String? fotoUrl;
   final ValueChanged<int> onSelect;
   final ValueChanged<String?> onNavigateToCalendar;
-  final ValueChanged<String?> onNavigateToColaborador;
+  final ValueChanged<String?> onNavigateToEditUser;
 
   const _DesktopShell({
     required this.pages,
@@ -295,7 +295,7 @@ class _DesktopShell extends StatefulWidget {
     this.fotoUrl,
     required this.onSelect,
     required this.onNavigateToCalendar,
-    required this.onNavigateToColaborador,
+    required this.onNavigateToEditUser,
   });
 
   @override
@@ -610,7 +610,7 @@ class _DesktopShellState extends State<_DesktopShell>
                   pages: widget.pages,
                   onSelectPage: widget.onSelect,
                   onNavigateToCalendar: widget.onNavigateToCalendar,
-                  onNavigateToColaborador: widget.onNavigateToColaborador,
+                  onNavigateToEditUser: widget.onNavigateToEditUser,
                   onSelectHome: () => widget.onSelect(0),
                 ),
                 Expanded(child: currentPage['widget']),
@@ -634,7 +634,7 @@ class _MobileShell extends StatelessWidget {
   final String? fotoUrl;
   final ValueChanged<int> onSelect;
   final ValueChanged<String?> onNavigateToCalendar;
-  final ValueChanged<String?> onNavigateToColaborador;
+  final ValueChanged<String?> onNavigateToEditUser;
 
   const _MobileShell({
     required this.pages,
@@ -645,7 +645,7 @@ class _MobileShell extends StatelessWidget {
     this.fotoUrl,
     required this.onSelect,
     required this.onNavigateToCalendar,
-    required this.onNavigateToColaborador,
+    required this.onNavigateToEditUser,
   });
 
   @override
@@ -678,7 +678,7 @@ class _MobileShell extends StatelessWidget {
             currentUserId:
                 Supabase.instance.client.auth.currentUser?.id ?? '',
             onNavigateToCalendar: onNavigateToCalendar,
-            onNavigateToColaborador: onNavigateToColaborador,
+            onNavigateToEditUser: onNavigateToEditUser,
           ),
         ],
       ),
@@ -785,7 +785,7 @@ class _Header extends StatelessWidget {
   final List<Map<String, dynamic>> pages;
   final ValueChanged<int> onSelectPage;
   final ValueChanged<String?> onNavigateToCalendar;
-  final ValueChanged<String?> onNavigateToColaborador;
+  final ValueChanged<String?> onNavigateToEditUser;
   final VoidCallback onSelectHome;
 
   const _Header({
@@ -796,7 +796,7 @@ class _Header extends StatelessWidget {
     required this.pages,
     required this.onSelectPage,
     required this.onNavigateToCalendar,
-    required this.onNavigateToColaborador,
+    required this.onNavigateToEditUser,
     required this.onSelectHome,
   });
 
@@ -865,7 +865,7 @@ class _Header extends StatelessWidget {
             currentUserId:
                 Supabase.instance.client.auth.currentUser?.id ?? '',
             onNavigateToCalendar: onNavigateToCalendar,
-            onNavigateToColaborador: onNavigateToColaborador,
+            onNavigateToEditUser: onNavigateToEditUser,
           ),
           const SizedBox(width: SiSpace.x3),
         ],

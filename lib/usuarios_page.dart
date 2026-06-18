@@ -36,7 +36,8 @@ Future<T?> showFullWidthModal<T>({
 }
 
 class AdminDashboard extends StatefulWidget {
-  const AdminDashboard({super.key});
+  final String? pendingEditUserId;
+  const AdminDashboard({super.key, this.pendingEditUserId});
 
   @override
   State<AdminDashboard> createState() => _AdminDashboardState();
@@ -71,6 +72,16 @@ class _AdminDashboardState extends State<AdminDashboard> {
     _checkAdminRole();
     _fetchStats();
     _fetchUsers();
+  }
+
+  @override
+  void didUpdateWidget(AdminDashboard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.pendingEditUserId != null &&
+        widget.pendingEditUserId != oldWidget.pendingEditUserId) {
+      WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _showUserForm(user: {'id': widget.pendingEditUserId}));
+    }
   }
 
   @override
