@@ -155,45 +155,39 @@ class _UserDashboardState extends State<UserDashboard> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Left profile card
-                    SizedBox(
-                      width: 280,
-                      child: _ProfileCard(
-                        profile: _profile,
-                        fullName: fullName,
-                        role: role,
-                        userEmail: userEmail,
-                        initials: initials,
-                        isPhotoLoading: _isPhotoLoading,
-                        onChangePhoto: _updateProfilePhoto,
-                      ),
-                    ),
-                    const SizedBox(width: SiSpace.x4),
-                    // Right cards
+                    // Columna 1: datos del usuario + datos del colaborador
                     Expanded(
                       child: Column(
                         children: [
-                          _DatosColaboradorCard(profile: _profile),
-                          const SizedBox(height: SiSpace.x4),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                  child: _EquipmentCard(
-                                      equipment: _assignedEquipment)),
-                              const SizedBox(width: SiSpace.x4),
-                              Expanded(
-                                  child: _CredentialsCard(
-                                      profile: _profile,
-                                      obscure: _obscureCredentials,
-                                      onToggle: (k) => setState(() =>
-                                          _obscureCredentials[k] =
-                                              !(_obscureCredentials[k] ??
-                                                  true)))),
-                            ],
+                          _ProfileCard(
+                            profile: _profile,
+                            fullName: fullName,
+                            role: role,
+                            userEmail: userEmail,
+                            initials: initials,
+                            isPhotoLoading: _isPhotoLoading,
+                            onChangePhoto: _updateProfilePhoto,
                           ),
+                          const SizedBox(height: SiSpace.x4),
+                          _DatosColaboradorCard(profile: _profile),
                         ],
                       ),
+                    ),
+                    const SizedBox(width: SiSpace.x4),
+                    // Columna 2: credenciales del sistema
+                    Expanded(
+                      child: _CredentialsCard(
+                        profile: _profile,
+                        obscure: _obscureCredentials,
+                        onToggle: (k) => setState(() =>
+                            _obscureCredentials[k] =
+                                !(_obscureCredentials[k] ?? true)),
+                      ),
+                    ),
+                    const SizedBox(width: SiSpace.x4),
+                    // Columna 3: equipo asignado
+                    Expanded(
+                      child: _EquipmentCard(equipment: _assignedEquipment),
                     ),
                   ],
                 )
