@@ -206,12 +206,17 @@ class _IssiPageState extends State<IssiPage> {
       while (true) {
         final data = await Supabase.instance.client
             .from('profiles')
-            .select('id, full_name')
+            .select('id, nombre, paterno, materno')
             .eq('status_sys', 'ACTIVO')
-            .order('full_name')
+            .order('nombre')
             .range(offset, offset + limit - 1);
 
-        allUsuarios.addAll(List<Map<String, dynamic>>.from(data));
+        allUsuarios.addAll(List<Map<String, dynamic>>.from(data).map((u) {
+          final fullName = [u['nombre'] ?? '', u['paterno'] ?? '', u['materno'] ?? '']
+              .where((s) => (s as String).isNotEmpty)
+              .join(' ');
+          return {...u, 'full_name': fullName};
+        }).toList());
 
         if (data.length < limit) break;
         offset += limit;
