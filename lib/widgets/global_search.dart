@@ -231,7 +231,7 @@ class _GlobalSearchDialogState extends State<_GlobalSearchDialog> {
       final anchor = words.reduce((a, b) => a.length >= b.length ? a : b);
       final rows = (await Supabase.instance.client
           .from('profiles')
-          .select('id, nombre, paterno, materno, numero_empleado, puesto')
+          .select('id, nombre, paterno, materno, numero_empleado, puesto, email')
           .or('nombre.ilike.%$anchor%,paterno.ilike.%$anchor%'
               ',materno.ilike.%$anchor%,numero_empleado.ilike.%$anchor%')
           .limit(100)) as List;
@@ -246,18 +246,16 @@ class _GlobalSearchDialogState extends State<_GlobalSearchDialog> {
         return words.every((w) => haystack.contains(w));
       }).take(5).toList();
       return matched.map((r) {
-        final nombre =
-            '${r['nombre'] ?? ''} ${r['paterno'] ?? ''}'.trim();
-        final parts = <String>[
-          if (r['numero_empleado'] != null)
-            'No. ${r['numero_empleado']}',
-          if (r['puesto'] != null) r['puesto'] as String,
-        ];
+        final nombre = [
+          r['nombre'] ?? '',
+          r['paterno'] ?? '',
+          r['materno'] ?? '',
+        ].where((s) => (s as String).isNotEmpty).join(' ');
         return _Result(
           category: 'Colaboradores',
           icon: Icons.person_outline,
           title: nombre.isEmpty ? '---' : nombre,
-          subtitle: parts.isEmpty ? null : parts.join(' · '),
+          subtitle: r['email'] as String?,
           onTap: () {
             if (widget.onOpenRecord != null) {
               widget.onOpenRecord!('colaborador', r['id'] as String);
@@ -294,8 +292,11 @@ class _GlobalSearchDialogState extends State<_GlobalSearchDialog> {
         return words.every((w) => haystack.contains(w));
       }).take(5).toList();
       return matched.map((r) {
-        final nombre =
-            '${r['nombre'] ?? ''} ${r['paterno'] ?? ''}'.trim();
+        final nombre = [
+          r['nombre'] ?? '',
+          r['paterno'] ?? '',
+          r['materno'] ?? '',
+        ].where((s) => (s as String).isNotEmpty).join(' ');
         return _Result(
           category: 'Usuarios',
           icon: Icons.manage_accounts_outlined,
