@@ -1405,7 +1405,26 @@ Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
             );
           }
         } else {
-          await Supabase.instance.client.from('profiles').insert(data);
+          final inserted = await Supabase.instance.client
+              .from('profiles')
+              .insert(data)
+              .select('id')
+              .single();
+          final newId = inserted['id'] as String;
+          final nombre =
+              '${data['nombre'] ?? ''} ${data['paterno'] ?? ''}'.trim();
+          await NotificationService.sendToUsersPage(
+            title: 'Nuevo colaborador dado de alta',
+            message:
+                '${nombre.isNotEmpty ? nombre : 'Un colaborador'} fue creado con estatus CAMBIO',
+            type: 'status_sys_alert',
+            metadata: {
+              'user_id': newId,
+              'nombre': nombre,
+              'old_status': null,
+              'new_status': 'CAMBIO',
+            },
+          );
         }
         if (mounted) {
           Navigator.pop(context);
