@@ -1585,6 +1585,8 @@ class _UserFormSheetState extends State<_UserFormSheet> {
         : parts.isNotEmpty ? parts[0][0].toUpperCase() : '?';
 
     final items = <(IconData, String)>[
+      if ((u['numero_empleado'] ?? '').toString().isNotEmpty)
+        (Icons.badge_outlined,       u['numero_empleado'].toString()),
       if ((u['tipo_empresa'] ?? '').toString().isNotEmpty)
         (Icons.business_outlined,    u['tipo_empresa'].toString()),
       if ((u['puesto'] ?? '').toString().isNotEmpty)
@@ -1624,7 +1626,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                SelectableText(
                   nombre.isEmpty ? 'Sin nombre' : nombre,
                   style: TextStyle(
                       fontWeight: FontWeight.w600,
@@ -1634,7 +1636,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
                 if ((u['email'] ?? '').toString().isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
-                    child: Text(
+                    child: SelectableText(
                       u['email'].toString(),
                       style: TextStyle(fontSize: 12, color: c.ink4),
                     ),
@@ -1658,13 +1660,33 @@ class _UserFormSheetState extends State<_UserFormSheet> {
   }
 
   Widget _infoChip(SiColors c, IconData icon, String text) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 13, color: c.ink4),
-        const SizedBox(width: 4),
-        Text(text, style: TextStyle(fontSize: 12, color: c.ink3)),
-      ],
+    return Tooltip(
+      message: 'Copiar',
+      child: InkWell(
+        borderRadius: SiRadius.rSm,
+        onTap: () async {
+          await Clipboard.setData(ClipboardData(text: text));
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Copiado: $text'),
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 13, color: c.ink4),
+              const SizedBox(width: 4),
+              Text(text, style: TextStyle(fontSize: 12, color: c.ink3)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
