@@ -1626,19 +1626,25 @@ class _UserFormSheetState extends State<_UserFormSheet> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SelectableText(
+                _infoChip(
+                  c,
+                  Icons.person_outline,
                   nombre.isEmpty ? 'Sin nombre' : nombre,
-                  style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
-                      color: c.ink),
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  iconColor: c.ink3,
+                  textColor: c.ink,
                 ),
                 if ((u['email'] ?? '').toString().isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
-                    child: SelectableText(
+                    child: _infoChip(
+                      c,
+                      Icons.alternate_email,
                       u['email'].toString(),
-                      style: TextStyle(fontSize: 12, color: c.ink4),
+                      fontSize: 12,
+                      iconColor: c.ink4,
+                      textColor: c.ink4,
                     ),
                   ),
                 if (items.isNotEmpty) ...[
@@ -1659,7 +1665,17 @@ class _UserFormSheetState extends State<_UserFormSheet> {
     );
   }
 
-  Widget _infoChip(SiColors c, IconData icon, String text) {
+  Widget _infoChip(
+    SiColors c,
+    IconData icon,
+    String text, {
+    double fontSize = 12,
+    FontWeight fontWeight = FontWeight.w400,
+    Color? iconColor,
+    Color? textColor,
+  }) {
+    final iColor = iconColor ?? c.ink4;
+    final tColor = textColor ?? c.ink3;
     return Tooltip(
       message: 'Copiar',
       child: InkWell(
@@ -1680,9 +1696,13 @@ class _UserFormSheetState extends State<_UserFormSheet> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 13, color: c.ink4),
+              Icon(icon, size: 13, color: iColor),
               const SizedBox(width: 4),
-              Text(text, style: TextStyle(fontSize: 12, color: c.ink3)),
+              Text(text,
+                  style: TextStyle(
+                      fontSize: fontSize,
+                      fontWeight: fontWeight,
+                      color: tColor)),
             ],
           ),
         ),
