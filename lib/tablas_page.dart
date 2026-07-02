@@ -162,7 +162,7 @@ class _NominaTableState extends State<_NominaTable> {
         fontColorHex: xl.ExcelColor.fromHexString('#FFFFFF'),
       );
 
-      final headers = ['Núm. Empleado', 'Nombre', 'Fecha Ingreso', 'Mail Usuario', 'Ubicación', 'Banco', 'Cuenta', 'CLABE', 'Puesto', 'Status RH'];
+      final headers = ['Nombre', 'Núm. Empleado', 'Fecha Ingreso', 'Mail Usuario', 'Ubicación', 'Banco', 'Cuenta', 'CLABE', 'Puesto', 'Status RH'];
       for (var i = 0; i < headers.length; i++) {
         final cell = sheet.cell(xl.CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0));
         cell.value = xl.TextCellValue(headers[i]);
@@ -173,8 +173,8 @@ class _NominaTableState extends State<_NominaTable> {
         final r = _all[ri];
         final nombre = '${r['nombre'] ?? ''} ${r['paterno'] ?? ''} ${r['materno'] ?? ''}'.trim();
         final rowData = [
-          r['numero_empleado']?.toString() ?? '',
           nombre,
+          r['numero_empleado']?.toString() ?? '',
           r['fecha_ingreso']?.toString() ?? '',
           r['mail_user'] ?? '',
           r['ubicacion'] ?? '',
@@ -322,8 +322,8 @@ class _NominaTableState extends State<_NominaTable> {
             ),
             child: Row(
               children: [
-                SizedBox(width: 40, child: Text('ID', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: c.ink3, letterSpacing: 0.6))),
                 Expanded(flex: 2, child: Text('NOMBRE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: c.ink3, letterSpacing: 0.6))),
+                SizedBox(width: 40, child: Text('ID', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: c.ink3, letterSpacing: 0.6))),
                 Expanded(child: Text('BANCO', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: c.ink3, letterSpacing: 0.6))),
                 Expanded(child: Text('CUENTA', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: c.ink3, letterSpacing: 0.6))),
                 Expanded(child: Text('CLABE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: c.ink3, letterSpacing: 0.6))),
@@ -364,10 +364,6 @@ class _NominaTableState extends State<_NominaTable> {
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
                   child: Row(
                     children: [
-                      SizedBox(
-                        width: 40,
-                        child: Text(numEmp, style: TextStyle(fontSize: 11, color: c.ink3)),
-                      ),
                       Expanded(
                         flex: 2,
                         child: Text(
@@ -375,6 +371,10 @@ class _NominaTableState extends State<_NominaTable> {
                           style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: c.ink),
                           overflow: TextOverflow.ellipsis,
                         ),
+                      ),
+                      SizedBox(
+                        width: 40,
+                        child: Text(numEmp, style: TextStyle(fontSize: 11, color: c.ink3)),
                       ),
                       Expanded(
                         child: Text(banco, style: TextStyle(fontSize: 11, color: c.ink2), overflow: TextOverflow.ellipsis),
