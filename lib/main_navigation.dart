@@ -202,7 +202,7 @@ class _MainNavigationState extends State<MainNavigation> {
         'widget': AiPage(role: widget.role, permissions: widget.permissions),
       });
     }
-    if (widget.role == 'admin' || widget.permissions['show_trash'] == true) {
+    if (widget.permissions['show_trash'] == true) {
       pages.add({
         'title': 'Papelera',
         'icon': Icons.delete_outline,
