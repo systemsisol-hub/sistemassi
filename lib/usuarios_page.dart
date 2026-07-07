@@ -53,6 +53,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   final _searchController = TextEditingController();
   String _searchQuery = '';
   String? _filterStatusSys;
+  bool?   _filterAcceso;
   bool _isAdmin = false;
   Timer? _searchDebounce;
 
@@ -185,6 +186,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
       if (_filterStatusSys != null) {
         dataQuery  = dataQuery.eq('status_sys', _filterStatusSys!);
         countQuery = countQuery.eq('status_sys', _filterStatusSys!);
+      }
+      if (_filterAcceso != null) {
+        dataQuery  = dataQuery.eq('has_auth_account', _filterAcceso!);
+        countQuery = countQuery.eq('has_auth_account', _filterAcceso!);
       }
 
       if (words.isNotEmpty) {
@@ -465,6 +470,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       padding: const EdgeInsets.symmetric(
           horizontal: SiSpace.x4, vertical: SiSpace.x3),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Expanded(
             child: Container(
@@ -503,38 +509,36 @@ class _AdminDashboardState extends State<AdminDashboard> {
             ),
           ),
           const SizedBox(width: SiSpace.x3),
-          // Filtro por Status Sistema
-          Container(
-            height: 36,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            decoration: BoxDecoration(
-              color: _filterStatusSys != null ? c.brandTint : c.bg,
-              borderRadius: SiRadius.rMd,
-              border: Border.all(
-                  color: _filterStatusSys != null ? c.brand : c.line),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String?>(
-                value: _filterStatusSys,
-                hint: Text('Status Sys',
-                    style: TextStyle(fontSize: 12, color: c.ink3)),
-                style: TextStyle(fontSize: 12, color: c.ink),
-                icon: Icon(Icons.arrow_drop_down, size: 16, color: c.ink3),
-                isDense: true,
-                items: [
-                  DropdownMenuItem(
-                    value: null,
-                    child: Text('Todos', style: TextStyle(color: c.ink3)),
-                  ),
-                  ...['ACTIVO', 'BAJA', 'CAMBIO', 'ELIMINAR', 'NO APLICA']
-                      .map((s) => DropdownMenuItem(value: s, child: Text(s))),
-                ],
-                onChanged: (val) {
-                  setState(() { _filterStatusSys = val; _page = 0; });
-                  _fetchUsers();
-                },
-              ),
-            ),
+          _buildFilterDropdown<String?>(
+            c,
+            label: 'STATUS SYS',
+            value: _filterStatusSys,
+            isActive: _filterStatusSys != null,
+            items: [
+              DropdownMenuItem(value: null, child: Text('Todos', style: TextStyle(color: c.ink3))),
+              ...['ACTIVO', 'BAJA', 'CAMBIO', 'ELIMINAR', 'NO APLICA']
+                  .map((s) => DropdownMenuItem(value: s, child: Text(s))),
+            ],
+            onChanged: (val) {
+              setState(() { _filterStatusSys = val; _page = 0; });
+              _fetchUsers();
+            },
+          ),
+          const SizedBox(width: SiSpace.x3),
+          _buildFilterDropdown<bool?>(
+            c,
+            label: 'ACCESO',
+            value: _filterAcceso,
+            isActive: _filterAcceso != null,
+            items: [
+              DropdownMenuItem(value: null, child: Text('Todos', style: TextStyle(color: c.ink3))),
+              DropdownMenuItem(value: true, child: Text('Con acceso')),
+              DropdownMenuItem(value: false, child: Text('Sin acceso')),
+            ],
+            onChanged: (val) {
+              setState(() { _filterAcceso = val; _page = 0; });
+              _fetchUsers();
+            },
           ),
           const SizedBox(width: SiSpace.x3),
           if (_isAdmin)
@@ -815,6 +819,52 @@ class _AdminDashboardState extends State<AdminDashboard> {
       return _sortAsc ? sa.compareTo(sb) : sb.compareTo(sa);
     });
     return sorted;
+  }
+
+  Widget _buildFilterDropdown<T>(
+    SiColors c, {
+    required String label,
+    required T value,
+    required bool isActive,
+    required List<DropdownMenuItem<T>> items,
+    required void Function(T?) onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 9,
+            fontWeight: FontWeight.w700,
+            color: isActive ? c.brand : c.ink4,
+            letterSpacing: 0.6,
+          ),
+        ),
+        const SizedBox(height: 3),
+        Container(
+          height: 32,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            color: isActive ? c.brandTint : c.bg,
+            borderRadius: SiRadius.rMd,
+            border: Border.all(color: isActive ? c.brand : c.line),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<T>(
+              value: value,
+              hint: Text('Todos', style: TextStyle(fontSize: 12, color: c.ink3)),
+              style: TextStyle(fontSize: 12, color: c.ink),
+              icon: Icon(Icons.arrow_drop_down, size: 16, color: c.ink3),
+              isDense: true,
+              items: items,
+              onChanged: onChanged,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _colHeader(SiColors c, String label, {int flex = 1, String? sortKey}) {
