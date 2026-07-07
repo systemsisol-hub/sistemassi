@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'theme/si_theme.dart';
+import 'services/trash_service.dart';
 
 Future<T?> showFullWidthModal<T>({
   required BuildContext context,
@@ -278,12 +279,31 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
     if (confirmed != true) return;
     try {
+      // Fetch full profile before deletion for trash snapshot
+      try {
+        final profileData = await Supabase.instance.client
+            .from('profiles')
+            .select()
+            .eq('id', id)
+            .single();
+        final profile = Map<String, dynamic>.from(profileData);
+        final label = [profile['nombre'], profile['paterno'], profile['materno']]
+            .where((s) => (s as String?)?.isNotEmpty == true)
+            .join(' ');
+        await TrashService.moveToTrash(
+          originTable: 'profiles',
+          originId: id,
+          data: profile,
+          label: label.isNotEmpty ? label : 'Usuario',
+        );
+      } catch (_) {}
+
       await Supabase.instance.client
           .rpc('delete_user_admin', params: {'user_id_param': id});
       _fetchUsers();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Usuario eliminado correctamente')),
+          const SnackBar(content: Text('Usuario movido a la papelera')),
         );
       }
     } catch (e) {

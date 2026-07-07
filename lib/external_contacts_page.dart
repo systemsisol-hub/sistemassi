@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/services.dart';
 import 'theme/si_theme.dart';
+import 'services/trash_service.dart';
 
 class ExternalContactsPage extends StatefulWidget {
   const ExternalContactsPage({super.key});
@@ -99,6 +100,16 @@ class _ExternalContactsPageState extends State<ExternalContactsPage> {
 
     if (confirmed == true) {
       try {
+        final contact = _contacts.firstWhere((c) => c['id'] == id, orElse: () => {});
+        if (contact.isNotEmpty) {
+          final label = (contact['nombre'] as String? ?? '').trim();
+          await TrashService.moveToTrash(
+            originTable: 'external_contacts',
+            originId: id,
+            data: Map<String, dynamic>.from(contact),
+            label: label.isNotEmpty ? label : 'Contacto',
+          );
+        }
         await Supabase.instance.client
             .from('external_contacts')
             .delete()
@@ -106,7 +117,7 @@ class _ExternalContactsPageState extends State<ExternalContactsPage> {
         _fetchContacts();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Contacto eliminado')));
+              const SnackBar(content: Text('Contacto movido a la papelera')));
         }
       } catch (e) {
         if (mounted) {

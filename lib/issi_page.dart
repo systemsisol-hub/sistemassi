@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'theme/si_theme.dart';
 import 'services/issi_pdf_service.dart';
+import 'services/trash_service.dart';
 
 class IssiPage extends StatefulWidget {
   final String? pendingSearchQuery;
@@ -326,6 +327,16 @@ class _IssiPageState extends State<IssiPage> {
 
     if (confirmed == true) {
       try {
+        final item = _items.firstWhere((i) => i['id'] == id, orElse: () => {});
+        if (item.isNotEmpty) {
+          final label = '${item['marca'] ?? ''} ${item['modelo'] ?? ''}'.trim();
+          await TrashService.moveToTrash(
+            originTable: 'issi_inventory',
+            originId: id,
+            data: Map<String, dynamic>.from(item),
+            label: label.isNotEmpty ? label : 'Inventario',
+          );
+        }
         await Supabase.instance.client
             .from('issi_inventory')
             .delete()
@@ -333,7 +344,7 @@ class _IssiPageState extends State<IssiPage> {
         _fetchItems();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Elemento eliminado correctamente')),
+            const SnackBar(content: Text('Elemento movido a la papelera')),
           );
         }
       } catch (e) {

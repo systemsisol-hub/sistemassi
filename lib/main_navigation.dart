@@ -19,6 +19,7 @@ import 'tablas_page.dart';
 import 'passwords_page.dart';
 import 'ai_page.dart';
 import 'knowledge_page.dart';
+import 'trash_page.dart';
 import 'theme/si_theme.dart';
 
 class _OpenSearchIntent extends Intent {
@@ -30,7 +31,7 @@ final _navGroups = <(String, List<String>)>[
   ('GENERAL',        ['Mi Perfil', 'Social', 'Conocimientos', 'Contraseñas', 'Contactos', 'Firmas', 'Calendario']),
   ('OPERACIÓN',      ['Incidencias', 'Inventario', 'Colaborador', 'Asistencia']),
   ('ANÁLISIS',       ['BI', 'Logs', 'Tablas']),
-  ('ADMINISTRACIÓN', ['Usuarios', 'IA']),
+  ('ADMINISTRACIÓN', ['Usuarios', 'IA', 'Papelera']),
 ];
 
 class MainNavigation extends StatefulWidget {
@@ -199,6 +200,14 @@ class _MainNavigationState extends State<MainNavigation> {
         'icon': Icons.smart_toy_outlined,
         'activeIcon': Icons.smart_toy,
         'widget': AiPage(role: widget.role, permissions: widget.permissions),
+      });
+    }
+    if (widget.role == 'admin') {
+      pages.add({
+        'title': 'Papelera',
+        'icon': Icons.delete_outline,
+        'activeIcon': Icons.delete,
+        'widget': const TrashPage(),
       });
     }
 

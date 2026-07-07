@@ -8,6 +8,7 @@ import 'dart:io';
 import 'colaborador_detail_page.dart';
 import 'theme/si_theme.dart';
 import 'services/notification_service.dart';
+import 'services/trash_service.dart';
 
 class ColaboradorPage extends StatefulWidget {
   final String role;
@@ -268,6 +269,18 @@ Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
 
     if (confirmed == true) {
       try {
+        final item = _items.firstWhere((i) => i['id'] == id, orElse: () => {});
+        if (item.isNotEmpty) {
+          final label = [item['nombre'], item['paterno'], item['materno']]
+              .where((s) => (s as String?)?.isNotEmpty == true)
+              .join(' ');
+          await TrashService.moveToTrash(
+            originTable: 'profiles',
+            originId: id,
+            data: Map<String, dynamic>.from(item),
+            label: label.isNotEmpty ? label : 'Colaborador',
+          );
+        }
         await Supabase.instance.client.from('profiles').delete().eq('id', id);
         _fetchItems();
       } catch (e) {
