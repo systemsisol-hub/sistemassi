@@ -1966,6 +1966,14 @@ class _UserFormSheetState extends State<_UserFormSheet> {
     return '${ini(_nombreCtrl.text)}$paterno${ini(_maternoCtrl.text)}@selvanorte.com';
   }
 
+  String _autoMailBonanza() {
+    String ini(String s) {
+      final t = s.trim();
+      return t.isEmpty ? '' : t[0].toLowerCase();
+    }
+    return '${ini(_nombreCtrl.text)}${ini(_paternoCtrl.text)}${ini(_maternoCtrl.text)}@bonanzaprisma.com';
+  }
+
   Widget _buildCredentialsSection(SiColors c) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2001,6 +2009,8 @@ class _UserFormSheetState extends State<_UserFormSheet> {
                     setState(() => _mailUser.text = _autoMailAsesorSI());
                   } else if (value == 'selvanorte') {
                     setState(() => _mailUser.text = _autoMailSelvaNorte());
+                  } else if (value == 'bonanza') {
+                    setState(() => _mailUser.text = _autoMailBonanza());
                   }
                 },
                 itemBuilder: (_) => [
@@ -2031,6 +2041,16 @@ class _UserFormSheetState extends State<_UserFormSheet> {
                         Icon(Icons.forest_outlined, size: 16, color: c.ink3),
                         const SizedBox(width: 8),
                         const Text('Selva Norte'),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'bonanza',
+                    child: Row(
+                      children: [
+                        Icon(Icons.store_outlined, size: 16, color: c.ink3),
+                        const SizedBox(width: 8),
+                        const Text('Bonanza'),
                       ],
                     ),
                   ),
