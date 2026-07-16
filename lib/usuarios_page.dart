@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'theme/si_theme.dart';
 import 'services/trash_service.dart';
+import 'utils/webmail_utils.dart';
 
 Future<T?> showFullWidthModal<T>({
   required BuildContext context,
@@ -1992,7 +1993,10 @@ class _UserFormSheetState extends State<_UserFormSheet> {
   Widget _mailRow(SiColors c) {
     return Padding(
       padding: const EdgeInsets.only(bottom: SiSpace.x3),
-      child: Row(children: [
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+        Row(children: [
         Expanded(
           child: TextField(
             controller: _mailUser,
@@ -2082,6 +2086,21 @@ class _UserFormSheetState extends State<_UserFormSheet> {
           ),
         ),
       ]),
+      const SizedBox(height: 4),
+      Align(
+        alignment: Alignment.centerRight,
+        child: TextButton.icon(
+          onPressed: () => openWebmail(_mailUser.text.trim(), _mailPass.text.trim()),
+          icon: Icon(Icons.open_in_new, size: 13, color: c.ink3),
+          label: Text('Abrir Webmail', style: TextStyle(fontSize: 12, color: c.ink3)),
+          style: TextButton.styleFrom(
+            visualDensity: VisualDensity.compact,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          ),
+        ),
+      ),
+        ],
+      ),
     );
   }
 
