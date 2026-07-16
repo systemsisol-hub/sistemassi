@@ -1957,6 +1957,15 @@ class _UserFormSheetState extends State<_UserFormSheet> {
     return '${ini(_nombreCtrl.text)}$paterno${ini(_maternoCtrl.text)}@sisol.com.mx';
   }
 
+  String _autoMailSelvaNorte() {
+    String ini(String s) {
+      final t = s.trim();
+      return t.isEmpty ? '' : t[0].toLowerCase();
+    }
+    final paterno = _paternoCtrl.text.trim().toLowerCase();
+    return '${ini(_nombreCtrl.text)}$paterno${ini(_maternoCtrl.text)}@selvanorte.com';
+  }
+
   Widget _buildCredentialsSection(SiColors c) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1990,6 +1999,8 @@ class _UserFormSheetState extends State<_UserFormSheet> {
                     setState(() => _mailUser.text = _autoMailBackOffice());
                   } else if (value == 'asesorsi') {
                     setState(() => _mailUser.text = _autoMailAsesorSI());
+                  } else if (value == 'selvanorte') {
+                    setState(() => _mailUser.text = _autoMailSelvaNorte());
                   }
                 },
                 itemBuilder: (_) => [
@@ -2010,6 +2021,16 @@ class _UserFormSheetState extends State<_UserFormSheet> {
                         Icon(Icons.support_agent_outlined, size: 16, color: c.ink3),
                         const SizedBox(width: 8),
                         const Text('AsesorSI'),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'selvanorte',
+                    child: Row(
+                      children: [
+                        Icon(Icons.forest_outlined, size: 16, color: c.ink3),
+                        const SizedBox(width: 8),
+                        const Text('Selva Norte'),
                       ],
                     ),
                   ),
