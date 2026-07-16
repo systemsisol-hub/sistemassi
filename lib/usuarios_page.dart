@@ -1940,18 +1940,107 @@ class _UserFormSheetState extends State<_UserFormSheet> {
     );
   }
 
+  String _autoMailBackOffice() {
+    String ini(String s) {
+      final t = s.trim();
+      return t.isEmpty ? '' : t[0].toLowerCase();
+    }
+    return '${ini(_nombreCtrl.text)}${ini(_paternoCtrl.text)}${ini(_maternoCtrl.text)}@sisol.com.mx';
+  }
+
+  String _autoMailAsesorSI() {
+    String ini(String s) {
+      final t = s.trim();
+      return t.isEmpty ? '' : t[0].toLowerCase();
+    }
+    final paterno = _paternoCtrl.text.trim().toLowerCase();
+    return '${ini(_nombreCtrl.text)}$paterno${ini(_maternoCtrl.text)}@sisol.com.mx';
+  }
+
   Widget _buildCredentialsSection(SiColors c) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _buildSectionTitle(c, 'CREDENCIALES DE SISTEMAS'),
-        _credRow(c, 'Mail', _mailUser, _mailPass, 'mail'),
+        _mailRow(c),
         _credRow(c, 'DRP', _drpUser, _drpPass, 'drp'),
         _credRow(c, 'GP', _gpUser, _gpPass, 'gp'),
         _credRow(c, 'Bitrix', _bitrixUser, _bitrixPass, 'bitrix'),
         _credRow(c, 'Enkontrol', _ekUser, _ekPass, 'ek'),
         _credRow(c, 'Otro', _otroUser, _otroPass, 'otro'),
       ],
+    );
+  }
+
+  Widget _mailRow(SiColors c) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: SiSpace.x3),
+      child: Row(children: [
+        Expanded(
+          child: TextField(
+            controller: _mailUser,
+            decoration: InputDecoration(
+              labelText: 'Mail usuario',
+              isDense: true,
+              suffixIcon: PopupMenuButton<String>(
+                icon: Icon(Icons.auto_fix_high_outlined, size: 16, color: c.ink3),
+                tooltip: 'Autollenar',
+                onSelected: (value) {
+                  if (value == 'backoffice') {
+                    setState(() => _mailUser.text = _autoMailBackOffice());
+                  } else if (value == 'asesorsi') {
+                    setState(() => _mailUser.text = _autoMailAsesorSI());
+                  }
+                },
+                itemBuilder: (_) => [
+                  PopupMenuItem(
+                    value: 'backoffice',
+                    child: Row(
+                      children: [
+                        Icon(Icons.business_outlined, size: 16, color: c.ink3),
+                        const SizedBox(width: 8),
+                        const Text('Back Office'),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'asesorsi',
+                    child: Row(
+                      children: [
+                        Icon(Icons.support_agent_outlined, size: 16, color: c.ink3),
+                        const SizedBox(width: 8),
+                        const Text('AsesorSI'),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: SiSpace.x2),
+        Expanded(
+          child: TextField(
+            controller: _mailPass,
+            obscureText: _obscure['mail'] ?? true,
+            decoration: InputDecoration(
+              labelText: 'Pass',
+              isDense: true,
+              suffixIcon: IconButton(
+                icon: Icon(
+                  (_obscure['mail'] ?? true)
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined,
+                  size: 16,
+                  color: c.ink4,
+                ),
+                onPressed: () =>
+                    setState(() => _obscure['mail'] = !(_obscure['mail'] ?? true)),
+              ),
+            ),
+          ),
+        ),
+      ]),
     );
   }
 
