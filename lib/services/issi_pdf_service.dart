@@ -7,15 +7,20 @@ import 'package:intl/intl.dart';
 class IssiPdfService {
   static final _brand = PdfColor.fromInt(0xFF344092);
 
+  // Márgenes diseñados para el template oficial:
+  // top=90 → debajo del logo (≈75pt) + la curva superior
+  // bottom=52 → sobre el footer con redes/sitio web
+  // left=50, right=45 → dentro de la línea curva izquierda
+  static const _pad = pw.EdgeInsets.fromLTRB(50, 90, 45, 52);
+
   static Future<void> generateAsignacion(
     Map<String, dynamic> profile,
     Map<String, dynamic> item,
   ) async {
     final pdf = pw.Document();
 
-    final logoImage = pw.MemoryImage(
-      (await rootBundle.load('assets/logo.png')).buffer.asUint8List(),
-    );
+    final bgBytes = (await rootBundle.load('assets/acuerdo_bg.png')).buffer.asUint8List();
+    final bgImage = pw.MemoryImage(bgBytes);
 
     final dateStr = DateFormat('dd/MM/yyyy').format(DateTime.now());
 
@@ -28,14 +33,28 @@ class IssiPdfService {
 
     pdf.addPage(pw.Page(
       pageFormat: PdfPageFormat.letter,
-      margin: const pw.EdgeInsets.fromLTRB(48, 40, 48, 36),
-      build: (ctx) => _page1(logoImage, displayName, puesto, area, dateStr),
+      margin: pw.EdgeInsets.zero,
+      build: (ctx) => pw.Container(
+        constraints: const pw.BoxConstraints.expand(),
+        decoration: pw.BoxDecoration(
+          image: pw.DecorationImage(image: bgImage, fit: pw.BoxFit.fill),
+        ),
+        padding: _pad,
+        child: _page1Content(displayName, puesto, area, dateStr),
+      ),
     ));
 
     pdf.addPage(pw.Page(
       pageFormat: PdfPageFormat.letter,
-      margin: const pw.EdgeInsets.fromLTRB(48, 40, 48, 36),
-      build: (ctx) => _page2(),
+      margin: pw.EdgeInsets.zero,
+      build: (ctx) => pw.Container(
+        constraints: const pw.BoxConstraints.expand(),
+        decoration: pw.BoxDecoration(
+          image: pw.DecorationImage(image: bgImage, fit: pw.BoxFit.fill),
+        ),
+        padding: _pad,
+        child: _page2Content(),
+      ),
     ));
 
     await Printing.layoutPdf(
@@ -46,27 +65,11 @@ class IssiPdfService {
 
   // ── Page 1 ───────────────────────────────────────────────────────────────────
 
-  static pw.Widget _page1(
-    pw.ImageProvider logo,
-    String name,
-    String puesto,
-    String area,
-    String date,
-  ) {
+  static pw.Widget _page1Content(
+      String name, String puesto, String area, String date) {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.stretch,
       children: [
-        // Header: logo + page number
-        pw.Row(
-          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: pw.CrossAxisAlignment.center,
-          children: [
-            pw.Image(logo, width: 120),
-            pw.Text('Página 1 de 2',
-                style: const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey600)),
-          ],
-        ),
-        pw.SizedBox(height: 10),
         pw.Center(
           child: pw.Text(
             'Acuerdo de Uso y Confidencialidad de Equipo de Trabajo',
@@ -79,7 +82,7 @@ class IssiPdfService {
         ),
         pw.SizedBox(height: 14),
 
-        // 1. Datos del colaborador (SISTEMA LLENA)
+        // 1. Datos del colaborador — SISTEMA LLENA
         _sectionHeader('1. Datos del colaborador'),
         pw.SizedBox(height: 4),
         pw.Table(
@@ -97,7 +100,7 @@ class IssiPdfService {
         ),
         pw.SizedBox(height: 12),
 
-        // 2. Datos del equipo asignado (VACÍO)
+        // 2. Datos del equipo asignado — VACÍO
         _sectionHeader('2. Datos del equipo asignado'),
         pw.SizedBox(height: 4),
         pw.Table(
@@ -131,7 +134,7 @@ class IssiPdfService {
         ),
         pw.SizedBox(height: 12),
 
-        // 3. Compromisos (VACÍO — solo checkboxes)
+        // 3. Compromisos — VACÍO (solo checkboxes)
         _sectionHeader('3. Compromisos del colaborador'),
         pw.SizedBox(height: 3),
         pw.Text(
@@ -142,26 +145,19 @@ class IssiPdfService {
         _commitmentsTable(),
 
         pw.Spacer(),
-        _pageFooter('SI SOL Inmobiliarias, S. A. P. I. de C. V.'),
+        _pageNum('1'),
       ],
     );
   }
 
   // ── Page 2 ───────────────────────────────────────────────────────────────────
 
-  static pw.Widget _page2() {
+  static pw.Widget _page2Content() {
     const bodyS = pw.TextStyle(fontSize: 8.5);
 
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.stretch,
       children: [
-        pw.Align(
-          alignment: pw.Alignment.topRight,
-          child: pw.Text('Página 2 de 2',
-              style: const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey600)),
-        ),
-        pw.SizedBox(height: 8),
-
         // 4. Confidencialidad
         _sectionHeader('4. Confidencialidad de la información'),
         pw.SizedBox(height: 7),
@@ -203,7 +199,6 @@ class IssiPdfService {
         ),
         pw.SizedBox(height: 12),
 
-        // Nota
         pw.Container(
           padding: const pw.EdgeInsets.all(8),
           decoration: pw.BoxDecoration(
@@ -230,12 +225,12 @@ class IssiPdfService {
               style: const pw.TextStyle(fontSize: 9)),
         ),
         pw.SizedBox(height: 10),
-        _pageFooter('SI SOL Inmobiliarias, S. A. P. I. de C. V.'),
+        _pageNum('2'),
       ],
     );
   }
 
-  // ── Shared helpers ────────────────────────────────────────────────────────────
+  // ── Helpers ───────────────────────────────────────────────────────────────────
 
   static pw.Widget _sectionHeader(String text) {
     return pw.Container(
@@ -246,14 +241,10 @@ class IssiPdfService {
       ),
       child: pw.Text(text,
           style: pw.TextStyle(
-            color: PdfColors.white,
-            fontWeight: pw.FontWeight.bold,
-            fontSize: 9,
-          )),
+              color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 9)),
     );
   }
 
-  // Cell with bold label + plain value (section 1)
   static pw.Widget _labeledValue(String label, String value) {
     return pw.Padding(
       padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 8),
@@ -268,7 +259,6 @@ class IssiPdfService {
     );
   }
 
-  // Empty row with label + blank space below for handwriting (sections 2)
   static pw.Widget _emptyRow(String label) {
     return pw.Padding(
       padding: const pw.EdgeInsets.fromLTRB(8, 6, 8, 18),
@@ -277,7 +267,6 @@ class IssiPdfService {
     );
   }
 
-  // Small checkbox drawn as bordered square
   static pw.Widget _cbx() => pw.Container(
         width: 9,
         height: 9,
@@ -286,7 +275,6 @@ class IssiPdfService {
         ),
       );
 
-  // Inline [box] Label pairs
   static List<pw.Widget> _cbxRow(List<String> labels) {
     final out = <pw.Widget>[];
     for (final label in labels) {
@@ -385,14 +373,11 @@ class IssiPdfService {
     return pw.TableRow(children: [cell(left), cell(right)]);
   }
 
-  static pw.Widget _pageFooter(String company) {
-    return pw.Column(children: [
-      pw.Divider(height: 1, color: PdfColors.grey300),
-      pw.SizedBox(height: 3),
-      pw.Center(
-        child: pw.Text(company,
-            style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey500)),
-      ),
-    ]);
+  static pw.Widget _pageNum(String n) {
+    return pw.Align(
+      alignment: pw.Alignment.centerRight,
+      child: pw.Text('Página $n de 2',
+          style: const pw.TextStyle(fontSize: 7.5, color: PdfColors.grey600)),
+    );
   }
 }
