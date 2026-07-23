@@ -50,6 +50,7 @@ class _IssiPageState extends State<IssiPage> {
     'ACER',
     'ADATA',
     'ASUS',
+    'BENQ',
     'DELL',
     'EDI SECURE',
     'HP',
@@ -499,23 +500,55 @@ class _IssiPageState extends State<IssiPage> {
 
       final fields = [
         fieldColumn(
-          DropdownButtonFormField<String>(
-            value: selectedUsuarioId,
-            decoration: const InputDecoration(
-                labelText: 'Usuario *', prefixIcon: Icon(Icons.person_outline)),
-            isExpanded: true,
-            items: _usuarios
-                .map((u) => DropdownMenuItem(
-                    value: u['id'] as String,
-                    child: Text(u['full_name'] ?? 'Usuario')))
-                .toList(),
-            onChanged: (val) {
-              final usuario = _usuarios.firstWhere((u) => u['id'] == val);
+          Autocomplete<Map<String, dynamic>>(
+            displayStringForOption: (u) => u['full_name'] as String? ?? '',
+            initialValue: selectedUsuarioNombre != null
+                ? TextEditingValue(text: selectedUsuarioNombre!)
+                : null,
+            optionsBuilder: (textEditingValue) {
+              final q = textEditingValue.text.toLowerCase();
+              if (q.isEmpty) return _usuarios;
+              return _usuarios.where(
+                (u) => (u['full_name'] as String? ?? '').toLowerCase().contains(q),
+              );
+            },
+            onSelected: (u) {
               setDialogState(() {
-                selectedUsuarioId = val;
-                selectedUsuarioNombre = usuario['full_name'];
+                selectedUsuarioId = u['id'] as String;
+                selectedUsuarioNombre = u['full_name'] as String?;
               });
             },
+            fieldViewBuilder: (ctx, ctrl, focusNode, onSubmitted) => TextFormField(
+              controller: ctrl,
+              focusNode: focusNode,
+              decoration: const InputDecoration(
+                labelText: 'Usuario *',
+                prefixIcon: Icon(Icons.person_outline),
+                hintText: 'Buscar por nombre...',
+              ),
+            ),
+            optionsViewBuilder: (ctx, onSelected, options) => Align(
+              alignment: Alignment.topLeft,
+              child: Material(
+                elevation: 4,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 220),
+                  child: ListView.builder(
+                    padding: EdgeInsets.zero,
+                    shrinkWrap: true,
+                    itemCount: options.length,
+                    itemBuilder: (_, i) {
+                      final u = options.elementAt(i);
+                      return ListTile(
+                        title: Text(u['full_name'] as String? ?? ''),
+                        dense: true,
+                        onTap: () => onSelected(u),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
         fieldColumn(
