@@ -1002,13 +1002,15 @@ class _IssiPageState extends State<IssiPage> {
     if (_searchQuery.isNotEmpty) {
       final query = _searchQuery.toLowerCase();
       result = result.where((item) {
+        final tipo = (item['tipo'] ?? '').toString().toLowerCase();
         final marca = (item['marca'] ?? '').toString().toLowerCase();
         final modelo = (item['modelo'] ?? '').toString().toLowerCase();
         final ubicacion = (item['ubicacion'] ?? '').toString().toLowerCase();
         final usuario = (item['usuario_nombre'] ?? '').toString().toLowerCase();
         final ns = (item['n_s'] ?? '').toString().toLowerCase();
         final imei = (item['imei'] ?? '').toString().toLowerCase();
-        return marca.contains(query) ||
+        return tipo.contains(query) ||
+            marca.contains(query) ||
             modelo.contains(query) ||
             ubicacion.contains(query) ||
             usuario.contains(query) ||
