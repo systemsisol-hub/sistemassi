@@ -59,6 +59,7 @@ class _IssiPageState extends State<IssiPage> {
     'LENOVO',
     'MAC',
     'OTROS',
+    'Q TOUCH',
     'RICOH',
     'SAMSUNG',
     'VIEW SONIC',
