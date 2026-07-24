@@ -1,8 +1,7 @@
-import 'dart:ui_web' as ui_web;
-import 'package:web/web.dart' as web;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'theme/si_theme.dart';
+import 'bi_web_iframe_stub.dart' if (dart.library.html) 'bi_web_iframe_web.dart';
 
 class BiPage extends StatefulWidget {
   final String role;
@@ -17,6 +16,7 @@ class BiPage extends StatefulWidget {
 class _BiPageState extends State<BiPage> {
   final _supabase = Supabase.instance.client;
   List<Map<String, dynamic>> _links = [];
+  List<Map<String, dynamic>> _grupos = [];
   bool _isLoading = true;
   bool get _isAdmin => widget.role == 'admin';
   final _searchController = TextEditingController();
@@ -44,7 +44,7 @@ class _BiPageState extends State<BiPage> {
         final assignedRaw = await _supabase
             .from('powerbi_link_users')
             .select(
-                'link_id, powerbi_links(id, title, url, descripcion, is_active, created_by)')
+                'link_id, powerbi_links(id, title, url, descripcion, is_active, created_by, grupo_id, bi_grupos(name))')
             .eq('user_id', userId);
 
         final assigned = (assignedRaw as List)
@@ -57,7 +57,7 @@ class _BiPageState extends State<BiPage> {
 
         final createdRaw = await _supabase
             .from('powerbi_links')
-            .select('id, title, url, descripcion, is_active, created_by')
+            .select('id, title, url, descripcion, is_active, created_by, grupo_id, bi_grupos(name)')
             .eq('created_by', userId)
             .eq('is_active', true);
 
@@ -73,6 +73,14 @@ class _BiPageState extends State<BiPage> {
       } else {
         _links = [];
       }
+
+      final gruposRaw = await _supabase
+          .from('bi_grupos')
+          .select('id, name')
+          .order('name');
+      _grupos = (gruposRaw as List)
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
 
       if (mounted) setState(() => _isLoading = false);
     } catch (e) {
@@ -91,9 +99,25 @@ class _BiPageState extends State<BiPage> {
     if (_searchQuery.isEmpty) return _links;
     final q = _searchQuery.toLowerCase();
     return _links.where((l) {
+      final grupoName =
+          (l['bi_grupos'] as Map?)?['name']?.toString().toLowerCase() ?? '';
       return (l['title'] ?? '').toString().toLowerCase().contains(q) ||
-          (l['descripcion'] ?? '').toString().toLowerCase().contains(q);
+          (l['descripcion'] ?? '').toString().toLowerCase().contains(q) ||
+          grupoName.contains(q);
     }).toList();
+  }
+
+  void _showGruposManager() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _GruposManagerSheet(
+        grupos: List.from(_grupos),
+        supabase: _supabase,
+        onChanged: _fetchData,
+      ),
+    );
   }
 
   Future<List<Map<String, dynamic>>> _getUsers() async {
@@ -187,9 +211,11 @@ class _BiPageState extends State<BiPage> {
       builder: (ctx) => _LinkFormSheet(
         link: link,
         isAdmin: _isAdmin,
+        grupos: _grupos,
         getUsers: _getUsers,
         getLinkUserIds: _getLinkUserIds,
         toggleUserAccess: _toggleUserAccess,
+        onGrupoCreated: (g) => setState(() => _grupos.add(g)),
         onSave: (data) async {
           if (link != null) {
             await _supabase
@@ -324,7 +350,23 @@ class _BiPageState extends State<BiPage> {
             ),
           ),
           const Spacer(),
-          if (_isAdmin)
+          if (_isAdmin) ...[
+            OutlinedButton.icon(
+              onPressed: _showGruposManager,
+              icon: const Icon(Icons.folder_outlined, size: 16),
+              label: const Text('Grupos',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: c.brand,
+                side: BorderSide(color: c.brand),
+                elevation: 0,
+                minimumSize: const Size(0, 36),
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                shape: const RoundedRectangleBorder(
+                    borderRadius: SiRadius.rMd),
+              ),
+            ),
+            const SizedBox(width: SiSpace.x2),
             ElevatedButton.icon(
               onPressed: () => _showLinkForm(),
               icon: const Icon(Icons.add, size: 16),
@@ -340,6 +382,7 @@ class _BiPageState extends State<BiPage> {
                     borderRadius: SiRadius.rMd),
               ),
             ),
+          ],
         ],
       ),
     );
@@ -389,6 +432,7 @@ class _BiPageState extends State<BiPage> {
             onTap: _openLink,
             onEdit: _isAdmin ? (l) => _showLinkForm(link: l) : null,
             onDelete: _isAdmin ? (id) => _deleteLink(id) : null,
+            grupos: _grupos,
           ),
         ),
       ),
@@ -421,12 +465,29 @@ class _BiPageState extends State<BiPage> {
               style: TextStyle(
                   fontWeight: FontWeight.w600, fontSize: 14, color: c.ink),
             ),
-            subtitle: desc.isNotEmpty
-                ? Text(desc,
-                    style: TextStyle(fontSize: 12, color: c.ink3),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis)
-                : null,
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if ((link['bi_grupos'] as Map?)?['name'] != null)
+                  Container(
+                    margin: const EdgeInsets.only(top: 2, bottom: 2),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: c.brandTint,
+                      borderRadius: SiRadius.rPill,
+                    ),
+                    child: Text(
+                      (link['bi_grupos'] as Map)['name'].toString(),
+                      style: TextStyle(fontSize: 10, color: c.brand, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                if (desc.isNotEmpty)
+                  Text(desc,
+                      style: TextStyle(fontSize: 12, color: c.ink3),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+              ],
+            ),
             trailing: _isAdmin
                 ? PopupMenuButton<String>(
                     icon: Icon(Icons.more_vert, size: 18, color: c.ink4),
@@ -468,6 +529,7 @@ class _BiPageState extends State<BiPage> {
 
 class _BiTable extends StatelessWidget {
   final List<Map<String, dynamic>> links;
+  final List<Map<String, dynamic>> grupos;
   final bool isAdmin;
   final SiColors c;
   final void Function(Map<String, dynamic>) onTap;
@@ -479,14 +541,43 @@ class _BiTable extends StatelessWidget {
     required this.isAdmin,
     required this.c,
     required this.onTap,
+    required this.grupos,
     this.onEdit,
     this.onDelete,
   });
 
   @override
   Widget build(BuildContext context) {
+    // Sort by grupo name (null/sin grupo last), then by title
+    final sorted = List.of(links)
+      ..sort((a, b) {
+        final ga = (a['bi_grupos'] as Map?)?['name']?.toString() ?? '';
+        final gb = (b['bi_grupos'] as Map?)?['name']?.toString() ?? '';
+        if (ga != gb) {
+          if (ga.isEmpty) return 1;
+          if (gb.isEmpty) return -1;
+          return ga.compareTo(gb);
+        }
+        return (a['title'] ?? '').toString().compareTo((b['title'] ?? '').toString());
+      });
+
+    String? lastGrupo;
+    int rowIdx = 0;
+    final rows = <Widget>[];
+    for (final link in sorted) {
+      final grupoName = (link['bi_grupos'] as Map?)?['name']?.toString();
+      if (grupoName != lastGrupo) {
+        lastGrupo = grupoName;
+        rows.add(_groupHeader(grupoName));
+        rowIdx = 0;
+      }
+      rows.add(_linkRow(link, rowIdx));
+      rowIdx++;
+    }
+
     return Column(
       children: [
+        // Table header
         Container(
           padding: const EdgeInsets.symmetric(
               horizontal: SiSpace.x5, vertical: SiSpace.x3),
@@ -516,101 +607,117 @@ class _BiTable extends StatelessWidget {
             ],
           ),
         ),
-        ...links.asMap().entries.map((entry) {
-          final i = entry.key;
-          final link = entry.value;
-          final desc = link['descripcion']?.toString() ?? '';
-          return InkWell(
-            onTap: () => onTap(link),
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: SiSpace.x5, vertical: SiSpace.x3 + 2),
-              decoration: BoxDecoration(
-                color: i.isOdd ? c.bg : c.panel,
-                border:
-                    Border(bottom: BorderSide(color: c.line2, width: 0.5)),
-              ),
+        ...rows,
+      ],
+    );
+  }
+
+  Widget _groupHeader(String? name) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(SiSpace.x5, SiSpace.x2, SiSpace.x5, SiSpace.x2),
+      decoration: BoxDecoration(
+        color: c.brandTint,
+        border: Border(bottom: BorderSide(color: c.line2, width: 0.5)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.folder_outlined, size: 14, color: c.brand),
+          const SizedBox(width: 6),
+          Text(
+            name ?? 'Sin grupo',
+            style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: c.brand,
+                letterSpacing: 0.5),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _linkRow(Map<String, dynamic> link, int i) {
+    final desc = link['descripcion']?.toString() ?? '';
+    return InkWell(
+      onTap: () => onTap(link),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+            horizontal: SiSpace.x5, vertical: SiSpace.x3 + 2),
+        decoration: BoxDecoration(
+          color: i.isOdd ? c.bg : c.panel,
+          border: Border(bottom: BorderSide(color: c.line2, width: 0.5)),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              flex: 3,
               child: Row(
                 children: [
-                  Expanded(
-                    flex: 3,
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 28,
-                          height: 28,
-                          decoration: BoxDecoration(
-                              color: c.brandTint,
-                              borderRadius: SiRadius.rSm),
-                          alignment: Alignment.center,
-                          child: Icon(Icons.assessment_outlined,
-                              size: 14, color: c.brand),
-                        ),
-                        const SizedBox(width: SiSpace.x3),
-                        Expanded(
-                          child: Text(
-                            (link['title'] ?? 'Sin título')
-                                .toString()
-                                .toUpperCase(),
-                            style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: c.ink),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                        color: c.brandTint, borderRadius: SiRadius.rSm),
+                    alignment: Alignment.center,
+                    child: Icon(Icons.assessment_outlined,
+                        size: 14, color: c.brand),
                   ),
+                  const SizedBox(width: SiSpace.x3),
                   Expanded(
-                    flex: 5,
                     child: Text(
-                      desc.isEmpty ? '—' : desc,
-                      style: TextStyle(fontSize: 13, color: c.ink3),
+                      (link['title'] ?? 'Sin título').toString().toUpperCase(),
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: c.ink),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  if (isAdmin)
-                    SizedBox(
-                      width: 48,
-                      child: PopupMenuButton<String>(
-                        icon:
-                            Icon(Icons.more_horiz, size: 18, color: c.ink4),
-                        onSelected: (v) {
-                          if (v == 'edit') onEdit?.call(link);
-                          if (v == 'delete') onDelete?.call(link['id']);
-                        },
-                        itemBuilder: (_) => [
-                          PopupMenuItem(
-                            value: 'edit',
-                            child: Row(children: [
-                              Icon(Icons.edit_outlined,
-                                  size: 16, color: c.ink2),
-                              const SizedBox(width: 12),
-                              const Text('Editar'),
-                            ]),
-                          ),
-                          PopupMenuItem(
-                            value: 'delete',
-                            child: Row(children: [
-                              Icon(Icons.delete_outline,
-                                  size: 16, color: c.danger),
-                              const SizedBox(width: 12),
-                              Text('Eliminar',
-                                  style: TextStyle(color: c.danger)),
-                            ]),
-                          ),
-                        ],
-                      ),
-                    ),
                 ],
               ),
             ),
-          );
-        }),
-      ],
+            Expanded(
+              flex: 5,
+              child: Text(
+                desc.isEmpty ? '—' : desc,
+                style: TextStyle(fontSize: 13, color: c.ink3),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (isAdmin)
+              SizedBox(
+                width: 48,
+                child: PopupMenuButton<String>(
+                  icon: Icon(Icons.more_horiz, size: 18, color: c.ink4),
+                  onSelected: (v) {
+                    if (v == 'edit') onEdit?.call(link);
+                    if (v == 'delete') onDelete?.call(link['id']);
+                  },
+                  itemBuilder: (_) => [
+                    PopupMenuItem(
+                      value: 'edit',
+                      child: Row(children: [
+                        Icon(Icons.edit_outlined, size: 16, color: c.ink2),
+                        const SizedBox(width: 12),
+                        const Text('Editar'),
+                      ]),
+                    ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Row(children: [
+                        Icon(Icons.delete_outline, size: 16, color: c.danger),
+                        const SizedBox(width: 12),
+                        Text('Eliminar', style: TextStyle(color: c.danger)),
+                      ]),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -620,18 +727,22 @@ class _BiTable extends StatelessWidget {
 class _LinkFormSheet extends StatefulWidget {
   final Map<String, dynamic>? link;
   final bool isAdmin;
+  final List<Map<String, dynamic>> grupos;
   final Future<List<Map<String, dynamic>>> Function() getUsers;
   final Future<List<String>> Function(String) getLinkUserIds;
   final Future<void> Function(String, String, bool) toggleUserAccess;
   final Future<void> Function(Map<String, dynamic>) onSave;
+  final void Function(Map<String, dynamic>)? onGrupoCreated;
 
   const _LinkFormSheet({
     required this.onSave,
     required this.isAdmin,
+    required this.grupos,
     required this.getUsers,
     required this.getLinkUserIds,
     required this.toggleUserAccess,
     this.link,
+    this.onGrupoCreated,
   });
 
   @override
@@ -642,6 +753,8 @@ class _LinkFormSheetState extends State<_LinkFormSheet> {
   late final TextEditingController _titleCtrl;
   late final TextEditingController _urlCtrl;
   late final TextEditingController _descCtrl;
+  late List<Map<String, dynamic>> _grupos;
+  String? _selectedGrupoId;
   bool _saving = false;
 
   @override
@@ -651,6 +764,8 @@ class _LinkFormSheetState extends State<_LinkFormSheet> {
     _titleCtrl = TextEditingController(text: l?['title']);
     _urlCtrl = TextEditingController(text: l?['url']);
     _descCtrl = TextEditingController(text: l?['descripcion']);
+    _grupos = List.from(widget.grupos);
+    _selectedGrupoId = l?['grupo_id'] as String?;
   }
 
   @override
@@ -659,6 +774,57 @@ class _LinkFormSheetState extends State<_LinkFormSheet> {
     _urlCtrl.dispose();
     _descCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _createGrupo(BuildContext ctx) async {
+    final c = SiColors.of(ctx);
+    final ctrl = TextEditingController();
+    final newName = await showDialog<String>(
+      context: ctx,
+      builder: (dctx) => AlertDialog(
+        title: const Text('Nuevo grupo'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(
+            labelText: 'Nombre del grupo',
+            prefixIcon: Icon(Icons.folder_outlined),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dctx),
+            child: Text('Cancelar', style: TextStyle(color: c.ink3)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dctx, ctrl.text.trim()),
+            child: Text('Crear', style: TextStyle(color: c.brand)),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (newName == null || newName.isEmpty) return;
+    try {
+      final result = await Supabase.instance.client
+          .from('bi_grupos')
+          .insert({'name': newName})
+          .select('id, name')
+          .single();
+      final g = Map<String, dynamic>.from(result);
+      setState(() {
+        _grupos.add(g);
+        _selectedGrupoId = g['id'] as String;
+      });
+      widget.onGrupoCreated?.call(g);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al crear grupo: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _submit() async {
@@ -677,6 +843,7 @@ class _LinkFormSheetState extends State<_LinkFormSheet> {
         'descripcion': _descCtrl.text.trim().isEmpty
             ? null
             : _descCtrl.text.trim(),
+        'grupo_id': _selectedGrupoId,
         'is_active': true,
         'created_by': Supabase.instance.client.auth.currentUser?.id,
       });
@@ -760,6 +927,37 @@ class _LinkFormSheetState extends State<_LinkFormSheet> {
                 labelText: 'Título *',
                 prefixIcon: Icon(Icons.title_outlined),
               ),
+            ),
+            const SizedBox(height: SiSpace.x4),
+            DropdownButtonFormField<String>(
+              value: _selectedGrupoId,
+              decoration: const InputDecoration(
+                labelText: 'Grupo',
+                prefixIcon: Icon(Icons.folder_outlined),
+              ),
+              items: [
+                ..._grupos.map((g) => DropdownMenuItem(
+                      value: g['id'] as String,
+                      child: Text(g['name'] as String? ?? ''),
+                    )),
+                const DropdownMenuItem(
+                  value: '__new__',
+                  child: Row(
+                    children: [
+                      Icon(Icons.add, size: 16),
+                      SizedBox(width: 6),
+                      Text('Crear nuevo grupo...'),
+                    ],
+                  ),
+                ),
+              ],
+              onChanged: (val) {
+                if (val == '__new__') {
+                  _createGrupo(context);
+                } else {
+                  setState(() => _selectedGrupoId = val);
+                }
+              },
             ),
             const SizedBox(height: SiSpace.x4),
             TextField(
@@ -901,42 +1099,190 @@ class _UserAssignListState extends State<_UserAssignList> {
   }
 }
 
-// ── Inline iframe widget ──────────────────────────────────────────────────────
+// ── Grupos manager sheet ──────────────────────────────────────────────────────
 
-class _WebIframe extends StatefulWidget {
-  final String url;
-  final double height;
-  final double width;
+class _GruposManagerSheet extends StatefulWidget {
+  final List<Map<String, dynamic>> grupos;
+  final SupabaseClient supabase;
+  final VoidCallback onChanged;
 
-  const _WebIframe({required this.url, required this.height, required this.width});
+  const _GruposManagerSheet({
+    required this.grupos,
+    required this.supabase,
+    required this.onChanged,
+  });
 
   @override
-  State<_WebIframe> createState() => _WebIframeState();
+  State<_GruposManagerSheet> createState() => _GruposManagerSheetState();
 }
 
-class _WebIframeState extends State<_WebIframe> {
-  late final String _viewType;
+class _GruposManagerSheetState extends State<_GruposManagerSheet> {
+  late List<Map<String, dynamic>> _grupos;
+  bool _saving = false;
+  final _ctrl = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _viewType = 'bi-iframe-${DateTime.now().millisecondsSinceEpoch}';
-    ui_web.platformViewRegistry.registerViewFactory(_viewType, (int _) {
-      return web.HTMLIFrameElement()
-        ..src = widget.url
-        ..allow = 'fullscreen'
-        ..style.border = 'none'
-        ..style.width = '100%'
-        ..style.height = '100%';
-    });
+    _grupos = List.from(widget.grupos);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _add() async {
+    final name = _ctrl.text.trim();
+    if (name.isEmpty) return;
+    setState(() => _saving = true);
+    try {
+      final result = await widget.supabase
+          .from('bi_grupos')
+          .insert({'name': name})
+          .select('id, name')
+          .single();
+      _ctrl.clear();
+      setState(() {
+        _grupos.add(Map<String, dynamic>.from(result));
+        _grupos.sort((a, b) => (a['name'] as String).compareTo(b['name'] as String));
+        _saving = false;
+      });
+      widget.onChanged();
+    } catch (e) {
+      setState(() => _saving = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _delete(String id) async {
+    try {
+      await widget.supabase.from('bi_grupos').delete().eq('id', id);
+      setState(() => _grupos.removeWhere((g) => g['id'] == id));
+      widget.onChanged();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se puede eliminar: tiene reportes asignados')),
+        );
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: widget.height,
-      width: widget.width,
-      child: HtmlElementView(viewType: _viewType),
+    final c = SiColors.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: c.panel,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: EdgeInsets.only(
+        left: SiSpace.x6,
+        right: SiSpace.x6,
+        top: SiSpace.x4,
+        bottom: MediaQuery.of(context).viewInsets.bottom + SiSpace.x10,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: Container(
+              width: 36,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: SiSpace.x4),
+              decoration:
+                  BoxDecoration(color: c.line, borderRadius: SiRadius.rPill),
+            ),
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('Cerrar', style: TextStyle(color: c.ink3, fontSize: 15)),
+              ),
+              Text('Grupos',
+                  style: TextStyle(
+                      fontSize: 17, fontWeight: FontWeight.w600, color: c.ink)),
+              const SizedBox(width: 72),
+            ],
+          ),
+          const SizedBox(height: SiSpace.x5),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _ctrl,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
+                    labelText: 'Nombre del grupo',
+                    prefixIcon: Icon(Icons.folder_outlined),
+                    isDense: true,
+                  ),
+                  onSubmitted: (_) => _add(),
+                ),
+              ),
+              const SizedBox(width: SiSpace.x3),
+              ElevatedButton(
+                onPressed: _saving ? null : _add,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: c.brand,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  minimumSize: const Size(0, 48),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  shape: const RoundedRectangleBorder(borderRadius: SiRadius.rMd),
+                ),
+                child: _saving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white))
+                    : const Text('Agregar'),
+              ),
+            ],
+          ),
+          const SizedBox(height: SiSpace.x4),
+          if (_grupos.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: SiSpace.x6),
+              child: Center(
+                child: Text('Sin grupos creados',
+                    style: TextStyle(color: c.ink3, fontSize: 13)),
+              ),
+            )
+          else
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 300),
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: _grupos.length,
+                separatorBuilder: (_, __) => Divider(color: c.line2, height: 1),
+                itemBuilder: (ctx, i) {
+                  final g = _grupos[i];
+                  return ListTile(
+                    dense: true,
+                    leading: Icon(Icons.folder_outlined, color: c.brand, size: 18),
+                    title: Text(g['name'] as String? ?? '',
+                        style: TextStyle(fontSize: 14, color: c.ink)),
+                    trailing: IconButton(
+                      icon: Icon(Icons.delete_outline, size: 18, color: c.danger),
+                      onPressed: () => _delete(g['id'] as String),
+                    ),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -991,7 +1337,7 @@ class _LinkViewer extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: _WebIframe(
+            child: WebIframe(
               url: url,
               height: height - headerH,
               width: mq.size.width,
