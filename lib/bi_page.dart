@@ -1024,7 +1024,7 @@ class _LinkFormSheetState extends State<_LinkFormSheet> {
                       color: c.ink)),
               const SizedBox(height: SiSpace.x3),
               SizedBox(
-                height: 240,
+                height: 320,
                 child: _UserAssignList(
                   linkId: widget.link!['id'].toString(),
                   getUsers: widget.getUsers,
@@ -1066,11 +1066,19 @@ class _UserAssignListState extends State<_UserAssignList> {
   List<Map<String, dynamic>>? _users;
   Set<String> _assigned = {};
   bool _loading = true;
+  String _query = '';
+  final _searchCtrl = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -1089,6 +1097,19 @@ class _UserAssignListState extends State<_UserAssignList> {
     }
   }
 
+  List<Map<String, dynamic>> get _filtered {
+    final all = _users ?? [];
+    if (_query.isEmpty) return all;
+    final q = _query.toLowerCase();
+    return all.where((u) {
+      final name =
+          '${u['nombre'] ?? ''} ${u['paterno'] ?? ''} ${u['materno'] ?? ''}'
+              .toLowerCase();
+      return name.contains(q) ||
+          (u['email'] ?? '').toString().toLowerCase().contains(q);
+    }).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = widget.c;
@@ -1096,39 +1117,86 @@ class _UserAssignListState extends State<_UserAssignList> {
       return Center(
           child: CircularProgressIndicator(color: c.brand, strokeWidth: 2));
     }
-    final users = _users ?? [];
-    if (users.isEmpty) {
+    final allUsers = _users ?? [];
+    if (allUsers.isEmpty) {
       return Center(
         child: Text('No hay usuarios con acceso a BI',
             style: TextStyle(color: c.ink3, fontSize: 13)),
       );
     }
-    return ListView.builder(
-      itemCount: users.length,
-      itemBuilder: (ctx, i) {
-        final u = users[i];
-        final id = u['id'].toString();
-        final name =
-            '${u['nombre'] ?? ''} ${u['paterno'] ?? ''} ${u['materno'] ?? ''}'
-                .trim();
-        final isOn = _assigned.contains(id);
-        return SwitchListTile(
-          dense: true,
-          title: Text(
-            name.isEmpty ? (u['email'] ?? id) : name,
-            style: TextStyle(fontSize: 13, color: c.ink),
+    final visible = _filtered;
+    return Column(
+      children: [
+        Container(
+          height: 36,
+          decoration: BoxDecoration(
+            color: c.bg,
+            borderRadius: SiRadius.rMd,
+            border: Border.all(color: c.line),
           ),
-          value: isOn,
-          activeColor: c.brand,
-          onChanged: (v) {
-            setState(() {
-              if (v) _assigned.add(id);
-              else _assigned.remove(id);
-            });
-            widget.toggleUserAccess(widget.linkId, id, v);
-          },
-        );
-      },
+          child: TextField(
+            controller: _searchCtrl,
+            style: const TextStyle(fontSize: 13),
+            decoration: InputDecoration(
+              hintText: 'Buscar usuario...',
+              hintStyle: TextStyle(fontSize: 13, color: c.ink4),
+              prefixIcon: Icon(Icons.search, size: 16, color: c.ink3),
+              suffixIcon: _query.isNotEmpty
+                  ? IconButton(
+                      icon: Icon(Icons.clear, size: 14, color: c.ink3),
+                      onPressed: () {
+                        _searchCtrl.clear();
+                        setState(() => _query = '');
+                      },
+                    )
+                  : null,
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              isDense: true,
+            ),
+            onChanged: (v) => setState(() => _query = v),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: visible.isEmpty
+              ? Center(
+                  child: Text('Sin resultados',
+                      style: TextStyle(color: c.ink3, fontSize: 13)),
+                )
+              : ListView.builder(
+                  itemCount: visible.length,
+                  itemBuilder: (ctx, i) {
+                    final u = visible[i];
+                    final id = u['id'].toString();
+                    final name =
+                        '${u['nombre'] ?? ''} ${u['paterno'] ?? ''} ${u['materno'] ?? ''}'
+                            .trim();
+                    final isOn = _assigned.contains(id);
+                    return SwitchListTile(
+                      dense: true,
+                      title: Text(
+                        name.isEmpty ? (u['email'] ?? id) : name,
+                        style: TextStyle(fontSize: 13, color: c.ink),
+                      ),
+                      value: isOn,
+                      activeColor: c.brand,
+                      onChanged: (v) {
+                        setState(() {
+                          if (v)
+                            _assigned.add(id);
+                          else
+                            _assigned.remove(id);
+                        });
+                        widget.toggleUserAccess(widget.linkId, id, v);
+                      },
+                    );
+                  },
+                ),
+        ),
+      ],
     );
   }
 }
