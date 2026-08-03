@@ -2096,7 +2096,7 @@ class _IncidenciaCalendarCard extends StatefulWidget {
 class _IncidenciaCalendarCardState extends State<_IncidenciaCalendarCard> {
   late DateTime _month;
 
-  static const _weekdays = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+  static const _weekdays = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
   static const _months = [
     'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
     'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
@@ -2131,7 +2131,7 @@ class _IncidenciaCalendarCardState extends State<_IncidenciaCalendarCard> {
     final daysInMonth =
         DateUtils.getDaysInMonth(_month.year, _month.month);
     final offset =
-        DateTime(_month.year, _month.month, 1).weekday - 1; // Mon=0
+        DateTime(_month.year, _month.month, 1).weekday % 7; // Sun=0
 
     // Build flat list of cells
     final cells = <_CellData>[];
