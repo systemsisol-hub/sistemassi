@@ -1565,6 +1565,13 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                         fontSize: 11,
                         letterSpacing: 1))),
             DataColumn(
+                label: Text('REGRESO',
+                    style: TextStyle(
+                        color: c.ink3,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                        letterSpacing: 1))),
+            DataColumn(
                 label: Text('ESTATUS',
                     style: TextStyle(
                         color: c.ink3,
@@ -1912,6 +1919,10 @@ class _IncidenciasDataSource extends DataTableSource {
             ],
           ),
         ),
+        DataCell(Text(
+          inc['fecha_regreso'] != null ? formatDate(inc['fecha_regreso']) : '-',
+          style: const TextStyle(fontSize: 13),
+        )),
         DataCell(
           Row(
             mainAxisSize: MainAxisSize.min,
