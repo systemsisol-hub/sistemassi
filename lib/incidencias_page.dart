@@ -1804,13 +1804,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                               child: _buildDesktopTable(c),
                             ),
                             SizedBox(width: SiSpace.x6),
-                            // Historial
-                            Expanded(
-                              flex: 1,
-                              child: _buildHistorialVacaciones(),
-                            ),
-                            SizedBox(width: SiSpace.x6),
-                            // Calendario + Antigüedad
+                            // Calendario + Historial
                             Expanded(
                               flex: 1,
                               child: Column(
@@ -1819,9 +1813,15 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                                   _buildLastIncidenciaCalendar(),
                                   if (_incidencias.isNotEmpty)
                                     SizedBox(height: SiSpace.x4),
-                                  _buildAntiguedadDesktop(),
+                                  _buildHistorialVacaciones(),
                                 ],
                               ),
+                            ),
+                            SizedBox(width: SiSpace.x6),
+                            // Antigüedad
+                            Expanded(
+                              flex: 1,
+                              child: _buildAntiguedadDesktop(),
                             ),
                           ],
                         );
