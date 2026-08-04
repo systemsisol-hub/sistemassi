@@ -161,14 +161,48 @@ para que un recorte nunca se lea como un resultado completo.
 
 ### Variables de entorno
 
-| Secreto | Uso |
+| Secreto | Valor / uso |
 |---|---|
-| `AZURE_TENANT_ID` | Tenant de SFKontrol (dueño del workspace) |
-| `AZURE_CLIENT_ID` | App registrada en su Entra ID |
-| `AZURE_CLIENT_SECRET` | Secreto de esa app — **sólo servidor** |
+| `AZURE_TENANT_ID` | `9336ec0c-d302-4bdf-a668-c961ae49c541` — tenant de SFKontrol |
+| `AZURE_CLIENT_ID` | `dc560542-a36e-4cd3-994e-c5d2a2ac5260` — app `SISOL Asistente BI` |
+| `AZURE_CLIENT_SECRET` | Secreto de esa app — **sólo en Supabase, nunca en el repo** |
+
+Tenant y client ID no son secretos: viajan en cada petición OAuth. Sólo el tercero lo es.
 
 Flujo `client_credentials` contra `login.microsoftonline.com`, scope
 `https://analysis.windows.net/powerbi/api/.default`. El token se cachea en el isolate.
+
+### ⚠️ El client secret caduca: 3 de agosto de 2028
+
+**Cuando caduque, el asistente dejará de leer cifras y el error dirá algo genérico de
+autenticación contra Azure AD — no "tu secreto venció".** Es una falla que cuesta horas
+diagnosticar si nadie sabe que existe una fecha. Por eso está aquí.
+
+Rotación (también aplica si se sospecha que el secreto se filtró):
+
+1. <https://entra.microsoft.com> → Registros de aplicaciones → `SISOL Asistente BI` →
+   Certificados y secretos → **Nuevo secreto de cliente**, vigencia 24 meses.
+2. Copiar el **Valor** en ese momento: sólo se muestra una vez.
+3. Pegarlo en Supabase → Project Settings → Edge Functions → Secrets → `AZURE_CLIENT_SECRET`.
+4. **Recién entonces** eliminar el secreto viejo en Entra.
+5. Probar una consulta en el panel BI y actualizar la fecha en este archivo.
+
+El orden de los pasos 3 y 4 importa: si se elimina el viejo antes de guardar el nuevo, el
+asistente queda roto en la ventana intermedia. Guardar el secreto reinicia las Edge Functions,
+así que su número de versión sube — eso es normal, no es un despliegue.
+
+### Configuración del acceso en Power BI (ya hecha)
+
+Workspace `SISOL_KBI` = `9d6868a1-526c-4aaf-9da9-0647e6cccef7`. La cuenta
+`bisisol@enkontrolbi.com` es `Admin` del workspace y su único miembro humano, así que pudo
+configurar todo sin intervención de SFKontrol:
+
+- App registrada en Entra por esa misma cuenta, tipo "sólo este directorio".
+- **Sin permisos de API en Entra.** Power BI no autoriza service principals por permisos de
+  Entra sino por el rol en el workspace; agregarlos lleva a pedir consentimiento de
+  administrador que no hace falta.
+- App agregada al workspace como **Colaborador**. Visor no alcanza: `executeQueries` exige
+  permiso Build sobre el dataset, y Colaborador lo incluye.
 
 ### Configuración por reporte
 
