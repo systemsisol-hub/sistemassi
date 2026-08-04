@@ -61,13 +61,61 @@ analice los reportes con cifras reales en lugar de inventarlas. `verify_jwt: tru
 > **Estado: escrita pero NO desplegada.** Falta la credencial de servicio del tenant de
 > SFKontrol (ver abajo). Sin los tres secretos `AZURE_*` responde `503` con un mensaje explícito.
 
+### Por qué el asistente no escribe DAX
+
+La tabla de hechos es una **foto periódica**: guarda el saldo por fecha. Una consulta sin
+contexto de fecha suma todas las fotos y cuenta el mismo saldo decenas de veces. Medido contra
+el panel de PROVEEDORES:
+
+| Consulta | Resultado |
+|---|---|
+| `[Suma Vencido]` sin filtro de periodo | `180,880,573.13` |
+| Con `Año Slicer = "Actual"` y `Mes Slicer = "Actual"` | `22,088,254.08` ← coincide con el panel |
+
+Un error de **8x** en cifras financieras, con dos decimales y tono de autoridad. Advertirlo en el
+prompt no sirve: el modelo lo olvida cuando la conversación se alarga. Por eso el modelo manda
+**parámetros** y el servidor arma el DAX, inyectando el filtro por construcción — el modelo no
+puede omitirlo porque nunca toca la consulta.
+
 ### Contrato
 
-Request: `{ link_id: string, dax: string }`
-Response: `{ rows, row_count, total_rows, truncated, report: { id, title } }`
+Dos acciones. En ambas el cliente manda `link_id`, **nunca** el workspace ni el dataset: el
+servidor los resuelve leyendo `powerbi_links`, así no se puede apuntar a un dataset arbitrario.
 
-El cliente **nunca** manda workspace ni dataset: manda `link_id` y el servidor resuelve el par
-leyendo `powerbi_links`. Así no se puede apuntar a un dataset arbitrario.
+**`accion: "modelo"`** — qué se puede preguntar.
+```jsonc
+{ "link_id": "…", "accion": "modelo" }
+// → { medidas: [...], columnas: ["Tabla[Columna]", ...], periodo_soportado: true }
+```
+
+**`accion: "consultar"`** — la consulta.
+```jsonc
+{
+  "link_id":     "…",
+  "medidas":     ["Suma Vencido", "Suma Por Vencer"],
+  "agrupar_por": ["Cat Compañias[Compañia]"],   // opcional
+  "periodo":     "actual",                      // o { "anio": "2025", "mes": "Jul" }
+  "limite":      50
+}
+// → { rows, row_count, total_rows, truncated, report, consulta: { …, dax } }
+```
+
+Toda medida y columna se valida contra el esquema real del modelo antes de interpolarse. El
+esquema se cachea 24 h en `pbi_model_cache`. Si el modelo no expone columnas de periodo, la
+función responde `422` en lugar de devolver cifras infladas en silencio.
+
+Se excluyen de la lista blanca las medidas del patrón TopN (`Vencido Top`, `Vencido Other`,
+`TopN Selection`, `Rank`): sólo tienen sentido dentro de ese patrón y darían totales incompletos,
+pero un modelo que las viera en la lista las elegiría sin dudar.
+
+### Normalización de resultados
+
+Dos correcciones sobre lo que devuelve Power BI:
+
+- **Nulos omitidos.** La API omite los valores nulos, dejando renglones con llaves distintas —
+  y una llave ausente se lee como cero. Se uniforman todas las llaves con `null` explícito.
+- **Ruido de punto flotante.** `394238.77999999997` → `394238.78`. Redondeo a 6 decimales:
+  limpia el ruido de IEEE-754 sin dañar porcentajes ni scores.
 
 ### Control de acceso
 

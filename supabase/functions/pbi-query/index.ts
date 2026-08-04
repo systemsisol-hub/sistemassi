@@ -1,17 +1,25 @@
-// Ejecuta consultas DAX de lectura contra un dataset de Power BI.
+// Consulta datos de un dataset de Power BI para el asistente IA. Sólo lectura.
 //
 // Por qué existe: los enlaces de powerbi_links son embeds públicos ("Publicar en la web").
 // Ese token sólo sirve para renderizar el iframe — no da acceso a los datos. Para leer el
 // modelo hay que autenticarse contra la API REST de Power BI con una entidad de servicio.
 //
-// Seguridad, en tres capas:
-//   1. El cliente NUNCA manda workspace/dataset. Manda link_id y el servidor resuelve el
-//      resto leyendo powerbi_links. Así no se puede consultar un dataset arbitrario.
-//   2. Se verifica que el usuario tenga acceso a ese enlace (admin, dueño, o asignado).
-//   3. executeQueries sólo acepta DAX y no puede modificar el modelo ni los datos. Aun así
-//      se valida la forma de la consulta.
+// ─── Por qué el asistente NO escribe DAX ──────────────────────────────────────
 //
-// El client secret vive únicamente como secreto de Edge Function, jamás en el cliente Flutter.
+// La tabla de hechos es una FOTO PERIÓDICA: guarda el saldo por fecha. Una consulta sin
+// contexto de fecha suma todas las fotos y cuenta el mismo saldo decenas de veces.
+// Medido contra el panel de PROVEEDORES:
+//
+//     sin filtro de periodo  →  180,880,573.13
+//     con filtro "Actual"    →   22,088,254.08   (coincide con el panel al centavo)
+//
+// Un error de 8x en cifras financieras, con dos decimales y tono de autoridad. Advertirle al
+// modelo en el prompt no sirve: lo olvida cuando la conversación se alarga. Por eso el modelo
+// manda PARÁMETROS y el servidor arma la consulta, inyectando el contexto de filtro por
+// construcción. El modelo no puede omitirlo porque nunca toca la consulta.
+//
+// Todo nombre de medida o columna se valida contra el esquema real del modelo antes de
+// interpolarse — nada llega crudo al DAX.
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
@@ -23,17 +31,16 @@ const AZ_SECRET    = Deno.env.get("AZURE_CLIENT_SECRET") ?? "";
 
 const PBI_SCOPE = "https://analysis.windows.net/powerbi/api/.default";
 
-/** Topes para no reventar el contexto del modelo con tablas enormes. */
-const MAX_ROWS      = 500;
-const MAX_CHARS     = 100_000;
-const MAX_DAX_CHARS = 8_000;
+const MAX_ROWS     = 500;
+const MAX_CHARS    = 100_000;
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const json = (body: unknown, status = 200) =>
+const reply = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
     headers: { ...CORS, "Content-Type": "application/json" },
@@ -46,9 +53,6 @@ class HttpError extends Error {
 }
 
 // ── Token de Azure ────────────────────────────────────────────────────────────
-// Se cachea en el isolate. Los isolates se reciclan, así que esto ahorra llamadas
-// dentro de una misma conversación pero no es un caché global fiable — no importa,
-// pedir el token de nuevo es baratísimo.
 
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
@@ -56,7 +60,8 @@ async function getPbiToken(): Promise<string> {
   if (!AZ_TENANT || !AZ_CLIENT || !AZ_SECRET) {
     throw new HttpError(
       503,
-      "Falta configurar las credenciales de Power BI (AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET).",
+      "Power BI no está configurado todavía: faltan AZURE_TENANT_ID, AZURE_CLIENT_ID y " +
+      "AZURE_CLIENT_SECRET. Se solicitan al administrador del tenant dueño del workspace.",
     );
   }
 
@@ -66,9 +71,9 @@ async function getPbiToken(): Promise<string> {
   const res = await fetch(
     `https://login.microsoftonline.com/${AZ_TENANT}/oauth2/v2.0/token`,
     {
-      method: "POST",
+      method:  "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
+      body:    new URLSearchParams({
         grant_type:    "client_credentials",
         client_id:     AZ_CLIENT,
         client_secret: AZ_SECRET,
@@ -79,7 +84,7 @@ async function getPbiToken(): Promise<string> {
 
   const body = await res.json().catch(() => ({}));
   if (!res.ok || !body.access_token) {
-    // No propagar el cuerpo crudo: puede traer detalles del tenant del proveedor.
+    // Sin volcar el cuerpo crudo: puede traer detalles del tenant ajeno.
     const detail = body.error_description ?? body.error ?? `HTTP ${res.status}`;
     throw new HttpError(502, `No se pudo autenticar contra Azure AD: ${detail}`);
   }
@@ -91,29 +96,7 @@ async function getPbiToken(): Promise<string> {
   return cachedToken.token;
 }
 
-// ── Validación de la consulta ────────────────────────────────────────────────
-
-/**
- * Una consulta DAX válida arranca con EVALUATE o, si define medidas locales, con DEFINE.
- * executeQueries no puede escribir, así que esto no es una barrera de seguridad sino un
- * filtro temprano para dar un error claro en lugar de un 400 opaco de Power BI.
- */
-function assertValidDax(dax: unknown): string {
-  if (typeof dax !== "string" || dax.trim().length === 0) {
-    throw new HttpError(400, "Falta la consulta DAX.");
-  }
-  const trimmed = dax.trim();
-  if (trimmed.length > MAX_DAX_CHARS) {
-    throw new HttpError(400, `La consulta excede ${MAX_DAX_CHARS} caracteres.`);
-  }
-  const head = trimmed.toUpperCase();
-  if (!head.startsWith("EVALUATE") && !head.startsWith("DEFINE")) {
-    throw new HttpError(400, "La consulta DAX debe iniciar con EVALUATE o DEFINE.");
-  }
-  return trimmed;
-}
-
-// ── Resolución del enlace y control de acceso ────────────────────────────────
+// ── Ejecución cruda de DAX (interna: el cliente nunca la alcanza) ─────────────
 
 interface LinkRow {
   id: string;
@@ -124,6 +107,288 @@ interface LinkRow {
   is_active: boolean | null;
   created_by: string | null;
 }
+
+async function runDax(link: LinkRow, dax: string): Promise<Record<string, unknown>[]> {
+  const token = await getPbiToken();
+
+  const res = await fetch(
+    `https://api.powerbi.com/v1.0/myorg/groups/${link.pbi_workspace_id}` +
+    `/datasets/${link.pbi_dataset_id}/executeQueries`,
+    {
+      method:  "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type":  "application/json",
+      },
+      body: JSON.stringify({ queries: [{ query: dax }] }),
+    },
+  );
+
+  const body = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    // Power BI anida el detalle útil en error.pbi.error.details[].detail.value
+    const err    = body?.error ?? {};
+    const nested = err?.pbi?.error?.details?.[0]?.detail?.value;
+    const detail = nested ?? err?.details?.[0]?.message ?? err?.message ?? `HTTP ${res.status}`;
+    // 401/403 son problema de nuestra credencial, no de la petición del usuario.
+    const status = res.status === 401 || res.status === 403 ? 502 : 400;
+    throw new HttpError(status, `Power BI: ${detail}`);
+  }
+
+  const rows = body?.results?.[0]?.tables?.[0]?.rows;
+  return Array.isArray(rows) ? rows : [];
+}
+
+// ── Esquema del modelo (con caché) ────────────────────────────────────────────
+
+interface ModelItem { tabla: string; nombre: string }
+
+interface ModelSchema {
+  medidas:  ModelItem[];
+  columnas: ModelItem[];
+  /** Columnas detectadas para fijar el periodo. Null si el modelo no sigue la convención. */
+  periodo: { tabla: string; anio: string; mes: string } | null;
+}
+
+/**
+ * Las medidas del patrón TopN sólo tienen sentido dentro de ese patrón: usadas como total
+ * dan cifras incompletas. Un modelo que ve "Vencido Top" en la lista la elegiría sin dudar
+ * al preguntarle por el vencido total, así que no se exponen.
+ */
+function esMedidaDePatronTopN(m: ModelItem): boolean {
+  if (/^(TopN|Top & Other)$/i.test(m.tabla)) return true;
+  return /\b(top|other)\b/i.test(m.nombre) || /^rank\b/i.test(m.nombre.trim());
+}
+
+/**
+ * Detecta las columnas que fijan el periodo. Los datasets de este proveedor exponen un
+ * miembro "Actual" mediante columnas `Año Slicer` / `Mes Slicer` separadas de `Año` / `Mes`.
+ * Se prefiere la tabla de hechos: las dimensiones `Cat *` también las tienen, pero el filtro
+ * verificado contra el panel es el del hecho.
+ */
+function detectarPeriodo(columnas: ModelItem[]): ModelSchema["periodo"] {
+  const conAmbas = [...new Set(columnas.map((c) => c.tabla))].filter((t) => {
+    const cols = columnas.filter((c) => c.tabla === t).map((c) => c.nombre);
+    return cols.includes("Año Slicer") && cols.includes("Mes Slicer");
+  });
+  if (conAmbas.length === 0) return null;
+  const tabla = conAmbas.find((t) => !/^cat\s/i.test(t)) ?? conAmbas[0];
+  return { tabla, anio: "Año Slicer", mes: "Mes Slicer" };
+}
+
+async function getModel(
+  db: ReturnType<typeof createClient>,
+  link: LinkRow,
+): Promise<ModelSchema> {
+  const datasetId = link.pbi_dataset_id!;
+
+  const { data: cached } = await db
+    .from("pbi_model_cache")
+    .select("schema_json, updated_at")
+    .eq("dataset_id", datasetId)
+    .maybeSingle();
+
+  if (cached?.schema_json) {
+    const age = Date.now() - new Date(cached.updated_at as string).getTime();
+    if (age < CACHE_TTL_MS) return cached.schema_json as unknown as ModelSchema;
+  }
+
+  const pick = (rows: Record<string, unknown>[]): ModelItem[] =>
+    rows
+      .map((r) => ({
+        tabla:  String(r["[tabla]"] ?? ""),
+        nombre: String(r["[nombre]"] ?? ""),
+      }))
+      // Un ] o " en el nombre rompería la interpolación al armar el DAX.
+      .filter((i) => i.tabla && i.nombre && !/[\]"]/.test(i.nombre) && !/['"]/.test(i.tabla));
+
+  const medidasRaw = await runDax(
+    link,
+    'EVALUATE SELECTCOLUMNS(FILTER(INFO.VIEW.MEASURES(), [IsHidden]=FALSE()), ' +
+    '"tabla", [Table], "nombre", [Name])',
+  );
+  const columnasRaw = await runDax(
+    link,
+    'EVALUATE SELECTCOLUMNS(FILTER(INFO.VIEW.COLUMNS(), [IsHidden]=FALSE()), ' +
+    '"tabla", [Table], "nombre", [Name])',
+  );
+
+  const columnas = pick(columnasRaw);
+  const schema: ModelSchema = {
+    medidas:  pick(medidasRaw).filter((m) => !esMedidaDePatronTopN(m)),
+    columnas,
+    periodo:  detectarPeriodo(columnas),
+  };
+
+  await db.from("pbi_model_cache").upsert({
+    dataset_id:  datasetId,
+    schema_json: schema,
+    updated_at:  new Date().toISOString(),
+  });
+
+  return schema;
+}
+
+// ── Construcción validada de la consulta ─────────────────────────────────────
+
+interface QueryParams {
+  medidas?: unknown;
+  agrupar_por?: unknown;
+  periodo?: unknown;
+  limite?: unknown;
+}
+
+function asStringArray(v: unknown, campo: string): string[] {
+  if (v === undefined || v === null) return [];
+  if (!Array.isArray(v)) throw new HttpError(400, `${campo} debe ser una lista.`);
+  return v.map((x) => {
+    if (typeof x !== "string") throw new HttpError(400, `${campo} sólo acepta texto.`);
+    return x.trim();
+  }).filter((x) => x.length > 0);
+}
+
+/** Filtros de periodo. Sin esto las cifras salen infladas por acumulación de fotos. */
+function construirFiltrosPeriodo(schema: ModelSchema, periodo: unknown): string[] {
+  if (!schema.periodo) {
+    // El modelo no sigue la convención: mejor fallar que devolver cifras infladas en silencio.
+    throw new HttpError(
+      422,
+      "No se detectaron columnas de periodo ('Año Slicer' / 'Mes Slicer') en este modelo. " +
+      "Sin fijar periodo las cifras se inflan por acumulación, así que no se consulta.",
+    );
+  }
+
+  const { tabla, anio, mes } = schema.periodo;
+  const ref = (col: string) => `'${tabla}'[${col}]`;
+
+  if (periodo === undefined || periodo === null || periodo === "actual") {
+    return [`${ref(anio)} = "Actual"`, `${ref(mes)} = "Actual"`];
+  }
+
+  if (typeof periodo !== "object") {
+    throw new HttpError(400, 'periodo debe ser "actual" o un objeto { anio, mes }.');
+  }
+
+  const p = periodo as Record<string, unknown>;
+  const valores = { anio: p.anio, mes: p.mes };
+  const filtros: string[] = [];
+
+  for (const [clave, col] of [["anio", anio], ["mes", mes]] as const) {
+    const v = valores[clave];
+    if (v === undefined || v === null) continue;
+    if (typeof v !== "string" || /["\]]/.test(v)) {
+      throw new HttpError(400, `Valor inválido para ${clave}.`);
+    }
+    filtros.push(`${ref(col)} = "${v}"`);
+  }
+
+  if (filtros.length === 0) {
+    throw new HttpError(400, "El periodo debe especificar al menos anio o mes.");
+  }
+  return filtros;
+}
+
+interface BuiltQuery { dax: string; medidas: string[]; columnas: string[] }
+
+function construirConsulta(schema: ModelSchema, params: QueryParams): BuiltQuery {
+  const medidas    = asStringArray(params.medidas, "medidas");
+  const agruparPor = asStringArray(params.agrupar_por, "agrupar_por");
+
+  if (medidas.length === 0 && agruparPor.length === 0) {
+    throw new HttpError(400, "Indica al menos una medida o una columna de agrupación.");
+  }
+
+  // Lista blanca: toda medida debe existir en el modelo.
+  const validas = new Set(schema.medidas.map((m) => m.nombre));
+  for (const m of medidas) {
+    if (!validas.has(m)) {
+      throw new HttpError(
+        400,
+        `La medida "${m}" no existe en el modelo o no es válida para totales. ` +
+        `Consulta las disponibles con la acción "modelo".`,
+      );
+    }
+  }
+
+  // Las columnas llegan como "Tabla[Columna]" y deben existir tal cual.
+  const refsValidas = new Map(
+    schema.columnas.map((c) => [`${c.tabla}[${c.nombre}]`, c]),
+  );
+  const colsDax: string[] = [];
+  for (const ref of agruparPor) {
+    const col = refsValidas.get(ref);
+    if (!col) {
+      throw new HttpError(
+        400,
+        `La columna "${ref}" no existe en el modelo. Usa el formato Tabla[Columna] ` +
+        `con los nombres que devuelve la acción "modelo".`,
+      );
+    }
+    colsDax.push(`'${col.tabla}'[${col.nombre}]`);
+  }
+
+  const pares   = medidas.map((m) => `"${m}", [${m}]`);
+  const filtros = construirFiltrosPeriodo(schema, params.periodo);
+
+  let tabla: string;
+  if (colsDax.length > 0) {
+    tabla = `SUMMARIZECOLUMNS(${[...colsDax, ...pares].join(", ")})`;
+  } else {
+    tabla = `ROW(${pares.join(", ")})`;
+  }
+
+  let dax = `EVALUATE\nCALCULATETABLE(\n  ${tabla},\n  ${filtros.join(",\n  ")}\n)`;
+
+  // Ordenar y recortar sólo tiene sentido al agrupar por alguna dimensión.
+  if (colsDax.length > 0 && medidas.length > 0) {
+    const orden  = `[${medidas[0]}]`;
+    const limite = Math.min(Math.max(Number(params.limite) || MAX_ROWS, 1), MAX_ROWS);
+    dax = `EVALUATE\nTOPN(\n  ${limite},\n  CALCULATETABLE(\n    ${tabla},\n    ` +
+          `${filtros.join(",\n    ")}\n  ),\n  ${orden}, DESC\n)\nORDER BY ${orden} DESC`;
+  }
+
+  return { dax, medidas, columnas: agruparPor };
+}
+
+// ── Normalización de resultados ──────────────────────────────────────────────
+
+/**
+ * Power BI omite los valores nulos, dejando renglones con llaves distintas: una llave ausente
+ * se lee como cero. Aquí se uniforman todas las llaves y se limpia el ruido de punto flotante
+ * (394238.77999999997 → 394238.78) sin dañar porcentajes ni scores.
+ */
+function normalizar(rows: Record<string, unknown>[]) {
+  const total = rows.length;
+  let out = total > MAX_ROWS ? rows.slice(0, MAX_ROWS) : rows;
+
+  while (out.length > 1 && JSON.stringify(out).length > MAX_CHARS) {
+    out = out.slice(0, Math.floor(out.length / 2));
+  }
+
+  const llaves = [...new Set(out.flatMap((r) => Object.keys(r)))];
+
+  const limpio = out.map((r) => {
+    const fila: Record<string, unknown> = {};
+    for (const k of llaves) {
+      const v = r[k];
+      // El nombre viene como "[Alias]" o "Tabla[Columna]"; se deja tal cual para no perder origen.
+      fila[k] = typeof v === "number" && Number.isFinite(v)
+        ? Math.round(v * 1e6) / 1e6
+        : (v ?? null);
+    }
+    return fila;
+  });
+
+  return {
+    rows:       limpio,
+    row_count:  limpio.length,
+    total_rows: total,
+    truncated:  limpio.length < total,
+  };
+}
+
+// ── Resolución del enlace y control de acceso ────────────────────────────────
 
 async function resolveLink(
   db: ReturnType<typeof createClient>,
@@ -160,65 +425,13 @@ async function resolveLink(
 
   if (!link.pbi_workspace_id || !link.pbi_dataset_id) {
     throw new HttpError(
-      400,
-      "Este reporte no tiene un dataset de Power BI configurado. " +
-      "Un administrador debe capturarlo en el formulario del enlace.",
+      422,
+      "Este reporte no tiene un dataset de Power BI configurado. Un administrador debe " +
+      "capturar el workspace y el dataset en el formulario del enlace.",
     );
   }
 
   return link;
-}
-
-// ── Ejecución ────────────────────────────────────────────────────────────────
-
-async function executeDax(link: LinkRow, dax: string) {
-  const token = await getPbiToken();
-
-  const res = await fetch(
-    `https://api.powerbi.com/v1.0/myorg/groups/${link.pbi_workspace_id}` +
-    `/datasets/${link.pbi_dataset_id}/executeQueries`,
-    {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "Content-Type":  "application/json",
-      },
-      body: JSON.stringify({
-        queries: [{ query: dax }],
-        serializerSettings: { includeNulls: false },
-      }),
-    },
-  );
-
-  const body = await res.json().catch(() => ({}));
-
-  if (!res.ok) {
-    // Power BI anida el detalle útil en error.pbi.error.details[].detail.value
-    const err = body?.error ?? {};
-    const nested = err?.pbi?.error?.details?.[0]?.detail?.value;
-    const detail = nested ?? err?.details?.[0]?.message ?? err?.message ?? `HTTP ${res.status}`;
-    throw new HttpError(res.status === 401 || res.status === 403 ? 502 : 400, `Power BI: ${detail}`);
-  }
-
-  const allRows = body?.results?.[0]?.tables?.[0]?.rows ?? [];
-  return truncate(Array.isArray(allRows) ? allRows : []);
-}
-
-/** Recorta por número de filas y por tamaño serializado, informando siempre el recorte. */
-function truncate(rows: unknown[]) {
-  const total = rows.length;
-  let out = total > MAX_ROWS ? rows.slice(0, MAX_ROWS) : rows;
-
-  while (out.length > 1 && JSON.stringify(out).length > MAX_CHARS) {
-    out = out.slice(0, Math.floor(out.length / 2));
-  }
-
-  return {
-    rows:       out,
-    row_count:  out.length,
-    total_rows: total,
-    truncated:  out.length < total,
-  };
 }
 
 // ── Handler ──────────────────────────────────────────────────────────────────
@@ -247,19 +460,38 @@ Deno.serve(async (req: Request) => {
     const hasAiPerm = (prof?.permissions as Record<string, unknown>)?.show_ai === true;
     if (!isAdmin && !hasAiPerm) throw new HttpError(403, "Forbidden");
 
-    const payload = await req.json().catch(() => ({}));
-    const dax     = assertValidDax(payload.dax);
-    const link    = await resolveLink(db, payload.link_id, user.id, isAdmin);
+    const payload = await req.json().catch(() => ({})) as QueryParams & {
+      link_id?: unknown; accion?: unknown;
+    };
 
-    const result = await executeDax(link, dax);
+    const link   = await resolveLink(db, payload.link_id, user.id, isAdmin);
+    const schema = await getModel(db, link);
+    const accion = payload.accion ?? "consultar";
 
-    return json({
+    if (accion === "modelo") {
+      return reply({
+        report:   { id: link.id, title: link.title, contexto: link.ai_context },
+        medidas:  schema.medidas.map((m) => m.nombre),
+        columnas: schema.columnas.map((c) => `${c.tabla}[${c.nombre}]`),
+        periodo_soportado: schema.periodo !== null,
+      });
+    }
+
+    if (accion !== "consultar") {
+      throw new HttpError(400, 'accion debe ser "modelo" o "consultar".');
+    }
+
+    const built  = construirConsulta(schema, payload);
+    const result = normalizar(await runDax(link, built.dax));
+
+    return reply({
       ...result,
-      report: { id: link.id, title: link.title },
+      report:   { id: link.id, title: link.title },
+      consulta: { medidas: built.medidas, agrupar_por: built.columnas, dax: built.dax },
     });
   } catch (e) {
-    if (e instanceof HttpError) return json({ error: e.message }, e.status);
+    if (e instanceof HttpError) return reply({ error: e.message }, e.status);
     const msg = e instanceof Error ? e.message : String(e);
-    return json({ error: msg }, 500);
+    return reply({ error: msg }, 500);
   }
 });
