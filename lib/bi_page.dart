@@ -175,14 +175,33 @@ class _BiPageState extends State<BiPage> {
     }
   }
 
+  /// Locale con el que se piden los reportes de Power BI.
+  static const _localeReportes = 'es-MX';
+
+  /// Fija el formato de moneda y fechas del embed.
+  ///
+  /// El embed de "Publicar en la web" es anónimo: sin cuenta de Power BI, el formato sale del
+  /// locale del NAVEGADOR. Por eso un usuario con Windows en inglés veía los importes con
+  /// convención estadounidense dentro de la app, aunque en Power BI directo los viera bien —
+  /// ahí manda el idioma configurado en su cuenta. Fijándolo aquí todos ven lo mismo.
+  ///
+  /// Se concatena en texto a propósito, sin parsear la URI: el token `r=` va en base64 y
+  /// re-codificar la cadena podría corromperlo.
+  static String _conLocale(String url) {
+    if (url.contains('formatlocale=')) return url;
+    final sep = url.contains('?') ? '&' : '?';
+    return '$url${sep}language=$_localeReportes&formatlocale=$_localeReportes';
+  }
+
   void _openLink(Map<String, dynamic> link) {
-    final url = link['url'] as String?;
-    if (url == null || url.isEmpty) {
+    final rawUrl = link['url'] as String?;
+    if (rawUrl == null || rawUrl.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Este reporte no tiene URL configurada')),
       );
       return;
     }
+    final url = _conLocale(rawUrl);
     showGeneralDialog(
       context: context,
       barrierDismissible: true,
