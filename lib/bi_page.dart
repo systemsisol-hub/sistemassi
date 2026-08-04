@@ -1749,7 +1749,7 @@ class _BiAiPanelState extends State<_BiAiPanel> {
         _loading = false;
         _messages.add(_AiMsg(
           role: 'assistant',
-          text: body['reply']?.toString() ?? '',
+          text: body['text'] as String? ?? '',
         ));
       });
       _scrollToBottom();
@@ -1930,9 +1930,7 @@ class _Bubble extends StatelessWidget {
           margin: const EdgeInsets.symmetric(vertical: 4),
           padding:
               const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width * 0.28,
-          ),
+          constraints: const BoxConstraints(maxWidth: 340),
           decoration: BoxDecoration(
             color: isUser ? c.brand : c.bg,
             borderRadius: BorderRadius.only(
