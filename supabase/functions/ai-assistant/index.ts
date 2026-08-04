@@ -65,75 +65,6 @@ Reglas importantes:
 - Si una búsqueda devuelve 0 resultados, infórmalo claramente. NUNCA inventes ni asumas información.`;
 }
 
-// ── Modo analista de Power BI ─────────────────────────────────────────────────
-//
-// Se activa cuando la petición trae pbi_context. Reemplaza por completo el prompt y las
-// herramientas administrativas: en este modo el asistente sólo ve el reporte abierto. Eso
-// arregla de raíz que al preguntarle por el saldo vencido contestara con la lista de
-// colaboradores, incidencias e inventario.
-
-const PBI_TOOLS = [
-  {
-    type: "function",
-    function: {
-      name: "pbi_modelo",
-      description:
-        "Devuelve las medidas y columnas disponibles del reporte abierto, con el formato de " +
-        "cada medida. Llámala SIEMPRE antes de tu primera consulta: los nombres deben ser exactos.",
-      parameters: { type: "object", properties: {} },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "pbi_consultar",
-      description:
-        "Consulta cifras del reporte. No escribes DAX: indicas qué medidas quieres, cómo " +
-        "agruparlas y el periodo; el servidor arma la consulta y fija el contexto de fecha.",
-      parameters: {
-        type: "object",
-        required: ["medidas"],
-        properties: {
-          medidas: {
-            type: "array", items: { type: "string" },
-            description: "Nombres EXACTOS de medidas, tal como los devuelve pbi_modelo.",
-          },
-          agrupar_por: {
-            type: "array", items: { type: "string" },
-            description: "Columnas para desglosar, en formato Tabla[Columna]. Opcional.",
-          },
-          anio: {
-            type: "string",
-            description: "Año del vocabulario del modelo. Si se omite junto con mes, usa el periodo Actual.",
-          },
-          mes: { type: "string", description: "Mes del vocabulario del modelo. Opcional." },
-          limite: { type: "number", description: "Máximo de renglones al agrupar." },
-        },
-      },
-    },
-  },
-];
-
-function buildAnalistaSystemPrompt(userName: string, reportTitle: string): string {
-  return `Eres analista de datos financieros de Sisol Soluciones Inmobiliarias. Ayudas a ${userName} a interpretar el reporte de Power BI "${reportTitle}".
-Respondes siempre en español, con precisión y sin adornos. Fecha actual: ${today}.
-
-Tu ÚNICA fuente de datos son pbi_modelo y pbi_consultar. No tienes acceso a colaboradores, incidencias, inventario, contactos ni asistencia: si preguntan de eso, aclara que este asistente cubre sólo el reporte abierto.
-
-Cómo trabajar:
-1. Llama pbi_modelo antes de tu primera consulta. Usa los nombres EXACTOS que devuelve; no los adivines, traduzcas ni corrijas.
-2. En pbi_consultar no escribes DAX: das medidas, agrupación y periodo. El servidor fija el contexto de fecha.
-3. Declara siempre sobre qué periodo respondes. Por defecto es "Actual", el mismo que muestra el panel en pantalla.
-
-Reglas sobre las cifras, obligatorias:
-- Si el formato de una medida es un porcentaje (por ejemplo "0.0%"), el valor llega como FRACCIÓN: 0.9946 significa 99.5%. Conviértelo antes de reportarlo. Nunca escribas "0.99%" cuando el dato es 0.9946.
-- Reporta montos con separador de miles y dos decimales.
-- Si una medida no trae formato y su escala no es evidente (los "Score", por ejemplo), dilo explícitamente en vez de asumir que es porcentaje o índice.
-- Si la respuesta trae truncated en true, avisa que la lista viene recortada.
-- No sumes tú los renglones de una consulta agrupada para obtener un total: pide el total en una consulta sin agrupación. Muchas medidas no son aditivas y la suma manual daría una cifra falsa.
-- NUNCA inventes una cifra. Si una herramienta falla o devuelve vacío, dilo tal cual.`;
-}
-
 const ALL_TOOLS = [
   {
     type: "function",
@@ -655,48 +586,6 @@ async function runTool(
   return { error: `Tool desconocida: ${name}` };
 }
 
-/**
- * Delega en la función pbi-query reenviando el JWT del usuario, para que el control de acceso
- * al reporte se aplique una sola vez y en un solo lugar. El workspace y el dataset los resuelve
- * pbi-query leyendo powerbi_links: nunca viajan desde aquí ni desde el cliente.
- */
-async function runPbiTool(
-  name: string,
-  input: ToolInput,
-  linkId: string,
-  authHeader: string,
-): Promise<unknown> {
-  const body: Record<string, unknown> = { link_id: linkId };
-
-  if (name === "pbi_modelo") {
-    body.accion = "modelo";
-  } else if (name === "pbi_consultar") {
-    body.accion  = "consultar";
-    body.medidas = input.medidas ?? [];
-    if (input.agrupar_por) body.agrupar_por = input.agrupar_por;
-    if (input.limite)      body.limite      = input.limite;
-    // Sin año ni mes explícitos se consulta el periodo "Actual", que es lo que muestra el panel.
-    body.periodo = (input.anio || input.mes)
-      ? { anio: input.anio, mes: input.mes }
-      : "actual";
-  } else {
-    return { error: `Tool desconocida en modo analista: ${name}` };
-  }
-
-  try {
-    const res = await fetch(`${SUPABASE_URL}/functions/v1/pbi-query`, {
-      method:  "POST",
-      headers: { "Authorization": authHeader, "Content-Type": "application/json" },
-      body:    JSON.stringify(body),
-    });
-    const out = await res.json().catch(() => ({}));
-    if (!res.ok) return { error: out.error ?? `Error ${res.status} al consultar Power BI.` };
-    return out;
-  } catch (e) {
-    return { error: `No se pudo contactar Power BI: ${e instanceof Error ? e.message : String(e)}` };
-  }
-}
-
 interface OllamaToolCall { function: { name: string; arguments: ToolInput }; }
 interface OllamaMessage  { role: string; content: string; tool_calls?: OllamaToolCall[]; }
 interface OllamaResponse { message: OllamaMessage; done: boolean; error?: string; }
@@ -726,27 +615,10 @@ Deno.serve(async (req: Request) => {
       .filter((p: string) => p.length > 0);
     const userFullName = nameParts.length > 0 ? nameParts.join(" ") : (user.email || "Usuario");
 
-    const { messages, pbi_context } = await req.json() as {
-      messages: Array<{ role: string; content: string }>;
-      pbi_context?: { link_id?: unknown; titulo?: unknown };
-    };
+    const { messages } = await req.json() as { messages: Array<{ role: string; content: string }> };
 
-    // Modo analista si viene un reporte en contexto. El título es sólo cosmético para el
-    // prompt; la autorización del reporte la hace pbi-query a partir del link_id.
-    const pbiLinkId = typeof pbi_context?.link_id === "string" && pbi_context.link_id.length > 0
-      ? pbi_context.link_id
-      : null;
-    const pbiTitulo = typeof pbi_context?.titulo === "string" && pbi_context.titulo.length > 0
-      ? pbi_context.titulo
-      : "el reporte abierto";
-
-    const tools = pbiLinkId
-      ? PBI_TOOLS
-      : (isAdmin ? ALL_TOOLS : ALL_TOOLS.filter(t => USER_ALLOWED_TOOLS.has(t.function.name)));
-
-    const systemPrompt = pbiLinkId
-      ? buildAnalistaSystemPrompt(userFullName, pbiTitulo)
-      : (isAdmin ? SYSTEM_ADMIN : buildUserSystemPrompt(userFullName));
+    const tools        = isAdmin ? ALL_TOOLS : ALL_TOOLS.filter(t => USER_ALLOWED_TOOLS.has(t.function.name));
+    const systemPrompt = isAdmin ? SYSTEM_ADMIN : buildUserSystemPrompt(userFullName);
 
     let msgs: OllamaMessage[] = [
       { role: "system", content: systemPrompt },
@@ -777,20 +649,11 @@ Deno.serve(async (req: Request) => {
       msgs.push({ role: "assistant", content: msg.content || "", tool_calls: msg.tool_calls });
       for (const tc of msg.tool_calls) {
         const { name, arguments: args } = tc.function;
-        const result = pbiLinkId
-          ? await runPbiTool(name, args, pbiLinkId, auth)
-          : await runTool(name, args, svc, isAdmin, user.id, userFullName);
+        const result = await runTool(name, args, svc, isAdmin, user.id, userFullName);
         const r = result as Record<string, unknown>;
 
         // Capturar datos estructurados para el UI de Flutter
-        if (name === "pbi_consultar" && Array.isArray(r.rows)) {
-          structuredData = {
-            type:      "pbi_rows",
-            data:      r.rows,
-            formatos:  r.formatos ?? null,
-            truncated: r.truncated ?? false,
-          };
-        } else if (name === "buscar_colaborador" && r.results) {
+        if (name === "buscar_colaborador" && r.results) {
           structuredData = { type: "collaborators", data: r.results };
         } else if (["buscar_incidencias","buscar_inventario","buscar_contactos","ver_asistencia"].includes(name) && r.results) {
           structuredData = { type: name.replace("buscar_","").replace("ver_",""), data: r.results };
