@@ -116,6 +116,12 @@ Dos correcciones sobre lo que devuelve Power BI:
   y una llave ausente se lee como cero. Se uniforman todas las llaves con `null` explícito.
 - **Ruido de punto flotante.** `394238.77999999997` → `394238.78`. Redondeo a 6 decimales:
   limpia el ruido de IEEE-754 sin dañar porcentajes ni scores.
+- **Porcentajes como fracción.** `% Vencido Critico` devuelve `0.9946…` donde el panel muestra
+  `99.5%`. Un modelo que lea el número crudo reporta `0.99%` — error de **100x** que suena
+  razonable. Por eso la respuesta incluye `formatos`, con el `FormatString` de cada medida
+  **junto a las cifras**, no sólo en el prompt: una advertencia lejana se olvida, un campo
+  adyacente al dato no. Si el modelo no expone `FormatString`, se deduce del prefijo `%` del
+  nombre.
 
 ### Control de acceso
 

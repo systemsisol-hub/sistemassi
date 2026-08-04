@@ -142,7 +142,16 @@ async function runDax(link: LinkRow, dax: string): Promise<Record<string, unknow
 
 // ── Esquema del modelo (con caché) ────────────────────────────────────────────
 
-interface ModelItem { tabla: string; nombre: string }
+interface ModelItem {
+  tabla: string;
+  nombre: string;
+  /**
+   * FormatString de la medida. Importa más de lo que parece: los porcentajes se guardan como
+   * fracción (0.9946 = 99.5%). Un modelo que lea el número crudo sin saber su formato reporta
+   * "0.99%" en lugar de "99.5%" — un error de 100x que suena razonable.
+   */
+  formato?: string;
+}
 
 interface ModelSchema {
   medidas:  ModelItem[];
@@ -177,6 +186,50 @@ function detectarPeriodo(columnas: ModelItem[]): ModelSchema["periodo"] {
   return { tabla, anio: "Año Slicer", mes: "Mes Slicer" };
 }
 
+const MEDIDAS_VISIBLES = "FILTER(INFO.VIEW.MEASURES(), [IsHidden]=FALSE())";
+
+async function fetchMedidas(link: LinkRow): Promise<ModelItem[]> {
+  try {
+    const rows = await runDax(
+      link,
+      `EVALUATE SELECTCOLUMNS(${MEDIDAS_VISIBLES}, ` +
+      '"tabla", [Table], "nombre", [Name], "formato", [FormatString])',
+    );
+    return rows.map((r) => ({
+      tabla:   String(r["[tabla]"] ?? ""),
+      nombre:  String(r["[nombre]"] ?? ""),
+      formato: r["[formato]"] == null ? undefined : String(r["[formato]"]),
+    }));
+  } catch {
+    // Modelos que no exponen FormatString: se deduce del nombre, que en estos datasets
+    // marca los porcentajes con el prefijo "%".
+    const rows = await runDax(
+      link,
+      `EVALUATE SELECTCOLUMNS(${MEDIDAS_VISIBLES}, "tabla", [Table], "nombre", [Name])`,
+    );
+    return rows.map((r) => {
+      const nombre = String(r["[nombre]"] ?? "");
+      return {
+        tabla:   String(r["[tabla]"] ?? ""),
+        nombre,
+        formato: nombre.trimStart().startsWith("%") ? "0.0%" : undefined,
+      };
+    });
+  }
+}
+
+async function fetchColumnas(link: LinkRow): Promise<ModelItem[]> {
+  const rows = await runDax(
+    link,
+    'EVALUATE SELECTCOLUMNS(FILTER(INFO.VIEW.COLUMNS(), [IsHidden]=FALSE()), ' +
+    '"tabla", [Table], "nombre", [Name])',
+  );
+  return rows.map((r) => ({
+    tabla:  String(r["[tabla]"] ?? ""),
+    nombre: String(r["[nombre]"] ?? ""),
+  }));
+}
+
 async function getModel(
   db: ReturnType<typeof createClient>,
   link: LinkRow,
@@ -194,31 +247,17 @@ async function getModel(
     if (age < CACHE_TTL_MS) return cached.schema_json as unknown as ModelSchema;
   }
 
-  const pick = (rows: Record<string, unknown>[]): ModelItem[] =>
-    rows
-      .map((r) => ({
-        tabla:  String(r["[tabla]"] ?? ""),
-        nombre: String(r["[nombre]"] ?? ""),
-      }))
-      // Un ] o " en el nombre rompería la interpolación al armar el DAX.
-      .filter((i) => i.tabla && i.nombre && !/[\]"]/.test(i.nombre) && !/['"]/.test(i.tabla));
+  // Un ] o " en el nombre rompería la interpolación al armar el DAX.
+  const usable = (i: ModelItem) =>
+    i.tabla && i.nombre && !/[\]"]/.test(i.nombre) && !/['"]/.test(i.tabla);
 
-  const medidasRaw = await runDax(
-    link,
-    'EVALUATE SELECTCOLUMNS(FILTER(INFO.VIEW.MEASURES(), [IsHidden]=FALSE()), ' +
-    '"tabla", [Table], "nombre", [Name])',
-  );
-  const columnasRaw = await runDax(
-    link,
-    'EVALUATE SELECTCOLUMNS(FILTER(INFO.VIEW.COLUMNS(), [IsHidden]=FALSE()), ' +
-    '"tabla", [Table], "nombre", [Name])',
-  );
+  const medidas  = (await fetchMedidas(link)).filter(usable).filter((m) => !esMedidaDePatronTopN(m));
+  const columnas = (await fetchColumnas(link)).filter(usable);
 
-  const columnas = pick(columnasRaw);
   const schema: ModelSchema = {
-    medidas:  pick(medidasRaw).filter((m) => !esMedidaDePatronTopN(m)),
+    medidas,
     columnas,
-    periodo:  detectarPeriodo(columnas),
+    periodo: detectarPeriodo(columnas),
   };
 
   await db.from("pbi_model_cache").upsert({
@@ -471,7 +510,7 @@ Deno.serve(async (req: Request) => {
     if (accion === "modelo") {
       return reply({
         report:   { id: link.id, title: link.title, contexto: link.ai_context },
-        medidas:  schema.medidas.map((m) => m.nombre),
+        medidas:  schema.medidas.map((m) => ({ nombre: m.nombre, formato: m.formato ?? null })),
         columnas: schema.columnas.map((c) => `${c.tabla}[${c.nombre}]`),
         periodo_soportado: schema.periodo !== null,
       });
@@ -484,10 +523,20 @@ Deno.serve(async (req: Request) => {
     const built  = construirConsulta(schema, payload);
     const result = normalizar(await runDax(link, built.dax));
 
+    // El formato viaja junto a las cifras, no sólo en el prompt: los porcentajes vienen como
+    // fracción y sin esta pista el modelo reportaría 0.99% donde el panel dice 99.5%.
+    const formatos = Object.fromEntries(
+      built.medidas.map((m) => [
+        m,
+        schema.medidas.find((x) => x.nombre === m)?.formato ?? null,
+      ]),
+    );
+
     return reply({
       ...result,
       report:   { id: link.id, title: link.title },
       consulta: { medidas: built.medidas, agrupar_por: built.columnas, dax: built.dax },
+      formatos,
     });
   } catch (e) {
     if (e instanceof HttpError) return reply({ error: e.message }, e.status);
