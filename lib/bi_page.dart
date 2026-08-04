@@ -1924,6 +1924,7 @@ class _BiAiPanelState extends State<_BiAiPanel> {
 
       // Tabla de resultados, cuando el asistente consultó cifras.
       List<Map<String, dynamic>>? rows;
+      Map<String, dynamic>? formatos;
       bool truncated = false;
       final structured = body['structured'];
       if (structured is Map && structured['type'] == 'pbi_rows') {
@@ -1934,6 +1935,9 @@ class _BiAiPanelState extends State<_BiAiPanel> {
               .map((e) => Map<String, dynamic>.from(e))
               .toList();
         }
+        // Sin esto los porcentajes se pintan como 0.99 donde el panel dice 99.5%.
+        final f = structured['formatos'];
+        if (f is Map) formatos = Map<String, dynamic>.from(f);
         truncated = structured['truncated'] == true;
       }
 
@@ -1943,6 +1947,7 @@ class _BiAiPanelState extends State<_BiAiPanel> {
           role: 'assistant',
           text: reply.isNotEmpty ? reply : '(Sin respuesta del modelo)',
           rows: rows,
+          formatos: formatos,
           truncated: truncated,
         ));
       });
@@ -2065,7 +2070,11 @@ class _BiAiPanelState extends State<_BiAiPanel> {
                       children: [
                         _Bubble(msg: msg, c: c),
                         _ResultTable(
-                            rows: rows, truncated: msg.truncated, c: c),
+                          rows: rows,
+                          formatos: msg.formatos,
+                          truncated: msg.truncated,
+                          c: c,
+                        ),
                       ],
                     );
                   },
@@ -2221,12 +2230,18 @@ class _AiMsg {
 
   /// Filas devueltas por pbi_consultar, para pintarlas como tabla debajo del texto.
   final List<Map<String, dynamic>>? rows;
+
+  /// FormatString por medida. Imprescindible: los porcentajes llegan como fracción, y sin
+  /// esta pista la tabla pinta 0.99 donde el panel dice 99.5%.
+  final Map<String, dynamic>? formatos;
+
   final bool truncated;
 
   const _AiMsg({
     required this.role,
     required this.text,
     this.rows,
+    this.formatos,
     this.truncated = false,
   });
 }
@@ -2238,6 +2253,7 @@ class _AiMsg {
 /// el que definió la consulta.
 class _ResultTable extends StatelessWidget {
   final List<Map<String, dynamic>> rows;
+  final Map<String, dynamic>? formatos;
   final bool truncated;
   final SiColors c;
 
@@ -2245,35 +2261,56 @@ class _ResultTable extends StatelessWidget {
     required this.rows,
     required this.truncated,
     required this.c,
+    this.formatos,
   });
+
+  /// El nombre de la medida dentro de "[Alias]", para cruzarlo con el mapa de formatos.
+  static String _medida(String key) {
+    final m = RegExp(r'^\[(.+)\]$').firstMatch(key);
+    return m?.group(1) ?? key;
+  }
 
   static String _encabezado(String key) {
     final m = RegExp(r'^(.*?)\[(.+)\]$').firstMatch(key);
-    if (m == null) return key;
-    final tabla = m.group(1) ?? '';
-    final col = m.group(2) ?? key;
-    return tabla.isEmpty ? col : col;
+    return m?.group(2) ?? key;
   }
 
-  static String _celda(dynamic v) {
-    if (v == null) return '—';
-    if (v is num) {
-      // Miles con coma y hasta dos decimales, omitiéndolos cuando el valor es entero.
-      final entero = v == v.roundToDouble() && v.abs() < 1e15;
-      final s = entero
-          ? v.toInt().toString()
-          : v.toStringAsFixed(2);
-      final partes = s.split('.');
-      final digitos = partes[0].replaceFirst('-', '');
-      final signo = partes[0].startsWith('-') ? '-' : '';
-      final buf = StringBuffer();
-      for (int i = 0; i < digitos.length; i++) {
-        if (i > 0 && (digitos.length - i) % 3 == 0) buf.write(',');
-        buf.write(digitos[i]);
-      }
-      return partes.length > 1 ? '$signo$buf.${partes[1]}' : '$signo$buf';
+  bool _esPorcentaje(String key) {
+    final f = formatos?[_medida(key)];
+    return f is String && f.contains('%');
+  }
+
+  /// Separador de miles, respetando el signo.
+  static String _miles(String entero) {
+    final signo = entero.startsWith('-') ? '-' : '';
+    final digitos = entero.replaceFirst('-', '');
+    final buf = StringBuffer();
+    for (int i = 0; i < digitos.length; i++) {
+      if (i > 0 && (digitos.length - i) % 3 == 0) buf.write(',');
+      buf.write(digitos[i]);
     }
-    return v.toString();
+    return '$signo$buf';
+  }
+
+  String _celda(String key, dynamic v) {
+    if (v == null) return '—';
+    if (v is! num) return v.toString();
+
+    // Los porcentajes se guardan como fracción: 0.9946 es 99.5%. Mostrar el crudo sería
+    // un error de 100x que se lee como perfectamente razonable.
+    if (_esPorcentaje(key)) {
+      final pct = v * 100;
+      // Un valor diminuto pero distinto de cero no debe verse como un cero redondo.
+      if (pct != 0 && pct.abs() < 0.05) return '<0.1%';
+      return '${pct.toStringAsFixed(1)}%';
+    }
+
+    final entero = v == v.roundToDouble() && v.abs() < 1e15;
+    if (entero) return _miles(v.toInt().toString());
+
+    if (v.abs() < 0.005) return '<0.01';
+    final partes = v.toStringAsFixed(2).split('.');
+    return '${_miles(partes[0])}.${partes[1]}';
   }
 
   @override
@@ -2313,7 +2350,7 @@ class _ResultTable extends StatelessWidget {
                   .map((r) => DataRow(
                         cells: llaves
                             .map((k) => DataCell(Text(
-                                  _celda(r[k]),
+                                  _celda(k, r[k]),
                                   style: TextStyle(
                                       fontSize: 12,
                                       color: c.ink,
