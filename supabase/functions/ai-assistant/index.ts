@@ -1,0 +1,675 @@
+import { createClient } from "jsr:@supabase/supabase-js@2";
+
+const OLLAMA_KEY   = Deno.env.get("OLLAMA_API_KEY") ?? "";
+const OLLAMA_BASE  = Deno.env.get("OLLAMA_BASE_URL") ?? "https://ollama.com/api";
+const OLLAMA_MODEL = Deno.env.get("OLLAMA_MODEL") ?? "llama3.2";
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
+const SERVICE_KEY  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
+const today = new Date().toLocaleDateString("es-MX", {
+  timeZone: "America/Mexico_City",
+  year: "numeric", month: "long", day: "numeric",
+});
+
+const USER_COLABORADOR_FIELDS =
+  "numero_empleado,nombre,paterno,materno,telefono,celular,empresa_tipo,area,puesto,ubicacion,empresa,jefe_inmediato,lider,gerente_regional,director";
+
+const ADMIN_COLABORADOR_FIELDS =
+  "id,numero_empleado,nombre,paterno,materno,area,puesto,ubicacion,empresa,empresa_tipo," +
+  "status_rh,status_sys,celular,telefono,correo_personal,mail_user,fecha_ingreso," +
+  "jefe_inmediato,lider,gerente_regional,director,foto_url,horario";
+
+const USER_ALLOWED_TOOLS = new Set([
+  "buscar_colaborador", "buscar_incidencias", "buscar_inventario",
+  "buscar_contactos", "ver_asistencia",
+  "crear_incidencia", "enviar_notificacion",
+  "calcular_vacaciones",
+]);
+
+const ADMIN_ONLY_TOOLS = new Set([
+  "crear_colaborador", "actualizar_colaborador", "actualizar_incidencia",
+  "actualizar_inventario", "gestionar_contacto",
+]);
+
+const SYSTEM_ADMIN =
+`Eres el asistente administrativo de Sisol Soluciones Inmobiliarias con acceso completo al sistema.
+Respondes siempre en español, de forma clara y concisa. Fecha actual: ${today}.
+Tienes acceso completo para consultar, crear y actualizar colaboradores, incidencias, inventario, contactos y asistencia.
+Puedes calcular los días de vacaciones disponibles de cualquier colaborador con la herramienta calcular_vacaciones.
+
+Reglas importantes:
+- Para operaciones de escritura SIEMPRE muestra un resumen y pide confirmación antes de ejecutar.
+- Al buscar colaboradores: NO añadas el parámetro status_rh automáticamente. Devuelve todos los registros que coincidan independientemente de su status, a menos que el usuario lo pida EXPLÍCITAMENTE.
+- Si una búsqueda devuelve 0 resultados, infórmalo claramente. NUNCA inventes ni asumas información que no esté en la respuesta de la herramienta.`;
+
+function buildUserSystemPrompt(userName: string): string {
+  return `Eres el asistente de Sisol Soluciones Inmobiliarias para el colaborador ${userName}.
+Respondes siempre en español, de forma clara y concisa. Fecha actual: ${today}.
+
+Restricciones de acceso:
+- Incidencias: solo puedes ver y crear las PROPIAS de ${userName}.
+- Inventario: solo puedes ver el equipo asignado a ${userName}.
+- Colaboradores: puedes buscar y ver datos básicos (número de empleado, nombre, teléfono, área, puesto, ubicación, empresa, jefe, líder, gerente, director). No se muestran datos privados.
+- Vacaciones: puedes consultar tus días de vacaciones disponibles con la herramienta calcular_vacaciones.
+- NO puedes crear ni modificar colaboradores, inventario ni contactos.
+- Puedes crear solicitudes de incidencias (solo para ti mismo) y enviar notificaciones.
+
+Reglas importantes:
+- Al buscar colaboradores: NO añadas el parámetro status_rh automáticamente. Devuelve todos independientemente de su status.
+- Para crear incidencias o notificaciones muestra siempre un resumen y pide confirmación.
+- Si una búsqueda devuelve 0 resultados, infórmalo claramente. NUNCA inventes ni asumas información.`;
+}
+
+const ALL_TOOLS = [
+  {
+    type: "function",
+    function: {
+      name: "buscar_colaborador",
+      description: "Busca colaboradores. Por defecto NO filtra por status_rh — devuelve todos los registros (activos y bajas). Solo aplica status_rh si el usuario lo pide explícitamente. Admin ve datos completos; usuarios solo ven datos básicos.",
+      parameters: {
+        type: "object",
+        properties: {
+          numero_empleado: { type: "string", description: "Número de empleado. Se prueban variantes con y sin ceros iniciales." },
+          nombre: { type: "string" }, paterno: { type: "string" },
+          area: { type: "string" }, puesto: { type: "string" }, ubicacion: { type: "string" },
+          status_rh: { type: "string", enum: ["ACTIVO","BAJA","CAMBIO","REINGRESO"], description: "SOLO usar si el usuario lo pide explícitamente. NO incluir en búsquedas normales." },
+          status_sys: { type: "string", description: "SOLO admin. SOLO si el usuario lo pide." },
+          limit: { type: "number" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "calcular_vacaciones",
+      description: "Calcula los días de vacaciones disponibles de un colaborador según su antigüedad y las incidencias aprobadas/pendientes. Usa esta herramienta cuando el usuario pregunte cuántos días de vacaciones tiene, cuántos ha usado, cuál es su saldo o quiera ver el historial de periodos de vacaciones.",
+      parameters: {
+        type: "object",
+        properties: {
+          usuario_id: { type: "string", description: "[Solo admin] UUID del colaborador. Si se omite, calcula para el usuario actual." },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "buscar_incidencias",
+      description: "Busca incidencias. Usuarios no-admin solo ven las propias.",
+      parameters: {
+        type: "object",
+        properties: {
+          status:     { type: "string", enum: ["PENDIENTE","APROBADA","CANCELADA"] },
+          periodo:    { type: "string" }, limit: { type: "number" },
+          usuario_id: { type: "string", description: "[Solo admin] UUID del colaborador" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "buscar_inventario",
+      description: "Busca equipos. Usuarios no-admin solo ven el equipo asignado a sí mismos.",
+      parameters: {
+        type: "object",
+        properties: {
+          tipo: { type: "string" }, ubicacion: { type: "string" }, marca: { type: "string" },
+          condicion: { type: "string", enum: ["NUEVO","USADO","DAÑADO"] },
+          usuario_id: { type: "string", description: "[Solo admin]" },
+          sin_asignar: { type: "boolean", description: "[Solo admin]" },
+          limit: { type: "number" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "buscar_contactos",
+      description: "Busca contactos externos por nombre, empresa o correo.",
+      parameters: {
+        type: "object",
+        properties: {
+          nombre: { type: "string" }, empresa: { type: "string" },
+          correo: { type: "string" }, limit: { type: "number" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "ver_asistencia",
+      description: "Consulta registros de asistencia de un colaborador.",
+      parameters: {
+        type: "object",
+        properties: {
+          colaborador_id: { type: "string" },
+          fecha_inicio: { type: "string" }, fecha_fin: { type: "string" }, limit: { type: "number" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "crear_incidencia",
+      description: "Crea una incidencia/solicitud de vacaciones. Usuarios no-admin solo pueden crearla para sí mismos. Solo tras confirmación.",
+      parameters: {
+        type: "object",
+        required: ["periodo","dias","fecha_inicio","fecha_fin","fecha_regreso"],
+        properties: {
+          usuario_id: { type: "string", description: "[Solo admin]" },
+          nombre_usuario: { type: "string", description: "[Solo admin]" },
+          periodo: { type: "string" }, dias: { type: "number" },
+          fecha_inicio: { type: "string" }, fecha_fin: { type: "string" }, fecha_regreso: { type: "string" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "enviar_notificacion",
+      description: "Envía una notificación push a un usuario. Solo tras confirmación.",
+      parameters: {
+        type: "object",
+        required: ["user_id","title","message"],
+        properties: {
+          user_id: { type: "string" }, title: { type: "string" },
+          message: { type: "string" }, type: { type: "string" },
+        },
+      },
+    },
+  },
+  // ─ SOLO ADMIN ──────────────────────────────────────────────────────────
+  {
+    type: "function",
+    function: {
+      name: "crear_colaborador",
+      description: "[ADMIN] Inserta un nuevo colaborador. Solo tras confirmación.",
+      parameters: {
+        type: "object",
+        required: ["nombre","paterno","numero_empleado"],
+        properties: {
+          nombre: { type: "string" }, paterno: { type: "string" }, materno: { type: "string" },
+          numero_empleado: { type: "string" }, area: { type: "string" }, puesto: { type: "string" },
+          ubicacion: { type: "string" }, empresa: { type: "string" }, empresa_tipo: { type: "string" },
+          status_rh: { type: "string" }, status_sys: { type: "string" },
+          fecha_ingreso: { type: "string" }, celular: { type: "string" },
+          correo_personal: { type: "string" }, jefe_inmediato: { type: "string" }, horario: { type: "string" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "actualizar_colaborador",
+      description: "[ADMIN] Actualiza campos de un colaborador por UUID. Solo tras confirmación.",
+      parameters: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: { type: "string" },
+          nombre: { type: "string" }, paterno: { type: "string" }, materno: { type: "string" },
+          area: { type: "string" }, puesto: { type: "string" }, ubicacion: { type: "string" },
+          empresa: { type: "string" }, status_rh: { type: "string" }, status_sys: { type: "string" },
+          fecha_ingreso: { type: "string" }, fecha_baja: { type: "string" },
+          fecha_reingreso: { type: "string" }, celular: { type: "string" },
+          correo_personal: { type: "string" }, jefe_inmediato: { type: "string" },
+          lider: { type: "string" }, gerente_regional: { type: "string" },
+          director: { type: "string" }, observaciones: { type: "string" }, horario: { type: "string" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "actualizar_incidencia",
+      description: "[ADMIN] Cambia el estatus u otros datos de una incidencia. Solo tras confirmación.",
+      parameters: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: { type: "string" }, status: { type: "string", enum: ["PENDIENTE","APROBADA","CANCELADA"] },
+          dias: { type: "number" }, periodo: { type: "string" },
+          fecha_inicio: { type: "string" }, fecha_fin: { type: "string" }, fecha_regreso: { type: "string" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "actualizar_inventario",
+      description: "[ADMIN] Asigna o libera un equipo. Solo tras confirmación.",
+      parameters: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: { type: "string" }, usuario_id: { type: "string" }, usuario_nombre: { type: "string" },
+          ubicacion: { type: "string" }, condicion: { type: "string" }, observaciones: { type: "string" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "gestionar_contacto",
+      description: "[ADMIN] Crea o actualiza un contacto externo. Solo tras confirmación.",
+      parameters: {
+        type: "object",
+        required: ["nombre"],
+        properties: {
+          id: { type: "string" }, nombre: { type: "string" }, empresa: { type: "string" },
+          correo: { type: "string" }, telefono: { type: "string" }, otro: { type: "string" },
+        },
+      },
+    },
+  },
+];
+
+type ToolInput = Record<string, unknown>;
+
+function numeroEmpleadoVariants(raw: string): string[] {
+  const trimmed = raw.trim();
+  const numInt  = parseInt(trimmed, 10);
+  if (isNaN(numInt)) return [trimmed];
+  const variants = new Set<string>();
+  variants.add(trimmed);
+  variants.add(String(numInt));
+  variants.add(String(numInt).padStart(4, '0'));
+  variants.add(String(numInt).padStart(5, '0'));
+  return Array.from(variants);
+}
+
+/** Parsea una fecha "YYYY-MM-DD" en hora local (evita desfase UTC). */
+function parseLocalDate(s: string | null | undefined): Date | null {
+  if (!s) return null;
+  const parts = s.split("-");
+  if (parts.length < 3) return null;
+  return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+}
+
+/** Años completos entre base y hoy (misma lógica que Flutter _calcYears). */
+function calcYears(base: Date): number {
+  const now = new Date();
+  let years = now.getFullYear() - base.getFullYear();
+  const nowMD  = now.getMonth()  * 100 + now.getDate();
+  const baseMD = base.getMonth() * 100 + base.getDate();
+  if (nowMD < baseMD) years--;
+  return Math.max(0, Math.min(years, 50));
+}
+
+/** Días de vacaciones según años de servicio (LFT 2023). */
+function getDaysByYear(y: number): number {
+  if (y === 1) return 12;
+  if (y === 2) return 14;
+  if (y === 3) return 16;
+  if (y === 4) return 18;
+  if (y === 5) return 20;
+  if (y <= 10) return 22;
+  if (y <= 15) return 24;
+  if (y <= 20) return 26;
+  if (y <= 25) return 28;
+  if (y <= 30) return 30;
+  return 32;
+}
+
+async function runTool(
+  name: string,
+  input: ToolInput,
+  db: ReturnType<typeof createClient>,
+  isAdmin: boolean,
+  userId: string,
+  userFullName: string,
+): Promise<unknown> {
+  if (!isAdmin && ADMIN_ONLY_TOOLS.has(name)) {
+    return { error: "Acción no permitida: exclusiva del administrador." };
+  }
+
+  // ── COLABORADORES ────────────────────────────────────────────────────
+  if (name === "buscar_colaborador") {
+    const fields = isAdmin ? ADMIN_COLABORADOR_FIELDS : USER_COLABORADOR_FIELDS;
+    let q = db.from("profiles").select(fields);
+    if (input.numero_empleado) {
+      const variants = numeroEmpleadoVariants(String(input.numero_empleado));
+      if (variants.length === 1) {
+        q = (q as any).eq("numero_empleado", variants[0]);
+      } else {
+        q = (q as any).or(variants.map(v => `numero_empleado.eq.${v}`).join(","));
+      }
+    }
+    if (input.nombre)    q = (q as any).ilike("nombre",  `%${input.nombre}%`);
+    if (input.paterno)   q = (q as any).ilike("paterno", `%${input.paterno}%`);
+    if (input.area)      q = (q as any).eq("area", input.area);
+    if (input.puesto)    q = (q as any).ilike("puesto", `%${input.puesto}%`);
+    if (input.ubicacion) q = (q as any).eq("ubicacion", input.ubicacion);
+    if (input.status_rh)             q = (q as any).eq("status_rh", input.status_rh);
+    if (isAdmin && input.status_sys) q = (q as any).eq("status_sys", input.status_sys);
+    q = (q as any).limit((input.limit as number) || 20).order("nombre");
+    const { data, error } = await q;
+    if (error) return { error: error.message };
+    return { results: data, count: data?.length || 0 };
+  }
+
+  if (name === "crear_colaborador") {
+    const { data, error } = await db.from("profiles")
+      .insert({ ...input, status_rh: input.status_rh || "ACTIVO", status_sys: input.status_sys || "CAMBIO" })
+      .select("id,numero_empleado,nombre,paterno").single();
+    if (error) return { error: error.message };
+    return { success: true, created: data };
+  }
+
+  if (name === "actualizar_colaborador") {
+    const { id, ...fields } = input;
+    const { data, error } = await db.from("profiles").update(fields).eq("id", id as string)
+      .select("id,numero_empleado,nombre,paterno").single();
+    if (error) return { error: error.message };
+    return { success: true, updated: data };
+  }
+
+  // ── VACACIONES ────────────────────────────────────────────────────
+  if (name === "calcular_vacaciones") {
+    const targetId = isAdmin && input.usuario_id ? input.usuario_id as string : userId;
+
+    const { data: prof, error: profErr } = await db
+      .from("profiles")
+      .select("nombre,paterno,materno,numero_empleado,fecha_ingreso,fecha_reingreso")
+      .eq("id", targetId)
+      .single();
+    if (profErr || !prof) return { error: "No se encontró el perfil del colaborador." };
+
+    const fechaIngreso   = parseLocalDate(prof.fecha_ingreso);
+    const fechaReingreso = parseLocalDate(prof.fecha_reingreso);
+    const base = fechaReingreso ?? fechaIngreso;
+    if (!base) return { error: "El colaborador no tiene fecha de ingreso registrada. No es posible calcular los días de vacaciones." };
+
+    // Incidencias APROBADAS y PENDIENTES para el cálculo
+    const { data: incs } = await db
+      .from("incidencias")
+      .select("periodo,dias,status")
+      .eq("usuario_id", targetId)
+      .in("status", ["APROBADA", "PENDIENTE"]);
+
+    const normalize = (s: string | null) => (s || "").replace(/\D/g, "");
+    const usedMap: Record<string, number> = {};
+    for (const inc of (incs || [])) {
+      const k = normalize(inc.periodo);
+      if (k) usedMap[k] = (usedMap[k] || 0) + (inc.dias || 0);
+    }
+
+    const now = new Date();
+    const completedYears = calcYears(base);
+    const cutoff2017 = new Date(2017, 4, 2); // 2 Mayo 2017
+
+    const calcProporcional = (days: number, start: Date, end: Date): number => {
+      if (start > now) return days;
+      if (end <= now)  return days;
+      const elapsed = Math.floor((now.getTime() - start.getTime()) / 86400000) + 1;
+      return (days / 365) * elapsed;
+    };
+
+    const periodos = [];
+    for (let y = 1; y <= completedYears + 1; y++) {
+      const periodStart = new Date(base.getFullYear() + y - 1, base.getMonth(), base.getDate());
+      const periodEnd   = new Date(base.getFullYear() + y,     base.getMonth(), base.getDate());
+      const label = `${periodStart.getFullYear()} - ${periodEnd.getFullYear()}`;
+
+      let days: number;
+      if (periodStart.getFullYear() >= 2023) {
+        days = getDaysByYear(y);
+      } else if (base < cutoff2017) {
+        days = Math.min(6 + (y - 1) * 2, 14);
+      } else {
+        days = Math.min(8 + (y - 1) * 2, 16);
+      }
+
+      const prop      = calcProporcional(days, periodStart, periodEnd);
+      const requested = usedMap[normalize(label)] || 0;
+      const disponible = Math.floor(prop - requested);
+      const esCurrent  = periodStart <= now && periodEnd > now;
+
+      periodos.push({
+        periodo: label,
+        dias_ley: days,
+        dias_proporcionales: Math.floor(prop),
+        dias_solicitados: requested,
+        dias_disponibles: disponible,
+        es_periodo_actual: esCurrent,
+      });
+    }
+
+    const totalDisponible = periodos.reduce((s, p) => s + Math.max(0, p.dias_disponibles), 0);
+    const nombre = [prof.nombre, prof.paterno, prof.materno].filter(Boolean).join(" ");
+
+    return {
+      colaborador: nombre,
+      numero_empleado: prof.numero_empleado,
+      fecha_base: fechaReingreso ? prof.fecha_reingreso : prof.fecha_ingreso,
+      usa_fecha_reingreso: !!fechaReingreso,
+      periodos,
+      total_disponible: totalDisponible,
+    };
+  }
+
+  // ── INCIDENCIAS ────────────────────────────────────────────────────
+  if (name === "buscar_incidencias") {
+    let q = db.from("incidencias").select("*");
+    if (!isAdmin) {
+      q = (q as any).eq("usuario_id", userId);
+    } else {
+      if (input.usuario_id) q = (q as any).eq("usuario_id", input.usuario_id);
+    }
+    if (input.status)  q = (q as any).eq("status", input.status);
+    if (input.periodo) q = (q as any).ilike("periodo", `%${input.periodo}%`);
+    q = (q as any).limit((input.limit as number) || 20).order("created_at", { ascending: false });
+    const { data, error } = await q;
+    if (error) return { error: error.message };
+    return { results: data, count: data?.length || 0 };
+  }
+
+  if (name === "crear_incidencia") {
+    const effectiveUserId   = isAdmin ? ((input.usuario_id   as string) || userId) : userId;
+    const effectiveUserName = isAdmin ? ((input.nombre_usuario as string) || userFullName) : userFullName;
+    const { data, error } = await db.from("incidencias").insert({
+      ...input,
+      usuario_id:     effectiveUserId,
+      nombre_usuario: effectiveUserName,
+      status:         "PENDIENTE",
+      created_at:     new Date().toISOString(),
+    }).select().single();
+    if (error) return { error: error.message };
+    return { success: true, incidencia: data };
+  }
+
+  if (name === "actualizar_incidencia") {
+    const { id, ...fields } = input;
+    const { data, error } = await db.from("incidencias").update(fields)
+      .eq("id", id as string).select().single();
+    if (error) return { error: error.message };
+    return { success: true, updated: data };
+  }
+
+  // ── INVENTARIO ────────────────────────────────────────────────────
+  if (name === "buscar_inventario") {
+    let q = db.from("issi_inventory").select(
+      "id,tipo,marca,modelo,n_s,condicion,ubicacion,usuario_id,usuario_nombre,observaciones,valor,cpu,ram,ssd"
+    );
+    if (!isAdmin) {
+      q = (q as any).eq("usuario_id", userId);
+    } else {
+      if (input.usuario_id)           q = (q as any).eq("usuario_id", input.usuario_id);
+      if (input.sin_asignar === true) q = (q as any).is("usuario_id", null);
+    }
+    if (input.tipo)      q = (q as any).eq("tipo", (input.tipo as string).toUpperCase());
+    if (input.ubicacion) q = (q as any).ilike("ubicacion", `%${input.ubicacion}%`);
+    if (input.marca)     q = (q as any).ilike("marca", `%${input.marca}%`);
+    if (input.condicion) q = (q as any).eq("condicion", (input.condicion as string).toUpperCase());
+    q = (q as any).limit((input.limit as number) || 20).order("tipo");
+    const { data, error } = await q;
+    if (error) return { error: error.message };
+    return { results: data, count: data?.length || 0 };
+  }
+
+  if (name === "actualizar_inventario") {
+    const { id, ...fields } = input;
+    if (!fields.usuario_id || fields.usuario_id === "null") {
+      fields.usuario_id = null; fields.usuario_nombre = null;
+    }
+    const { data, error } = await db.from("issi_inventory").update(fields)
+      .eq("id", id as string).select().single();
+    if (error) return { error: error.message };
+    return { success: true, updated: data };
+  }
+
+  // ── CONTACTOS ────────────────────────────────────────────────────
+  if (name === "buscar_contactos") {
+    let q = db.from("external_contacts").select("*");
+    if (input.nombre)  q = (q as any).ilike("nombre",  `%${input.nombre}%`);
+    if (input.empresa) q = (q as any).ilike("empresa", `%${input.empresa}%`);
+    if (input.correo)  q = (q as any).ilike("correo",  `%${input.correo}%`);
+    q = (q as any).limit((input.limit as number) || 20).order("nombre");
+    const { data, error } = await q;
+    if (error) return { error: error.message };
+    return { results: data, count: data?.length || 0 };
+  }
+
+  if (name === "gestionar_contacto") {
+    const { id, ...fields } = input;
+    if (id) {
+      const { data, error } = await db.from("external_contacts").update(fields)
+        .eq("id", id as string).select().single();
+      if (error) return { error: error.message };
+      return { success: true, action: "updated", contact: data };
+    } else {
+      const { data, error } = await db.from("external_contacts").insert(fields).select().single();
+      if (error) return { error: error.message };
+      return { success: true, action: "created", contact: data };
+    }
+  }
+
+  // ── ASISTENCIA ────────────────────────────────────────────────────
+  if (name === "ver_asistencia") {
+    let q = db.from("attendance").select(
+      "id,colaborador_id,check_in,check_out,date,validated,lat,lng"
+    );
+    if (input.colaborador_id) q = (q as any).eq("colaborador_id", input.colaborador_id);
+    if (input.fecha_inicio)   q = (q as any).gte("date", input.fecha_inicio);
+    if (input.fecha_fin)      q = (q as any).lte("date", input.fecha_fin);
+    q = (q as any).limit((input.limit as number) || 30).order("date", { ascending: false });
+    const { data, error } = await q;
+    if (error) return { error: error.message };
+    return { results: data, count: data?.length || 0 };
+  }
+
+  // ── NOTIFICACIONES ────────────────────────────────────────────────────
+  if (name === "enviar_notificacion") {
+    const { data, error } = await db.from("notifications").insert({
+      user_id: input.user_id, title: input.title, message: input.message,
+      type: input.type || "admin_message", is_read: false, created_at: new Date().toISOString(),
+    }).select().single();
+    if (error) return { error: error.message };
+    return { success: true, notification: data };
+  }
+
+  return { error: `Tool desconocida: ${name}` };
+}
+
+interface OllamaToolCall { function: { name: string; arguments: ToolInput }; }
+interface OllamaMessage  { role: string; content: string; tool_calls?: OllamaToolCall[]; }
+interface OllamaResponse { message: OllamaMessage; done: boolean; error?: string; }
+
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
+
+  try {
+    const auth = req.headers.get("Authorization");
+    if (!auth) return new Response(JSON.stringify({ error: "No authorization" }), { status: 401, headers: CORS });
+
+    const svc = createClient(SUPABASE_URL, SERVICE_KEY);
+    const { data: { user }, error: authErr } = await svc.auth.getUser(auth.replace("Bearer ", ""));
+    if (authErr || !user) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: CORS });
+
+    const { data: prof } = await svc.from("profiles")
+      .select("role, permissions, nombre, paterno, materno")
+      .eq("id", user.id).single();
+
+    const isAdmin    = prof?.role === "admin";
+    const hasAiPerm  = (prof?.permissions as Record<string, unknown>)?.show_ai === true;
+    if (!isAdmin && !hasAiPerm) {
+      return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: CORS });
+    }
+
+    const nameParts  = [prof?.nombre || "", prof?.paterno || "", prof?.materno || ""]
+      .filter((p: string) => p.length > 0);
+    const userFullName = nameParts.length > 0 ? nameParts.join(" ") : (user.email || "Usuario");
+
+    const { messages } = await req.json() as { messages: Array<{ role: string; content: string }> };
+
+    const tools        = isAdmin ? ALL_TOOLS : ALL_TOOLS.filter(t => USER_ALLOWED_TOOLS.has(t.function.name));
+    const systemPrompt = isAdmin ? SYSTEM_ADMIN : buildUserSystemPrompt(userFullName);
+
+    let msgs: OllamaMessage[] = [
+      { role: "system", content: systemPrompt },
+      ...messages.map(m => ({ role: m.role, content: m.content })),
+    ];
+
+    let structuredData: unknown = null;
+    let iterations = 0;
+
+    while (iterations++ < 15) {
+      const apiRes = await fetch(`${OLLAMA_BASE}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${OLLAMA_KEY}` },
+        body: JSON.stringify({ model: OLLAMA_MODEL, messages: msgs, tools, stream: false }),
+      });
+
+      const ollama: OllamaResponse = await apiRes.json();
+      if (!apiRes.ok) return new Response(JSON.stringify({ error: ollama.error || JSON.stringify(ollama) }), { status: 500, headers: CORS });
+
+      const msg = ollama.message;
+      if (!msg.tool_calls || msg.tool_calls.length === 0) {
+        return new Response(
+          JSON.stringify({ text: (msg.content || "").trim(), structured: structuredData }),
+          { headers: { ...CORS, "Content-Type": "application/json" } }
+        );
+      }
+
+      msgs.push({ role: "assistant", content: msg.content || "", tool_calls: msg.tool_calls });
+      for (const tc of msg.tool_calls) {
+        const { name, arguments: args } = tc.function;
+        const result = await runTool(name, args, svc, isAdmin, user.id, userFullName);
+        const r = result as Record<string, unknown>;
+
+        // Capturar datos estructurados para el UI de Flutter
+        if (name === "buscar_colaborador" && r.results) {
+          structuredData = { type: "collaborators", data: r.results };
+        } else if (["buscar_incidencias","buscar_inventario","buscar_contactos","ver_asistencia"].includes(name) && r.results) {
+          structuredData = { type: name.replace("buscar_","").replace("ver_",""), data: r.results };
+        } else if (name === "calcular_vacaciones" && !r.error) {
+          structuredData = { type: "vacaciones", data: result };
+        } else if (r.success) {
+          structuredData = { type: "success", tool: name, data: result };
+        }
+
+        msgs.push({ role: "tool", content: JSON.stringify(result) });
+      }
+    }
+
+    return new Response(JSON.stringify({ error: "Máximo de iteraciones alcanzado" }), { status: 500, headers: CORS });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return new Response(JSON.stringify({ error: msg }), { status: 500, headers: CORS });
+  }
+});
