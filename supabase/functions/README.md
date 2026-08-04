@@ -15,7 +15,11 @@ Asistente conversacional del sistema. Consumido por dos pantallas:
 | Asistente general (con adjuntos) | `lib/ai_page.dart:31` |
 | Panel IA junto a reportes BI | `lib/bi_page.dart:1677` |
 
-**Rescatada de la versión 13 desplegada** (actualizada 2026-08-04). `verify_jwt: true`.
+**Desplegada como v14** el 2026-08-04, con el modo analista. La v13 pristina —la que existía sólo
+en el despliegue antes de versionarla— quedó en el commit `e4c6554`, que es el punto de rollback
+si el modo analista causara una regresión.
+
+`verify_jwt: true`.
 
 ### Contrato
 
@@ -77,8 +81,9 @@ encadenadas a herramientas.
 Ejecuta consultas DAX **de sólo lectura** contra un dataset de Power BI, para que el asistente
 analice los reportes con cifras reales en lugar de inventarlas. `verify_jwt: true`.
 
-> **Estado: escrita pero NO desplegada.** Falta la credencial de servicio del tenant de
-> SFKontrol (ver abajo). Sin los tres secretos `AZURE_*` responde `503` con un mensaje explícito.
+> **Estado: desplegada (v1), sin credenciales.** Falta el service principal del tenant de
+> SFKontrol (ver abajo). Sin los tres secretos `AZURE_*` responde `503` con un mensaje explícito,
+> así que está desplegada pero inerte hasta que lleguen.
 
 ### Por qué el asistente no escribe DAX
 
