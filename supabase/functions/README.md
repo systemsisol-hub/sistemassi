@@ -29,15 +29,11 @@ Response: `{ text: string, structured: unknown }`
 `structured` se llena con el resultado de la última herramienta ejecutada para que Flutter pinte
 tablas. Ojo: `bi_page.dart` actualmente **ignora** ese campo; `ai_page.dart:202` sí lo lee.
 
-### ⚠️ Modo analista: código muerto pendiente de retirar
+### Alcance
 
-La v16 desplegada todavía contiene el modo analista (`PBI_TOOLS`, `buildAnalistaSystemPrompt`,
-`runPbiTool` y el manejo de `pbi_context`). **Ya no se usa:** ese trabajo se movió a
-`bi-assistant` y `bi_page.dart` apunta ahí. Queda inalcanzable porque nadie envía `pbi_context`.
-
-No se retiró todavía para no divergir el repo del despliegue: limpiarlo exige redesplegar, y por
-MCP eso significa transcribir el archivo completo a mano. **Retirarlo en cuanto haya CLI de
-Supabase instalado**, en un solo paso limpieza + despliegue.
+**Sólo RH.** Todo lo de Power BI vive en `bi-assistant`. Esta función no conoce `pbi_context` ni
+tiene herramientas de BI: se retiraron al separar los asistentes, restaurando el archivo desde la
+v13 pristina. Un cliente viejo que mande `pbi_context` simplemente lo ve ignorado.
 
 ### Permisos
 
@@ -263,13 +259,32 @@ modelo puede alimentar varios reportes.
 
 ## Desplegar
 
-```bash
-supabase functions deploy ai-assistant --project-ref zkmbebybyyefmqcxjqrg
-```
-
-Antes de desplegar un cambio, respalda la versión viva — sigue siendo la única copia de
-cualquier edición hecha directo en el dashboard:
+Requiere `supabase login` una vez (es interactivo, abre el navegador). **Correr desde la raíz del
+repo**: el CLI busca `supabase/functions/<slug>/index.ts` relativo al directorio actual, y desde
+otro lugar falla con "Entrypoint path does not exist".
 
 ```bash
-supabase functions download ai-assistant --project-ref zkmbebybyyefmqcxjqrg
+supabase functions deploy bi-assistant --project-ref zkmbebybyyefmqcxjqrg
 ```
+
+El aviso "Docker is not running" es inofensivo: Docker sólo hace falta para desarrollo local.
+
+### Verificar que se desplegó lo que se pretendía
+
+Descargar a un directorio aparte y comparar. Vale la pena porque un despliegue puede quedar
+desfasado del repo sin que nada lo advierta:
+
+```bash
+mkdir /tmp/verify && cd /tmp/verify
+supabase functions download bi-assistant --project-ref zkmbebybyyefmqcxjqrg
+diff supabase/functions/bi-assistant/index.ts <repo>/supabase/functions/bi-assistant/index.ts
+```
+
+Cuidado con descargar desde la raíz del repo: sobreescribe el archivo local.
+
+### Sobre los números de versión
+
+El contador de versión sube también al **guardar secretos**, no sólo al desplegar: guardar un
+secreto reinicia las funciones. Por eso el `version` del dashboard puede ir muy por delante de la
+cantidad de despliegues reales. Para saber qué código está corriendo, compara el `ezbr_sha256` o
+descarga y haz diff — no te fíes del número.
