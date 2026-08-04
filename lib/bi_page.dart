@@ -1,4 +1,7 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'theme/si_theme.dart';
 import 'bi_web_iframe_stub.dart' if (dart.library.html) 'bi_web_iframe_web.dart';
@@ -1589,17 +1592,19 @@ class _LinkViewer extends StatelessWidget {
     final c = SiColors.of(context);
     final mq = MediaQuery.of(context);
     final height = mq.size.height - mq.padding.top - mq.padding.bottom;
+    final width = mq.size.width;
     const headerH = 56.0;
+    final isWide = width > 700;
 
     return Container(
       height: height,
       color: c.panel,
       child: Column(
         children: [
+          // Header
           Container(
             height: headerH,
-            padding:
-                const EdgeInsets.symmetric(horizontal: SiSpace.x4),
+            padding: const EdgeInsets.symmetric(horizontal: SiSpace.x4),
             decoration: BoxDecoration(
               color: c.panel,
               border: Border(bottom: BorderSide(color: c.line, width: 1)),
@@ -1624,15 +1629,363 @@ class _LinkViewer extends StatelessWidget {
               ],
             ),
           ),
+          // Body: AI panel (izquierda) + iframe (derecha)
           Expanded(
-            child: WebIframe(
-              url: url,
-              height: height - headerH,
-              width: mq.size.width,
-            ),
+            child: isWide
+                ? Row(
+                    children: [
+                      // AI assistant — 1/3
+                      SizedBox(
+                        width: width / 3,
+                        child: _BiAiPanel(reportTitle: title),
+                      ),
+                      VerticalDivider(width: 1, color: c.line),
+                      // iframe — 2/3
+                      Expanded(
+                        child: WebIframe(
+                          url: url,
+                          height: height - headerH,
+                          width: width * 2 / 3,
+                        ),
+                      ),
+                    ],
+                  )
+                : WebIframe(
+                    url: url,
+                    height: height - headerH,
+                    width: width,
+                  ),
           ),
         ],
       ),
     );
   }
+}
+
+// ── BI AI Panel ───────────────────────────────────────────────────────────────
+
+class _BiAiPanel extends StatefulWidget {
+  final String reportTitle;
+  const _BiAiPanel({required this.reportTitle});
+
+  @override
+  State<_BiAiPanel> createState() => _BiAiPanelState();
+}
+
+class _BiAiPanelState extends State<_BiAiPanel> {
+  static const _fnUrl =
+      'https://zkmbebybyyefmqcxjqrg.supabase.co/functions/v1/ai-assistant';
+
+  final _inputCtrl = TextEditingController();
+  final _scrollCtrl = ScrollController();
+  final List<_AiMsg> _messages = [];
+  bool _loading = false;
+
+  @override
+  void dispose() {
+    _inputCtrl.dispose();
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollCtrl.hasClients) {
+        _scrollCtrl.animateTo(
+          _scrollCtrl.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  Future<void> _send(String text) async {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty || _loading) return;
+    _inputCtrl.clear();
+
+    setState(() {
+      _messages.add(_AiMsg(role: 'user', text: trimmed));
+      _loading = true;
+    });
+    _scrollToBottom();
+
+    try {
+      final session = Supabase.instance.client.auth.currentSession;
+      if (session == null) throw Exception('Sin sesión activa');
+
+      // Prepend report context as first system-like user message
+      final context =
+          'Eres un asistente experto en análisis de datos. '
+          'El usuario está viendo el panel de Power BI titulado "${widget.reportTitle}". '
+          'Ayúdalo a entender las métricas, tendencias o preguntas sobre este reporte. '
+          'Responde de forma clara y concisa.';
+
+      final history = [
+        {'role': 'user', 'content': context},
+        {'role': 'assistant', 'content': 'Entendido, estoy listo para ayudarte con el análisis de este panel.'},
+        ..._messages
+            .where((m) => m.text.isNotEmpty)
+            .map((m) => {'role': m.role, 'content': m.text}),
+      ];
+
+      final resp = await http.post(
+        Uri.parse(_fnUrl),
+        headers: {
+          'Authorization': 'Bearer ${session.accessToken}',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({'messages': history}),
+      ).timeout(const Duration(seconds: 60));
+
+      if (!mounted) return;
+      final body = jsonDecode(resp.body) as Map<String, dynamic>;
+      if (resp.statusCode != 200) {
+        throw Exception(body['error']?.toString() ?? 'Error ${resp.statusCode}');
+      }
+
+      setState(() {
+        _loading = false;
+        _messages.add(_AiMsg(
+          role: 'assistant',
+          text: body['reply']?.toString() ?? '',
+        ));
+      });
+      _scrollToBottom();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _messages.add(_AiMsg(role: 'assistant', text: 'Error: $e'));
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = SiColors.of(context);
+
+    return Column(
+      children: [
+        // Panel header
+        Container(
+          padding: const EdgeInsets.symmetric(
+              horizontal: SiSpace.x4, vertical: SiSpace.x3),
+          decoration:
+              BoxDecoration(color: c.brandTint),
+          child: Row(
+            children: [
+              Icon(Icons.auto_awesome, size: 16, color: c.brand),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Asistente BI',
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: c.brand),
+                ),
+              ),
+            ],
+          ),
+        ),
+        // Messages
+        Expanded(
+          child: _messages.isEmpty
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(SiSpace.x5),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.bar_chart_outlined,
+                            size: 40, color: c.line),
+                        const SizedBox(height: SiSpace.x3),
+                        Text(
+                          'Pregúntame sobre\n"${widget.reportTitle}"',
+                          textAlign: TextAlign.center,
+                          style:
+                              TextStyle(fontSize: 13, color: c.ink3),
+                        ),
+                        const SizedBox(height: SiSpace.x5),
+                        // Quick prompt
+                        _QuickChip(
+                          label: '¿Qué métricas muestra este panel?',
+                          onTap: () => _send(
+                              '¿Qué métricas o indicadores suele mostrar un panel llamado "${widget.reportTitle}"?'),
+                        ),
+                        const SizedBox(height: SiSpace.x2),
+                        _QuickChip(
+                          label: '¿Cómo interpreto los datos?',
+                          onTap: () => _send(
+                              '¿Cómo debo interpretar los datos de un reporte titulado "${widget.reportTitle}"?'),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : ListView.builder(
+                  controller: _scrollCtrl,
+                  padding: const EdgeInsets.all(SiSpace.x3),
+                  itemCount: _messages.length + (_loading ? 1 : 0),
+                  itemBuilder: (ctx, i) {
+                    if (_loading && i == _messages.length) {
+                      return _BubbleTyping(c: c);
+                    }
+                    final msg = _messages[i];
+                    return _Bubble(msg: msg, c: c);
+                  },
+                ),
+        ),
+        // Input
+        Container(
+          decoration: BoxDecoration(
+            color: c.panel,
+            border: Border(top: BorderSide(color: c.line)),
+          ),
+          padding: const EdgeInsets.symmetric(
+              horizontal: SiSpace.x3, vertical: SiSpace.x2),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _inputCtrl,
+                  minLines: 1,
+                  maxLines: 4,
+                  style: const TextStyle(fontSize: 13),
+                  decoration: InputDecoration(
+                    hintText: 'Escribe tu pregunta...',
+                    hintStyle:
+                        TextStyle(fontSize: 13, color: c.ink4),
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding:
+                        const EdgeInsets.symmetric(vertical: 8),
+                  ),
+                  onSubmitted: _send,
+                ),
+              ),
+              const SizedBox(width: 6),
+              IconButton(
+                onPressed: _loading
+                    ? null
+                    : () => _send(_inputCtrl.text),
+                icon: _loading
+                    ? SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: c.brand))
+                    : Icon(Icons.send_rounded,
+                        color: c.brand, size: 20),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _QuickChip extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+  const _QuickChip({required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = SiColors.of(context);
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          border: Border.all(color: c.brand.withValues(alpha: 0.4)),
+          borderRadius: SiRadius.rPill,
+          color: c.brandTint,
+        ),
+        child: Text(label,
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12, color: c.brand)),
+      ),
+    );
+  }
+}
+
+class _Bubble extends StatelessWidget {
+  final _AiMsg msg;
+  final SiColors c;
+  const _Bubble({required this.msg, required this.c});
+
+  @override
+  Widget build(BuildContext context) {
+    final isUser = msg.role == 'user';
+    return Align(
+      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+      child: GestureDetector(
+        onLongPress: () =>
+            Clipboard.setData(ClipboardData(text: msg.text)),
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.28,
+          ),
+          decoration: BoxDecoration(
+            color: isUser ? c.brand : c.bg,
+            borderRadius: BorderRadius.only(
+              topLeft: const Radius.circular(14),
+              topRight: const Radius.circular(14),
+              bottomLeft: Radius.circular(isUser ? 14 : 4),
+              bottomRight: Radius.circular(isUser ? 4 : 14),
+            ),
+            border: isUser ? null : Border.all(color: c.line),
+          ),
+          child: Text(
+            msg.text,
+            style: TextStyle(
+                fontSize: 13,
+                color: isUser ? Colors.white : c.ink,
+                height: 1.4),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BubbleTyping extends StatelessWidget {
+  final SiColors c;
+  const _BubbleTyping({required this.c});
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: c.bg,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: c.line),
+        ),
+        child: SizedBox(
+          width: 36,
+          height: 16,
+          child: CircularProgressIndicator(
+              strokeWidth: 2, color: c.brand),
+        ),
+      ),
+    );
+  }
+}
+
+class _AiMsg {
+  final String role;
+  final String text;
+  const _AiMsg({required this.role, required this.text});
 }
