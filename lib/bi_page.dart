@@ -1697,7 +1697,7 @@ class _GruposManagerSheetState extends State<_GruposManagerSheet> {
 
 // ── Link viewer ───────────────────────────────────────────────────────────────
 
-class _LinkViewer extends StatelessWidget {
+class _LinkViewer extends StatefulWidget {
   final String url;
   final String title;
   final String? linkId;
@@ -1711,6 +1711,22 @@ class _LinkViewer extends StatelessWidget {
     this.hasDataset = false,
     this.onClose,
   });
+
+  @override
+  State<_LinkViewer> createState() => _LinkViewerState();
+}
+
+class _LinkViewerState extends State<_LinkViewer> {
+  /// Arranca contraído: el reporte es el contenido principal y se lleva todo el ancho hasta
+  /// que alguien pida el asistente.
+  bool _panelAbierto = false;
+  bool _panelCompacto = false;
+
+  static const _anchoCompacto = 300.0;
+
+  double _anchoPanel(double anchoPantalla) => _panelCompacto
+      ? _anchoCompacto
+      : (anchoPantalla / 3).clamp(340.0, 560.0);
 
   /// En pantallas angostas no cabe la vista dividida, así que el asistente se abre como
   /// hoja. Antes simplemente no estaba disponible en móvil.
@@ -1726,9 +1742,9 @@ class _LinkViewer extends StatelessWidget {
       builder: (ctx) => SizedBox(
         height: MediaQuery.of(ctx).size.height * 0.85,
         child: _BiAiPanel(
-          reportTitle: title,
-          linkId: linkId,
-          hasDataset: hasDataset,
+          reportTitle: widget.title,
+          linkId: widget.linkId,
+          hasDataset: widget.hasDataset,
         ),
       ),
     );
@@ -1742,6 +1758,7 @@ class _LinkViewer extends StatelessWidget {
     final width = mq.size.width;
     const headerH = 56.0;
     final isWide = width > 700;
+    final anchoPanel = _anchoPanel(width);
 
     return Container(
       height: height,
@@ -1760,11 +1777,11 @@ class _LinkViewer extends StatelessWidget {
               children: [
                 IconButton(
                   icon: Icon(Icons.close, size: 18, color: c.ink2),
-                  onPressed: onClose ?? () => Navigator.pop(context),
+                  onPressed: widget.onClose ?? () => Navigator.pop(context),
                 ),
                 Expanded(
                   child: Text(
-                    title,
+                    widget.title,
                     textAlign: TextAlign.center,
                     style: TextStyle(
                         fontSize: 16,
@@ -1772,49 +1789,109 @@ class _LinkViewer extends StatelessWidget {
                         color: c.ink),
                   ),
                 ),
-                if (isWide)
-                  const SizedBox(width: 40)
-                else
-                  IconButton(
-                    tooltip: 'Asistente IA',
-                    icon: Icon(Icons.auto_awesome, size: 18, color: c.brand),
-                    onPressed: () => _abrirAsistente(context),
-                  ),
+                // Un solo botón para el asistente: en ancho alterna el panel lateral, en
+                // angosto abre la hoja. Se resalta cuando está abierto.
+                _BotonAsistente(
+                  activo: isWide && _panelAbierto,
+                  onTap: () {
+                    if (isWide) {
+                      setState(() => _panelAbierto = !_panelAbierto);
+                    } else {
+                      _abrirAsistente(context);
+                    }
+                  },
+                  c: c,
+                ),
               ],
             ),
           ),
-          // Body: AI panel (izquierda) + iframe (derecha)
+          // Body: asistente (izquierda) + iframe (derecha)
           Expanded(
             child: isWide
                 ? Row(
                     children: [
-                      // AI assistant — 1/3
-                      SizedBox(
-                        width: width / 3,
-                        child: _BiAiPanel(
-                          reportTitle: title,
-                          linkId: linkId,
-                          hasDataset: hasDataset,
+                      // Offstage y no un `if`: mantiene vivo el State del panel, así que al
+                      // contraer y volver a abrir la conversación sigue ahí. Con un `if` se
+                      // destruiría y se perdería el historial.
+                      Offstage(
+                        offstage: !_panelAbierto,
+                        child: SizedBox(
+                          width: anchoPanel,
+                          child: _BiAiPanel(
+                            reportTitle: widget.title,
+                            linkId: widget.linkId,
+                            hasDataset: widget.hasDataset,
+                            compacto: _panelCompacto,
+                            onAlternarAncho: () =>
+                                setState(() => _panelCompacto = !_panelCompacto),
+                            onContraer: () =>
+                                setState(() => _panelAbierto = false),
+                          ),
                         ),
                       ),
-                      VerticalDivider(width: 1, color: c.line),
-                      // iframe — 2/3
+                      if (_panelAbierto)
+                        VerticalDivider(width: 1, color: c.line),
                       Expanded(
-                        child: WebIframe(
-                          url: url,
-                          height: height - headerH,
-                          width: width * 2 / 3,
+                        // El ancho real lo da el layout. Sin esto habría que recalcularlo a
+                        // mano en cada estado del panel y quedaría desfasado.
+                        child: LayoutBuilder(
+                          builder: (_, box) => WebIframe(
+                            url: widget.url,
+                            height: height - headerH,
+                            width: box.maxWidth,
+                          ),
                         ),
                       ),
                     ],
                   )
                 : WebIframe(
-                    url: url,
+                    url: widget.url,
                     height: height - headerH,
                     width: width,
                   ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Botón del asistente en el encabezado del visor. Cuando el panel está abierto se rellena,
+/// para que se lea como un interruptor y no como una acción que se repite.
+class _BotonAsistente extends StatelessWidget {
+  final bool activo;
+  final VoidCallback onTap;
+  final SiColors c;
+
+  const _BotonAsistente({
+    required this.activo,
+    required this.onTap,
+    required this.c,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: activo ? 'Ocultar asistente' : 'Asistente IA',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: SiRadius.rPill,
+        child: AnimatedContainer(
+          duration: SiMotion.fast,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          decoration: BoxDecoration(
+            color: activo ? c.brand : c.brandTint,
+            borderRadius: SiRadius.rPill,
+            border: Border.all(
+              color: activo ? c.brand : c.brand.withValues(alpha: 0.35),
+            ),
+          ),
+          child: Icon(
+            Icons.auto_awesome,
+            size: 16,
+            color: activo ? Colors.white : c.brand,
+          ),
+        ),
       ),
     );
   }
@@ -1833,10 +1910,22 @@ class _BiAiPanel extends StatefulWidget {
   /// cifras. Se declara en el panel en vez de dejar que el usuario lo descubra fallando.
   final bool hasDataset;
 
+  /// Ancho reducido. Sólo cambia la presentación: en compacto se ocultan los adornos del
+  /// encabezado para que quepa la conversación.
+  final bool compacto;
+
+  /// Nulos cuando el panel va en hoja (móvil), donde no hay ancho que alternar ni panel
+  /// lateral que contraer.
+  final VoidCallback? onAlternarAncho;
+  final VoidCallback? onContraer;
+
   const _BiAiPanel({
     required this.reportTitle,
     this.linkId,
     this.hasDataset = false,
+    this.compacto = false,
+    this.onAlternarAncho,
+    this.onContraer,
   });
 
   @override
@@ -1994,10 +2083,13 @@ class _BiAiPanelState extends State<_BiAiPanel> {
       children: [
         // Panel header
         Container(
-          padding: const EdgeInsets.symmetric(
-              horizontal: SiSpace.x4, vertical: SiSpace.x3),
-          decoration:
-              BoxDecoration(color: c.brandTint),
+          padding: const EdgeInsets.only(
+            left: SiSpace.x4,
+            right: SiSpace.x2,
+            top: SiSpace.x2,
+            bottom: SiSpace.x2,
+          ),
+          decoration: BoxDecoration(color: c.brandTint),
           child: Row(
             children: [
               Icon(Icons.auto_awesome, size: 16, color: c.brand),
@@ -2005,12 +2097,29 @@ class _BiAiPanelState extends State<_BiAiPanel> {
               Expanded(
                 child: Text(
                   'Asistente BI',
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                       color: c.brand),
                 ),
               ),
+              if (widget.onAlternarAncho != null)
+                _AccionPanel(
+                  tooltip: widget.compacto ? 'Ampliar' : 'Reducir',
+                  icono: widget.compacto
+                      ? Icons.chevron_left
+                      : Icons.chevron_right,
+                  onTap: widget.onAlternarAncho!,
+                  c: c,
+                ),
+              if (widget.onContraer != null)
+                _AccionPanel(
+                  tooltip: 'Ocultar asistente',
+                  icono: Icons.close,
+                  onTap: widget.onContraer!,
+                  c: c,
+                ),
             ],
           ),
         ),
@@ -2150,6 +2259,38 @@ class _BiAiPanelState extends State<_BiAiPanel> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Acción compacta del encabezado del panel. Área de toque de 32px: suficiente para el dedo
+/// sin robarle espacio al título en modo compacto.
+class _AccionPanel extends StatelessWidget {
+  final String tooltip;
+  final IconData icono;
+  final VoidCallback onTap;
+  final SiColors c;
+
+  const _AccionPanel({
+    required this.tooltip,
+    required this.icono,
+    required this.onTap,
+    required this.c,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: SizedBox(
+          width: 32,
+          height: 32,
+          child: Icon(icono, size: 17, color: c.brand),
+        ),
+      ),
     );
   }
 }
