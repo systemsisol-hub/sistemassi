@@ -1825,8 +1825,15 @@ class _BiAiPanel extends StatefulWidget {
 }
 
 class _BiAiPanelState extends State<_BiAiPanel> {
-  static const _fnUrl =
-      'https://zkmbebybyyefmqcxjqrg.supabase.co/functions/v1/ai-assistant';
+  static const _base = 'https://zkmbebybyyefmqcxjqrg.supabase.co/functions/v1';
+
+  /// Función dedicada al análisis de reportes, con su propio modelo. Separada de
+  /// ai-assistant para que un cambio en el analista no pueda romper al de RH.
+  static const _fnAnalista = '$_base/bi-assistant';
+
+  /// Sin dataset configurado no hay nada que analizar, así que se usa el asistente general
+  /// para que al menos explique el panel desde su conocimiento.
+  static const _fnGeneral = '$_base/ai-assistant';
 
   final _inputCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
@@ -1892,15 +1899,13 @@ class _BiAiPanelState extends State<_BiAiPanel> {
 
       final payload = <String, dynamic>{'messages': history};
       if (_modoAnalista) {
-        payload['pbi_context'] = {
-          'link_id': widget.linkId,
-          'titulo': widget.reportTitle,
-        };
+        payload['link_id'] = widget.linkId;
+        payload['titulo'] = widget.reportTitle;
       }
 
       final resp = await http
           .post(
-            Uri.parse(_fnUrl),
+            Uri.parse(_modoAnalista ? _fnAnalista : _fnGeneral),
             headers: {
               'Authorization': 'Bearer ${session.accessToken}',
               'Content-Type': 'application/json',

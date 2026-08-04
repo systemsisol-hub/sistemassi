@@ -29,24 +29,15 @@ Response: `{ text: string, structured: unknown }`
 `structured` se llena con el resultado de la última herramienta ejecutada para que Flutter pinte
 tablas. Ojo: `bi_page.dart` actualmente **ignora** ese campo; `ai_page.dart:202` sí lo lee.
 
-### Modo analista
+### ⚠️ Modo analista: código muerto pendiente de retirar
 
-Cuando la petición trae `pbi_context.link_id`, el asistente cambia por completo: usa
-`buildAnalistaSystemPrompt` y expone **sólo** `pbi_modelo` y `pbi_consultar`, sin ninguna de las
-13 herramientas administrativas. Eso arregla de raíz el síntoma original — preguntarle por el
-saldo vencido y recibir la lista de colaboradores, incidencias e inventario.
+La v16 desplegada todavía contiene el modo analista (`PBI_TOOLS`, `buildAnalistaSystemPrompt`,
+`runPbiTool` y el manejo de `pbi_context`). **Ya no se usa:** ese trabajo se movió a
+`bi-assistant` y `bi_page.dart` apunta ahí. Queda inalcanzable porque nadie envía `pbi_context`.
 
-Las herramientas delegan en `pbi-query` **reenviando el JWT del usuario**, para que el control de
-acceso al reporte viva en un solo lugar. El `titulo` que manda el cliente es cosmético, sólo para
-el prompt; la autorización siempre sale del `link_id` resuelto contra la base.
-
-El prompt del analista carga las reglas que salieron de medir el modelo: convertir las fracciones
-de porcentaje, declarar el periodo de la respuesta, no asumir la escala de las medidas sin
-formato, avisar cuando el resultado viene recortado, y **no sumar a mano los renglones de una
-consulta agrupada** — muchas medidas no son aditivas y la suma manual daría una cifra falsa.
-
-Resultados estructurados: `pbi_consultar` llena `structured` con
-`{ type: 'pbi_rows', data, formatos, truncated }`.
+No se retiró todavía para no divergir el repo del despliegue: limpiarlo exige redesplegar, y por
+MCP eso significa transcribir el archivo completo a mano. **Retirarlo en cuanto haya CLI de
+Supabase instalado**, en un solo paso limpieza + despliegue.
 
 ### Permisos
 
@@ -75,6 +66,61 @@ el cliente Flutter.**
 
 El modelo se invoca con `tools` y un bucle de hasta 15 iteraciones para resolver llamadas
 encadenadas a herramientas.
+
+## `bi-assistant`
+
+Analista de reportes de Power BI. **Independiente de `ai-assistant`** y con su propio modelo.
+Consumido por el panel lateral de `lib/bi_page.dart`. `verify_jwt: true`.
+
+### Por qué está separado
+
+Son dos productos sin nada en común salvo la autenticación. Mientras compartían función, cada
+despliegue del analista ponía en riesgo al asistente de RH y obligaba a probar ambos. Ahora cada
+uno tiene su prompt, sus herramientas, su modelo y su radio de impacto.
+
+`bi_page.dart` elige el destino según la configuración del enlace: con dataset capturado va a
+`bi-assistant`; sin dataset va a `ai-assistant`, que al menos explica el panel desde su
+conocimiento general en lugar de fallar en cada consulta.
+
+### Contrato
+
+Request: `{ messages: [{ role, content }], link_id, titulo }`
+Response: `{ text, structured }`
+
+`link_id` es obligatorio: este asistente siempre opera sobre un reporte. El `titulo` es
+cosmético para el prompt — la autorización sale del `link_id` que resuelve `pbi-query`.
+
+Herramientas: `pbi_modelo` y `pbi_consultar`, ambas delegan en `pbi-query` reenviando el JWT del
+usuario. **Ninguna herramienta de RH.**
+
+### Proveedor de modelo — intercambiable por configuración
+
+Se habla el formato de OpenAI (`/chat/completions` con `tools`), compatible con Cloudflare
+Workers AI, Ollama y OpenAI. Cambiar de proveedor no requiere tocar código:
+
+| Secreto | Valor para Cloudflare Workers AI |
+|---|---|
+| `AI_BASE_URL` | `https://api.cloudflare.com/client/v4/accounts/<account_id>/ai/v1` |
+| `AI_API_KEY` | Token de API de Cloudflare con permiso de Workers AI |
+| `AI_MODEL` | `@cf/openai/gpt-oss-120b` (default si se omite) |
+
+`@cf/openai/gpt-oss-120b`: soporta function calling, 128k de contexto, $0.35 / $0.75 por millón
+de tokens de entrada / salida. Otros modelos con function calling en el catálogo de Workers AI:
+`@cf/meta/llama-3.3-70b-instruct-fp8-fast`, `nemotron-3-120b-a12b`, `kimi-k2.6`, `glm-5.2`.
+**Verificar en el catálogo que el modelo soporte function calling** — sin eso el analista no
+opera, porque todo su acceso a datos pasa por herramientas.
+
+Diferencias respecto al formato de Ollama que usa `ai-assistant`, ya manejadas aquí: los
+argumentos de las herramientas llegan como **texto JSON** y no como objeto, y las respuestas de
+herramienta exigen `tool_call_id` para emparejarse con su llamada.
+
+### Verificación de consistencia en el prompt
+
+El prompt incluye una instrucción que salió de una falla real: si la suma de un desglose excede
+el total sin agrupar, el asistente debe **reportar la inconsistencia** en lugar de presentar el
+desglose como confiable. Y si el usuario compara con el panel y no coincide, debe considerar que
+el panel aplica filtros que él no (banderas de exclusión, intercompañía, moneda) en vez de
+insistir en que su cifra es la correcta.
 
 ## `pbi-query`
 
