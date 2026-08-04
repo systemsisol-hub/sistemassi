@@ -1715,20 +1715,22 @@ class _BiAiPanelState extends State<_BiAiPanel> {
       final session = Supabase.instance.client.auth.currentSession;
       if (session == null) throw Exception('Sin sesión activa');
 
-      // Prepend report context as first system-like user message
-      final context =
-          'Eres un asistente experto en análisis de datos. '
-          'El usuario está viendo el panel de Power BI titulado "${widget.reportTitle}". '
-          'Ayúdalo a entender las métricas, tendencias o preguntas sobre este reporte. '
-          'Responde de forma clara y concisa.';
-
-      final history = [
-        {'role': 'user', 'content': context},
-        {'role': 'assistant', 'content': 'Entendido, estoy listo para ayudarte con el análisis de este panel.'},
-        ..._messages
-            .where((m) => m.text.isNotEmpty)
-            .map((m) => {'role': m.role, 'content': m.text}),
-      ];
+      // Build history injecting panel context into the first user message only
+      final rawMessages =
+          _messages.where((m) => m.text.isNotEmpty).toList();
+      final List<Map<String, String>> history = [];
+      for (int i = 0; i < rawMessages.length; i++) {
+        final m = rawMessages[i];
+        String content = m.text;
+        if (i == 0 && m.role == 'user') {
+          content =
+              '[Panel Power BI activo: "${widget.reportTitle}"]\n\n'
+              '$content\n\n'
+              'Responde directamente desde tu conocimiento general sobre Power BI '
+              'y análisis de datos. No consultes la base de datos.';
+        }
+        history.add({'role': m.role, 'content': content});
+      }
 
       final resp = await http.post(
         Uri.parse(_fnUrl),
@@ -1740,16 +1742,21 @@ class _BiAiPanelState extends State<_BiAiPanel> {
       ).timeout(const Duration(seconds: 60));
 
       if (!mounted) return;
-      final body = jsonDecode(resp.body) as Map<String, dynamic>;
+
       if (resp.statusCode != 200) {
-        throw Exception(body['error']?.toString() ?? 'Error ${resp.statusCode}');
+        final errBody = jsonDecode(resp.body) as Map<String, dynamic>;
+        throw Exception(
+            errBody['error']?.toString() ?? 'Error ${resp.statusCode}');
       }
+
+      final body = jsonDecode(resp.body) as Map<String, dynamic>;
+      final reply = (body['text'] as String? ?? '').trim();
 
       setState(() {
         _loading = false;
         _messages.add(_AiMsg(
           role: 'assistant',
-          text: body['text'] as String? ?? '',
+          text: reply.isNotEmpty ? reply : '(Sin respuesta del modelo)',
         ));
       });
       _scrollToBottom();
@@ -1759,6 +1766,7 @@ class _BiAiPanelState extends State<_BiAiPanel> {
         _loading = false;
         _messages.add(_AiMsg(role: 'assistant', text: 'Error: $e'));
       });
+      _scrollToBottom();
     }
   }
 
