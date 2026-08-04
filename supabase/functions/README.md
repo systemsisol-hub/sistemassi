@@ -174,6 +174,32 @@ Se excluyen de la lista blanca las medidas del patrón TopN (`Vencido Top`, `Ven
 `TopN Selection`, `Rank`): sólo tienen sentido dentro de ese patrón y darían totales incompletos,
 pero un modelo que las viera en la lista las elegiría sin dudar.
 
+### Qué columnas se exponen para agrupar, y por qué tan pocas
+
+Sólo se ofrecen columnas que de verdad sirven para desglosar. Tres criterios:
+
+1. **Nada numérico ni booleano** (por `DataType`): agrupar por `Saldo`, `Vencido`, `Pesos_*`,
+   `Dias` o una bandera `Bit *` no tiene sentido — son magnitudes, no categorías.
+2. **Sin las columnas de periodo** (`Año Slicer`, `Mes Slicer`): las administra el servidor por
+   parámetro. Agrupar por ellas daría un solo renglón.
+3. **Sin copias en la tabla de hechos de algo que ya existe como dimensión.** Se prefiere la
+   dimensión.
+
+El tercer criterio cierra una falla real: con un modelo pequeño, preguntar por proveedores
+devolvía cifras donde **dos proveedores solos excedían el total de la empresa**. La causa fue que
+agrupó por `Indicadores Proveedores[Proveedor]` —la copia en el hecho— en lugar de
+`Cat Proveedores[Proveedor]`. Ambas estaban en la lista blanca y ambas sonaban correctas.
+
+Que un modelo mejor acierte no era suficiente: cambiar `AI_MODEL` por algo más barato habría
+reintroducido el problema en silencio. Ahora la copia **no se expone**, así que elegir mal deja
+de ser posible.
+
+Efecto secundario bienvenido: el catálogo era ~150 columnas y una cuarta parte de los tokens de
+entrada de cada pregunta, así que el recorte también baja el consumo.
+
+`SCHEMA_VERSION` invalida los esquemas ya cacheados al cambiar estos criterios — sin eso habría
+que vaciar `pbi_model_cache` a mano en cada despliegue.
+
 ### Normalización de resultados
 
 Dos correcciones sobre lo que devuelve Power BI:

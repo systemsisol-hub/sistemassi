@@ -151,10 +151,17 @@ interface ModelItem {
    * "0.99%" en lugar de "99.5%" — un error de 100x que suena razonable.
    */
   formato?: string;
+  /** DataType de la columna. Se usa para descartar las que no tiene sentido agrupar. */
+  tipo?: string;
 }
 
+/** Súbela al cambiar los criterios de filtrado: invalida los esquemas ya cacheados. */
+const SCHEMA_VERSION = 2;
+
 interface ModelSchema {
+  version?: number;
   medidas:  ModelItem[];
+  /** Sólo las columnas que sirven para desglosar. Ver filtrarAgrupables. */
   columnas: ModelItem[];
   /** Columnas detectadas para fijar el periodo. Null si el modelo no sigue la convención. */
   periodo: { tabla: string; anio: string; mes: string } | null;
@@ -228,16 +235,72 @@ async function fetchMedidas(link: LinkRow): Promise<ModelItem[]> {
   }
 }
 
+const COLUMNAS_VISIBLES = "FILTER(INFO.VIEW.COLUMNS(), [IsHidden]=FALSE())";
+
 async function fetchColumnas(link: LinkRow): Promise<ModelItem[]> {
-  const rows = await runDax(
-    link,
-    'EVALUATE SELECTCOLUMNS(FILTER(INFO.VIEW.COLUMNS(), [IsHidden]=FALSE()), ' +
-    '"tabla", [Table], "nombre", [Name])',
-  );
-  return rows.map((r) => ({
+  const construir = (r: Record<string, unknown>): ModelItem => ({
     tabla:  String(r["[tabla]"] ?? ""),
     nombre: String(r["[nombre]"] ?? ""),
-  }));
+    tipo:   r["[tipo]"] == null ? undefined : String(r["[tipo]"]),
+  });
+
+  try {
+    const rows = await runDax(
+      link,
+      `EVALUATE SELECTCOLUMNS(${COLUMNAS_VISIBLES}, ` +
+      '"tabla", [Table], "nombre", [Name], "tipo", [DataType])',
+    );
+    return rows.map(construir);
+  } catch {
+    // Modelos cuya versión de INFO.VIEW.COLUMNS() no expone DataType: se pierde el filtro
+    // por tipo, pero los demás criterios de agrupación siguen aplicando.
+    const rows = await runDax(
+      link,
+      `EVALUATE SELECTCOLUMNS(${COLUMNAS_VISIBLES}, "tabla", [Table], "nombre", [Name])`,
+    );
+    return rows.map(construir);
+  }
+}
+
+/** Tipos por los que agrupar no tiene sentido: son magnitudes, no categorías. */
+const TIPOS_NO_AGRUPABLES = /int|double|decimal|currency|boolean|single|binary|number/i;
+
+/**
+ * Reduce las columnas a las que de verdad sirven para desglosar.
+ *
+ * No es sólo higiene de catálogo: aquí se cierra la falla que produjo cifras que no
+ * reconciliaban. Un modelo pequeño agrupó por `Indicadores Proveedores[Proveedor]` —la copia
+ * en la tabla de hechos— en lugar de `Cat Proveedores[Proveedor]`, la dimensión. Ambas
+ * existían en la lista blanca y ambas sonaban correctas. Ahora la copia no se expone, así que
+ * elegir mal deja de ser posible en lugar de depender de que el modelo acierte.
+ *
+ * Efecto secundario bienvenido: el catálogo era ~150 columnas y una cuarta parte de los tokens
+ * de entrada de cada pregunta.
+ */
+function filtrarAgrupables(
+  columnas: ModelItem[],
+  periodo: ModelSchema["periodo"],
+): ModelItem[] {
+  const esDimension = (t: string) => /^cat\s/i.test(t);
+
+  const nombresEnDimension = new Set(
+    columnas.filter((c) => esDimension(c.tabla)).map((c) => c.nombre.toLowerCase()),
+  );
+
+  return columnas.filter((c) => {
+    // Saldo, Vencido, Pesos_*, Dias, Bit *, Id numéricos, latitud/longitud...
+    if (c.tipo && TIPOS_NO_AGRUPABLES.test(c.tipo)) return false;
+
+    // El periodo lo administra el servidor por parámetro; agrupar por él daría un solo
+    // renglón y sólo invita a confusión.
+    if (periodo && c.tabla === periodo.tabla &&
+        (c.nombre === periodo.anio || c.nombre === periodo.mes)) return false;
+
+    // Copia en el hecho de algo que ya existe como dimensión: se prefiere la dimensión.
+    if (!esDimension(c.tabla) && nombresEnDimension.has(c.nombre.toLowerCase())) return false;
+
+    return true;
+  });
 }
 
 async function getModel(
@@ -253,21 +316,30 @@ async function getModel(
     .maybeSingle();
 
   if (cached?.schema_json) {
-    const age = Date.now() - new Date(cached.updated_at as string).getTime();
-    if (age < CACHE_TTL_MS) return cached.schema_json as unknown as ModelSchema;
+    const prev = cached.schema_json as unknown as ModelSchema;
+    const age  = Date.now() - new Date(cached.updated_at as string).getTime();
+    // La versión evita servir un esquema cacheado con criterios viejos tras cambiar la
+    // lógica de filtrado: sin esto habría que vaciar la tabla a mano en cada despliegue.
+    if (age < CACHE_TTL_MS && prev.version === SCHEMA_VERSION) return prev;
   }
 
   // Un ] o " en el nombre rompería la interpolación al armar el DAX.
   const usable = (i: ModelItem) =>
     i.tabla && i.nombre && !/[\]"]/.test(i.nombre) && !/['"]/.test(i.tabla);
 
-  const medidas  = (await fetchMedidas(link)).filter(usable).filter((m) => !esMedidaDePatronTopN(m));
-  const columnas = (await fetchColumnas(link)).filter(usable);
+  const medidas = (await fetchMedidas(link)).filter(usable)
+    .filter((m) => !esMedidaDePatronTopN(m));
+  const todas   = (await fetchColumnas(link)).filter(usable);
+
+  // El periodo se detecta sobre TODAS las columnas: las de slicer se descartan enseguida
+  // como opción de agrupación, pero son justamente las que fijan el contexto de filtro.
+  const periodo = detectarPeriodo(todas);
 
   const schema: ModelSchema = {
+    version:  SCHEMA_VERSION,
     medidas,
-    columnas,
-    periodo: detectarPeriodo(columnas),
+    columnas: filtrarAgrupables(todas, periodo),
+    periodo,
   };
 
   await db.from("pbi_model_cache").upsert({
