@@ -188,33 +188,43 @@ function detectarPeriodo(columnas: ModelItem[]): ModelSchema["periodo"] {
 
 const MEDIDAS_VISIBLES = "FILTER(INFO.VIEW.MEASURES(), [IsHidden]=FALSE())";
 
+/**
+ * Formato de una medida. Medido en el dataset de PROVEEDORES: la columna `FormatString`
+ * existe pero viene **vacía en todas las medidas** — el formato se aplica en los visuales del
+ * reporte, no en el modelo. Así que el prefijo `%` del nombre no es un respaldo para cuando
+ * falta la columna: es la única señal disponible en la práctica, y hay que aplicarla siempre
+ * que el FormatString venga en blanco.
+ */
+function formatoDeMedida(nombre: string, formatString: unknown): string | undefined {
+  const declarado = formatString == null ? "" : String(formatString).trim();
+  if (declarado) return declarado;
+  return nombre.trimStart().startsWith("%") ? "0.0%" : undefined;
+}
+
 async function fetchMedidas(link: LinkRow): Promise<ModelItem[]> {
+  const construir = (r: Record<string, unknown>): ModelItem => {
+    const nombre = String(r["[nombre]"] ?? "");
+    return {
+      tabla:   String(r["[tabla]"] ?? ""),
+      nombre,
+      formato: formatoDeMedida(nombre, r["[formato]"]),
+    };
+  };
+
   try {
     const rows = await runDax(
       link,
       `EVALUATE SELECTCOLUMNS(${MEDIDAS_VISIBLES}, ` +
       '"tabla", [Table], "nombre", [Name], "formato", [FormatString])',
     );
-    return rows.map((r) => ({
-      tabla:   String(r["[tabla]"] ?? ""),
-      nombre:  String(r["[nombre]"] ?? ""),
-      formato: r["[formato]"] == null ? undefined : String(r["[formato]"]),
-    }));
+    return rows.map(construir);
   } catch {
-    // Modelos que no exponen FormatString: se deduce del nombre, que en estos datasets
-    // marca los porcentajes con el prefijo "%".
+    // Modelos cuya versión de INFO.VIEW.MEASURES() no expone FormatString.
     const rows = await runDax(
       link,
       `EVALUATE SELECTCOLUMNS(${MEDIDAS_VISIBLES}, "tabla", [Table], "nombre", [Name])`,
     );
-    return rows.map((r) => {
-      const nombre = String(r["[nombre]"] ?? "");
-      return {
-        tabla:   String(r["[tabla]"] ?? ""),
-        nombre,
-        formato: nombre.trimStart().startsWith("%") ? "0.0%" : undefined,
-      };
-    });
+    return rows.map(construir);
   }
 }
 
