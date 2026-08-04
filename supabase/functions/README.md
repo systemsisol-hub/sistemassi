@@ -19,11 +19,30 @@ Asistente conversacional del sistema. Consumido por dos pantallas:
 
 ### Contrato
 
-Request: `{ messages: [{ role, content }, ...] }`
+Request: `{ messages: [{ role, content }, ...], pbi_context?: { link_id, titulo } }`
 Response: `{ text: string, structured: unknown }`
 
 `structured` se llena con el resultado de la última herramienta ejecutada para que Flutter pinte
 tablas. Ojo: `bi_page.dart` actualmente **ignora** ese campo; `ai_page.dart:202` sí lo lee.
+
+### Modo analista
+
+Cuando la petición trae `pbi_context.link_id`, el asistente cambia por completo: usa
+`buildAnalistaSystemPrompt` y expone **sólo** `pbi_modelo` y `pbi_consultar`, sin ninguna de las
+13 herramientas administrativas. Eso arregla de raíz el síntoma original — preguntarle por el
+saldo vencido y recibir la lista de colaboradores, incidencias e inventario.
+
+Las herramientas delegan en `pbi-query` **reenviando el JWT del usuario**, para que el control de
+acceso al reporte viva en un solo lugar. El `titulo` que manda el cliente es cosmético, sólo para
+el prompt; la autorización siempre sale del `link_id` resuelto contra la base.
+
+El prompt del analista carga las reglas que salieron de medir el modelo: convertir las fracciones
+de porcentaje, declarar el periodo de la respuesta, no asumir la escala de las medidas sin
+formato, avisar cuando el resultado viene recortado, y **no sumar a mano los renglones de una
+consulta agrupada** — muchas medidas no son aditivas y la suma manual daría una cifra falsa.
+
+Resultados estructurados: `pbi_consultar` llena `structured` con
+`{ type: 'pbi_rows', data, formatos, truncated }`.
 
 ### Permisos
 
