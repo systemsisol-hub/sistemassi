@@ -47,7 +47,7 @@ class _BiPageState extends State<BiPage> {
         final assignedRaw = await _supabase
             .from('powerbi_link_users')
             .select(
-                'link_id, powerbi_links(id, title, url, descripcion, is_active, created_by, grupo_id, bi_grupos(name))')
+                'link_id, powerbi_links(id, title, url, descripcion, is_active, created_by, grupo_id, pbi_workspace_id, pbi_dataset_id, ai_context, bi_grupos(name))')
             .eq('user_id', userId);
 
         final assigned = (assignedRaw as List)
@@ -60,7 +60,8 @@ class _BiPageState extends State<BiPage> {
 
         final createdRaw = await _supabase
             .from('powerbi_links')
-            .select('id, title, url, descripcion, is_active, created_by, grupo_id, bi_grupos(name)')
+            .select(
+                'id, title, url, descripcion, is_active, created_by, grupo_id, pbi_workspace_id, pbi_dataset_id, ai_context, bi_grupos(name)')
             .eq('created_by', userId)
             .eq('is_active', true);
 
@@ -198,6 +199,11 @@ class _BiPageState extends State<BiPage> {
             child: _LinkViewer(
               url: url,
               title: link['title'] ?? 'Reporte',
+              linkId: link['id']?.toString(),
+              // Sin dataset configurado el asistente no puede leer cifras; el panel lo
+              // dice en lugar de fingir que puede.
+              hasDataset: link['pbi_dataset_id'] != null &&
+                  link['pbi_workspace_id'] != null,
               onClose: () => Navigator.pop(ctx),
             ),
           ),
@@ -790,6 +796,9 @@ class _LinkFormSheetState extends State<_LinkFormSheet> {
   late final TextEditingController _titleCtrl;
   late final TextEditingController _urlCtrl;
   late final TextEditingController _descCtrl;
+  late final TextEditingController _wsCtrl;
+  late final TextEditingController _dsCtrl;
+  late final TextEditingController _aiCtxCtrl;
   late List<Map<String, dynamic>> _grupos;
   String? _selectedGrupoId;
   bool _saving = false;
@@ -801,6 +810,9 @@ class _LinkFormSheetState extends State<_LinkFormSheet> {
     _titleCtrl = TextEditingController(text: l?['title']);
     _urlCtrl = TextEditingController(text: l?['url']);
     _descCtrl = TextEditingController(text: l?['descripcion']);
+    _wsCtrl = TextEditingController(text: l?['pbi_workspace_id']);
+    _dsCtrl = TextEditingController(text: l?['pbi_dataset_id']);
+    _aiCtxCtrl = TextEditingController(text: l?['ai_context']);
     _grupos = List.from(widget.grupos);
     _selectedGrupoId = l?['grupo_id'] as String?;
   }
@@ -810,7 +822,22 @@ class _LinkFormSheetState extends State<_LinkFormSheet> {
     _titleCtrl.dispose();
     _urlCtrl.dispose();
     _descCtrl.dispose();
+    _wsCtrl.dispose();
+    _dsCtrl.dispose();
+    _aiCtxCtrl.dispose();
     super.dispose();
+  }
+
+  /// Los dos identificadores son UUID. Validarlos aquí evita guardar un valor que la base
+  /// rechazaría con un error opaco de Postgres.
+  static final _uuidRe = RegExp(
+      r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
+
+  String? _validarUuid(String raw, String campo) {
+    final v = raw.trim();
+    if (v.isEmpty) return null;
+    if (!_uuidRe.hasMatch(v)) return '$campo no es un UUID válido.';
+    return null;
   }
 
   Future<void> _createGrupo(BuildContext ctx) async {
@@ -871,8 +898,22 @@ class _LinkFormSheetState extends State<_LinkFormSheet> {
       );
       return;
     }
+
+    final errorUuid = _validarUuid(_wsCtrl.text, 'El ID del workspace') ??
+        _validarUuid(_dsCtrl.text, 'El ID del dataset');
+    if (errorUuid != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(errorUuid),
+        backgroundColor: SiColors.of(context).danger,
+      ));
+      return;
+    }
+
     setState(() => _saving = true);
     try {
+      String? limpio(TextEditingController ctrl) =>
+          ctrl.text.trim().isEmpty ? null : ctrl.text.trim();
+
       await widget.onSave({
         'title': _titleCtrl.text.trim().toUpperCase(),
         'url':
@@ -881,6 +922,9 @@ class _LinkFormSheetState extends State<_LinkFormSheet> {
             ? null
             : _descCtrl.text.trim(),
         'grupo_id': _selectedGrupoId,
+        'pbi_workspace_id': limpio(_wsCtrl),
+        'pbi_dataset_id': limpio(_dsCtrl),
+        'ai_context': limpio(_aiCtxCtrl),
         'is_active': true,
         'created_by': Supabase.instance.client.auth.currentUser?.id,
       });
@@ -1016,6 +1060,60 @@ class _LinkFormSheetState extends State<_LinkFormSheet> {
                 alignLabelWithHint: true,
               ),
             ),
+            if (widget.isAdmin) ...[
+              const SizedBox(height: SiSpace.x6),
+              Divider(color: c.line),
+              const SizedBox(height: SiSpace.x4),
+              Row(
+                children: [
+                  Icon(Icons.auto_awesome, size: 16, color: c.brand),
+                  const SizedBox(width: SiSpace.x2),
+                  Text('Asistente IA',
+                      style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: c.ink)),
+                ],
+              ),
+              const SizedBox(height: SiSpace.x2),
+              Text(
+                'Con el workspace y el dataset de Power BI, el asistente puede analizar '
+                'las cifras del reporte. Sin ellos sólo explica el panel.',
+                style: TextStyle(fontSize: 12, color: c.ink3, height: 1.4),
+              ),
+              const SizedBox(height: SiSpace.x4),
+              TextField(
+                controller: _wsCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'ID del workspace',
+                  prefixIcon: Icon(Icons.workspaces_outline),
+                  hintText: '9d6868a1-526c-4aaf-9da9-0647e6cccef7',
+                ),
+              ),
+              const SizedBox(height: SiSpace.x4),
+              TextField(
+                controller: _dsCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'ID del dataset',
+                  prefixIcon: Icon(Icons.dataset_outlined),
+                  helperText: 'Se obtiene de GET /groups/{workspace}/reports, '
+                      'no del nombre del reporte.',
+                  helperMaxLines: 2,
+                ),
+              ),
+              const SizedBox(height: SiSpace.x4),
+              TextField(
+                controller: _aiCtxCtrl,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  labelText: 'Contexto para el asistente',
+                  prefixIcon: Icon(Icons.psychology_outlined),
+                  alignLabelWithHint: true,
+                  helperText: 'Qué mide el reporte y cómo se calculan sus KPIs.',
+                  helperMaxLines: 2,
+                ),
+              ),
+            ],
             if (isEditing && widget.isAdmin) ...[
               const SizedBox(height: SiSpace.x6),
               Divider(color: c.line),
@@ -1583,9 +1681,39 @@ class _GruposManagerSheetState extends State<_GruposManagerSheet> {
 class _LinkViewer extends StatelessWidget {
   final String url;
   final String title;
+  final String? linkId;
+  final bool hasDataset;
   final VoidCallback? onClose;
 
-  const _LinkViewer({required this.url, required this.title, this.onClose});
+  const _LinkViewer({
+    required this.url,
+    required this.title,
+    this.linkId,
+    this.hasDataset = false,
+    this.onClose,
+  });
+
+  /// En pantallas angostas no cabe la vista dividida, así que el asistente se abre como
+  /// hoja. Antes simplemente no estaba disponible en móvil.
+  void _abrirAsistente(BuildContext context) {
+    final c = SiColors.of(context);
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: c.panel,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SizedBox(
+        height: MediaQuery.of(ctx).size.height * 0.85,
+        child: _BiAiPanel(
+          reportTitle: title,
+          linkId: linkId,
+          hasDataset: hasDataset,
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1625,7 +1753,14 @@ class _LinkViewer extends StatelessWidget {
                         color: c.ink),
                   ),
                 ),
-                const SizedBox(width: 40),
+                if (isWide)
+                  const SizedBox(width: 40)
+                else
+                  IconButton(
+                    tooltip: 'Asistente IA',
+                    icon: Icon(Icons.auto_awesome, size: 18, color: c.brand),
+                    onPressed: () => _abrirAsistente(context),
+                  ),
               ],
             ),
           ),
@@ -1637,7 +1772,11 @@ class _LinkViewer extends StatelessWidget {
                       // AI assistant — 1/3
                       SizedBox(
                         width: width / 3,
-                        child: _BiAiPanel(reportTitle: title),
+                        child: _BiAiPanel(
+                          reportTitle: title,
+                          linkId: linkId,
+                          hasDataset: hasDataset,
+                        ),
                       ),
                       VerticalDivider(width: 1, color: c.line),
                       // iframe — 2/3
@@ -1666,7 +1805,20 @@ class _LinkViewer extends StatelessWidget {
 
 class _BiAiPanel extends StatefulWidget {
   final String reportTitle;
-  const _BiAiPanel({required this.reportTitle});
+
+  /// Al enviarse como pbi_context, la Edge Function cambia al modo analista: consulta el
+  /// dataset y deja de exponer las herramientas administrativas.
+  final String? linkId;
+
+  /// Si el enlace no tiene workspace y dataset capturados, el asistente no puede leer
+  /// cifras. Se declara en el panel en vez de dejar que el usuario lo descubra fallando.
+  final bool hasDataset;
+
+  const _BiAiPanel({
+    required this.reportTitle,
+    this.linkId,
+    this.hasDataset = false,
+  });
 
   @override
   State<_BiAiPanel> createState() => _BiAiPanelState();
@@ -1680,6 +1832,11 @@ class _BiAiPanelState extends State<_BiAiPanel> {
   final _scrollCtrl = ScrollController();
   final List<_AiMsg> _messages = [];
   bool _loading = false;
+
+  /// El modo analista requiere las dos cosas: un enlace identificado y un dataset
+  /// capturado. Sin dataset la Edge Function respondería 422 en cada consulta, así que
+  /// es mejor quedarse en modo conversacional y decirlo.
+  bool get _modoAnalista => widget.linkId != null && widget.hasDataset;
 
   @override
   void dispose() {
@@ -1715,31 +1872,44 @@ class _BiAiPanelState extends State<_BiAiPanel> {
       final session = Supabase.instance.client.auth.currentSession;
       if (session == null) throw Exception('Sin sesión activa');
 
-      // Build history injecting panel context into the first user message only
       final rawMessages =
           _messages.where((m) => m.text.isNotEmpty).toList();
       final List<Map<String, String>> history = [];
+
       for (int i = 0; i < rawMessages.length; i++) {
         final m = rawMessages[i];
         String content = m.text;
-        if (i == 0 && m.role == 'user') {
+        // Sin dataset no hay modo analista: se le da contexto del panel en el primer
+        // mensaje para que al menos lo explique desde su conocimiento general.
+        if (!_modoAnalista && i == 0 && m.role == 'user') {
           content =
               '[Panel Power BI activo: "${widget.reportTitle}"]\n\n'
               '$content\n\n'
-              'Responde directamente desde tu conocimiento general sobre Power BI '
-              'y análisis de datos. No consultes la base de datos.';
+              'Responde desde tu conocimiento general sobre Power BI y análisis de datos.';
         }
         history.add({'role': m.role, 'content': content});
       }
 
-      final resp = await http.post(
-        Uri.parse(_fnUrl),
-        headers: {
-          'Authorization': 'Bearer ${session.accessToken}',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({'messages': history}),
-      ).timeout(const Duration(seconds: 60));
+      final payload = <String, dynamic>{'messages': history};
+      if (_modoAnalista) {
+        payload['pbi_context'] = {
+          'link_id': widget.linkId,
+          'titulo': widget.reportTitle,
+        };
+      }
+
+      final resp = await http
+          .post(
+            Uri.parse(_fnUrl),
+            headers: {
+              'Authorization': 'Bearer ${session.accessToken}',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode(payload),
+          )
+          // El modo analista consulta Power BI y puede encadenar herramientas, así que
+          // necesita más margen que una respuesta conversacional.
+          .timeout(Duration(seconds: _modoAnalista ? 120 : 60));
 
       if (!mounted) return;
 
@@ -1752,11 +1922,28 @@ class _BiAiPanelState extends State<_BiAiPanel> {
       final body = jsonDecode(resp.body) as Map<String, dynamic>;
       final reply = (body['text'] as String? ?? '').trim();
 
+      // Tabla de resultados, cuando el asistente consultó cifras.
+      List<Map<String, dynamic>>? rows;
+      bool truncated = false;
+      final structured = body['structured'];
+      if (structured is Map && structured['type'] == 'pbi_rows') {
+        final data = structured['data'];
+        if (data is List && data.isNotEmpty) {
+          rows = data
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
+        }
+        truncated = structured['truncated'] == true;
+      }
+
       setState(() {
         _loading = false;
         _messages.add(_AiMsg(
           role: 'assistant',
           text: reply.isNotEmpty ? reply : '(Sin respuesta del modelo)',
+          rows: rows,
+          truncated: truncated,
         ));
       });
       _scrollToBottom();
@@ -1816,19 +2003,46 @@ class _BiAiPanelState extends State<_BiAiPanel> {
                           style:
                               TextStyle(fontSize: 13, color: c.ink3),
                         ),
+                        const SizedBox(height: SiSpace.x3),
+                        // Se declara la capacidad real: con dataset lee cifras, sin él
+                        // sólo explica. Así el usuario no descubre el límite fallando.
+                        Text(
+                          _modoAnalista
+                              ? 'Consulta las cifras reales del reporte'
+                              : 'Sin dataset configurado: puedo explicar el panel, '
+                                  'pero no leer sus cifras',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: _modoAnalista ? c.brand : c.warn,
+                          ),
+                        ),
                         const SizedBox(height: SiSpace.x5),
-                        // Quick prompt
-                        _QuickChip(
-                          label: '¿Qué métricas muestra este panel?',
-                          onTap: () => _send(
-                              '¿Qué métricas o indicadores suele mostrar un panel llamado "${widget.reportTitle}"?'),
-                        ),
-                        const SizedBox(height: SiSpace.x2),
-                        _QuickChip(
-                          label: '¿Cómo interpreto los datos?',
-                          onTap: () => _send(
-                              '¿Cómo debo interpretar los datos de un reporte titulado "${widget.reportTitle}"?'),
-                        ),
+                        if (_modoAnalista) ...[
+                          _QuickChip(
+                            label: '¿Qué puedes consultar de este reporte?',
+                            onTap: () => _send(
+                                '¿Qué medidas y desgloses puedes consultar en este reporte?'),
+                          ),
+                          const SizedBox(height: SiSpace.x2),
+                          _QuickChip(
+                            label: 'Resumen del periodo actual',
+                            onTap: () => _send(
+                                'Dame un resumen de las cifras principales del periodo actual.'),
+                          ),
+                        ] else ...[
+                          _QuickChip(
+                            label: '¿Qué métricas muestra este panel?',
+                            onTap: () => _send(
+                                '¿Qué métricas o indicadores suele mostrar un panel llamado "${widget.reportTitle}"?'),
+                          ),
+                          const SizedBox(height: SiSpace.x2),
+                          _QuickChip(
+                            label: '¿Cómo interpreto los datos?',
+                            onTap: () => _send(
+                                '¿Cómo debo interpretar los datos de un reporte titulado "${widget.reportTitle}"?'),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -1842,7 +2056,18 @@ class _BiAiPanelState extends State<_BiAiPanel> {
                       return _BubbleTyping(c: c);
                     }
                     final msg = _messages[i];
-                    return _Bubble(msg: msg, c: c);
+                    final rows = msg.rows;
+                    if (rows == null) return _Bubble(msg: msg, c: c);
+                    // Las cifras consultadas se muestran además como tabla: el texto del
+                    // modelo interpreta, la tabla deja ver el dato tal como llegó.
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _Bubble(msg: msg, c: c),
+                        _ResultTable(
+                            rows: rows, truncated: msg.truncated, c: c),
+                      ],
+                    );
                   },
                 ),
         ),
@@ -1993,5 +2218,124 @@ class _BubbleTyping extends StatelessWidget {
 class _AiMsg {
   final String role;
   final String text;
-  const _AiMsg({required this.role, required this.text});
+
+  /// Filas devueltas por pbi_consultar, para pintarlas como tabla debajo del texto.
+  final List<Map<String, dynamic>>? rows;
+  final bool truncated;
+
+  const _AiMsg({
+    required this.role,
+    required this.text,
+    this.rows,
+    this.truncated = false,
+  });
+}
+
+/// Tabla de resultados de una consulta al dataset.
+///
+/// Las llaves llegan como "[Alias]" para las medidas y "Tabla[Columna]" para las
+/// dimensiones; se limpian para el encabezado pero se conserva el orden original, que es
+/// el que definió la consulta.
+class _ResultTable extends StatelessWidget {
+  final List<Map<String, dynamic>> rows;
+  final bool truncated;
+  final SiColors c;
+
+  const _ResultTable({
+    required this.rows,
+    required this.truncated,
+    required this.c,
+  });
+
+  static String _encabezado(String key) {
+    final m = RegExp(r'^(.*?)\[(.+)\]$').firstMatch(key);
+    if (m == null) return key;
+    final tabla = m.group(1) ?? '';
+    final col = m.group(2) ?? key;
+    return tabla.isEmpty ? col : col;
+  }
+
+  static String _celda(dynamic v) {
+    if (v == null) return '—';
+    if (v is num) {
+      // Miles con coma y hasta dos decimales, omitiéndolos cuando el valor es entero.
+      final entero = v == v.roundToDouble() && v.abs() < 1e15;
+      final s = entero
+          ? v.toInt().toString()
+          : v.toStringAsFixed(2);
+      final partes = s.split('.');
+      final digitos = partes[0].replaceFirst('-', '');
+      final signo = partes[0].startsWith('-') ? '-' : '';
+      final buf = StringBuffer();
+      for (int i = 0; i < digitos.length; i++) {
+        if (i > 0 && (digitos.length - i) % 3 == 0) buf.write(',');
+        buf.write(digitos[i]);
+      }
+      return partes.length > 1 ? '$signo$buf.${partes[1]}' : '$signo$buf';
+    }
+    return v.toString();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final llaves = rows.first.keys.toList();
+
+    return Container(
+      margin: const EdgeInsets.only(top: SiSpace.x2, bottom: SiSpace.x2),
+      decoration: BoxDecoration(
+        border: Border.all(color: c.line),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Las tablas anchas se desplazan dentro de su caja, no arrastran el panel.
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              headingRowHeight: 34,
+              dataRowMinHeight: 30,
+              dataRowMaxHeight: 38,
+              horizontalMargin: 12,
+              columnSpacing: 20,
+              columns: llaves
+                  .map((k) => DataColumn(
+                        label: Text(
+                          _encabezado(k),
+                          style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: c.ink2),
+                        ),
+                      ))
+                  .toList(),
+              rows: rows
+                  .map((r) => DataRow(
+                        cells: llaves
+                            .map((k) => DataCell(Text(
+                                  _celda(r[k]),
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: c.ink,
+                                      fontFeatures: const [
+                                        FontFeature.tabularFigures()
+                                      ]),
+                                )))
+                            .toList(),
+                      ))
+                  .toList(),
+            ),
+          ),
+          if (truncated)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+              child: Text(
+                'Lista recortada: hay más renglones de los que se muestran.',
+                style: TextStyle(fontSize: 11, color: c.warn),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
