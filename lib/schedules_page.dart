@@ -20,16 +20,21 @@ class _SchedulesPageState extends State<SchedulesPage> {
   List<Map<String, dynamic>> _schedules = [];
   String _searchQuery = '';
 
+  /// Tolerancia fija para la entrada, en minutos. Antes era configurable por horario; se
+  /// unificó para que el criterio de retardo sea el mismo en toda la empresa.
+  static const _toleranciaMin = 15;
+
+  static const _entradaPorDefecto = TimeOfDay(hour: 8, minute: 0);
+  static const _salidaPorDefecto = TimeOfDay(hour: 18, minute: 0);
+
   // Form State
   final _nameController = TextEditingController();
   final _zoneController = TextEditingController();
-  List<Map<String, dynamic>> _currentRules = [];
 
-  // Rules Quick-Define state
-  final Set<int> _selectedDays = {};
-  TimeOfDay _tempIn = const TimeOfDay(hour: 8, minute: 0);
-  TimeOfDay _tempOut = const TimeOfDay(hour: 18, minute: 0);
-  int _tempTolerance = 10;
+  /// Horario por día, cada uno independiente. Un día presente en el mapa está activo; su
+  /// ausencia significa que no se trabaja ese día.
+  final Map<int, TimeOfDay> _entradaPorDia = {};
+  final Map<int, TimeOfDay> _salidaPorDia = {};
 
   final List<String> _daysOfWeek = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
@@ -54,30 +59,39 @@ class _SchedulesPageState extends State<SchedulesPage> {
   }
 
 
-  Future<void> _saveSchedule() async {
-    // Generación Automática: si el usuario ha marcado días, generamos las reglas antes de guardar
-    if (_selectedDays.isNotEmpty) {
-      _currentRules = []; // Limpiamos para evitar duplicidad si reintenta
-      for (int day in _selectedDays) {
-        _currentRules.add({
-          'day': day, 
-          'type': 'ENTRADA',
-          'time': '${_tempIn.hour.toString().padLeft(2, '0')}:${_tempIn.minute.toString().padLeft(2, '0')}:00',
-          'tol': _tempTolerance,
-        });
-        _currentRules.add({
-          'day': day, 
-          'type': 'SALIDA',
-          'time': '${_tempOut.hour.toString().padLeft(2, '0')}:${_tempOut.minute.toString().padLeft(2, '0')}:00',
-          'tol': 0,
-        });
-      }
-    }
+  /// "HH:mm:00", el formato que espera la columna rules.
+  static String _hhmmss(TimeOfDay t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}:00';
 
-    if (_nameController.text.trim().isEmpty || _currentRules.isEmpty) {
+  /// Dos reglas por día activo: ENTRADA con tolerancia y SALIDA sin ella. Cada día lleva su
+  /// propia hora, así que un horario puede tener jornadas distintas entre semana y sábado.
+  List<Map<String, dynamic>> _construirReglas() {
+    final dias = _entradaPorDia.keys.toList()..sort();
+    return [
+      for (final day in dias) ...[
+        {
+          'day': day,
+          'type': 'ENTRADA',
+          'time': _hhmmss(_entradaPorDia[day]!),
+          'tol': _toleranciaMin,
+        },
+        {
+          'day': day,
+          'type': 'SALIDA',
+          'time': _hhmmss(_salidaPorDia[day] ?? _salidaPorDefecto),
+          'tol': 0,
+        },
+      ],
+    ];
+  }
+
+  Future<void> _saveSchedule() async {
+    final reglas = _construirReglas();
+
+    if (_nameController.text.trim().isEmpty || reglas.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Por favor ingresa un nombre y selecciona al menos un día.')),
+          const SnackBar(content: Text('Por favor ingresa un nombre y activa al menos un día.')),
         );
       }
       return;
@@ -88,13 +102,14 @@ class _SchedulesPageState extends State<SchedulesPage> {
       await _supabase.from('schedules').insert({
         'name': _nameController.text.trim(),
         'zone': _zoneController.text.trim(),
-        'rules': _currentRules,
+        'rules': reglas,
       });
 
       _nameController.clear();
       _zoneController.clear();
       setState(() {
-        _currentRules = [];
+        _entradaPorDia.clear();
+        _salidaPorDia.clear();
         _isLoading = false;
       });
       _fetchSchedules();
@@ -146,9 +161,9 @@ class _SchedulesPageState extends State<SchedulesPage> {
   void showScheduleForm() {
     _nameController.clear();
     _zoneController.clear();
-    _currentRules.clear();
-    _selectedDays.clear();
-    
+    _entradaPorDia.clear();
+    _salidaPorDia.clear();
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -184,9 +199,10 @@ class _SchedulesPageState extends State<SchedulesPage> {
                       ),
                       TextButton(
                         onPressed: () {
-                          if (_nameController.text.trim().isEmpty || (_currentRules.isEmpty && _selectedDays.isEmpty)) {
+                          if (_nameController.text.trim().isEmpty ||
+                              _entradaPorDia.isEmpty) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Por favor ingresa un nombre y selecciona al menos un día.')),
+                              const SnackBar(content: Text('Por favor ingresa un nombre y activa al menos un día.')),
                             );
                             return;
                           }
@@ -282,106 +298,174 @@ class _SchedulesPageState extends State<SchedulesPage> {
   }
 
   Widget _buildQuickDefineRow(ThemeData theme, StateSetter setModalState, SiColors c) {
+    final activos = _entradaPorDia.keys.toList()..sort();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildTimeSelectionItem(
-          label: 'Comienza',
-          time: _tempIn,
-          icon: Icons.access_time_outlined,
-          c: c,
-          onTap: () async {
-            final t = await showTimePicker(context: context, initialTime: _tempIn);
-            if (t != null) setModalState(() => _tempIn = t);
-          },
-        ),
-        const SizedBox(height: 16),
-        _buildTimeSelectionItem(
-          label: 'Termina',
-          time: _tempOut,
-          icon: Icons.access_time_outlined,
-          c: c,
-          onTap: () async {
-            final t = await showTimePicker(context: context, initialTime: _tempOut);
-            if (t != null) setModalState(() => _tempOut = t);
-          },
-        ),
-        const SizedBox(height: 16),
-        // Tolerancia con mismo estilo
         Row(
           children: [
-            Icon(Icons.timer_outlined, color: c.ink4, size: 22),
-            const SizedBox(width: 16),
-            const Text('Tolerancia', style: TextStyle(fontSize: 16)),
-            const Spacer(),
-            DropdownButton<int>(
-              value: _tempTolerance,
-              underline: const SizedBox(),
-              items: [0, 5, 10, 15, 20, 30].map((t) => DropdownMenuItem(value: t, child: Text('$t min'))).toList(),
-              onChanged: (v) => setModalState(() => _tempTolerance = v!),
+            Icon(Icons.timer_outlined, color: c.ink4, size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Tolerancia de $_toleranciaMin minutos en la entrada, igual para todos los días.',
+                style: TextStyle(fontSize: 12, color: c.ink3, height: 1.4),
+              ),
             ),
           ],
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 20),
         const Divider(),
-        const SizedBox(height: 24),
-        Text('Días de la semana', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: c.ink2)),
+        const SizedBox(height: 20),
+        Row(
+          children: [
+            Text('Días y horario',
+                style: TextStyle(
+                    fontWeight: FontWeight.bold, fontSize: 13, color: c.ink2)),
+            const Spacer(),
+            // Con jornadas iguales toda la semana, capturar 7 días por separado sería tedioso;
+            // esto copia el primer día activo a los demás y luego se puede ajustar el que
+            // difiera, como el sábado.
+            if (activos.length > 1)
+              TextButton(
+                onPressed: () => setModalState(() {
+                  final entrada = _entradaPorDia[activos.first]!;
+                  final salida = _salidaPorDia[activos.first] ?? _salidaPorDefecto;
+                  for (final d in activos) {
+                    _entradaPorDia[d] = entrada;
+                    _salidaPorDia[d] = salida;
+                  }
+                }),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+                child: Text('Igualar al ${_daysOfWeek[activos.first].toLowerCase()}',
+                    style: TextStyle(fontSize: 11, color: c.brand)),
+              ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        ...List.generate(7, (i) => _buildDiaFila(i, setModalState, c)),
         const SizedBox(height: 8),
-        ...List.generate(7, (i) {
-          final active = _selectedDays.contains(i);
-          return Transform.scale(
-            scale: 0.85,
-            alignment: Alignment.centerLeft,
-            child: SwitchListTile(
-              title: Text(_daysOfWeek[i], style: const TextStyle(fontSize: 17)), // Un poquito más grande el texto compensando la escala
-              value: active,
-              activeColor: theme.colorScheme.primary,
-              onChanged: (val) {
-                setModalState(() {
-                  if (val) _selectedDays.add(i);
-                  else _selectedDays.remove(i);
-                });
-              },
-              contentPadding: EdgeInsets.zero,
-              dense: true,
-            ),
-          );
-        }),
-        const SizedBox(height: 24),
+        if (activos.isEmpty)
+          Text('Activa al menos un día para definir su horario.',
+              style: TextStyle(fontSize: 12, color: c.warn)),
+        const SizedBox(height: 16),
       ],
     );
   }
 
-  Widget _buildTimeSelectionItem({
-    required String label,
-    required TimeOfDay time,
-    required IconData icon,
-    required VoidCallback onTap,
-    required SiColors c,
-  }) {
-    return Row(
-      children: [
-        Icon(icon, color: c.ink4, size: 22),
-        const SizedBox(width: 16),
-        Text(label, style: const TextStyle(fontSize: 16)),
-        const Spacer(),
-        InkWell(
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: c.line2,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+  /// Un día: interruptor y, si está activo, sus horas de entrada y salida.
+  Widget _buildDiaFila(int dia, StateSetter setModalState, SiColors c) {
+    final activo = _entradaPorDia.containsKey(dia);
+    final entrada = _entradaPorDia[dia];
+    final salida = _salidaPorDia[dia];
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: activo ? c.brandTint : Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: activo ? c.brand.withValues(alpha: 0.25) : c.line),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 40,
+            child: Switch(
+              value: activo,
+              onChanged: (val) => setModalState(() {
+                if (val) {
+                  // Se hereda del último día ya configurado: crear una semana completa no
+                  // debería exigir capturar la misma hora siete veces.
+                  final previos = _entradaPorDia.keys.toList()..sort();
+                  final ref = previos.isEmpty ? null : previos.last;
+                  _entradaPorDia[dia] =
+                      ref == null ? _entradaPorDefecto : _entradaPorDia[ref]!;
+                  _salidaPorDia[dia] = ref == null
+                      ? _salidaPorDefecto
+                      : (_salidaPorDia[ref] ?? _salidaPorDefecto);
+                } else {
+                  _entradaPorDia.remove(dia);
+                  _salidaPorDia.remove(dia);
+                }
+              }),
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
           ),
-        ),
-      ],
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _daysOfWeek[dia],
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: activo ? FontWeight.w600 : FontWeight.normal,
+                color: activo ? c.ink : c.ink3,
+              ),
+            ),
+          ),
+          if (activo) ...[
+            _chipHora(
+              hora: entrada!,
+              c: c,
+              tooltip: 'Entrada',
+              onTap: () async {
+                final t =
+                    await showTimePicker(context: context, initialTime: entrada);
+                if (t != null) setModalState(() => _entradaPorDia[dia] = t);
+              },
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: Text('→', style: TextStyle(color: c.ink4, fontSize: 13)),
+            ),
+            _chipHora(
+              hora: salida ?? _salidaPorDefecto,
+              c: c,
+              tooltip: 'Salida',
+              onTap: () async {
+                final t = await showTimePicker(
+                    context: context, initialTime: salida ?? _salidaPorDefecto);
+                if (t != null) setModalState(() => _salidaPorDia[dia] = t);
+              },
+            ),
+          ],
+        ],
+      ),
     );
   }
+
+  Widget _chipHora({
+    required TimeOfDay hora,
+    required SiColors c,
+    required String tooltip,
+    required VoidCallback onTap,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: c.panel,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: c.line),
+          ),
+          child: Text(
+            '${hora.hour.toString().padLeft(2, '0')}:${hora.minute.toString().padLeft(2, '0')}',
+            style: TextStyle(
+                fontWeight: FontWeight.w600, fontSize: 13, color: c.ink),
+          ),
+        ),
+      ),
+    );
+  }
+
 
 
 
