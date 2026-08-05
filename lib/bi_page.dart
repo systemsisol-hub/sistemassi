@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -2198,12 +2199,17 @@ class _BiAiPanelState extends State<_BiAiPanel> {
                     final msg = _messages[i];
                     final rows = msg.rows;
                     if (rows == null) return _Bubble(msg: msg, c: c);
-                    // Las cifras consultadas se muestran además como tabla: el texto del
-                    // modelo interpreta, la tabla deja ver el dato tal como llegó.
+                    // Tres lecturas del mismo resultado, de la más rápida a la más precisa:
+                    // el texto interpreta, la gráfica da la forma, la tabla el dato exacto.
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _Bubble(msg: msg, c: c),
+                        _ResultChart(
+                          rows: rows,
+                          formatos: msg.formatos,
+                          c: c,
+                        ),
                         _ResultTable(
                           rows: rows,
                           formatos: msg.formatos,
@@ -2417,6 +2423,166 @@ class _AiMsg {
 /// Las llaves llegan como "[Alias]" para las medidas y "Tabla[Columna]" para las
 /// dimensiones; se limpian para el encabezado pero se conserva el orden original, que es
 /// el que definió la consulta.
+// ── Gráficas de resultados ────────────────────────────────────────────────────
+
+/// Paleta categórica, en orden fijo y nunca cíclica: una 6ª categoría se agrupa en "Otros"
+/// en lugar de generar un color nuevo.
+///
+/// Validada con los seis checks de la guía de visualización, en ambos modos:
+///   claro  — banda de luminosidad, croma, CVD y contraste PASS; WARN de contraste en el
+///            teal (2.8:1), cubierto porque la tabla de cifras siempre acompaña a la gráfica
+///   oscuro — los cinco checks PASS, sin advertencias
+///   peor par adyacente CVD ΔE 8.9 (deuteranopía), por encima del piso de 8
+///
+/// No usa success / warn / danger de SiColors: están reservados para estado y reciclarlos
+/// como series haría que un color con significado propio apareciera sin significado.
+/// Si se cambia un solo valor hay que volver a correr el validador — no ajustar a ojo.
+const _paletaSeries = <Color>[
+  Color(0xFF5A69D0), // índigo, familia de marca
+  Color(0xFF10A8B8), // teal
+  Color(0xFFD6407E), // magenta
+  Color(0xFF6F9528), // oliva
+  Color(0xFFA855D6), // púrpura
+];
+
+/// Forma que toma un resultado. La decide el cliente a partir de la estructura de las filas,
+/// no el modelo: es el mismo criterio que rige toda esta función — no dejarle al modelo lo
+/// que el código puede garantizar.
+enum _Forma { cifra, barras, linea }
+
+/// Resuelve qué dibujar. Separado del widget para poder razonarlo y probarlo aparte.
+class _PlanGrafica {
+  final _Forma forma;
+  final String? dimension;
+  final List<String> medidas;
+
+  const _PlanGrafica({required this.forma, this.dimension, required this.medidas});
+
+  /// Palabras que delatan una dimensión de tiempo, donde la línea comunica mejor que barras.
+  static final _reTiempo = RegExp(
+      r'(tiempo|fecha|mes|a[ñn]o|periodo|semana|trimestre|d[íi]a)',
+      caseSensitive: false);
+
+  /// Agrupa las medidas por escala compatible y devuelve un plan por grupo.
+  ///
+  /// **Nunca un doble eje.** El asistente puede pedir `Suma Vencido` (millones) junto con
+  /// `% Vencido Critico` (fracción) en la misma consulta; ponerlos en un solo eje deforma
+  /// ambos. Se emite una gráfica por grupo de escala, que es lo correcto y además evita el
+  /// error de gráficas más común.
+  static List<_PlanGrafica> desde(
+    List<Map<String, dynamic>> rows,
+    _FormatoCifras fmt,
+  ) {
+    if (rows.isEmpty) return const [];
+
+    final llaves = rows.first.keys.toList();
+    final medidas = llaves.where(_FormatoCifras.esMedida).toList();
+    final dimensiones = llaves.where((k) => !_FormatoCifras.esMedida(k)).toList();
+
+    if (medidas.isEmpty) return const [];
+
+    // Sin dimensión el resultado es un total: una cifra, no una gráfica de una sola barra.
+    if (dimensiones.isEmpty || rows.length == 1 && dimensiones.isEmpty) {
+      return [_PlanGrafica(forma: _Forma.cifra, medidas: medidas)];
+    }
+
+    // Con más de una dimensión no hay una lectura visual honesta con una sola serie de
+    // barras; la tabla lo comunica mejor.
+    if (dimensiones.length > 1) return const [];
+
+    final dim = dimensiones.first;
+    final esTiempo = _reTiempo.hasMatch(dim);
+
+    final porcentajes = medidas.where(fmt.esPorcentaje).toList();
+    final montos = medidas.where((m) => !fmt.esPorcentaje(m)).toList();
+
+    return [
+      for (final grupo in [montos, porcentajes])
+        if (grupo.isNotEmpty)
+          _PlanGrafica(
+            forma: esTiempo ? _Forma.linea : _Forma.barras,
+            dimension: dim,
+            medidas: grupo,
+          ),
+    ];
+  }
+}
+
+/// Formato de las cifras que devuelve pbi-query, compartido por la tabla y la gráfica.
+///
+/// Vive aparte a propósito. Si la gráfica duplicara esta lógica, un cambio en una y no en la
+/// otra reintroduciría el error de 100x de los porcentajes justo en la mitad de la interfaz
+/// que nadie revisó. Una sola fuente para las dos.
+class _FormatoCifras {
+  final Map<String, dynamic>? formatos;
+  const _FormatoCifras(this.formatos);
+
+  /// El nombre de la medida dentro de "[Alias]", para cruzarlo con el mapa de formatos.
+  static String medida(String key) {
+    final m = RegExp(r'^\[(.+)\]$').firstMatch(key);
+    return m?.group(1) ?? key;
+  }
+
+  /// Etiqueta legible: de "Tabla[Columna]" o "[Alias]" se queda con lo de dentro.
+  static String encabezado(String key) {
+    final m = RegExp(r'^(.*?)\[(.+)\]$').firstMatch(key);
+    return m?.group(2) ?? key;
+  }
+
+  /// Una llave sin nombre de tabla es una medida; con tabla, una dimensión.
+  static bool esMedida(String key) => RegExp(r'^\[(.+)\]$').hasMatch(key);
+
+  bool esPorcentaje(String key) {
+    final f = formatos?[medida(key)];
+    return f is String && f.contains('%');
+  }
+
+  /// Separador de miles, respetando el signo.
+  static String miles(String entero) {
+    final signo = entero.startsWith('-') ? '-' : '';
+    final digitos = entero.replaceFirst('-', '');
+    final buf = StringBuffer();
+    for (int i = 0; i < digitos.length; i++) {
+      if (i > 0 && (digitos.length - i) % 3 == 0) buf.write(',');
+      buf.write(digitos[i]);
+    }
+    return '$signo$buf';
+  }
+
+  String valor(String key, dynamic v) {
+    if (v == null) return '—';
+    if (v is! num) return v.toString();
+
+    // Los porcentajes se guardan como fracción: 0.9946 es 99.5%. Mostrar el crudo sería
+    // un error de 100x que se lee como perfectamente razonable.
+    if (esPorcentaje(key)) {
+      final pct = v * 100;
+      // Un valor diminuto pero distinto de cero no debe verse como un cero redondo.
+      if (pct != 0 && pct.abs() < 0.05) return '<0.1%';
+      return '${pct.toStringAsFixed(1)}%';
+    }
+
+    final entero = v == v.roundToDouble() && v.abs() < 1e15;
+    if (entero) return miles(v.toInt().toString());
+
+    if (v.abs() < 0.005) return '<0.01';
+    final partes = v.toStringAsFixed(2).split('.');
+    return '${miles(partes[0])}.${partes[1]}';
+  }
+
+  /// Versión abreviada para ejes y etiquetas dentro de gráficas, donde no cabe el número
+  /// completo: 22,088,254.08 → "22.1 M".
+  String compacto(String key, dynamic v) {
+    if (v is! num) return valor(key, v);
+    if (esPorcentaje(key)) return valor(key, v);
+    final abs = v.abs();
+    if (abs >= 1e9) return '${(v / 1e9).toStringAsFixed(1)} MM';
+    if (abs >= 1e6) return '${(v / 1e6).toStringAsFixed(1)} M';
+    if (abs >= 1e3) return '${(v / 1e3).toStringAsFixed(1)} k';
+    return valor(key, v);
+  }
+}
+
 class _ResultTable extends StatelessWidget {
   final List<Map<String, dynamic>> rows;
   final Map<String, dynamic>? formatos;
@@ -2430,58 +2596,10 @@ class _ResultTable extends StatelessWidget {
     this.formatos,
   });
 
-  /// El nombre de la medida dentro de "[Alias]", para cruzarlo con el mapa de formatos.
-  static String _medida(String key) {
-    final m = RegExp(r'^\[(.+)\]$').firstMatch(key);
-    return m?.group(1) ?? key;
-  }
-
-  static String _encabezado(String key) {
-    final m = RegExp(r'^(.*?)\[(.+)\]$').firstMatch(key);
-    return m?.group(2) ?? key;
-  }
-
-  bool _esPorcentaje(String key) {
-    final f = formatos?[_medida(key)];
-    return f is String && f.contains('%');
-  }
-
-  /// Separador de miles, respetando el signo.
-  static String _miles(String entero) {
-    final signo = entero.startsWith('-') ? '-' : '';
-    final digitos = entero.replaceFirst('-', '');
-    final buf = StringBuffer();
-    for (int i = 0; i < digitos.length; i++) {
-      if (i > 0 && (digitos.length - i) % 3 == 0) buf.write(',');
-      buf.write(digitos[i]);
-    }
-    return '$signo$buf';
-  }
-
-  String _celda(String key, dynamic v) {
-    if (v == null) return '—';
-    if (v is! num) return v.toString();
-
-    // Los porcentajes se guardan como fracción: 0.9946 es 99.5%. Mostrar el crudo sería
-    // un error de 100x que se lee como perfectamente razonable.
-    if (_esPorcentaje(key)) {
-      final pct = v * 100;
-      // Un valor diminuto pero distinto de cero no debe verse como un cero redondo.
-      if (pct != 0 && pct.abs() < 0.05) return '<0.1%';
-      return '${pct.toStringAsFixed(1)}%';
-    }
-
-    final entero = v == v.roundToDouble() && v.abs() < 1e15;
-    if (entero) return _miles(v.toInt().toString());
-
-    if (v.abs() < 0.005) return '<0.01';
-    final partes = v.toStringAsFixed(2).split('.');
-    return '${_miles(partes[0])}.${partes[1]}';
-  }
-
   @override
   Widget build(BuildContext context) {
     final llaves = rows.first.keys.toList();
+    final fmt = _FormatoCifras(formatos);
 
     return Container(
       margin: const EdgeInsets.only(top: SiSpace.x2, bottom: SiSpace.x2),
@@ -2504,7 +2622,7 @@ class _ResultTable extends StatelessWidget {
               columns: llaves
                   .map((k) => DataColumn(
                         label: Text(
-                          _encabezado(k),
+                          _FormatoCifras.encabezado(k),
                           style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
@@ -2516,7 +2634,7 @@ class _ResultTable extends StatelessWidget {
                   .map((r) => DataRow(
                         cells: llaves
                             .map((k) => DataCell(Text(
-                                  _celda(k, r[k]),
+                                  fmt.valor(k, r[k]),
                                   style: TextStyle(
                                       fontSize: 12,
                                       color: c.ink,
@@ -2536,6 +2654,421 @@ class _ResultTable extends StatelessWidget {
                 'Lista recortada: hay más renglones de los que se muestran.',
                 style: TextStyle(fontSize: 11, color: c.warn),
               ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Dibuja los resultados de una consulta. Emite una gráfica por grupo de escala compatible,
+/// nunca una con dos ejes.
+class _ResultChart extends StatelessWidget {
+  final List<Map<String, dynamic>> rows;
+  final Map<String, dynamic>? formatos;
+  final SiColors c;
+
+  const _ResultChart({required this.rows, required this.c, this.formatos});
+
+  /// Por debajo de este ancho una gráfica con etiquetas de compañía es ilegible, así que se
+  /// omite y queda sólo la tabla. El panel puede estar en modo compacto de 300px.
+  static const anchoMinimo = 320.0;
+
+  /// Tope de categorías antes de agrupar el resto en "Otros".
+  static const _maxCategorias = 12;
+
+  @override
+  Widget build(BuildContext context) {
+    final fmt = _FormatoCifras(formatos);
+    final planes = _PlanGrafica.desde(rows, fmt);
+    if (planes.isEmpty) return const SizedBox.shrink();
+
+    return LayoutBuilder(
+      builder: (_, box) {
+        if (box.maxWidth < anchoMinimo) return const SizedBox.shrink();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final plan in planes) _porPlan(plan, fmt),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _porPlan(_PlanGrafica plan, _FormatoCifras fmt) {
+    switch (plan.forma) {
+      case _Forma.cifra:
+        return _CifrasDestacadas(fila: rows.first, medidas: plan.medidas, fmt: fmt, c: c);
+      case _Forma.barras:
+        return _BarrasHorizontales(
+          rows: _agrupado(plan),
+          plan: plan,
+          fmt: fmt,
+          c: c,
+        );
+      case _Forma.linea:
+        return _LineaTiempo(rows: rows, plan: plan, fmt: fmt, c: c);
+    }
+  }
+
+  /// Recorta a las primeras categorías y suma el resto en "Otros". Las filas ya vienen
+  /// ordenadas de mayor a menor por el servidor, así que el recorte conserva las relevantes.
+  List<Map<String, dynamic>> _agrupado(_PlanGrafica plan) {
+    if (rows.length <= _maxCategorias) return rows;
+
+    final visibles = rows.take(_maxCategorias - 1).toList();
+    final resto = rows.skip(_maxCategorias - 1);
+
+    final otros = <String, dynamic>{plan.dimension!: 'Otros (${resto.length})'};
+    for (final m in plan.medidas) {
+      num suma = 0;
+      for (final r in resto) {
+        final v = r[m];
+        if (v is num) suma += v;
+      }
+      otros[m] = suma;
+    }
+    return [...visibles, otros];
+  }
+}
+
+/// Barras horizontales hechas a mano y no con fl_chart: su BarChart sólo dibuja vertical, y
+/// aquí las etiquetas son largas ("02 INMOBILIARIA BUENOS MUCHACHOS"). Rotar el gráfico
+/// rotaría también el texto. La geometría horizontal es trivial y da control total.
+class _BarrasHorizontales extends StatelessWidget {
+  final List<Map<String, dynamic>> rows;
+  final _PlanGrafica plan;
+  final _FormatoCifras fmt;
+  final SiColors c;
+
+  const _BarrasHorizontales({
+    required this.rows,
+    required this.plan,
+    required this.fmt,
+    required this.c,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Escala común a todas las series del grupo, anclada en cero.
+    double maximo = 0;
+    for (final r in rows) {
+      for (final m in plan.medidas) {
+        final v = r[m];
+        if (v is num && v.abs() > maximo) maximo = v.abs().toDouble();
+      }
+    }
+    if (maximo == 0) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(top: SiSpace.x2),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+      decoration: BoxDecoration(
+        border: Border.all(color: c.line),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Con una sola serie el título ya la nombra; con dos o más la leyenda es
+          // obligatoria para que la identidad no dependa sólo del color.
+          if (plan.medidas.length > 1)
+            _Leyenda(medidas: plan.medidas, fmt: fmt, c: c),
+          for (final r in rows) _fila(r, maximo),
+        ],
+      ),
+    );
+  }
+
+  Widget _fila(Map<String, dynamic> r, double maximo) {
+    final etiqueta = r[plan.dimension] ?? '—';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  etiqueta.toString(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11, color: c.ink2),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // El valor exacto va como etiqueta directa: es el alivio que exige la
+              // advertencia de contraste de la paleta, y evita tener que leer el largo.
+              Text(
+                fmt.valor(plan.medidas.first, r[plan.medidas.first]),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: c.ink,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 3),
+          for (int i = 0; i < plan.medidas.length; i++) ...[
+            if (i > 0) const SizedBox(height: 2),
+            _barra(r[plan.medidas[i]], maximo, _paletaSeries[i % _paletaSeries.length],
+                plan.medidas[i], r),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _barra(
+    dynamic v,
+    double maximo,
+    Color color,
+    String medida,
+    Map<String, dynamic> r,
+  ) {
+    final valor = v is num ? v.abs().toDouble() : 0.0;
+    final fraccion = (valor / maximo).clamp(0.0, 1.0);
+
+    return Tooltip(
+      message: '${_FormatoCifras.encabezado(medida)}: ${fmt.valor(medida, v)}',
+      child: SizedBox(
+        height: 8,
+        child: Row(
+          children: [
+            // Extremo redondeado de 4px anclado a la línea base, marca delgada.
+            Expanded(
+              flex: (fraccion * 1000).round().clamp(1, 1000),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: const BorderRadius.horizontal(
+                    right: Radius.circular(4),
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
+              flex: (1000 - (fraccion * 1000).round()).clamp(0, 1000),
+              child: const SizedBox.shrink(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Línea de tiempo. Aquí sí fl_chart: ejes, curva y tooltip son trabajo real que no vale
+/// reimplementar con CustomPainter.
+class _LineaTiempo extends StatelessWidget {
+  final List<Map<String, dynamic>> rows;
+  final _PlanGrafica plan;
+  final _FormatoCifras fmt;
+  final SiColors c;
+
+  const _LineaTiempo({
+    required this.rows,
+    required this.plan,
+    required this.fmt,
+    required this.c,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final etiquetas = rows.map((r) => (r[plan.dimension] ?? '').toString()).toList();
+
+    final series = <LineChartBarData>[];
+    for (int s = 0; s < plan.medidas.length; s++) {
+      final medida = plan.medidas[s];
+      final puntos = <FlSpot>[];
+      for (int i = 0; i < rows.length; i++) {
+        final v = rows[i][medida];
+        if (v is num) puntos.add(FlSpot(i.toDouble(), v.toDouble()));
+      }
+      if (puntos.isEmpty) continue;
+      series.add(LineChartBarData(
+        spots: puntos,
+        color: _paletaSeries[s % _paletaSeries.length],
+        barWidth: 2,
+        isCurved: false,
+        dotData: FlDotData(show: puntos.length <= 20),
+      ));
+    }
+    if (series.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(top: SiSpace.x2),
+      padding: const EdgeInsets.fromLTRB(8, 12, 12, 4),
+      decoration: BoxDecoration(
+        border: Border.all(color: c.line),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        children: [
+          if (plan.medidas.length > 1)
+            _Leyenda(medidas: plan.medidas, fmt: fmt, c: c),
+          SizedBox(
+            height: 180,
+            child: LineChart(
+              LineChartData(
+                lineBarsData: series,
+                // Rejilla y ejes recesivos: la línea es el dato, no el marco.
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  getDrawingHorizontalLine: (_) =>
+                      FlLine(color: c.line, strokeWidth: 1),
+                ),
+                borderData: FlBorderData(show: false),
+                titlesData: FlTitlesData(
+                  topTitles: const AxisTitles(),
+                  rightTitles: const AxisTitles(),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 46,
+                      getTitlesWidget: (v, _) => Text(
+                        fmt.compacto(plan.medidas.first, v),
+                        style: TextStyle(fontSize: 9, color: c.ink3),
+                      ),
+                    ),
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 24,
+                      getTitlesWidget: (v, _) {
+                        final i = v.round();
+                        if (i < 0 || i >= etiquetas.length) {
+                          return const SizedBox.shrink();
+                        }
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            etiquetas[i],
+                            style: TextStyle(fontSize: 9, color: c.ink3),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                lineTouchData: LineTouchData(
+                  touchTooltipData: LineTouchTooltipData(
+                    getTooltipItems: (spots) => spots.map((s) {
+                      final medida = plan.medidas[
+                          s.barIndex.clamp(0, plan.medidas.length - 1)];
+                      return LineTooltipItem(
+                        '${_FormatoCifras.encabezado(medida)}\n'
+                        '${fmt.valor(medida, s.y)}',
+                        TextStyle(fontSize: 11, color: c.ink),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// El caso sin agrupación: un total no es una gráfica de una sola barra.
+class _CifrasDestacadas extends StatelessWidget {
+  final Map<String, dynamic> fila;
+  final List<String> medidas;
+  final _FormatoCifras fmt;
+  final SiColors c;
+
+  const _CifrasDestacadas({
+    required this.fila,
+    required this.medidas,
+    required this.fmt,
+    required this.c,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(top: SiSpace.x2),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: c.brandTint,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Wrap(
+        spacing: 24,
+        runSpacing: 12,
+        children: [
+          for (final m in medidas)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _FormatoCifras.encabezado(m),
+                  style: TextStyle(fontSize: 10, color: c.ink3),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  fmt.valor(m, fila[m]),
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: c.brand,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Leyenda: obligatoria con dos o más series, para que la identidad no dependa sólo del
+/// color. El texto va en tinta, no en el color de la serie — el punto de color al lado es
+/// el que carga la identidad.
+class _Leyenda extends StatelessWidget {
+  final List<String> medidas;
+  final _FormatoCifras fmt;
+  final SiColors c;
+
+  const _Leyenda({required this.medidas, required this.fmt, required this.c});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Wrap(
+        spacing: 14,
+        runSpacing: 6,
+        children: [
+          for (int i = 0; i < medidas.length; i++)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 9,
+                  height: 9,
+                  decoration: BoxDecoration(
+                    color: _paletaSeries[i % _paletaSeries.length],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  _FormatoCifras.encabezado(medidas[i]),
+                  style: TextStyle(fontSize: 10, color: c.ink2),
+                ),
+              ],
             ),
         ],
       ),
