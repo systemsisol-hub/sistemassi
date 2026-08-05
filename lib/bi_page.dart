@@ -22,6 +22,12 @@ class _BiPageState extends State<BiPage> {
   List<Map<String, dynamic>> _grupos = [];
   bool _isLoading = true;
   bool get _isAdmin => widget.role == 'admin';
+
+  /// Mismo criterio que aplican las Edge Functions: admin o permiso show_ai explícito. Si el
+  /// botón apareciera sin el permiso, cada pregunta devolvería 403 y parecería una falla.
+  bool get _puedeUsarAsistente =>
+      _isAdmin || widget.permissions['show_ai'] == true;
+
   final _searchController = TextEditingController();
   String _searchQuery = '';
 
@@ -109,6 +115,37 @@ class _BiPageState extends State<BiPage> {
           (l['descripcion'] ?? '').toString().toLowerCase().contains(q) ||
           grupoName.contains(q);
     }).toList();
+  }
+
+  /// Abre el asistente sin reporte. Al no mandar link_id, la Edge Function lista los reportes
+  /// accesibles y pregunta con cuál trabajar.
+  void _nuevoPanelGuiado() {
+    final c = SiColors.of(context);
+    final mq = MediaQuery.of(context);
+    final angosto = mq.size.width <= 700;
+
+    showDialog(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (ctx) => Dialog(
+        backgroundColor: c.panel,
+        insetPadding: EdgeInsets.symmetric(
+          horizontal: angosto ? SiSpace.x3 : 0,
+          vertical: angosto ? SiSpace.x4 : SiSpace.x6,
+        ),
+        shape: const RoundedRectangleBorder(borderRadius: SiRadius.rLg),
+        clipBehavior: Clip.antiAlias,
+        child: SizedBox(
+          width: angosto ? double.infinity : 560,
+          height: mq.size.height * 0.8,
+          child: _BiAiPanel(
+            reportTitle: 'Nuevo panel',
+            modoGuiado: true,
+            onContraer: () => Navigator.pop(ctx),
+          ),
+        ),
+      ),
+    );
   }
 
   void _showGruposManager() {
@@ -406,6 +443,26 @@ class _BiPageState extends State<BiPage> {
             ),
           ),
           const Spacer(),
+          // Punto de entrada para armar un panel sin abrir ningún reporte: el asistente
+          // pregunta con cuál trabajar. No es admin-only — los paneles son privados de
+          // quien los crea, así que cualquiera con acceso al asistente puede tener los suyos.
+          if (_puedeUsarAsistente) ...[
+            OutlinedButton.icon(
+              onPressed: _nuevoPanelGuiado,
+              icon: const Icon(Icons.auto_awesome, size: 16),
+              label: const Text('Nuevo panel',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: c.brand,
+                side: BorderSide(color: c.brand.withValues(alpha: 0.5)),
+                elevation: 0,
+                minimumSize: const Size(0, 36),
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                shape: const RoundedRectangleBorder(borderRadius: SiRadius.rMd),
+              ),
+            ),
+            const SizedBox(width: SiSpace.x2),
+          ],
           if (_isAdmin) ...[
             IconButton(
               onPressed: _showPapelera,
@@ -1919,6 +1976,10 @@ class _BiAiPanel extends StatefulWidget {
   final VoidCallback? onAlternarAncho;
   final VoidCallback? onContraer;
 
+  /// Modo guiado: se abre sin reporte y el asistente pregunta con cuál trabajar. Es el punto
+  /// de entrada para armar paneles desde la página, sin abrir ningún reporte antes.
+  final bool modoGuiado;
+
   const _BiAiPanel({
     required this.reportTitle,
     this.linkId,
@@ -1926,6 +1987,7 @@ class _BiAiPanel extends StatefulWidget {
     this.compacto = false,
     this.onAlternarAncho,
     this.onContraer,
+    this.modoGuiado = false,
   });
 
   @override
@@ -1948,10 +2010,11 @@ class _BiAiPanelState extends State<_BiAiPanel> {
   final List<_AiMsg> _messages = [];
   bool _loading = false;
 
-  /// El modo analista requiere las dos cosas: un enlace identificado y un dataset
-  /// capturado. Sin dataset la Edge Function respondería 422 en cada consulta, así que
-  /// es mejor quedarse en modo conversacional y decirlo.
-  bool get _modoAnalista => widget.linkId != null && widget.hasDataset;
+  /// El modo analista requiere un enlace identificado con dataset capturado — sin dataset la
+  /// Edge Function respondería 422 en cada consulta, así que es mejor quedarse en modo
+  /// conversacional y decirlo. En modo guiado no hay enlace todavía: lo elige el asistente.
+  bool get _modoAnalista =>
+      widget.modoGuiado || (widget.linkId != null && widget.hasDataset);
 
   @override
   void dispose() {
@@ -2006,7 +2069,9 @@ class _BiAiPanelState extends State<_BiAiPanel> {
       }
 
       final payload = <String, dynamic>{'messages': history};
-      if (_modoAnalista) {
+      // En modo guiado NO se manda link_id: eso es lo que hace que la función liste los
+      // reportes y pregunte cuál. Con reporte abierto se manda y queda fijo a ése.
+      if (_modoAnalista && !widget.modoGuiado) {
         payload['link_id'] = widget.linkId;
         payload['titulo'] = widget.reportTitle;
       }
@@ -2140,7 +2205,9 @@ class _BiAiPanelState extends State<_BiAiPanel> {
                             size: 40, color: c.line),
                         const SizedBox(height: SiSpace.x3),
                         Text(
-                          'Pregúntame sobre\n"${widget.reportTitle}"',
+                          widget.modoGuiado
+                              ? 'Armemos un panel'
+                              : 'Pregúntame sobre\n"${widget.reportTitle}"',
                           textAlign: TextAlign.center,
                           style:
                               TextStyle(fontSize: 13, color: c.ink3),
@@ -2149,10 +2216,12 @@ class _BiAiPanelState extends State<_BiAiPanel> {
                         // Se declara la capacidad real: con dataset lee cifras, sin él
                         // sólo explica. Así el usuario no descubre el límite fallando.
                         Text(
-                          _modoAnalista
-                              ? 'Consulta las cifras reales del reporte'
-                              : 'Sin dataset configurado: puedo explicar el panel, '
-                                  'pero no leer sus cifras',
+                          widget.modoGuiado
+                              ? 'Te pregunto con cuál reporte trabajar'
+                              : _modoAnalista
+                                  ? 'Consulta las cifras reales del reporte'
+                                  : 'Sin dataset configurado: puedo explicar el panel, '
+                                      'pero no leer sus cifras',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 11,
@@ -2160,7 +2229,19 @@ class _BiAiPanelState extends State<_BiAiPanel> {
                           ),
                         ),
                         const SizedBox(height: SiSpace.x5),
-                        if (_modoAnalista) ...[
+                        if (widget.modoGuiado) ...[
+                          _QuickChip(
+                            label: '¿Con qué reportes puedo trabajar?',
+                            onTap: () => _send(
+                                '¿Con qué reportes puedo trabajar y qué tiene cada uno?'),
+                          ),
+                          const SizedBox(height: SiSpace.x2),
+                          _QuickChip(
+                            label: 'Sugiéreme un panel útil',
+                            onTap: () => _send(
+                                'Muéstrame mis reportes y sugiéreme un panel útil para empezar.'),
+                          ),
+                        ] else if (_modoAnalista) ...[
                           _QuickChip(
                             label: '¿Qué puedes consultar de este reporte?',
                             onTap: () => _send(

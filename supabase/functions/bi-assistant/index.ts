@@ -393,6 +393,14 @@ Deno.serve(async (req: Request) => {
             truncated: r.truncated ?? false,
             consulta:  r.consulta ?? null,
             presentacion: p === "grafica" || p === "tabla" ? p : "auto",
+            // Lo que el cliente necesita para poder guardar el resultado como panel: sobre
+            // qué reporte y con qué periodo se consultó. En modo guiado el reporte lo eligió
+            // el modelo, así que el cliente no lo sabría de otra forma.
+            report:  r.report ?? null,
+            periodo: (args.anio || args.mes)
+              ? { anio: args.anio ?? null, mes: args.mes ?? null }
+              : null,
+            limite: typeof args.limite === "number" ? args.limite : null,
           };
         }
 
