@@ -555,6 +555,59 @@ async function resolveLink(
   return link;
 }
 
+/**
+ * Reportes que el usuario puede consultar, para el flujo guiado de creación de paneles: el
+ * asistente arranca sin reporte y necesita ofrecer entre cuáles elegir.
+ *
+ * Vive aquí y no en bi-assistant a propósito: las reglas de acceso a un enlace ya están en
+ * esta función, y duplicarlas garantizaría que algún día divergieran.
+ */
+async function listarReportes(
+  db: ReturnType<typeof createClient>,
+  userId: string,
+  isAdmin: boolean,
+): Promise<unknown> {
+  const campos = "id, title, pbi_workspace_id, pbi_dataset_id, ai_context";
+
+  let accesibles: Record<string, unknown>[] = [];
+
+  if (isAdmin) {
+    const { data } = await db
+      .from("powerbi_links").select(campos).eq("is_active", true).order("title");
+    accesibles = (data ?? []) as Record<string, unknown>[];
+  } else {
+    const { data: propios } = await db
+      .from("powerbi_links").select(campos)
+      .eq("is_active", true).eq("created_by", userId);
+
+    const { data: asignados } = await db
+      .from("powerbi_link_users")
+      .select(`link_id, powerbi_links(${campos}, is_active)`)
+      .eq("user_id", userId);
+
+    const deAsignados = (asignados ?? [])
+      .map((r) => (r as Record<string, unknown>).powerbi_links)
+      .filter((l): l is Record<string, unknown> =>
+        !!l && (l as Record<string, unknown>).is_active === true);
+
+    const unicos = new Map<string, Record<string, unknown>>();
+    for (const l of [...(propios ?? []), ...deAsignados]) {
+      unicos.set(String((l as Record<string, unknown>).id), l as Record<string, unknown>);
+    }
+    accesibles = [...unicos.values()];
+  }
+
+  return {
+    reportes: accesibles.map((l) => ({
+      link_id: l.id,
+      titulo:  l.title,
+      // Sin dataset no se puede consultar; el asistente debe decirlo en vez de intentarlo.
+      consultable: !!l.pbi_workspace_id && !!l.pbi_dataset_id,
+      contexto: l.ai_context ?? null,
+    })),
+  };
+}
+
 // ── Handler ──────────────────────────────────────────────────────────────────
 
 Deno.serve(async (req: Request) => {
@@ -585,9 +638,15 @@ Deno.serve(async (req: Request) => {
       link_id?: unknown; accion?: unknown;
     };
 
+    const accion = payload.accion ?? "consultar";
+
+    // No requiere link_id ni credenciales de Power BI: es sólo el catálogo de enlaces.
+    if (accion === "reportes") {
+      return reply(await listarReportes(db, user.id, isAdmin));
+    }
+
     const link   = await resolveLink(db, payload.link_id, user.id, isAdmin);
     const schema = await getModel(db, link);
-    const accion = payload.accion ?? "consultar";
 
     if (accion === "modelo") {
       return reply({
@@ -599,7 +658,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if (accion !== "consultar") {
-      throw new HttpError(400, 'accion debe ser "modelo" o "consultar".');
+      throw new HttpError(400, 'accion debe ser "reportes", "modelo" o "consultar".');
     }
 
     const built  = construirConsulta(schema, payload);
