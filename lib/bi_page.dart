@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'theme/si_theme.dart';
@@ -1805,11 +1804,24 @@ class _LinkViewerState extends State<_LinkViewer> {
               ],
             ),
           ),
-          // Body: asistente (izquierda) + iframe (derecha)
+          // Body: iframe (izquierda) + asistente (derecha)
           Expanded(
             child: isWide
                 ? Row(
                     children: [
+                      Expanded(
+                        // El ancho real lo da el layout. Sin esto habría que recalcularlo a
+                        // mano en cada estado del panel y quedaría desfasado.
+                        child: LayoutBuilder(
+                          builder: (_, box) => WebIframe(
+                            url: widget.url,
+                            height: height - headerH,
+                            width: box.maxWidth,
+                          ),
+                        ),
+                      ),
+                      if (_panelAbierto)
+                        VerticalDivider(width: 1, color: c.line),
                       // Offstage y no un `if`: mantiene vivo el State del panel, así que al
                       // contraer y volver a abrir la conversación sigue ahí. Con un `if` se
                       // destruiría y se perdería el historial.
@@ -1826,19 +1838,6 @@ class _LinkViewerState extends State<_LinkViewer> {
                                 setState(() => _panelCompacto = !_panelCompacto),
                             onContraer: () =>
                                 setState(() => _panelAbierto = false),
-                          ),
-                        ),
-                      ),
-                      if (_panelAbierto)
-                        VerticalDivider(width: 1, color: c.line),
-                      Expanded(
-                        // El ancho real lo da el layout. Sin esto habría que recalcularlo a
-                        // mano en cada estado del panel y quedaría desfasado.
-                        child: LayoutBuilder(
-                          builder: (_, box) => WebIframe(
-                            url: widget.url,
-                            height: height - headerH,
-                            width: box.maxWidth,
                           ),
                         ),
                       ),
@@ -2185,7 +2184,10 @@ class _BiAiPanelState extends State<_BiAiPanel> {
                     ),
                   ),
                 )
-              : ListView.builder(
+              // Permite seleccionar de corrido: entre burbujas y dentro de las tablas de
+              // cifras, que es donde más se necesita para copiar un dato a otro lado.
+              : SelectionArea(
+                  child: ListView.builder(
                   controller: _scrollCtrl,
                   padding: const EdgeInsets.all(SiSpace.x3),
                   itemCount: _messages.length + (_loading ? 1 : 0),
@@ -2211,6 +2213,7 @@ class _BiAiPanelState extends State<_BiAiPanel> {
                       ],
                     );
                   },
+                  ),
                 ),
         ),
         // Input
@@ -2328,33 +2331,31 @@ class _Bubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isUser = msg.role == 'user';
+    // Sin GestureDetector de copiar: el SelectionArea que envuelve la conversación ya
+    // permite seleccionar y copiar, y en móvil el toque largo es justamente el gesto con el
+    // que se inicia esa selección — competirían.
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: GestureDetector(
-        onLongPress: () =>
-            Clipboard.setData(ClipboardData(text: msg.text)),
-        child: Container(
-          margin: const EdgeInsets.symmetric(vertical: 4),
-          padding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          constraints: const BoxConstraints(maxWidth: 340),
-          decoration: BoxDecoration(
-            color: isUser ? c.brand : c.bg,
-            borderRadius: BorderRadius.only(
-              topLeft: const Radius.circular(14),
-              topRight: const Radius.circular(14),
-              bottomLeft: Radius.circular(isUser ? 14 : 4),
-              bottomRight: Radius.circular(isUser ? 4 : 14),
-            ),
-            border: isUser ? null : Border.all(color: c.line),
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        constraints: const BoxConstraints(maxWidth: 340),
+        decoration: BoxDecoration(
+          color: isUser ? c.brand : c.bg,
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(14),
+            topRight: const Radius.circular(14),
+            bottomLeft: Radius.circular(isUser ? 14 : 4),
+            bottomRight: Radius.circular(isUser ? 4 : 14),
           ),
-          child: Text(
-            msg.text,
-            style: TextStyle(
-                fontSize: 13,
-                color: isUser ? Colors.white : c.ink,
-                height: 1.4),
-          ),
+          border: isUser ? null : Border.all(color: c.line),
+        ),
+        child: Text(
+          msg.text,
+          style: TextStyle(
+              fontSize: 13,
+              color: isUser ? Colors.white : c.ink,
+              height: 1.4),
         ),
       ),
     );
