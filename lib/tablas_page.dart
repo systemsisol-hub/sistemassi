@@ -14,29 +14,34 @@ class TablasPage extends StatelessWidget {
     final c = SiColors.of(context);
     return Scaffold(
       backgroundColor: c.bg,
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final isDesktop = constraints.maxWidth > 700;
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: isDesktop
-                ? Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(child: _MailsActivosTable()),
-                      const SizedBox(width: 16),
-                      Expanded(flex: 2, child: _NominaTable()),
-                    ],
-                  )
-                : Column(
-                    children: [
-                      _MailsActivosTable(),
-                      const SizedBox(height: 16),
-                      _NominaTable(),
-                    ],
-                  ),
-          );
-        },
+      // Envuelve toda la página y no cada tabla por separado: así se puede arrastrar la
+      // selección de corrido, incluso entre las dos tablas. Los campos de búsqueda y los
+      // botones siguen funcionando igual — manejan su propia interacción.
+      body: SelectionArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isDesktop = constraints.maxWidth > 700;
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: isDesktop
+                  ? Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: _MailsActivosTable()),
+                        const SizedBox(width: 16),
+                        Expanded(flex: 2, child: _NominaTable()),
+                      ],
+                    )
+                  : Column(
+                      children: [
+                        _MailsActivosTable(),
+                        const SizedBox(height: 16),
+                        _NominaTable(),
+                      ],
+                    ),
+            );
+          },
+        ),
       ),
     );
   }
