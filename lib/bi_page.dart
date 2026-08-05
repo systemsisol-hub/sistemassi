@@ -20,6 +20,7 @@ class _BiPageState extends State<BiPage> {
   final _supabase = Supabase.instance.client;
   List<Map<String, dynamic>> _links = [];
   List<Map<String, dynamic>> _grupos = [];
+  List<Map<String, dynamic>> _paneles = [];
   bool _isLoading = true;
   bool get _isAdmin => widget.role == 'admin';
 
@@ -92,6 +93,8 @@ class _BiPageState extends State<BiPage> {
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
 
+      await _fetchPaneles();
+
       if (mounted) setState(() => _isLoading = false);
     } catch (e) {
       debugPrint('Error fetching BI data: $e');
@@ -102,6 +105,27 @@ class _BiPageState extends State<BiPage> {
           backgroundColor: SiColors.of(context).danger,
         ));
       }
+    }
+  }
+
+  /// Los paneles del usuario. El filtrado por dueño lo hace RLS en la base — aquí no se
+  /// filtra por user_id a propósito, para que la restricción viva en un solo lugar.
+  Future<void> _fetchPaneles() async {
+    if (!_puedeUsarAsistente) {
+      _paneles = [];
+      return;
+    }
+    try {
+      final raw = await _supabase
+          .from('bi_paneles')
+          .select('id, link_id, titulo, medidas, agrupar_por, periodo, limite, '
+              'presentacion, powerbi_links(title)')
+          .order('orden')
+          .order('created_at');
+      _paneles = (raw as List).map((e) => Map<String, dynamic>.from(e)).toList();
+    } catch (e) {
+      debugPrint('Error fetching paneles: $e');
+      _paneles = [];
     }
   }
 
@@ -507,6 +531,62 @@ class _BiPageState extends State<BiPage> {
     );
   }
 
+  /// Mis paneles, arriba de los enlaces: es lo que el usuario armó para sí mismo, así que va
+  /// antes del catálogo de reportes. Se oculta entera cuando no hay ninguno, para no dejar un
+  /// encabezado vacío en la página de quien no usa el asistente.
+  Widget _buildPaneles(SiColors c) {
+    if (_paneles.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: SiSpace.x6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.auto_awesome, size: 15, color: c.brand),
+              const SizedBox(width: SiSpace.x2),
+              Text('Mis paneles',
+                  style: TextStyle(
+                      fontSize: 15, fontWeight: FontWeight.w600, color: c.ink)),
+              const SizedBox(width: SiSpace.x2),
+              Text('${_paneles.length}',
+                  style: TextStyle(fontSize: 12, color: c.ink3)),
+            ],
+          ),
+          const SizedBox(height: SiSpace.x3),
+          LayoutBuilder(
+            builder: (_, box) {
+              // Dos columnas cuando hay espacio; una cuando no. Las gráficas necesitan
+              // ancho para que las etiquetas de compañía sean legibles.
+              final dos = box.maxWidth > 900;
+              final ancho = dos ? (box.maxWidth - SiSpace.x4) / 2 : box.maxWidth;
+              return Wrap(
+                spacing: SiSpace.x4,
+                runSpacing: SiSpace.x4,
+                children: [
+                  for (final p in _paneles)
+                    SizedBox(
+                      width: ancho,
+                      child: _PanelGuardado(
+                        key: ValueKey(p['id']),
+                        panel: p,
+                        onEliminado: () async {
+                          await _fetchPaneles();
+                          if (mounted) setState(() {});
+                        },
+                        c: c,
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildContent(SiColors c, List<Map<String, dynamic>> items) {
     if (items.isEmpty) {
       return Center(
@@ -542,7 +622,11 @@ class _BiPageState extends State<BiPage> {
   Widget _buildTable(SiColors c, List<Map<String, dynamic>> items) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(SiSpace.x6),
-      child: Center(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildPaneles(c),
+          Center(
         child: Card(
           child: _BiTable(
             links: items,
@@ -555,15 +639,23 @@ class _BiPageState extends State<BiPage> {
           ),
         ),
       ),
+        ],
+      ),
     );
   }
 
   Widget _buildList(SiColors c, List<Map<String, dynamic>> items) {
+    // Los paneles van como primer elemento de la misma lista y no en un Column aparte, para
+    // que se desplacen junto a los enlaces en lugar de robar altura fija en pantalla chica.
+    final conPaneles = _paneles.isNotEmpty;
+
     return ListView.separated(
       padding: const EdgeInsets.all(SiSpace.x4),
-      itemCount: items.length,
+      itemCount: items.length + (conPaneles ? 1 : 0),
       separatorBuilder: (_, __) => const SizedBox(height: SiSpace.x3),
-      itemBuilder: (context, i) {
+      itemBuilder: (context, index) {
+        if (conPaneles && index == 0) return _buildPaneles(c);
+        final i = index - (conPaneles ? 1 : 0);
         final link = items[i];
         final desc = link['descripcion']?.toString() ?? '';
         return Card(
@@ -2105,6 +2197,7 @@ class _BiAiPanelState extends State<_BiAiPanel> {
       Map<String, dynamic>? formatos;
       bool truncated = false;
       String presentacion = 'auto';
+      _ParametrosConsulta? consulta;
       final structured = body['structured'];
       if (structured is Map && structured['type'] == 'pbi_rows') {
         final data = structured['data'];
@@ -2120,6 +2213,7 @@ class _BiAiPanelState extends State<_BiAiPanel> {
         truncated = structured['truncated'] == true;
         final p = structured['presentacion'];
         if (p == 'grafica' || p == 'tabla') presentacion = p as String;
+        consulta = _ParametrosConsulta.desde(structured);
       }
 
       setState(() {
@@ -2131,6 +2225,7 @@ class _BiAiPanelState extends State<_BiAiPanel> {
           formatos: formatos,
           truncated: truncated,
           presentacion: presentacion,
+          consulta: consulta,
         ));
       });
       _scrollToBottom();
@@ -2496,6 +2591,11 @@ class _AiMsg {
   /// del usuario; la FORMA de la gráfica la sigue decidiendo el cliente.
   final String presentacion;
 
+  /// Parámetros de la consulta que produjo estas filas, para poder guardarla como panel.
+  /// Se guardan los parámetros y no las cifras: así el panel se actualiza solo cuando el
+  /// modelo semántico se refresca.
+  final _ParametrosConsulta? consulta;
+
   const _AiMsg({
     required this.role,
     required this.text,
@@ -2503,7 +2603,52 @@ class _AiMsg {
     this.formatos,
     this.truncated = false,
     this.presentacion = 'auto',
+    this.consulta,
   });
+}
+
+/// Lo que hace falta para repetir una consulta más adelante.
+class _ParametrosConsulta {
+  final String linkId;
+  final String reporte;
+  final List<String> medidas;
+  final List<String> agruparPor;
+  final Map<String, dynamic>? periodo;
+  final int? limite;
+
+  const _ParametrosConsulta({
+    required this.linkId,
+    required this.reporte,
+    required this.medidas,
+    required this.agruparPor,
+    this.periodo,
+    this.limite,
+  });
+
+  /// Devuelve null si falta algo esencial: sin reporte o sin medidas no hay panel que guardar.
+  static _ParametrosConsulta? desde(Map structured) {
+    final report = structured['report'];
+    final consulta = structured['consulta'];
+    if (report is! Map || consulta is! Map) return null;
+
+    final id = report['id']?.toString();
+    if (id == null || id.isEmpty) return null;
+
+    final medidas = (consulta['medidas'] as List?)?.whereType<String>().toList() ?? const [];
+    if (medidas.isEmpty) return null;
+
+    return _ParametrosConsulta(
+      linkId: id,
+      reporte: report['title']?.toString() ?? 'Reporte',
+      medidas: medidas,
+      agruparPor:
+          (consulta['agrupar_por'] as List?)?.whereType<String>().toList() ?? const [],
+      periodo: structured['periodo'] is Map
+          ? Map<String, dynamic>.from(structured['periodo'] as Map)
+          : null,
+      limite: structured['limite'] is int ? structured['limite'] as int : null,
+    );
+  }
 }
 
 /// Elige una sola lectura del resultado en lugar de apilar gráfica y tabla, con un alternador
@@ -2555,15 +2700,23 @@ class _ResultadoConsultaState extends State<_ResultadoConsulta> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (cabeGrafica)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: _AlternadorVista(
-                  enGrafica: mostrarGrafica,
-                  onCambiar: (v) => setState(() => _verGraficaManual = v),
-                  c: c,
-                ),
-              ),
+            Row(
+              children: [
+                if (cabeGrafica)
+                  _AlternadorVista(
+                    enGrafica: mostrarGrafica,
+                    onCambiar: (v) => setState(() => _verGraficaManual = v),
+                    c: c,
+                  ),
+                const Spacer(),
+                if (msg.consulta != null)
+                  _BotonGuardarPanel(
+                    consulta: msg.consulta!,
+                    presentacion: mostrarGrafica ? 'grafica' : 'tabla',
+                    c: c,
+                  ),
+              ],
+            ),
             if (mostrarGrafica)
               _ResultChart(rows: widget.rows, formatos: msg.formatos, c: c)
             else
@@ -2576,6 +2729,364 @@ class _ResultadoConsultaState extends State<_ResultadoConsulta> {
           ],
         );
       },
+    );
+  }
+}
+
+// ── Paneles guardados ─────────────────────────────────────────────────────────
+
+/// Un panel guardado, ejecutado al momento de mostrarse.
+///
+/// Vuelve a consultar en lugar de mostrar cifras almacenadas: es lo que hace que un panel
+/// siga vigente cuando el modelo semántico se refresca cada periodo.
+class _PanelGuardado extends StatefulWidget {
+  final Map<String, dynamic> panel;
+  final VoidCallback onEliminado;
+  final SiColors c;
+
+  const _PanelGuardado({
+    super.key,
+    required this.panel,
+    required this.onEliminado,
+    required this.c,
+  });
+
+  @override
+  State<_PanelGuardado> createState() => _PanelGuardadoState();
+}
+
+class _PanelGuardadoState extends State<_PanelGuardado> {
+  static const _fnUrl =
+      'https://zkmbebybyyefmqcxjqrg.supabase.co/functions/v1/pbi-query';
+
+  List<Map<String, dynamic>>? _rows;
+  Map<String, dynamic>? _formatos;
+  bool _truncated = false;
+  String? _error;
+  bool _cargando = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _consultar();
+  }
+
+  Future<void> _consultar() async {
+    setState(() {
+      _cargando = true;
+      _error = null;
+    });
+    try {
+      final session = Supabase.instance.client.auth.currentSession;
+      if (session == null) throw Exception('Sin sesión activa');
+
+      final p = widget.panel;
+      final resp = await http
+          .post(
+            Uri.parse(_fnUrl),
+            headers: {
+              'Authorization': 'Bearer ${session.accessToken}',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'link_id': p['link_id'],
+              'accion': 'consultar',
+              'medidas': (p['medidas'] as List?)?.cast<String>() ?? const [],
+              if ((p['agrupar_por'] as List?)?.isNotEmpty ?? false)
+                'agrupar_por': (p['agrupar_por'] as List).cast<String>(),
+              // null en la base significa periodo "Actual".
+              'periodo': p['periodo'] ?? 'actual',
+              if (p['limite'] != null) 'limite': p['limite'],
+            }),
+          )
+          .timeout(const Duration(seconds: 60));
+
+      if (!mounted) return;
+      final body = jsonDecode(resp.body) as Map<String, dynamic>;
+      if (resp.statusCode != 200) {
+        throw Exception(body['error']?.toString() ?? 'Error ${resp.statusCode}');
+      }
+
+      final data = body['rows'];
+      setState(() {
+        _cargando = false;
+        _rows = data is List
+            ? data.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()
+            : const [];
+        final f = body['formatos'];
+        _formatos = f is Map ? Map<String, dynamic>.from(f) : null;
+        _truncated = body['truncated'] == true;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _cargando = false;
+        _error = e.toString();
+      });
+    }
+  }
+
+  Future<void> _eliminar() async {
+    final c = widget.c;
+    final confirmado = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: c.panel,
+        title: Text('Eliminar panel', style: TextStyle(fontSize: 16, color: c.ink)),
+        content: Text('Se eliminará "${widget.panel['titulo']}".',
+            style: TextStyle(fontSize: 13, color: c.ink2)),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: c.danger, foregroundColor: Colors.white),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmado != true) return;
+
+    try {
+      await Supabase.instance.client
+          .from('bi_paneles')
+          .delete()
+          .eq('id', widget.panel['id']);
+      widget.onEliminado();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('No se pudo eliminar: $e'),
+        backgroundColor: widget.c.danger,
+      ));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.c;
+    final p = widget.panel;
+    final rows = _rows;
+    final enGrafica = p['presentacion'] != 'tabla';
+
+    return Container(
+      padding: const EdgeInsets.all(SiSpace.x4),
+      decoration: BoxDecoration(
+        color: c.panel,
+        border: Border.all(color: c.line),
+        borderRadius: SiRadius.rLg,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      p['titulo']?.toString() ?? 'Panel',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.w600, color: c.ink),
+                    ),
+                    Text(
+                      p['powerbi_links']?['title']?.toString() ?? '',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 11, color: c.ink3),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'Actualizar',
+                onPressed: _cargando ? null : _consultar,
+                icon: Icon(Icons.refresh, size: 16, color: c.ink3),
+                visualDensity: VisualDensity.compact,
+              ),
+              IconButton(
+                tooltip: 'Eliminar',
+                onPressed: _eliminar,
+                icon: Icon(Icons.delete_outline, size: 16, color: c.ink3),
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
+          const SizedBox(height: SiSpace.x2),
+          if (_cargando)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: SiSpace.x5),
+              child: Center(
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: c.brand),
+                ),
+              ),
+            )
+          else if (_error != null)
+            Text(_error!, style: TextStyle(fontSize: 11, color: c.danger))
+          else if (rows == null || rows.isEmpty)
+            Text('Sin datos para este periodo.',
+                style: TextStyle(fontSize: 11, color: c.ink3))
+          else if (enGrafica)
+            _ResultChart(rows: rows, formatos: _formatos, c: c)
+          else
+            _ResultTable(
+                rows: rows, formatos: _formatos, truncated: _truncated, c: c),
+        ],
+      ),
+    );
+  }
+}
+
+/// Guarda la consulta como panel. Pide un título y deja constancia de que lo guardado son
+/// los parámetros, no las cifras — es lo que explica que el panel siga vigente el mes que viene.
+class _BotonGuardarPanel extends StatefulWidget {
+  final _ParametrosConsulta consulta;
+  final String presentacion;
+  final SiColors c;
+
+  const _BotonGuardarPanel({
+    required this.consulta,
+    required this.presentacion,
+    required this.c,
+  });
+
+  @override
+  State<_BotonGuardarPanel> createState() => _BotonGuardarPanelState();
+}
+
+class _BotonGuardarPanelState extends State<_BotonGuardarPanel> {
+  bool _guardado = false;
+  bool _guardando = false;
+
+  Future<void> _guardar() async {
+    final c = widget.c;
+    final ctrl = TextEditingController(
+      text: '${_FormatoCifras.encabezado(widget.consulta.medidas.first)}'
+          '${widget.consulta.agruparPor.isEmpty ? '' : ' por '
+              '${_FormatoCifras.encabezado(widget.consulta.agruparPor.first)}'}',
+    );
+
+    final titulo = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: c.panel,
+        title: Text('Guardar como panel',
+            style: TextStyle(fontSize: 16, color: c.ink)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: ctrl,
+              autofocus: true,
+              decoration: const InputDecoration(labelText: 'Título'),
+              onSubmitted: (v) => Navigator.pop(ctx, v),
+            ),
+            const SizedBox(height: SiSpace.x3),
+            Text(
+              'Se guarda la consulta, no las cifras: el panel se actualizará solo cuando '
+              '${widget.consulta.reporte} se refresque.',
+              style: TextStyle(fontSize: 11, color: c.ink3, height: 1.4),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: c.brand, foregroundColor: Colors.white),
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+
+    if (titulo == null || titulo.trim().isEmpty || !mounted) return;
+
+    setState(() => _guardando = true);
+    try {
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      if (userId == null) throw Exception('Sin sesión activa');
+
+      await Supabase.instance.client.from('bi_paneles').insert({
+        'user_id': userId,
+        'link_id': widget.consulta.linkId,
+        'titulo': titulo.trim(),
+        'medidas': widget.consulta.medidas,
+        'agrupar_por': widget.consulta.agruparPor,
+        'periodo': widget.consulta.periodo,
+        'limite': widget.consulta.limite,
+        'presentacion': widget.presentacion,
+      });
+
+      if (!mounted) return;
+      setState(() {
+        _guardando = false;
+        _guardado = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Panel "${titulo.trim()}" guardado')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _guardando = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('No se pudo guardar: $e'),
+        backgroundColor: widget.c.danger,
+      ));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.c;
+    if (_guardado) {
+      return Padding(
+        padding: const EdgeInsets.only(top: SiSpace.x2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.check, size: 13, color: c.success),
+            const SizedBox(width: 4),
+            Text('Guardado',
+                style: TextStyle(fontSize: 11, color: c.success)),
+          ],
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: SiSpace.x2),
+      child: TextButton.icon(
+        onPressed: _guardando ? null : _guardar,
+        icon: _guardando
+            ? SizedBox(
+                width: 12,
+                height: 12,
+                child: CircularProgressIndicator(strokeWidth: 2, color: c.brand))
+            : Icon(Icons.bookmark_add_outlined, size: 15, color: c.brand),
+        label: Text('Guardar panel',
+            style: TextStyle(fontSize: 11, color: c.brand)),
+        style: TextButton.styleFrom(
+          minimumSize: const Size(0, 28),
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          visualDensity: VisualDensity.compact,
+        ),
+      ),
     );
   }
 }
