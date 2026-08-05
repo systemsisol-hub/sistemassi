@@ -405,7 +405,7 @@ class _CalendarPageState extends State<CalendarPage> {
                 boxShadow: isSelected
                     ? [
                         BoxShadow(
-                            color: Colors.black.withOpacity(0.08),
+                            color: Colors.black.withValues(alpha: 0.08),
                             blurRadius: 4,
                             offset: const Offset(0, 1))
                       ]
@@ -508,7 +508,7 @@ class _CalendarPageState extends State<CalendarPage> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
-                      color: c.brand.withOpacity(0.12),
+                      color: c.brand.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
@@ -967,7 +967,7 @@ class _CalendarPageState extends State<CalendarPage> {
                                     border: Border(
                                         top: BorderSide(color: c.line)),
                                     color: isSelected && isDesktop
-                                        ? c.brand.withOpacity(0.06)
+                                        ? c.brand.withValues(alpha: 0.06)
                                         : null,
                                   ),
                                   child: Column(
@@ -1020,7 +1020,7 @@ class _CalendarPageState extends State<CalendarPage> {
                                                         vertical: 1),
                                                 decoration: BoxDecoration(
                                                   color: ap.color
-                                                      .withOpacity(0.9),
+                                                      .withValues(alpha: 0.9),
                                                   borderRadius:
                                                       BorderRadius.circular(3),
                                                 ),
@@ -1049,7 +1049,7 @@ class _CalendarPageState extends State<CalendarPage> {
                             if (_isLoading)
                               Positioned.fill(
                                 child: Container(
-                                  color: c.bg.withOpacity(0.7),
+                                  color: c.bg.withValues(alpha: 0.7),
                                   child: Center(
                                     child: Image.asset(
                                         'assets/sisol_loader.gif',
