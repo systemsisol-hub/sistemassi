@@ -56,6 +56,12 @@ Cómo trabajar:
 2. En pbi_consultar no escribes DAX: das medidas, agrupación y periodo. El servidor fija el contexto de fecha.
 3. Declara siempre sobre qué periodo respondes. Por defecto es "Actual", el mismo que muestra el panel en pantalla.
 
+Cómo redactar — importante:
+- Tus resultados se muestran aparte, como gráfica y/o tabla. **NO repitas las filas en tu texto ni armes tablas en markdown**: se vería la misma información tres veces.
+- Tu texto interpreta: qué destaca, la magnitud relativa, alguna anomalía, y sobre qué periodo respondes. Dos o tres frases bastan.
+- Si el usuario pide explícitamente una lista o un valor puntual, entonces sí dilo en el texto.
+- En pbi_consultar declara "presentacion" según lo que pidió el usuario: "grafica" si pidió gráfica o comparación visual, "tabla" si pidió el detalle, la lista o cifras exactas, y "auto" si no lo especificó.
+
 Reglas sobre las cifras, obligatorias:
 - Si el formato de una medida es un porcentaje (por ejemplo "0.0%"), el valor llega como FRACCIÓN: 0.9946 significa 99.5%. Conviértelo antes de reportarlo. Nunca escribas "0.99%" cuando el dato es 0.9946.
 - Reporta montos con separador de miles y dos decimales.
@@ -107,6 +113,14 @@ const TOOLS = [
           },
           mes: { type: "string", description: "Mes del vocabulario del modelo. Opcional." },
           limite: { type: "number", description: "Máximo de renglones al agrupar." },
+          presentacion: {
+            type: "string",
+            enum: ["auto", "grafica", "tabla"],
+            description:
+              "Cómo mostrar el resultado, según lo que pidió el usuario. 'grafica' si pidió " +
+              "una gráfica o comparar visualmente; 'tabla' si pidió el detalle, la lista o " +
+              "cifras exactas; 'auto' si no lo especificó.",
+          },
         },
       },
     },
@@ -296,12 +310,16 @@ Deno.serve(async (req: Request) => {
         const r      = result as Record<string, unknown>;
 
         if (nombre === "pbi_consultar" && Array.isArray(r.rows)) {
+          // La presentación la pide el modelo porque él ve la intención del usuario. La
+          // FORMA de la gráfica sigue decidiéndola el cliente: eso es correctitud, no gusto.
+          const p = args.presentacion;
           structured = {
             type:      "pbi_rows",
             data:      r.rows,
             formatos:  r.formatos ?? null,
             truncated: r.truncated ?? false,
             consulta:  r.consulta ?? null,
+            presentacion: p === "grafica" || p === "tabla" ? p : "auto",
           };
         }
 

@@ -2039,6 +2039,7 @@ class _BiAiPanelState extends State<_BiAiPanel> {
       List<Map<String, dynamic>>? rows;
       Map<String, dynamic>? formatos;
       bool truncated = false;
+      String presentacion = 'auto';
       final structured = body['structured'];
       if (structured is Map && structured['type'] == 'pbi_rows') {
         final data = structured['data'];
@@ -2052,6 +2053,8 @@ class _BiAiPanelState extends State<_BiAiPanel> {
         final f = structured['formatos'];
         if (f is Map) formatos = Map<String, dynamic>.from(f);
         truncated = structured['truncated'] == true;
+        final p = structured['presentacion'];
+        if (p == 'grafica' || p == 'tabla') presentacion = p as String;
       }
 
       setState(() {
@@ -2062,6 +2065,7 @@ class _BiAiPanelState extends State<_BiAiPanel> {
           rows: rows,
           formatos: formatos,
           truncated: truncated,
+          presentacion: presentacion,
         ));
       });
       _scrollToBottom();
@@ -2199,23 +2203,13 @@ class _BiAiPanelState extends State<_BiAiPanel> {
                     final msg = _messages[i];
                     final rows = msg.rows;
                     if (rows == null) return _Bubble(msg: msg, c: c);
-                    // Tres lecturas del mismo resultado, de la más rápida a la más precisa:
-                    // el texto interpreta, la gráfica da la forma, la tabla el dato exacto.
+                    // Una sola lectura del resultado, no gráfica y tabla apiladas: el texto
+                    // interpreta y _ResultadoConsulta muestra la vista que corresponda.
                     return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         _Bubble(msg: msg, c: c),
-                        _ResultChart(
-                          rows: rows,
-                          formatos: msg.formatos,
-                          c: c,
-                        ),
-                        _ResultTable(
-                          rows: rows,
-                          formatos: msg.formatos,
-                          truncated: msg.truncated,
-                          c: c,
-                        ),
+                        _ResultadoConsulta(msg: msg, rows: rows, c: c),
                       ],
                     );
                   },
@@ -2340,12 +2334,19 @@ class _Bubble extends StatelessWidget {
     // Sin GestureDetector de copiar: el SelectionArea que envuelve la conversación ya
     // permite seleccionar y copiar, y en móvil el toque largo es justamente el gesto con el
     // que se inicia esa selección — competirían.
-    return Align(
+    // El ancho se deriva del disponible y no es fijo: con el panel en modo compacto (300px)
+    // un tope de 340 desbordaba y la burbuja se salía del panel.
+    return LayoutBuilder(
+      builder: (_, box) => Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 4),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        constraints: const BoxConstraints(maxWidth: 340),
+        constraints: BoxConstraints(
+          maxWidth: box.maxWidth.isFinite
+              ? (box.maxWidth * 0.94).clamp(160.0, 420.0)
+              : 340,
+        ),
         decoration: BoxDecoration(
           color: isUser ? c.brand : c.bg,
           borderRadius: BorderRadius.only(
@@ -2363,6 +2364,7 @@ class _Bubble extends StatelessWidget {
               color: isUser ? Colors.white : c.ink,
               height: 1.4),
         ),
+      ),
       ),
     );
   }
@@ -2409,13 +2411,139 @@ class _AiMsg {
 
   final bool truncated;
 
+  /// Qué mostrar: 'grafica', 'tabla' o 'auto'. La pide el modelo porque él ve la intención
+  /// del usuario; la FORMA de la gráfica la sigue decidiendo el cliente.
+  final String presentacion;
+
   const _AiMsg({
     required this.role,
     required this.text,
     this.rows,
     this.formatos,
     this.truncated = false,
+    this.presentacion = 'auto',
   });
+}
+
+/// Elige una sola lectura del resultado en lugar de apilar gráfica y tabla, con un alternador
+/// para cuando el modelo interpreta mal la intención.
+class _ResultadoConsulta extends StatefulWidget {
+  final _AiMsg msg;
+  final List<Map<String, dynamic>> rows;
+  final SiColors c;
+
+  const _ResultadoConsulta({
+    required this.msg,
+    required this.rows,
+    required this.c,
+  });
+
+  @override
+  State<_ResultadoConsulta> createState() => _ResultadoConsultaState();
+}
+
+class _ResultadoConsultaState extends State<_ResultadoConsulta> {
+  /// null = respetar lo que pidió el modelo; con valor = el usuario lo cambió a mano.
+  bool? _verGraficaManual;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.c;
+    final msg = widget.msg;
+    final fmt = _FormatoCifras(msg.formatos);
+    final graficable = _PlanGrafica.desde(widget.rows, fmt).isNotEmpty;
+
+    // Sin nada que graficar no hay decisión que tomar.
+    if (!graficable) {
+      return _ResultTable(
+        rows: widget.rows,
+        formatos: msg.formatos,
+        truncated: msg.truncated,
+        c: c,
+      );
+    }
+
+    final verGrafica = _verGraficaManual ?? msg.presentacion != 'tabla';
+
+    return LayoutBuilder(
+      builder: (_, box) {
+        // En angosto la gráfica no es legible, así que no se ofrece la opción.
+        final cabeGrafica = box.maxWidth >= _ResultChart.anchoMinimo;
+        final mostrarGrafica = verGrafica && cabeGrafica;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (cabeGrafica)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: _AlternadorVista(
+                  enGrafica: mostrarGrafica,
+                  onCambiar: (v) => setState(() => _verGraficaManual = v),
+                  c: c,
+                ),
+              ),
+            if (mostrarGrafica)
+              _ResultChart(rows: widget.rows, formatos: msg.formatos, c: c)
+            else
+              _ResultTable(
+                rows: widget.rows,
+                formatos: msg.formatos,
+                truncated: msg.truncated,
+                c: c,
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Par de botones para alternar entre gráfica y tabla.
+class _AlternadorVista extends StatelessWidget {
+  final bool enGrafica;
+  final ValueChanged<bool> onCambiar;
+  final SiColors c;
+
+  const _AlternadorVista({
+    required this.enGrafica,
+    required this.onCambiar,
+    required this.c,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: SiSpace.x2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _boton(Icons.bar_chart_rounded, 'Gráfica', enGrafica, () => onCambiar(true)),
+          const SizedBox(width: 4),
+          _boton(Icons.table_rows_rounded, 'Tabla', !enGrafica, () => onCambiar(false)),
+        ],
+      ),
+    );
+  }
+
+  Widget _boton(IconData icono, String tooltip, bool activo, VoidCallback onTap) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: activo ? null : onTap,
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+          decoration: BoxDecoration(
+            color: activo ? c.brandTint : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: activo ? c.brand.withValues(alpha: 0.35) : c.line),
+          ),
+          child: Icon(icono, size: 14, color: activo ? c.brand : c.ink3),
+        ),
+      ),
+    );
+  }
 }
 
 /// Tabla de resultados de una consulta al dataset.
@@ -2583,7 +2711,7 @@ class _FormatoCifras {
   }
 }
 
-class _ResultTable extends StatelessWidget {
+class _ResultTable extends StatefulWidget {
   final List<Map<String, dynamic>> rows;
   final Map<String, dynamic>? formatos;
   final bool truncated;
@@ -2597,9 +2725,28 @@ class _ResultTable extends StatelessWidget {
   });
 
   @override
+  State<_ResultTable> createState() => _ResultTableState();
+}
+
+class _ResultTableState extends State<_ResultTable> {
+  /// Con el panel angosto la tabla no cabe y hay que desplazarla. Sin una barra visible el
+  /// desplazamiento horizontal es invisible en escritorio: parecía que la tabla estaba
+  /// cortada en lugar de ser desplazable.
+  final _scrollH = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollH.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final rows = widget.rows;
+    final truncated = widget.truncated;
+    final c = widget.c;
     final llaves = rows.first.keys.toList();
-    final fmt = _FormatoCifras(formatos);
+    final fmt = _FormatoCifras(widget.formatos);
 
     return Container(
       margin: const EdgeInsets.only(top: SiSpace.x2, bottom: SiSpace.x2),
@@ -2610,9 +2757,16 @@ class _ResultTable extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Las tablas anchas se desplazan dentro de su caja, no arrastran el panel.
-          SingleChildScrollView(
+          // Las tablas anchas se desplazan dentro de su caja, no arrastran el panel. La barra
+          // va siempre visible: es lo que delata que hay más columnas a la derecha.
+          Scrollbar(
+            controller: _scrollH,
+            thumbVisibility: true,
+            scrollbarOrientation: ScrollbarOrientation.bottom,
+            child: SingleChildScrollView(
+            controller: _scrollH,
             scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.only(bottom: 6),
             child: DataTable(
               headingRowHeight: 34,
               dataRowMinHeight: 30,
@@ -2646,6 +2800,7 @@ class _ResultTable extends StatelessWidget {
                       ))
                   .toList(),
             ),
+          ),
           ),
           if (truncated)
             Padding(
