@@ -18,7 +18,6 @@ class _SchedulesPageState extends State<SchedulesPage> {
   final _supabase = Supabase.instance.client;
   bool _isLoading = true;
   List<Map<String, dynamic>> _schedules = [];
-  String _searchQuery = '';
 
   /// Tolerancia fija para la entrada, en minutos. Antes era configurable por horario; se
   /// unificó para que el criterio de retardo sea el mismo en toda la empresa.
@@ -471,120 +470,139 @@ class _SchedulesPageState extends State<SchedulesPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final c = SiColors.of(context);
 
-    final filteredSchedules = _schedules.where((s) {
-      final name = (s['name'] ?? '').toString().toLowerCase();
-      final zone = (s['zone'] ?? '').toString().toLowerCase();
-      return name.contains(_searchQuery.toLowerCase()) ||
-          zone.contains(_searchQuery.toLowerCase());
-    }).toList();
-
-    // Mismo andamio que el resto de las páginas: fondo de la app, barra de herramientas y
-    // contenido desplazable.
     return Scaffold(
       backgroundColor: c.bg,
       body: _isLoading
           ? Center(child: CircularProgressIndicator(color: c.brand))
-          : Column(
-              children: [
-                _buildToolbar(c, theme),
-                Expanded(
-                  child: filteredSchedules.isEmpty
-                      ? _buildVacio(c)
-                      : SingleChildScrollView(
-                          padding: const EdgeInsets.all(SiSpace.x6),
-                          child: Center(
-                            child: Card(
-                              child: PaginatedDataTable(
-                                columns: [
-                                  DataColumn(
-                                      label: Text('NOMBRE',
-                                          style: TextStyle(
-                                              color: c.ink3,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 11,
-                                              letterSpacing: 1))),
-                                  const DataColumn(label: SizedBox()), // Acciones
-                                ],
-                                source: _SchedulesDataSource(
-                                  schedules: filteredSchedules,
-                                  theme: theme,
-                                  siColors: c,
-                                  daysOfWeek: _daysOfWeek,
-                                  onDelete: (id) => _deleteSchedule(id),
-                                  onViewRules: (s) => _showRulesDialog(s),
-                                ),
-                                rowsPerPage: filteredSchedules.length > 10
-                                    ? 10
-                                    : filteredSchedules.length,
-                                showCheckboxColumn: false,
-                              ),
-                            ),
-                          ),
-                        ),
-                ),
-              ],
+          : LayoutBuilder(
+              builder: (context, box) {
+                // Un tercio del ancho: el resto queda reservado para las otras dos secciones.
+                // Abajo de 900px un tercio sería ilegible, así que la tarjeta toma todo.
+                final enColumnas = box.maxWidth >= 900;
+                final tarjeta = _buildTarjetaHorarios(c);
+
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.all(SiSpace.x6),
+                  child: enColumnas
+                      ? Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(child: tarjeta),
+                            // Espacio de las dos secciones por venir.
+                            const Expanded(flex: 2, child: SizedBox()),
+                          ],
+                        )
+                      : tarjeta,
+                );
+              },
             ),
     );
   }
 
-  Widget _buildToolbar(SiColors c, ThemeData theme) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-          horizontal: SiSpace.x6, vertical: SiSpace.x4),
-      decoration: BoxDecoration(
-        color: c.panel,
-        border: Border(bottom: BorderSide(color: c.line)),
-      ),
-      child: Row(
+  Widget _buildTarjetaHorarios(SiColors c) {
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 300),
-            child: SizedBox(
-              height: 38,
-              child: TextField(
-                onChanged: (value) => setState(() => _searchQuery = value),
-                decoration: InputDecoration(
-                  hintText: 'Buscar horario...',
-                  hintStyle: TextStyle(color: c.ink4, fontSize: 13),
-                  prefixIcon: const Icon(Icons.search, size: 18),
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: c.line)),
-                  enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: c.line)),
-                  focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: c.brand)),
-                  filled: true,
-                  fillColor: c.bg,
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+          // Encabezado de la tarjeta, con el botón de agregar sobre la lista.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(SiSpace.x4, SiSpace.x3, SiSpace.x2, SiSpace.x3),
+            child: Row(
+              children: [
+                Icon(Icons.schedule_outlined, size: 17, color: c.brand),
+                const SizedBox(width: SiSpace.x2),
+                Text('Horarios',
+                    style: TextStyle(
+                        fontSize: 15, fontWeight: FontWeight.w600, color: c.ink)),
+                const SizedBox(width: SiSpace.x2),
+                Text('${_schedules.length}',
+                    style: TextStyle(fontSize: 12, color: c.ink3)),
+                const Spacer(),
+                Tooltip(
+                  message: 'Nuevo horario',
+                  child: InkWell(
+                    onTap: showScheduleForm,
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: c.brand,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.add, size: 18, color: Colors.white),
+                    ),
+                  ),
                 ),
-                style: const TextStyle(fontSize: 13),
-              ),
+              ],
             ),
           ),
-          const Spacer(),
-          ElevatedButton.icon(
-            onPressed: showScheduleForm,
-            icon: const Icon(Icons.add, size: 16),
-            label: const Text('NUEVO',
-                style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 12,
-                    letterSpacing: 1)),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: c.brand,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              minimumSize: const Size(0, 36),
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              shape: const RoundedRectangleBorder(borderRadius: SiRadius.rMd),
+          Divider(height: 1, color: c.line),
+          if (_schedules.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: SiSpace.x8),
+              child: _buildVacio(c),
+            )
+          else
+            // Lista y no PaginatedDataTable: a un tercio de ancho su pie de paginación se
+            // come el espacio, y sus celdas de altura fija cortaban los nombres largos.
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _schedules.length,
+              separatorBuilder: (_, __) => Divider(height: 1, color: c.line2),
+              itemBuilder: (ctx, i) => _buildFilaHorario(_schedules[i], c),
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilaHorario(Map<String, dynamic> sched, SiColors c) {
+    final reglas = (sched['rules'] as List?) ?? const [];
+    final dias = reglas
+        .where((r) => r['type'] == 'ENTRADA')
+        .map((r) => r['day'])
+        .toSet()
+        .length;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(SiSpace.x4, SiSpace.x2, SiSpace.x2, SiSpace.x2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Sin recorte ni puntos suspensivos: el nombre es el único identificador y
+                // varios llevan las horas dentro, así que truncarlo los vuelve ambiguos.
+                Text(
+                  sched['name']?.toString() ?? '',
+                  softWrap: true,
+                  style: TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600, color: c.ink),
+                ),
+                const SizedBox(height: 2),
+                Text('$dias ${dias == 1 ? 'día' : 'días'}',
+                    style: TextStyle(fontSize: 11, color: c.ink3)),
+              ],
+            ),
+          ),
+          PopupMenuButton<String>(
+            icon: Icon(Icons.more_horiz, size: 18, color: c.ink3),
+            padding: EdgeInsets.zero,
+            tooltip: 'Opciones',
+            onSelected: (v) {
+              if (v == 'reglas') _showRulesDialog(sched);
+              if (v == 'eliminar') _deleteSchedule(sched['id']);
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'reglas', child: Text('Ver reglas')),
+              PopupMenuItem(value: 'eliminar', child: Text('Eliminar')),
+            ],
           ),
         ],
       ),
@@ -596,18 +614,10 @@ class _SchedulesPageState extends State<SchedulesPage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            _searchQuery.isEmpty ? Icons.schedule_outlined : Icons.search_off,
-            size: 56,
-            color: c.line,
-          ),
-          const SizedBox(height: SiSpace.x4),
-          Text(
-            _searchQuery.isEmpty
-                ? 'No hay horarios creados'
-                : 'Sin resultados para "$_searchQuery"',
-            style: TextStyle(color: c.ink3, fontSize: 15),
-          ),
+          Icon(Icons.schedule_outlined, size: 44, color: c.line),
+          const SizedBox(height: SiSpace.x3),
+          Text('No hay horarios creados',
+              style: TextStyle(color: c.ink3, fontSize: 13)),
         ],
       ),
     );
@@ -639,57 +649,4 @@ class _SchedulesPageState extends State<SchedulesPage> {
       ),
     );
   }
-}
-
-class _SchedulesDataSource extends DataTableSource {
-  final List<Map<String, dynamic>> schedules;
-  final ThemeData theme;
-  final SiColors siColors;
-  final List<String> daysOfWeek;
-  final Function(String) onDelete;
-  final Function(Map<String, dynamic>) onViewRules;
-
-  _SchedulesDataSource({
-    required this.schedules,
-    required this.theme,
-    required this.siColors,
-    required this.daysOfWeek,
-    required this.onDelete,
-    required this.onViewRules,
-  });
-
-  @override
-  DataRow? getRow(int index) {
-    if (index >= schedules.length) return null;
-    final sched = schedules[index];
-
-    return DataRow.byIndex(
-      index: index,
-      cells: [
-        DataCell(Text(sched['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold))),
-        DataCell(Align(
-          alignment: Alignment.centerRight,
-          child: PopupMenuButton<String>(
-            icon: Icon(Icons.more_horiz, color: siColors.ink3),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            onSelected: (val) {
-              if (val == 'rules') onViewRules(sched);
-              if (val == 'delete') onDelete(sched['id']);
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(value: 'rules', child: ListTile(leading: Icon(Icons.rule_outlined), title: Text('Ver Reglas'), dense: true)),
-              PopupMenuItem(value: 'delete', child: ListTile(leading: Icon(Icons.delete_outline, color: siColors.danger), title: Text('Eliminar', style: TextStyle(color: siColors.danger)), dense: true)),
-            ],
-          ),
-        )),
-      ],
-    );
-  }
-
-  @override
-  bool get isRowCountApproximate => false;
-  @override
-  int get rowCount => schedules.length;
-  @override
-  int get selectedRowCount => 0;
 }
