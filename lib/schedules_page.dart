@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'checador_dashboard.dart';
 import 'theme/si_theme.dart';
 
 /// Administración de horarios. Es lo único que quedó de la página de Asistencia: el checador y
@@ -478,8 +479,8 @@ class _SchedulesPageState extends State<SchedulesPage> {
           ? Center(child: CircularProgressIndicator(color: c.brand))
           : LayoutBuilder(
               builder: (context, box) {
-                // Un tercio del ancho: el resto queda reservado para las otras dos secciones.
-                // Abajo de 900px un tercio sería ilegible, así que la tarjeta toma todo.
+                // Un tercio para los horarios; los otros dos para el dashboard del checador.
+                // Abajo de 900px un tercio sería ilegible, así que se apila todo.
                 final enColumnas = box.maxWidth >= 900;
                 final tarjeta = _buildTarjetaHorarios(c);
 
@@ -490,11 +491,18 @@ class _SchedulesPageState extends State<SchedulesPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Expanded(child: tarjeta),
-                            // Espacio de las dos secciones por venir.
-                            const Expanded(flex: 2, child: SizedBox()),
+                            const SizedBox(width: SiSpace.x4),
+                            const Expanded(flex: 2, child: ChecadorDashboard()),
                           ],
                         )
-                      : tarjeta,
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            tarjeta,
+                            const SizedBox(height: SiSpace.x4),
+                            const ChecadorDashboard(),
+                          ],
+                        ),
                 );
               },
             ),

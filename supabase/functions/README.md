@@ -283,6 +283,82 @@ La asignación reporte → dataset debe salir de `GET /groups/{groupId}/reports`
 del nombre:** hay dos datasets de proveedores (`PROVEEDORES` y `PROVEEDORES - SISOL`) y un mismo
 modelo puede alimentar varios reportes.
 
+## `checador-import`
+
+Importa el reporte de checadas que exporta **appchecar.com**, la aplicación externa que hace de
+checador real. Consumido por `lib/checador_dashboard.dart`, dentro de la página de Asistencia.
+
+`verify_jwt: true`.
+
+### Contrato
+
+Request: `{ archivo?: string, contenido_base64: string }`
+
+Response:
+
+```json
+{
+  "ok": true,
+  "importacion_id": "...",
+  "periodo": { "inicio": "2026-07-16", "fin": "2026-07-31", "dias": 15 },
+  "filas": { "leidas": 877, "nuevas": 877, "actualizadas": 0, "omitidas": 0 },
+  "registros": { "entradas": 509, "salidas": 368 },
+  "empleados": 44,
+  "sin_empatar": { "empleados": [], "horarios": [] }
+}
+```
+
+`sin_empatar` es la parte que importa: un import que sólo dijera "listo" escondería a un empleado
+nuevo o a un horario renombrado en appchecar, y esas filas quedan fuera del cálculo de
+puntualidad. También se persiste en `checador_importaciones`.
+
+### Permisos
+
+**Sólo `profiles.role == 'admin'`.** Cargar un reporte reescribe el histórico de asistencia de
+toda la empresa, así que se usa el mismo criterio que la escritura en `schedules`, no el permiso
+de ver la página.
+
+### Lo que el archivo real enseñó
+
+Estas seis cosas están verificadas contra `Checador 07_16_2026 al 07_31_2026.xls` (877 filas) y
+son la razón de que el parser sea como es:
+
+1. **El `.xls` es HTML**, no Excel: BOM UTF-8 y un `<table>`. `Excel.decodeBytes` falla con él.
+
+2. **La columna `Diferencia` no sirve para saber quién llegó tarde.** Es un valor absoluto sin
+   signo: `"4 min"` se ve idéntico si la persona llegó 4 minutos antes o 4 minutos tarde. El
+   retardo se calcula en la vista `checador_entradas` contra nuestra tabla `schedules`.
+
+3. **El signo sí viaja en el reporte, pero en el color de la celda:** verde `#4fc725` a tiempo,
+   rojo `#ee6082` fuera de tiempo, negro con `---` sin referencia. Se guarda en
+   `retardo_reportado`. Se clasifica comparando rojo contra verde y no por el hex exacto, para
+   que siga funcionando si appchecar ajusta su paleta.
+
+4. **Los ceros iniciales del número de empleado son inconsistentes en ambos lados:** el reporte
+   trae `0162` y `170`; `profiles` tiene 1000 de 2488 con ceros. Se normalizan los dos. Verificado
+   que quitar ceros no crea colisiones: los 2488 perfiles siguen siendo distintos.
+
+5. **Tres de los 18 nombres de horario traen espacios dobles** (`'Punta Pacifico  L-S'`). Sin
+   normalizar espacios esos tres no se unen; normalizando empatan 18/18, cada uno a un solo
+   horario.
+
+6. **Hay un empleado sin número** (Moises Caldera Meza, 26 registros). Por eso la identidad de la
+   llave única cae al nombre — ver la columna generada `clave` en la migración
+   `20260805200000_checador_registros.sql`. Sin eso, dos personas sin número que checaran a la
+   misma hora se fundirían en una sola fila, en silencio. El `profile_id` se resuelve por número
+   y, si falta, por nombre completo exacto **sólo si es único**: `MOISES` aparece 5 veces en
+   `profiles`, así que emparejar por nombre de pila asignaría checadas a otra persona.
+
+Las columnas se mapean **por nombre de encabezado, no por posición**: un parser posicional leería
+los datos corridos, sin fallar, si appchecar insertara una columna.
+
+### Por qué las cifras no coinciden con appchecar
+
+appchecar marcó **104** de las 506 primeras entradas del periodo de julio como fuera de tiempo; el
+cálculo contra nuestros horarios da un número cercano pero no idéntico. La causa es que cada
+sistema tiene su propia configuración de horarios y ya difieren en ~3% de los casos. El dashboard
+muestra las dos cifras juntas para que la diferencia sea visible en lugar de parecer un error.
+
 ## Desplegar
 
 Requiere `supabase login` una vez (es interactivo, abre el navegador). **Correr desde la raíz del
