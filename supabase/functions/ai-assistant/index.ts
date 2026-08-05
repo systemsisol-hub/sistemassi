@@ -26,7 +26,7 @@ const ADMIN_COLABORADOR_FIELDS =
 
 const USER_ALLOWED_TOOLS = new Set([
   "buscar_colaborador", "buscar_incidencias", "buscar_inventario",
-  "buscar_contactos", "ver_asistencia",
+  "buscar_contactos",
   "crear_incidencia", "enviar_notificacion",
   "calcular_vacaciones",
 ]);
@@ -39,7 +39,7 @@ const ADMIN_ONLY_TOOLS = new Set([
 const SYSTEM_ADMIN =
 `Eres el asistente administrativo de Sisol Soluciones Inmobiliarias con acceso completo al sistema.
 Respondes siempre en español, de forma clara y concisa. Fecha actual: ${today}.
-Tienes acceso completo para consultar, crear y actualizar colaboradores, incidencias, inventario, contactos y asistencia.
+Tienes acceso completo para consultar, crear y actualizar colaboradores, incidencias, inventario y contactos.
 Puedes calcular los días de vacaciones disponibles de cualquier colaborador con la herramienta calcular_vacaciones.
 
 Reglas importantes:
@@ -139,20 +139,6 @@ const ALL_TOOLS = [
         properties: {
           nombre: { type: "string" }, empresa: { type: "string" },
           correo: { type: "string" }, limit: { type: "number" },
-        },
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "ver_asistencia",
-      description: "Consulta registros de asistencia de un colaborador.",
-      parameters: {
-        type: "object",
-        properties: {
-          colaborador_id: { type: "string" },
-          fecha_inicio: { type: "string" }, fecha_fin: { type: "string" }, limit: { type: "number" },
         },
       },
     },
@@ -559,19 +545,6 @@ async function runTool(
     }
   }
 
-  // ── ASISTENCIA ────────────────────────────────────────────────────
-  if (name === "ver_asistencia") {
-    let q = db.from("attendance").select(
-      "id,colaborador_id,check_in,check_out,date,validated,lat,lng"
-    );
-    if (input.colaborador_id) q = (q as any).eq("colaborador_id", input.colaborador_id);
-    if (input.fecha_inicio)   q = (q as any).gte("date", input.fecha_inicio);
-    if (input.fecha_fin)      q = (q as any).lte("date", input.fecha_fin);
-    q = (q as any).limit((input.limit as number) || 30).order("date", { ascending: false });
-    const { data, error } = await q;
-    if (error) return { error: error.message };
-    return { results: data, count: data?.length || 0 };
-  }
 
   // ── NOTIFICACIONES ────────────────────────────────────────────────────
   if (name === "enviar_notificacion") {
@@ -655,7 +628,7 @@ Deno.serve(async (req: Request) => {
         // Capturar datos estructurados para el UI de Flutter
         if (name === "buscar_colaborador" && r.results) {
           structuredData = { type: "collaborators", data: r.results };
-        } else if (["buscar_incidencias","buscar_inventario","buscar_contactos","ver_asistencia"].includes(name) && r.results) {
+        } else if (["buscar_incidencias","buscar_inventario","buscar_contactos"].includes(name) && r.results) {
           structuredData = { type: name.replace("buscar_","").replace("ver_",""), data: r.results };
         } else if (name === "calcular_vacaciones" && !r.error) {
           structuredData = { type: "vacaciones", data: result };

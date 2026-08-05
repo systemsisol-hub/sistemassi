@@ -1,19 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:intl/intl.dart';
 import 'theme/si_theme.dart';
 
+/// Administración de horarios. Es lo único que quedó de la página de Asistencia: el checador y
+/// su panel administrativo se retiraron.
+///
+/// Antes se dibujaba sin Scaffold porque vivía incrustada en ese panel. Ahora es una página
+/// completa, con los parámetros del modo incrustado retirados.
 class SchedulesPage extends StatefulWidget {
-  final bool hideAddButton;
-  final bool hideSearch;
-  final String? title;
-  const SchedulesPage({super.key, this.hideAddButton = false, this.hideSearch = false, this.title});
+  const SchedulesPage({super.key});
 
   @override
-  State<SchedulesPage> createState() => SchedulesPageState();
+  State<SchedulesPage> createState() => _SchedulesPageState();
 }
 
-class SchedulesPageState extends State<SchedulesPage> {
+class _SchedulesPageState extends State<SchedulesPage> {
   final _supabase = Supabase.instance.client;
   bool _isLoading = true;
   List<Map<String, dynamic>> _schedules = [];
@@ -52,11 +53,6 @@ class SchedulesPageState extends State<SchedulesPage> {
     }
   }
 
-  void _removeRule(int index) {
-    setState(() {
-      _currentRules.removeAt(index);
-    });
-  }
 
   Future<void> _saveSchedule() async {
     // Generación Automática: si el usuario ha marcado días, generamos las reglas antes de guardar
@@ -393,82 +389,142 @@ class SchedulesPageState extends State<SchedulesPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final c = SiColors.of(context);
-    final screenWidth = MediaQuery.of(context).size.width;
-    
+
     final filteredSchedules = _schedules.where((s) {
       final name = (s['name'] ?? '').toString().toLowerCase();
       final zone = (s['zone'] ?? '').toString().toLowerCase();
-      return name.contains(_searchQuery.toLowerCase()) || zone.contains(_searchQuery.toLowerCase());
+      return name.contains(_searchQuery.toLowerCase()) ||
+          zone.contains(_searchQuery.toLowerCase());
     }).toList();
 
-    return SizedBox(
-      width: double.infinity,
-      child: PaginatedDataTable(
-        header: Row(
-          children: [
-            if (widget.title != null) ...[
-              Text(
-                widget.title!,
+    // Mismo andamio que el resto de las páginas: fondo de la app, barra de herramientas y
+    // contenido desplazable.
+    return Scaffold(
+      backgroundColor: c.bg,
+      body: _isLoading
+          ? Center(child: CircularProgressIndicator(color: c.brand))
+          : Column(
+              children: [
+                _buildToolbar(c, theme),
+                Expanded(
+                  child: filteredSchedules.isEmpty
+                      ? _buildVacio(c)
+                      : SingleChildScrollView(
+                          padding: const EdgeInsets.all(SiSpace.x6),
+                          child: Center(
+                            child: Card(
+                              child: PaginatedDataTable(
+                                columns: [
+                                  DataColumn(
+                                      label: Text('NOMBRE',
+                                          style: TextStyle(
+                                              color: c.ink3,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 11,
+                                              letterSpacing: 1))),
+                                  const DataColumn(label: SizedBox()), // Acciones
+                                ],
+                                source: _SchedulesDataSource(
+                                  schedules: filteredSchedules,
+                                  theme: theme,
+                                  siColors: c,
+                                  daysOfWeek: _daysOfWeek,
+                                  onDelete: (id) => _deleteSchedule(id),
+                                  onViewRules: (s) => _showRulesDialog(s),
+                                ),
+                                rowsPerPage: filteredSchedules.length > 10
+                                    ? 10
+                                    : filteredSchedules.length,
+                                showCheckboxColumn: false,
+                              ),
+                            ),
+                          ),
+                        ),
+                ),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildToolbar(SiColors c, ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+          horizontal: SiSpace.x6, vertical: SiSpace.x4),
+      decoration: BoxDecoration(
+        color: c.panel,
+        border: Border(bottom: BorderSide(color: c.line)),
+      ),
+      child: Row(
+        children: [
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 300),
+            child: SizedBox(
+              height: 38,
+              child: TextField(
+                onChanged: (value) => setState(() => _searchQuery = value),
+                decoration: InputDecoration(
+                  hintText: 'Buscar horario...',
+                  hintStyle: TextStyle(color: c.ink4, fontSize: 13),
+                  prefixIcon: const Icon(Icons.search, size: 18),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: c.line)),
+                  enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: c.line)),
+                  focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide(color: c.brand)),
+                  filled: true,
+                  fillColor: c.bg,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                ),
+                style: const TextStyle(fontSize: 13),
+              ),
+            ),
+          ),
+          const Spacer(),
+          ElevatedButton.icon(
+            onPressed: showScheduleForm,
+            icon: const Icon(Icons.add, size: 16),
+            label: const Text('NUEVO',
                 style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                  letterSpacing: 1,
-                  color: theme.colorScheme.primary,
-                ),
-              ),
-              const SizedBox(width: 16),
-            ],
-            if (!widget.hideSearch)
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 300),
-                child: SizedBox(
-                  height: 38,
-                  child: TextField(
-                    onChanged: (value) => setState(() => _searchQuery = value),
-                    decoration: InputDecoration(
-                      hintText: 'Buscar horario...',
-                      hintStyle: TextStyle(color: c.ink4, fontSize: 13),
-                      prefixIcon: const Icon(Icons.search, size: 18),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: c.line)),
-                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: c.line)),
-                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: theme.colorScheme.primary)),
-                      filled: true,
-                      fillColor: c.panel,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                    ),
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                ),
-              ),
-            const Spacer(),
-            if (!widget.hideAddButton)
-              ElevatedButton.icon(
-                onPressed: showScheduleForm,
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('NUEVO', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: theme.colorScheme.primary,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                ),
-              ),
-          ],
-        ),
-        columns: [
-          DataColumn(label: Text('NOMBRE', style: TextStyle(color: c.ink3, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1))),
-          const DataColumn(label: SizedBox()), // Acciones
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                    letterSpacing: 1)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: c.brand,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              minimumSize: const Size(0, 36),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              shape: const RoundedRectangleBorder(borderRadius: SiRadius.rMd),
+            ),
+          ),
         ],
-        source: _SchedulesDataSource(
-          schedules: filteredSchedules,
-          theme: theme,
-          siColors: c,
-          daysOfWeek: _daysOfWeek,
-          onDelete: (id) => _deleteSchedule(id),
-          onViewRules: (s) => _showRulesDialog(s),
-        ),
-        rowsPerPage: filteredSchedules.isEmpty ? 1 : (filteredSchedules.length > 5 ? 5 : filteredSchedules.length),
-        showCheckboxColumn: false,
+      ),
+    );
+  }
+
+  Widget _buildVacio(SiColors c) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            _searchQuery.isEmpty ? Icons.schedule_outlined : Icons.search_off,
+            size: 56,
+            color: c.line,
+          ),
+          const SizedBox(height: SiSpace.x4),
+          Text(
+            _searchQuery.isEmpty
+                ? 'No hay horarios creados'
+                : 'Sin resultados para "$_searchQuery"',
+            style: TextStyle(color: c.ink3, fontSize: 15),
+          ),
+        ],
       ),
     );
   }
@@ -522,12 +578,6 @@ class _SchedulesDataSource extends DataTableSource {
   DataRow? getRow(int index) {
     if (index >= schedules.length) return null;
     final sched = schedules[index];
-    final List<dynamic> rules = sched['rules'] ?? [];
-    
-    // Resumen de días
-    final daysIndices = rules.map((r) => r['day'] as int).toSet().toList();
-    daysIndices.sort();
-    final daysSummary = daysIndices.map((i) => daysOfWeek[i].substring(0, 2)).join(', ');
 
     return DataRow.byIndex(
       index: index,

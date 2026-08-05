@@ -526,7 +526,7 @@ class SiTheme {
       ),
 
       scrollbarTheme: ScrollbarThemeData(
-        thumbColor: WidgetStateProperty.all(c.ink4.withValues(alpha: 0.4)),
+        thumbColor: WidgetStateProperty.all(c.ink4.withOpacity(0.4)),
         thickness: WidgetStateProperty.all(6),
         radius: const Radius.circular(3),
       ),

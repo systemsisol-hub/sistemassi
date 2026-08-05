@@ -12,7 +12,7 @@ import 'social_page.dart';
 import 'external_contacts_page.dart';
 import 'widgets/notification_bell.dart';
 import 'calendar_page.dart';
-import 'attendance_hub_page.dart';
+import 'schedules_page.dart';
 import 'bi_page.dart';
 import 'signature_generator_page.dart';
 import 'tablas_page.dart';
@@ -174,8 +174,9 @@ class _MainNavigationState extends State<MainNavigation> {
         'title': 'Asistencia',
         'icon': Icons.fingerprint,
         'activeIcon': Icons.fingerprint,
-        'widget': AttendanceHubPage(
-            role: widget.role, permissions: widget.permissions),
+        // La página ahora sólo administra horarios: el checador y su panel se retiraron. Se
+        // conserva el nombre y el permiso show_asistencia para no alterar accesos existentes.
+        'widget': const SchedulesPage(),
       });
     }
     if (widget.permissions['show_powerbi'] == true) {
