@@ -45,35 +45,16 @@ const hoy = new Date().toLocaleDateString("es-MX", {
 
 // ── Prompt ───────────────────────────────────────────────────────────────────
 
-function systemPrompt(userName: string, reportTitle: string | null): string {
-  const conReporte = reportTitle !== null;
-
-  const encabezado = conReporte
-    ? `Ayudas a ${userName} a interpretar el reporte de Power BI "${reportTitle}".`
-    : `Ayudas a ${userName} a armar un panel a partir de sus reportes de Power BI. Todavía no hay ninguno elegido.`;
-
-  const comoEmpezar = conReporte
-    ? `1. Llama pbi_modelo antes de tu primera consulta. Usa los nombres EXACTOS que devuelve; no los adivines, traduzcas ni corrijas.`
-    : `1. Empieza llamando pbi_reportes y pregúntale a ${userName} sobre cuál reporte quiere trabajar. Menciona sólo los que vengan con consultable en true; de los demás aclara que aún no tienen datos configurados.
-2. Con el link_id elegido, llama pbi_modelo y cuéntale en pocas palabras qué puede consultar ahí: los grupos de medidas y los desgloses disponibles, no la lista completa.
-3. Propón una o dos opciones concretas de panel antes de consultar, para no adivinar qué quiere ver.
-4. Pasa ese mismo link_id en todas las llamadas siguientes.`;
-
-  return `Eres analista de datos financieros de Sisol Soluciones Inmobiliarias. ${encabezado}
+function systemPrompt(userName: string, reportTitle: string): string {
+  return `Eres analista de datos financieros de Sisol Soluciones Inmobiliarias. Ayudas a ${userName} a interpretar el reporte de Power BI "${reportTitle}".
 Respondes siempre en español, con precisión y sin adornos. Fecha actual: ${hoy}.
 
-Tu ÚNICA fuente de datos son las herramientas de Power BI. No tienes acceso a colaboradores, incidencias, inventario, contactos ni asistencia: si preguntan de eso, aclara que este asistente cubre sólo los reportes de BI.
+Tu ÚNICA fuente de datos son pbi_modelo y pbi_consultar. No tienes acceso a colaboradores, incidencias, inventario, contactos ni asistencia: si preguntan de eso, aclara que este asistente cubre sólo el reporte abierto.
 
 Cómo trabajar:
-${comoEmpezar}
-- En pbi_consultar no escribes DAX: das medidas, agrupación y periodo. El servidor fija el contexto de fecha.
-- Declara siempre sobre qué periodo respondes. Por defecto es "Actual", el mismo que muestran los paneles.
-
-Cómo redactar — importante:
-- Tus resultados se muestran aparte, como gráfica y/o tabla. **NO repitas las filas en tu texto ni armes tablas en markdown**: se vería la misma información tres veces.
-- Tu texto interpreta: qué destaca, la magnitud relativa, alguna anomalía, y sobre qué periodo respondes. Dos o tres frases bastan.
-- Si el usuario pide explícitamente una lista o un valor puntual, entonces sí dilo en el texto.
-- En pbi_consultar declara "presentacion" según lo que pidió el usuario: "grafica" si pidió gráfica o comparación visual, "tabla" si pidió el detalle, la lista o cifras exactas, y "auto" si no lo especificó.
+1. Llama pbi_modelo antes de tu primera consulta. Usa los nombres EXACTOS que devuelve; no los adivines, traduzcas ni corrijas.
+2. En pbi_consultar no escribes DAX: das medidas, agrupación y periodo. El servidor fija el contexto de fecha.
+3. Declara siempre sobre qué periodo respondes. Por defecto es "Actual", el mismo que muestra el panel en pantalla.
 
 Reglas sobre las cifras, obligatorias:
 - Si el formato de una medida es un porcentaje (por ejemplo "0.0%"), el valor llega como FRACCIÓN: 0.9946 significa 99.5%. Conviértelo antes de reportarlo. Nunca escribas "0.99%" cuando el dato es 0.9946.
@@ -90,37 +71,15 @@ Verificación de consistencia — importante:
 
 // ── Herramientas ─────────────────────────────────────────────────────────────
 
-/** Sólo se ofrece cuando no hay reporte en contexto: el flujo guiado de creación de paneles. */
-const TOOL_REPORTES = {
-  type: "function",
-  function: {
-    name: "pbi_reportes",
-    description:
-      "Lista los reportes que este usuario puede consultar, con su link_id y si tienen datos " +
-      "disponibles. Úsala cuando no sepas sobre cuál reporte trabajar, para preguntarle al " +
-      "usuario cuál quiere.",
-    parameters: { type: "object", properties: {}, required: [] },
-  },
-};
-
 const TOOLS = [
   {
     type: "function",
     function: {
       name: "pbi_modelo",
       description:
-        "Devuelve las medidas y columnas disponibles de un reporte, con el formato de cada " +
-        "medida. Llámala SIEMPRE antes de tu primera consulta: los nombres deben ser exactos.",
-      parameters: {
-        type: "object",
-        properties: {
-          link_id: {
-            type: "string",
-            description:
-              "Reporte a inspeccionar. Obligatorio si no hay uno abierto; si lo hay, se ignora.",
-          },
-        },
-      },
+        "Devuelve las medidas y columnas disponibles del reporte abierto, con el formato de " +
+        "cada medida. Llámala SIEMPRE antes de tu primera consulta: los nombres deben ser exactos.",
+      parameters: { type: "object", properties: {}, required: [] },
     },
   },
   {
@@ -134,11 +93,6 @@ const TOOLS = [
         type: "object",
         required: ["medidas"],
         properties: {
-          link_id: {
-            type: "string",
-            description:
-              "Reporte a consultar. Obligatorio si no hay uno abierto; si lo hay, se ignora.",
-          },
           medidas: {
             type: "array", items: { type: "string" },
             description: "Nombres EXACTOS de medidas, tal como los devuelve pbi_modelo.",
@@ -153,14 +107,6 @@ const TOOLS = [
           },
           mes: { type: "string", description: "Mes del vocabulario del modelo. Opcional." },
           limite: { type: "number", description: "Máximo de renglones al agrupar." },
-          presentacion: {
-            type: "string",
-            enum: ["auto", "grafica", "tabla"],
-            description:
-              "Cómo mostrar el resultado, según lo que pidió el usuario. 'grafica' si pidió " +
-              "una gráfica o comparar visualmente; 'tabla' si pidió el detalle, la lista o " +
-              "cifras exactas; 'auto' si no lo especificó.",
-          },
         },
       },
     },
@@ -177,28 +123,9 @@ type ToolInput = Record<string, unknown>;
 async function ejecutarHerramienta(
   name: string,
   input: ToolInput,
-  linkFijo: string | null,
+  linkId: string,
   authHeader: string,
 ): Promise<unknown> {
-  // Un reporte abierto manda sobre lo que diga el modelo: si el usuario está viendo
-  // PROVEEDORES, el asistente no puede desviarse a otro dataset. Sin reporte abierto el
-  // modelo elige, y pbi-query valida que el usuario tenga acceso a ese enlace.
-  const linkId = linkFijo ?? (typeof input.link_id === "string" ? input.link_id : null);
-
-  if (name === "pbi_reportes") {
-    if (linkFijo) {
-      return { error: "Ya estás trabajando sobre un reporte; no hace falta listarlos." };
-    }
-    return await llamarPbiQuery({ accion: "reportes" }, authHeader);
-  }
-
-  if (!linkId) {
-    return {
-      error: "Falta indicar el reporte. Llama primero pbi_reportes, pregúntale al usuario " +
-             "cuál quiere, y pasa su link_id.",
-    };
-  }
-
   const body: Record<string, unknown> = { link_id: linkId };
 
   if (name === "pbi_modelo") {
@@ -216,14 +143,6 @@ async function ejecutarHerramienta(
     return { error: `Herramienta desconocida: ${name}` };
   }
 
-  return await llamarPbiQuery(body, authHeader);
-}
-
-/** Único punto de salida hacia pbi-query, reenviando el JWT del usuario. */
-async function llamarPbiQuery(
-  body: Record<string, unknown>,
-  authHeader: string,
-): Promise<unknown> {
   try {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/pbi-query`, {
       method:  "POST",
@@ -268,10 +187,7 @@ function parseArgs(raw: string | ToolInput | undefined): ToolInput {
   }
 }
 
-async function llamarModelo(
-  msgs: ChatMessage[],
-  tools: unknown[],
-): Promise<ChatMessage> {
+async function llamarModelo(msgs: ChatMessage[]): Promise<ChatMessage> {
   if (!AI_BASE_URL || !AI_API_KEY) {
     throw new Error(
       "El asistente de BI no está configurado: faltan AI_BASE_URL y AI_API_KEY. " +
@@ -289,7 +205,7 @@ async function llamarModelo(
     body: JSON.stringify({
       model:       AI_MODEL,
       messages:    msgs,
-      tools,
+      tools:       TOOLS,
       tool_choice: "auto",
       stream:      false,
     }),
@@ -344,20 +260,17 @@ Deno.serve(async (req: Request) => {
       titulo?: unknown;
     };
 
+    if (typeof link_id !== "string" || link_id.length === 0) {
+      return reply({ error: "Falta link_id: este asistente siempre opera sobre un reporte." }, 400);
+    }
     if (!Array.isArray(messages) || messages.length === 0) {
       return reply({ error: "Falta el historial de mensajes." }, 400);
     }
 
-    // Sin link_id el asistente entra en modo guiado: lista los reportes y pregunta cuál. Con
-    // link_id queda fijo a ese reporte y no puede desviarse a otro dataset.
-    const linkFijo = typeof link_id === "string" && link_id.length > 0 ? link_id : null;
-
-    // El título es cosmético para el prompt; la autorización la hace pbi-query.
-    const reportTitle = linkFijo === null
-        ? null
-        : (typeof titulo === "string" && titulo.length > 0 ? titulo : "el reporte abierto");
-
-    const tools = linkFijo === null ? [TOOL_REPORTES, ...TOOLS] : TOOLS;
+    // El título es cosmético para el prompt; la autorización del reporte la hace pbi-query.
+    const reportTitle = typeof titulo === "string" && titulo.length > 0
+      ? titulo
+      : "el reporte abierto";
 
     const msgs: ChatMessage[] = [
       { role: "system", content: systemPrompt(userFullName, reportTitle) },
@@ -367,7 +280,7 @@ Deno.serve(async (req: Request) => {
     let structured: unknown = null;
 
     for (let i = 0; i < MAX_ITERACIONES; i++) {
-      const msg = await llamarModelo(msgs, tools);
+      const msg = await llamarModelo(msgs);
       const calls = msg.tool_calls ?? [];
 
       if (calls.length === 0) {
@@ -379,28 +292,16 @@ Deno.serve(async (req: Request) => {
       for (const call of calls) {
         const nombre = call.function?.name ?? "";
         const args   = parseArgs(call.function?.arguments);
-        const result = await ejecutarHerramienta(nombre, args, linkFijo, auth);
+        const result = await ejecutarHerramienta(nombre, args, link_id, auth);
         const r      = result as Record<string, unknown>;
 
         if (nombre === "pbi_consultar" && Array.isArray(r.rows)) {
-          // La presentación la pide el modelo porque él ve la intención del usuario. La
-          // FORMA de la gráfica sigue decidiéndola el cliente: eso es correctitud, no gusto.
-          const p = args.presentacion;
           structured = {
             type:      "pbi_rows",
             data:      r.rows,
             formatos:  r.formatos ?? null,
             truncated: r.truncated ?? false,
             consulta:  r.consulta ?? null,
-            presentacion: p === "grafica" || p === "tabla" ? p : "auto",
-            // Lo que el cliente necesita para poder guardar el resultado como panel: sobre
-            // qué reporte y con qué periodo se consultó. En modo guiado el reporte lo eligió
-            // el modelo, así que el cliente no lo sabría de otra forma.
-            report:  r.report ?? null,
-            periodo: (args.anio || args.mes)
-              ? { anio: args.anio ?? null, mes: args.mes ?? null }
-              : null,
-            limite: typeof args.limite === "number" ? args.limite : null,
           };
         }
 

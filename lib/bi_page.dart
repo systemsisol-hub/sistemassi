@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -20,15 +19,8 @@ class _BiPageState extends State<BiPage> {
   final _supabase = Supabase.instance.client;
   List<Map<String, dynamic>> _links = [];
   List<Map<String, dynamic>> _grupos = [];
-  List<Map<String, dynamic>> _paneles = [];
   bool _isLoading = true;
   bool get _isAdmin => widget.role == 'admin';
-
-  /// Mismo criterio que aplican las Edge Functions: admin o permiso show_ai explícito. Si el
-  /// botón apareciera sin el permiso, cada pregunta devolvería 403 y parecería una falla.
-  bool get _puedeUsarAsistente =>
-      _isAdmin || widget.permissions['show_ai'] == true;
-
   final _searchController = TextEditingController();
   String _searchQuery = '';
 
@@ -93,8 +85,6 @@ class _BiPageState extends State<BiPage> {
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
 
-      await _fetchPaneles();
-
       if (mounted) setState(() => _isLoading = false);
     } catch (e) {
       debugPrint('Error fetching BI data: $e');
@@ -108,27 +98,6 @@ class _BiPageState extends State<BiPage> {
     }
   }
 
-  /// Los paneles del usuario. El filtrado por dueño lo hace RLS en la base — aquí no se
-  /// filtra por user_id a propósito, para que la restricción viva en un solo lugar.
-  Future<void> _fetchPaneles() async {
-    if (!_puedeUsarAsistente) {
-      _paneles = [];
-      return;
-    }
-    try {
-      final raw = await _supabase
-          .from('bi_paneles')
-          .select('id, link_id, titulo, medidas, agrupar_por, periodo, limite, '
-              'presentacion, powerbi_links(title)')
-          .order('orden')
-          .order('created_at');
-      _paneles = (raw as List).map((e) => Map<String, dynamic>.from(e)).toList();
-    } catch (e) {
-      debugPrint('Error fetching paneles: $e');
-      _paneles = [];
-    }
-  }
-
   List<Map<String, dynamic>> get _filtered {
     if (_searchQuery.isEmpty) return _links;
     final q = _searchQuery.toLowerCase();
@@ -139,37 +108,6 @@ class _BiPageState extends State<BiPage> {
           (l['descripcion'] ?? '').toString().toLowerCase().contains(q) ||
           grupoName.contains(q);
     }).toList();
-  }
-
-  /// Abre el asistente sin reporte. Al no mandar link_id, la Edge Function lista los reportes
-  /// accesibles y pregunta con cuál trabajar.
-  void _nuevoPanelGuiado() {
-    final c = SiColors.of(context);
-    final mq = MediaQuery.of(context);
-    final angosto = mq.size.width <= 700;
-
-    showDialog(
-      context: context,
-      barrierColor: Colors.black54,
-      builder: (ctx) => Dialog(
-        backgroundColor: c.panel,
-        insetPadding: EdgeInsets.symmetric(
-          horizontal: angosto ? SiSpace.x3 : 0,
-          vertical: angosto ? SiSpace.x4 : SiSpace.x6,
-        ),
-        shape: const RoundedRectangleBorder(borderRadius: SiRadius.rLg),
-        clipBehavior: Clip.antiAlias,
-        child: SizedBox(
-          width: angosto ? double.infinity : 560,
-          height: mq.size.height * 0.8,
-          child: _BiAiPanel(
-            reportTitle: 'Nuevo panel',
-            modoGuiado: true,
-            onContraer: () => Navigator.pop(ctx),
-          ),
-        ),
-      ),
-    );
   }
 
   void _showGruposManager() {
@@ -467,26 +405,6 @@ class _BiPageState extends State<BiPage> {
             ),
           ),
           const Spacer(),
-          // Punto de entrada para armar un panel sin abrir ningún reporte: el asistente
-          // pregunta con cuál trabajar. No es admin-only — los paneles son privados de
-          // quien los crea, así que cualquiera con acceso al asistente puede tener los suyos.
-          if (_puedeUsarAsistente) ...[
-            OutlinedButton.icon(
-              onPressed: _nuevoPanelGuiado,
-              icon: const Icon(Icons.auto_awesome, size: 16),
-              label: const Text('Nuevo panel',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: c.brand,
-                side: BorderSide(color: c.brand.withValues(alpha: 0.5)),
-                elevation: 0,
-                minimumSize: const Size(0, 36),
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                shape: const RoundedRectangleBorder(borderRadius: SiRadius.rMd),
-              ),
-            ),
-            const SizedBox(width: SiSpace.x2),
-          ],
           if (_isAdmin) ...[
             IconButton(
               onPressed: _showPapelera,
@@ -531,62 +449,6 @@ class _BiPageState extends State<BiPage> {
     );
   }
 
-  /// Mis paneles, arriba de los enlaces: es lo que el usuario armó para sí mismo, así que va
-  /// antes del catálogo de reportes. Se oculta entera cuando no hay ninguno, para no dejar un
-  /// encabezado vacío en la página de quien no usa el asistente.
-  Widget _buildPaneles(SiColors c) {
-    if (_paneles.isEmpty) return const SizedBox.shrink();
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: SiSpace.x6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.auto_awesome, size: 15, color: c.brand),
-              const SizedBox(width: SiSpace.x2),
-              Text('Mis paneles',
-                  style: TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.w600, color: c.ink)),
-              const SizedBox(width: SiSpace.x2),
-              Text('${_paneles.length}',
-                  style: TextStyle(fontSize: 12, color: c.ink3)),
-            ],
-          ),
-          const SizedBox(height: SiSpace.x3),
-          LayoutBuilder(
-            builder: (_, box) {
-              // Dos columnas cuando hay espacio; una cuando no. Las gráficas necesitan
-              // ancho para que las etiquetas de compañía sean legibles.
-              final dos = box.maxWidth > 900;
-              final ancho = dos ? (box.maxWidth - SiSpace.x4) / 2 : box.maxWidth;
-              return Wrap(
-                spacing: SiSpace.x4,
-                runSpacing: SiSpace.x4,
-                children: [
-                  for (final p in _paneles)
-                    SizedBox(
-                      width: ancho,
-                      child: _PanelGuardado(
-                        key: ValueKey(p['id']),
-                        panel: p,
-                        onEliminado: () async {
-                          await _fetchPaneles();
-                          if (mounted) setState(() {});
-                        },
-                        c: c,
-                      ),
-                    ),
-                ],
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildContent(SiColors c, List<Map<String, dynamic>> items) {
     if (items.isEmpty) {
       return Center(
@@ -622,11 +484,7 @@ class _BiPageState extends State<BiPage> {
   Widget _buildTable(SiColors c, List<Map<String, dynamic>> items) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(SiSpace.x6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _buildPaneles(c),
-          Center(
+      child: Center(
         child: Card(
           child: _BiTable(
             links: items,
@@ -639,23 +497,15 @@ class _BiPageState extends State<BiPage> {
           ),
         ),
       ),
-        ],
-      ),
     );
   }
 
   Widget _buildList(SiColors c, List<Map<String, dynamic>> items) {
-    // Los paneles van como primer elemento de la misma lista y no en un Column aparte, para
-    // que se desplacen junto a los enlaces en lugar de robar altura fija en pantalla chica.
-    final conPaneles = _paneles.isNotEmpty;
-
     return ListView.separated(
       padding: const EdgeInsets.all(SiSpace.x4),
-      itemCount: items.length + (conPaneles ? 1 : 0),
+      itemCount: items.length,
       separatorBuilder: (_, __) => const SizedBox(height: SiSpace.x3),
-      itemBuilder: (context, index) {
-        if (conPaneles && index == 0) return _buildPaneles(c);
-        final i = index - (conPaneles ? 1 : 0);
+      itemBuilder: (context, i) {
         final link = items[i];
         final desc = link['descripcion']?.toString() ?? '';
         return Card(
@@ -2068,10 +1918,6 @@ class _BiAiPanel extends StatefulWidget {
   final VoidCallback? onAlternarAncho;
   final VoidCallback? onContraer;
 
-  /// Modo guiado: se abre sin reporte y el asistente pregunta con cuál trabajar. Es el punto
-  /// de entrada para armar paneles desde la página, sin abrir ningún reporte antes.
-  final bool modoGuiado;
-
   const _BiAiPanel({
     required this.reportTitle,
     this.linkId,
@@ -2079,7 +1925,6 @@ class _BiAiPanel extends StatefulWidget {
     this.compacto = false,
     this.onAlternarAncho,
     this.onContraer,
-    this.modoGuiado = false,
   });
 
   @override
@@ -2102,11 +1947,10 @@ class _BiAiPanelState extends State<_BiAiPanel> {
   final List<_AiMsg> _messages = [];
   bool _loading = false;
 
-  /// El modo analista requiere un enlace identificado con dataset capturado — sin dataset la
-  /// Edge Function respondería 422 en cada consulta, así que es mejor quedarse en modo
-  /// conversacional y decirlo. En modo guiado no hay enlace todavía: lo elige el asistente.
-  bool get _modoAnalista =>
-      widget.modoGuiado || (widget.linkId != null && widget.hasDataset);
+  /// El modo analista requiere las dos cosas: un enlace identificado y un dataset
+  /// capturado. Sin dataset la Edge Function respondería 422 en cada consulta, así que
+  /// es mejor quedarse en modo conversacional y decirlo.
+  bool get _modoAnalista => widget.linkId != null && widget.hasDataset;
 
   @override
   void dispose() {
@@ -2161,9 +2005,7 @@ class _BiAiPanelState extends State<_BiAiPanel> {
       }
 
       final payload = <String, dynamic>{'messages': history};
-      // En modo guiado NO se manda link_id: eso es lo que hace que la función liste los
-      // reportes y pregunte cuál. Con reporte abierto se manda y queda fijo a ése.
-      if (_modoAnalista && !widget.modoGuiado) {
+      if (_modoAnalista) {
         payload['link_id'] = widget.linkId;
         payload['titulo'] = widget.reportTitle;
       }
@@ -2196,8 +2038,6 @@ class _BiAiPanelState extends State<_BiAiPanel> {
       List<Map<String, dynamic>>? rows;
       Map<String, dynamic>? formatos;
       bool truncated = false;
-      String presentacion = 'auto';
-      _ParametrosConsulta? consulta;
       final structured = body['structured'];
       if (structured is Map && structured['type'] == 'pbi_rows') {
         final data = structured['data'];
@@ -2211,9 +2051,6 @@ class _BiAiPanelState extends State<_BiAiPanel> {
         final f = structured['formatos'];
         if (f is Map) formatos = Map<String, dynamic>.from(f);
         truncated = structured['truncated'] == true;
-        final p = structured['presentacion'];
-        if (p == 'grafica' || p == 'tabla') presentacion = p as String;
-        consulta = _ParametrosConsulta.desde(structured);
       }
 
       setState(() {
@@ -2224,8 +2061,6 @@ class _BiAiPanelState extends State<_BiAiPanel> {
           rows: rows,
           formatos: formatos,
           truncated: truncated,
-          presentacion: presentacion,
-          consulta: consulta,
         ));
       });
       _scrollToBottom();
@@ -2300,9 +2135,7 @@ class _BiAiPanelState extends State<_BiAiPanel> {
                             size: 40, color: c.line),
                         const SizedBox(height: SiSpace.x3),
                         Text(
-                          widget.modoGuiado
-                              ? 'Armemos un panel'
-                              : 'Pregúntame sobre\n"${widget.reportTitle}"',
+                          'Pregúntame sobre\n"${widget.reportTitle}"',
                           textAlign: TextAlign.center,
                           style:
                               TextStyle(fontSize: 13, color: c.ink3),
@@ -2311,12 +2144,10 @@ class _BiAiPanelState extends State<_BiAiPanel> {
                         // Se declara la capacidad real: con dataset lee cifras, sin él
                         // sólo explica. Así el usuario no descubre el límite fallando.
                         Text(
-                          widget.modoGuiado
-                              ? 'Te pregunto con cuál reporte trabajar'
-                              : _modoAnalista
-                                  ? 'Consulta las cifras reales del reporte'
-                                  : 'Sin dataset configurado: puedo explicar el panel, '
-                                      'pero no leer sus cifras',
+                          _modoAnalista
+                              ? 'Consulta las cifras reales del reporte'
+                              : 'Sin dataset configurado: puedo explicar el panel, '
+                                  'pero no leer sus cifras',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 11,
@@ -2324,19 +2155,7 @@ class _BiAiPanelState extends State<_BiAiPanel> {
                           ),
                         ),
                         const SizedBox(height: SiSpace.x5),
-                        if (widget.modoGuiado) ...[
-                          _QuickChip(
-                            label: '¿Con qué reportes puedo trabajar?',
-                            onTap: () => _send(
-                                '¿Con qué reportes puedo trabajar y qué tiene cada uno?'),
-                          ),
-                          const SizedBox(height: SiSpace.x2),
-                          _QuickChip(
-                            label: 'Sugiéreme un panel útil',
-                            onTap: () => _send(
-                                'Muéstrame mis reportes y sugiéreme un panel útil para empezar.'),
-                          ),
-                        ] else if (_modoAnalista) ...[
+                        if (_modoAnalista) ...[
                           _QuickChip(
                             label: '¿Qué puedes consultar de este reporte?',
                             onTap: () => _send(
@@ -2379,13 +2198,18 @@ class _BiAiPanelState extends State<_BiAiPanel> {
                     final msg = _messages[i];
                     final rows = msg.rows;
                     if (rows == null) return _Bubble(msg: msg, c: c);
-                    // Una sola lectura del resultado, no gráfica y tabla apiladas: el texto
-                    // interpreta y _ResultadoConsulta muestra la vista que corresponda.
+                    // Las cifras consultadas se muestran además como tabla: el texto del
+                    // modelo interpreta, la tabla deja ver el dato tal como llegó.
                     return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _Bubble(msg: msg, c: c),
-                        _ResultadoConsulta(msg: msg, rows: rows, c: c),
+                        _ResultTable(
+                          rows: rows,
+                          formatos: msg.formatos,
+                          truncated: msg.truncated,
+                          c: c,
+                        ),
                       ],
                     );
                   },
@@ -2514,33 +2338,33 @@ class _Bubble extends StatelessWidget {
     // un tope de 340 desbordaba y la burbuja se salía del panel.
     return LayoutBuilder(
       builder: (_, box) => Align(
-      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        constraints: BoxConstraints(
-          maxWidth: box.maxWidth.isFinite
-              ? (box.maxWidth * 0.94).clamp(160.0, 420.0)
-              : 340,
-        ),
-        decoration: BoxDecoration(
-          color: isUser ? c.brand : c.bg,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(14),
-            topRight: const Radius.circular(14),
-            bottomLeft: Radius.circular(isUser ? 14 : 4),
-            bottomRight: Radius.circular(isUser ? 4 : 14),
+        alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          constraints: BoxConstraints(
+            maxWidth: box.maxWidth.isFinite
+                ? (box.maxWidth * 0.94).clamp(160.0, 420.0)
+                : 340,
           ),
-          border: isUser ? null : Border.all(color: c.line),
+          decoration: BoxDecoration(
+            color: isUser ? c.brand : c.bg,
+            borderRadius: BorderRadius.only(
+              topLeft: const Radius.circular(14),
+              topRight: const Radius.circular(14),
+              bottomLeft: Radius.circular(isUser ? 14 : 4),
+              bottomRight: Radius.circular(isUser ? 4 : 14),
+            ),
+            border: isUser ? null : Border.all(color: c.line),
+          ),
+          child: Text(
+            msg.text,
+            style: TextStyle(
+                fontSize: 13,
+                color: isUser ? Colors.white : c.ink,
+                height: 1.4),
+          ),
         ),
-        child: Text(
-          msg.text,
-          style: TextStyle(
-              fontSize: 13,
-              color: isUser ? Colors.white : c.ink,
-              height: 1.4),
-        ),
-      ),
       ),
     );
   }
@@ -2587,555 +2411,13 @@ class _AiMsg {
 
   final bool truncated;
 
-  /// Qué mostrar: 'grafica', 'tabla' o 'auto'. La pide el modelo porque él ve la intención
-  /// del usuario; la FORMA de la gráfica la sigue decidiendo el cliente.
-  final String presentacion;
-
-  /// Parámetros de la consulta que produjo estas filas, para poder guardarla como panel.
-  /// Se guardan los parámetros y no las cifras: así el panel se actualiza solo cuando el
-  /// modelo semántico se refresca.
-  final _ParametrosConsulta? consulta;
-
   const _AiMsg({
     required this.role,
     required this.text,
     this.rows,
     this.formatos,
     this.truncated = false,
-    this.presentacion = 'auto',
-    this.consulta,
   });
-}
-
-/// Lo que hace falta para repetir una consulta más adelante.
-class _ParametrosConsulta {
-  final String linkId;
-  final String reporte;
-  final List<String> medidas;
-  final List<String> agruparPor;
-  final Map<String, dynamic>? periodo;
-  final int? limite;
-
-  const _ParametrosConsulta({
-    required this.linkId,
-    required this.reporte,
-    required this.medidas,
-    required this.agruparPor,
-    this.periodo,
-    this.limite,
-  });
-
-  /// Devuelve null si falta algo esencial: sin reporte o sin medidas no hay panel que guardar.
-  static _ParametrosConsulta? desde(Map structured) {
-    final report = structured['report'];
-    final consulta = structured['consulta'];
-    if (report is! Map || consulta is! Map) return null;
-
-    final id = report['id']?.toString();
-    if (id == null || id.isEmpty) return null;
-
-    final medidas = (consulta['medidas'] as List?)?.whereType<String>().toList() ?? const [];
-    if (medidas.isEmpty) return null;
-
-    return _ParametrosConsulta(
-      linkId: id,
-      reporte: report['title']?.toString() ?? 'Reporte',
-      medidas: medidas,
-      agruparPor:
-          (consulta['agrupar_por'] as List?)?.whereType<String>().toList() ?? const [],
-      periodo: structured['periodo'] is Map
-          ? Map<String, dynamic>.from(structured['periodo'] as Map)
-          : null,
-      limite: structured['limite'] is int ? structured['limite'] as int : null,
-    );
-  }
-}
-
-/// Elige una sola lectura del resultado en lugar de apilar gráfica y tabla, con un alternador
-/// para cuando el modelo interpreta mal la intención.
-class _ResultadoConsulta extends StatefulWidget {
-  final _AiMsg msg;
-  final List<Map<String, dynamic>> rows;
-  final SiColors c;
-
-  const _ResultadoConsulta({
-    required this.msg,
-    required this.rows,
-    required this.c,
-  });
-
-  @override
-  State<_ResultadoConsulta> createState() => _ResultadoConsultaState();
-}
-
-class _ResultadoConsultaState extends State<_ResultadoConsulta> {
-  /// null = respetar lo que pidió el modelo; con valor = el usuario lo cambió a mano.
-  bool? _verGraficaManual;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = widget.c;
-    final msg = widget.msg;
-    final fmt = _FormatoCifras(msg.formatos);
-    final graficable = _PlanGrafica.desde(widget.rows, fmt).isNotEmpty;
-
-    // Sin nada que graficar no hay decisión que tomar.
-    if (!graficable) {
-      return _ResultTable(
-        rows: widget.rows,
-        formatos: msg.formatos,
-        truncated: msg.truncated,
-        c: c,
-      );
-    }
-
-    final verGrafica = _verGraficaManual ?? msg.presentacion != 'tabla';
-
-    return LayoutBuilder(
-      builder: (_, box) {
-        // En angosto la gráfica no es legible, así que no se ofrece la opción.
-        final cabeGrafica = box.maxWidth >= _ResultChart.anchoMinimo;
-        final mostrarGrafica = verGrafica && cabeGrafica;
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                if (cabeGrafica)
-                  _AlternadorVista(
-                    enGrafica: mostrarGrafica,
-                    onCambiar: (v) => setState(() => _verGraficaManual = v),
-                    c: c,
-                  ),
-                const Spacer(),
-                if (msg.consulta != null)
-                  _BotonGuardarPanel(
-                    consulta: msg.consulta!,
-                    presentacion: mostrarGrafica ? 'grafica' : 'tabla',
-                    c: c,
-                  ),
-              ],
-            ),
-            if (mostrarGrafica)
-              _ResultChart(rows: widget.rows, formatos: msg.formatos, c: c)
-            else
-              _ResultTable(
-                rows: widget.rows,
-                formatos: msg.formatos,
-                truncated: msg.truncated,
-                c: c,
-              ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-// ── Paneles guardados ─────────────────────────────────────────────────────────
-
-/// Un panel guardado, ejecutado al momento de mostrarse.
-///
-/// Vuelve a consultar en lugar de mostrar cifras almacenadas: es lo que hace que un panel
-/// siga vigente cuando el modelo semántico se refresca cada periodo.
-class _PanelGuardado extends StatefulWidget {
-  final Map<String, dynamic> panel;
-  final VoidCallback onEliminado;
-  final SiColors c;
-
-  const _PanelGuardado({
-    super.key,
-    required this.panel,
-    required this.onEliminado,
-    required this.c,
-  });
-
-  @override
-  State<_PanelGuardado> createState() => _PanelGuardadoState();
-}
-
-class _PanelGuardadoState extends State<_PanelGuardado> {
-  static const _fnUrl =
-      'https://zkmbebybyyefmqcxjqrg.supabase.co/functions/v1/pbi-query';
-
-  List<Map<String, dynamic>>? _rows;
-  Map<String, dynamic>? _formatos;
-  bool _truncated = false;
-  String? _error;
-  bool _cargando = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _consultar();
-  }
-
-  Future<void> _consultar() async {
-    setState(() {
-      _cargando = true;
-      _error = null;
-    });
-    try {
-      final session = Supabase.instance.client.auth.currentSession;
-      if (session == null) throw Exception('Sin sesión activa');
-
-      final p = widget.panel;
-      final resp = await http
-          .post(
-            Uri.parse(_fnUrl),
-            headers: {
-              'Authorization': 'Bearer ${session.accessToken}',
-              'Content-Type': 'application/json',
-            },
-            body: jsonEncode({
-              'link_id': p['link_id'],
-              'accion': 'consultar',
-              'medidas': (p['medidas'] as List?)?.cast<String>() ?? const [],
-              if ((p['agrupar_por'] as List?)?.isNotEmpty ?? false)
-                'agrupar_por': (p['agrupar_por'] as List).cast<String>(),
-              // null en la base significa periodo "Actual".
-              'periodo': p['periodo'] ?? 'actual',
-              if (p['limite'] != null) 'limite': p['limite'],
-            }),
-          )
-          .timeout(const Duration(seconds: 60));
-
-      if (!mounted) return;
-      final body = jsonDecode(resp.body) as Map<String, dynamic>;
-      if (resp.statusCode != 200) {
-        throw Exception(body['error']?.toString() ?? 'Error ${resp.statusCode}');
-      }
-
-      final data = body['rows'];
-      setState(() {
-        _cargando = false;
-        _rows = data is List
-            ? data.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()
-            : const [];
-        final f = body['formatos'];
-        _formatos = f is Map ? Map<String, dynamic>.from(f) : null;
-        _truncated = body['truncated'] == true;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _cargando = false;
-        _error = e.toString();
-      });
-    }
-  }
-
-  Future<void> _eliminar() async {
-    final c = widget.c;
-    final confirmado = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: c.panel,
-        title: Text('Eliminar panel', style: TextStyle(fontSize: 16, color: c.ink)),
-        content: Text('Se eliminará "${widget.panel['titulo']}".',
-            style: TextStyle(fontSize: 13, color: c.ink2)),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancelar')),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-                backgroundColor: c.danger, foregroundColor: Colors.white),
-            child: const Text('Eliminar'),
-          ),
-        ],
-      ),
-    );
-    if (confirmado != true) return;
-
-    try {
-      await Supabase.instance.client
-          .from('bi_paneles')
-          .delete()
-          .eq('id', widget.panel['id']);
-      widget.onEliminado();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('No se pudo eliminar: $e'),
-        backgroundColor: widget.c.danger,
-      ));
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final c = widget.c;
-    final p = widget.panel;
-    final rows = _rows;
-    final enGrafica = p['presentacion'] != 'tabla';
-
-    return Container(
-      padding: const EdgeInsets.all(SiSpace.x4),
-      decoration: BoxDecoration(
-        color: c.panel,
-        border: Border.all(color: c.line),
-        borderRadius: SiRadius.rLg,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      p['titulo']?.toString() ?? 'Panel',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.w600, color: c.ink),
-                    ),
-                    Text(
-                      p['powerbi_links']?['title']?.toString() ?? '',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 11, color: c.ink3),
-                    ),
-                  ],
-                ),
-              ),
-              IconButton(
-                tooltip: 'Actualizar',
-                onPressed: _cargando ? null : _consultar,
-                icon: Icon(Icons.refresh, size: 16, color: c.ink3),
-                visualDensity: VisualDensity.compact,
-              ),
-              IconButton(
-                tooltip: 'Eliminar',
-                onPressed: _eliminar,
-                icon: Icon(Icons.delete_outline, size: 16, color: c.ink3),
-                visualDensity: VisualDensity.compact,
-              ),
-            ],
-          ),
-          const SizedBox(height: SiSpace.x2),
-          if (_cargando)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: SiSpace.x5),
-              child: Center(
-                child: SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: c.brand),
-                ),
-              ),
-            )
-          else if (_error != null)
-            Text(_error!, style: TextStyle(fontSize: 11, color: c.danger))
-          else if (rows == null || rows.isEmpty)
-            Text('Sin datos para este periodo.',
-                style: TextStyle(fontSize: 11, color: c.ink3))
-          else if (enGrafica)
-            _ResultChart(rows: rows, formatos: _formatos, c: c)
-          else
-            _ResultTable(
-                rows: rows, formatos: _formatos, truncated: _truncated, c: c),
-        ],
-      ),
-    );
-  }
-}
-
-/// Guarda la consulta como panel. Pide un título y deja constancia de que lo guardado son
-/// los parámetros, no las cifras — es lo que explica que el panel siga vigente el mes que viene.
-class _BotonGuardarPanel extends StatefulWidget {
-  final _ParametrosConsulta consulta;
-  final String presentacion;
-  final SiColors c;
-
-  const _BotonGuardarPanel({
-    required this.consulta,
-    required this.presentacion,
-    required this.c,
-  });
-
-  @override
-  State<_BotonGuardarPanel> createState() => _BotonGuardarPanelState();
-}
-
-class _BotonGuardarPanelState extends State<_BotonGuardarPanel> {
-  bool _guardado = false;
-  bool _guardando = false;
-
-  Future<void> _guardar() async {
-    final c = widget.c;
-    final ctrl = TextEditingController(
-      text: '${_FormatoCifras.encabezado(widget.consulta.medidas.first)}'
-          '${widget.consulta.agruparPor.isEmpty ? '' : ' por '
-              '${_FormatoCifras.encabezado(widget.consulta.agruparPor.first)}'}',
-    );
-
-    final titulo = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: c.panel,
-        title: Text('Guardar como panel',
-            style: TextStyle(fontSize: 16, color: c.ink)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: ctrl,
-              autofocus: true,
-              decoration: const InputDecoration(labelText: 'Título'),
-              onSubmitted: (v) => Navigator.pop(ctx, v),
-            ),
-            const SizedBox(height: SiSpace.x3),
-            Text(
-              'Se guarda la consulta, no las cifras: el panel se actualizará solo cuando '
-              '${widget.consulta.reporte} se refresque.',
-              style: TextStyle(fontSize: 11, color: c.ink3, height: 1.4),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, ctrl.text),
-            style: ElevatedButton.styleFrom(
-                backgroundColor: c.brand, foregroundColor: Colors.white),
-            child: const Text('Guardar'),
-          ),
-        ],
-      ),
-    );
-    ctrl.dispose();
-
-    if (titulo == null || titulo.trim().isEmpty || !mounted) return;
-
-    setState(() => _guardando = true);
-    try {
-      final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId == null) throw Exception('Sin sesión activa');
-
-      await Supabase.instance.client.from('bi_paneles').insert({
-        'user_id': userId,
-        'link_id': widget.consulta.linkId,
-        'titulo': titulo.trim(),
-        'medidas': widget.consulta.medidas,
-        'agrupar_por': widget.consulta.agruparPor,
-        'periodo': widget.consulta.periodo,
-        'limite': widget.consulta.limite,
-        'presentacion': widget.presentacion,
-      });
-
-      if (!mounted) return;
-      setState(() {
-        _guardando = false;
-        _guardado = true;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Panel "${titulo.trim()}" guardado')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _guardando = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('No se pudo guardar: $e'),
-        backgroundColor: widget.c.danger,
-      ));
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final c = widget.c;
-    if (_guardado) {
-      return Padding(
-        padding: const EdgeInsets.only(top: SiSpace.x2),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.check, size: 13, color: c.success),
-            const SizedBox(width: 4),
-            Text('Guardado',
-                style: TextStyle(fontSize: 11, color: c.success)),
-          ],
-        ),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.only(top: SiSpace.x2),
-      child: TextButton.icon(
-        onPressed: _guardando ? null : _guardar,
-        icon: _guardando
-            ? SizedBox(
-                width: 12,
-                height: 12,
-                child: CircularProgressIndicator(strokeWidth: 2, color: c.brand))
-            : Icon(Icons.bookmark_add_outlined, size: 15, color: c.brand),
-        label: Text('Guardar panel',
-            style: TextStyle(fontSize: 11, color: c.brand)),
-        style: TextButton.styleFrom(
-          minimumSize: const Size(0, 28),
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          visualDensity: VisualDensity.compact,
-        ),
-      ),
-    );
-  }
-}
-
-/// Par de botones para alternar entre gráfica y tabla.
-class _AlternadorVista extends StatelessWidget {
-  final bool enGrafica;
-  final ValueChanged<bool> onCambiar;
-  final SiColors c;
-
-  const _AlternadorVista({
-    required this.enGrafica,
-    required this.onCambiar,
-    required this.c,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: SiSpace.x2),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _boton(Icons.bar_chart_rounded, 'Gráfica', enGrafica, () => onCambiar(true)),
-          const SizedBox(width: 4),
-          _boton(Icons.table_rows_rounded, 'Tabla', !enGrafica, () => onCambiar(false)),
-        ],
-      ),
-    );
-  }
-
-  Widget _boton(IconData icono, String tooltip, bool activo, VoidCallback onTap) {
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: activo ? null : onTap,
-        borderRadius: BorderRadius.circular(6),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-          decoration: BoxDecoration(
-            color: activo ? c.brandTint : Colors.transparent,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: activo ? c.brand.withValues(alpha: 0.35) : c.line),
-          ),
-          child: Icon(icono, size: 14, color: activo ? c.brand : c.ink3),
-        ),
-      ),
-    );
-  }
 }
 
 /// Tabla de resultados de una consulta al dataset.
@@ -3143,166 +2425,6 @@ class _AlternadorVista extends StatelessWidget {
 /// Las llaves llegan como "[Alias]" para las medidas y "Tabla[Columna]" para las
 /// dimensiones; se limpian para el encabezado pero se conserva el orden original, que es
 /// el que definió la consulta.
-// ── Gráficas de resultados ────────────────────────────────────────────────────
-
-/// Paleta categórica, en orden fijo y nunca cíclica: una 6ª categoría se agrupa en "Otros"
-/// en lugar de generar un color nuevo.
-///
-/// Validada con los seis checks de la guía de visualización, en ambos modos:
-///   claro  — banda de luminosidad, croma, CVD y contraste PASS; WARN de contraste en el
-///            teal (2.8:1), cubierto porque la tabla de cifras siempre acompaña a la gráfica
-///   oscuro — los cinco checks PASS, sin advertencias
-///   peor par adyacente CVD ΔE 8.9 (deuteranopía), por encima del piso de 8
-///
-/// No usa success / warn / danger de SiColors: están reservados para estado y reciclarlos
-/// como series haría que un color con significado propio apareciera sin significado.
-/// Si se cambia un solo valor hay que volver a correr el validador — no ajustar a ojo.
-const _paletaSeries = <Color>[
-  Color(0xFF5A69D0), // índigo, familia de marca
-  Color(0xFF10A8B8), // teal
-  Color(0xFFD6407E), // magenta
-  Color(0xFF6F9528), // oliva
-  Color(0xFFA855D6), // púrpura
-];
-
-/// Forma que toma un resultado. La decide el cliente a partir de la estructura de las filas,
-/// no el modelo: es el mismo criterio que rige toda esta función — no dejarle al modelo lo
-/// que el código puede garantizar.
-enum _Forma { cifra, barras, linea }
-
-/// Resuelve qué dibujar. Separado del widget para poder razonarlo y probarlo aparte.
-class _PlanGrafica {
-  final _Forma forma;
-  final String? dimension;
-  final List<String> medidas;
-
-  const _PlanGrafica({required this.forma, this.dimension, required this.medidas});
-
-  /// Palabras que delatan una dimensión de tiempo, donde la línea comunica mejor que barras.
-  static final _reTiempo = RegExp(
-      r'(tiempo|fecha|mes|a[ñn]o|periodo|semana|trimestre|d[íi]a)',
-      caseSensitive: false);
-
-  /// Agrupa las medidas por escala compatible y devuelve un plan por grupo.
-  ///
-  /// **Nunca un doble eje.** El asistente puede pedir `Suma Vencido` (millones) junto con
-  /// `% Vencido Critico` (fracción) en la misma consulta; ponerlos en un solo eje deforma
-  /// ambos. Se emite una gráfica por grupo de escala, que es lo correcto y además evita el
-  /// error de gráficas más común.
-  static List<_PlanGrafica> desde(
-    List<Map<String, dynamic>> rows,
-    _FormatoCifras fmt,
-  ) {
-    if (rows.isEmpty) return const [];
-
-    final llaves = rows.first.keys.toList();
-    final medidas = llaves.where(_FormatoCifras.esMedida).toList();
-    final dimensiones = llaves.where((k) => !_FormatoCifras.esMedida(k)).toList();
-
-    if (medidas.isEmpty) return const [];
-
-    // Sin dimensión el resultado es un total: una cifra, no una gráfica de una sola barra.
-    if (dimensiones.isEmpty || rows.length == 1 && dimensiones.isEmpty) {
-      return [_PlanGrafica(forma: _Forma.cifra, medidas: medidas)];
-    }
-
-    // Con más de una dimensión no hay una lectura visual honesta con una sola serie de
-    // barras; la tabla lo comunica mejor.
-    if (dimensiones.length > 1) return const [];
-
-    final dim = dimensiones.first;
-    final esTiempo = _reTiempo.hasMatch(dim);
-
-    final porcentajes = medidas.where(fmt.esPorcentaje).toList();
-    final montos = medidas.where((m) => !fmt.esPorcentaje(m)).toList();
-
-    return [
-      for (final grupo in [montos, porcentajes])
-        if (grupo.isNotEmpty)
-          _PlanGrafica(
-            forma: esTiempo ? _Forma.linea : _Forma.barras,
-            dimension: dim,
-            medidas: grupo,
-          ),
-    ];
-  }
-}
-
-/// Formato de las cifras que devuelve pbi-query, compartido por la tabla y la gráfica.
-///
-/// Vive aparte a propósito. Si la gráfica duplicara esta lógica, un cambio en una y no en la
-/// otra reintroduciría el error de 100x de los porcentajes justo en la mitad de la interfaz
-/// que nadie revisó. Una sola fuente para las dos.
-class _FormatoCifras {
-  final Map<String, dynamic>? formatos;
-  const _FormatoCifras(this.formatos);
-
-  /// El nombre de la medida dentro de "[Alias]", para cruzarlo con el mapa de formatos.
-  static String medida(String key) {
-    final m = RegExp(r'^\[(.+)\]$').firstMatch(key);
-    return m?.group(1) ?? key;
-  }
-
-  /// Etiqueta legible: de "Tabla[Columna]" o "[Alias]" se queda con lo de dentro.
-  static String encabezado(String key) {
-    final m = RegExp(r'^(.*?)\[(.+)\]$').firstMatch(key);
-    return m?.group(2) ?? key;
-  }
-
-  /// Una llave sin nombre de tabla es una medida; con tabla, una dimensión.
-  static bool esMedida(String key) => RegExp(r'^\[(.+)\]$').hasMatch(key);
-
-  bool esPorcentaje(String key) {
-    final f = formatos?[medida(key)];
-    return f is String && f.contains('%');
-  }
-
-  /// Separador de miles, respetando el signo.
-  static String miles(String entero) {
-    final signo = entero.startsWith('-') ? '-' : '';
-    final digitos = entero.replaceFirst('-', '');
-    final buf = StringBuffer();
-    for (int i = 0; i < digitos.length; i++) {
-      if (i > 0 && (digitos.length - i) % 3 == 0) buf.write(',');
-      buf.write(digitos[i]);
-    }
-    return '$signo$buf';
-  }
-
-  String valor(String key, dynamic v) {
-    if (v == null) return '—';
-    if (v is! num) return v.toString();
-
-    // Los porcentajes se guardan como fracción: 0.9946 es 99.5%. Mostrar el crudo sería
-    // un error de 100x que se lee como perfectamente razonable.
-    if (esPorcentaje(key)) {
-      final pct = v * 100;
-      // Un valor diminuto pero distinto de cero no debe verse como un cero redondo.
-      if (pct != 0 && pct.abs() < 0.05) return '<0.1%';
-      return '${pct.toStringAsFixed(1)}%';
-    }
-
-    final entero = v == v.roundToDouble() && v.abs() < 1e15;
-    if (entero) return miles(v.toInt().toString());
-
-    if (v.abs() < 0.005) return '<0.01';
-    final partes = v.toStringAsFixed(2).split('.');
-    return '${miles(partes[0])}.${partes[1]}';
-  }
-
-  /// Versión abreviada para ejes y etiquetas dentro de gráficas, donde no cabe el número
-  /// completo: 22,088,254.08 → "22.1 M".
-  String compacto(String key, dynamic v) {
-    if (v is! num) return valor(key, v);
-    if (esPorcentaje(key)) return valor(key, v);
-    final abs = v.abs();
-    if (abs >= 1e9) return '${(v / 1e9).toStringAsFixed(1)} MM';
-    if (abs >= 1e6) return '${(v / 1e6).toStringAsFixed(1)} M';
-    if (abs >= 1e3) return '${(v / 1e3).toStringAsFixed(1)} k';
-    return valor(key, v);
-  }
-}
-
 class _ResultTable extends StatefulWidget {
   final List<Map<String, dynamic>> rows;
   final Map<String, dynamic>? formatos;
@@ -3326,19 +2448,69 @@ class _ResultTableState extends State<_ResultTable> {
   /// cortada en lugar de ser desplazable.
   final _scrollH = ScrollController();
 
+  List<Map<String, dynamic>> get rows => widget.rows;
+  Map<String, dynamic>? get formatos => widget.formatos;
+  bool get truncated => widget.truncated;
+  SiColors get c => widget.c;
+
   @override
   void dispose() {
     _scrollH.dispose();
     super.dispose();
   }
 
+  /// El nombre de la medida dentro de "[Alias]", para cruzarlo con el mapa de formatos.
+  static String _medida(String key) {
+    final m = RegExp(r'^\[(.+)\]$').firstMatch(key);
+    return m?.group(1) ?? key;
+  }
+
+  static String _encabezado(String key) {
+    final m = RegExp(r'^(.*?)\[(.+)\]$').firstMatch(key);
+    return m?.group(2) ?? key;
+  }
+
+  bool _esPorcentaje(String key) {
+    final f = formatos?[_medida(key)];
+    return f is String && f.contains('%');
+  }
+
+  /// Separador de miles, respetando el signo.
+  static String _miles(String entero) {
+    final signo = entero.startsWith('-') ? '-' : '';
+    final digitos = entero.replaceFirst('-', '');
+    final buf = StringBuffer();
+    for (int i = 0; i < digitos.length; i++) {
+      if (i > 0 && (digitos.length - i) % 3 == 0) buf.write(',');
+      buf.write(digitos[i]);
+    }
+    return '$signo$buf';
+  }
+
+  String _celda(String key, dynamic v) {
+    if (v == null) return '—';
+    if (v is! num) return v.toString();
+
+    // Los porcentajes se guardan como fracción: 0.9946 es 99.5%. Mostrar el crudo sería
+    // un error de 100x que se lee como perfectamente razonable.
+    if (_esPorcentaje(key)) {
+      final pct = v * 100;
+      // Un valor diminuto pero distinto de cero no debe verse como un cero redondo.
+      if (pct != 0 && pct.abs() < 0.05) return '<0.1%';
+      return '${pct.toStringAsFixed(1)}%';
+    }
+
+    final entero = v == v.roundToDouble() && v.abs() < 1e15;
+    if (entero) return _miles(v.toInt().toString());
+
+    if (v.abs() < 0.005) return '<0.01';
+    final partes = v.toStringAsFixed(2).split('.');
+    return '${_miles(partes[0])}.${partes[1]}';
+  }
+
   @override
   Widget build(BuildContext context) {
-    final rows = widget.rows;
-    final truncated = widget.truncated;
-    final c = widget.c;
     final llaves = rows.first.keys.toList();
-    final fmt = _FormatoCifras(widget.formatos);
 
     return Container(
       margin: const EdgeInsets.only(top: SiSpace.x2, bottom: SiSpace.x2),
@@ -3368,7 +2540,7 @@ class _ResultTableState extends State<_ResultTable> {
               columns: llaves
                   .map((k) => DataColumn(
                         label: Text(
-                          _FormatoCifras.encabezado(k),
+                          _encabezado(k),
                           style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
@@ -3380,7 +2552,7 @@ class _ResultTableState extends State<_ResultTable> {
                   .map((r) => DataRow(
                         cells: llaves
                             .map((k) => DataCell(Text(
-                                  fmt.valor(k, r[k]),
+                                  _celda(k, r[k]),
                                   style: TextStyle(
                                       fontSize: 12,
                                       color: c.ink,
@@ -3401,421 +2573,6 @@ class _ResultTableState extends State<_ResultTable> {
                 'Lista recortada: hay más renglones de los que se muestran.',
                 style: TextStyle(fontSize: 11, color: c.warn),
               ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Dibuja los resultados de una consulta. Emite una gráfica por grupo de escala compatible,
-/// nunca una con dos ejes.
-class _ResultChart extends StatelessWidget {
-  final List<Map<String, dynamic>> rows;
-  final Map<String, dynamic>? formatos;
-  final SiColors c;
-
-  const _ResultChart({required this.rows, required this.c, this.formatos});
-
-  /// Por debajo de este ancho una gráfica con etiquetas de compañía es ilegible, así que se
-  /// omite y queda sólo la tabla. El panel puede estar en modo compacto de 300px.
-  static const anchoMinimo = 320.0;
-
-  /// Tope de categorías antes de agrupar el resto en "Otros".
-  static const _maxCategorias = 12;
-
-  @override
-  Widget build(BuildContext context) {
-    final fmt = _FormatoCifras(formatos);
-    final planes = _PlanGrafica.desde(rows, fmt);
-    if (planes.isEmpty) return const SizedBox.shrink();
-
-    return LayoutBuilder(
-      builder: (_, box) {
-        if (box.maxWidth < anchoMinimo) return const SizedBox.shrink();
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            for (final plan in planes) _porPlan(plan, fmt),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _porPlan(_PlanGrafica plan, _FormatoCifras fmt) {
-    switch (plan.forma) {
-      case _Forma.cifra:
-        return _CifrasDestacadas(fila: rows.first, medidas: plan.medidas, fmt: fmt, c: c);
-      case _Forma.barras:
-        return _BarrasHorizontales(
-          rows: _agrupado(plan),
-          plan: plan,
-          fmt: fmt,
-          c: c,
-        );
-      case _Forma.linea:
-        return _LineaTiempo(rows: rows, plan: plan, fmt: fmt, c: c);
-    }
-  }
-
-  /// Recorta a las primeras categorías y suma el resto en "Otros". Las filas ya vienen
-  /// ordenadas de mayor a menor por el servidor, así que el recorte conserva las relevantes.
-  List<Map<String, dynamic>> _agrupado(_PlanGrafica plan) {
-    if (rows.length <= _maxCategorias) return rows;
-
-    final visibles = rows.take(_maxCategorias - 1).toList();
-    final resto = rows.skip(_maxCategorias - 1);
-
-    final otros = <String, dynamic>{plan.dimension!: 'Otros (${resto.length})'};
-    for (final m in plan.medidas) {
-      num suma = 0;
-      for (final r in resto) {
-        final v = r[m];
-        if (v is num) suma += v;
-      }
-      otros[m] = suma;
-    }
-    return [...visibles, otros];
-  }
-}
-
-/// Barras horizontales hechas a mano y no con fl_chart: su BarChart sólo dibuja vertical, y
-/// aquí las etiquetas son largas ("02 INMOBILIARIA BUENOS MUCHACHOS"). Rotar el gráfico
-/// rotaría también el texto. La geometría horizontal es trivial y da control total.
-class _BarrasHorizontales extends StatelessWidget {
-  final List<Map<String, dynamic>> rows;
-  final _PlanGrafica plan;
-  final _FormatoCifras fmt;
-  final SiColors c;
-
-  const _BarrasHorizontales({
-    required this.rows,
-    required this.plan,
-    required this.fmt,
-    required this.c,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    // Escala común a todas las series del grupo, anclada en cero.
-    double maximo = 0;
-    for (final r in rows) {
-      for (final m in plan.medidas) {
-        final v = r[m];
-        if (v is num && v.abs() > maximo) maximo = v.abs().toDouble();
-      }
-    }
-    if (maximo == 0) return const SizedBox.shrink();
-
-    return Container(
-      margin: const EdgeInsets.only(top: SiSpace.x2),
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-      decoration: BoxDecoration(
-        border: Border.all(color: c.line),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Con una sola serie el título ya la nombra; con dos o más la leyenda es
-          // obligatoria para que la identidad no dependa sólo del color.
-          if (plan.medidas.length > 1)
-            _Leyenda(medidas: plan.medidas, fmt: fmt, c: c),
-          for (final r in rows) _fila(r, maximo),
-        ],
-      ),
-    );
-  }
-
-  Widget _fila(Map<String, dynamic> r, double maximo) {
-    final etiqueta = r[plan.dimension] ?? '—';
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  etiqueta.toString(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 11, color: c.ink2),
-                ),
-              ),
-              const SizedBox(width: 8),
-              // El valor exacto va como etiqueta directa: es el alivio que exige la
-              // advertencia de contraste de la paleta, y evita tener que leer el largo.
-              Text(
-                fmt.valor(plan.medidas.first, r[plan.medidas.first]),
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: c.ink,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 3),
-          for (int i = 0; i < plan.medidas.length; i++) ...[
-            if (i > 0) const SizedBox(height: 2),
-            _barra(r[plan.medidas[i]], maximo, _paletaSeries[i % _paletaSeries.length],
-                plan.medidas[i], r),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _barra(
-    dynamic v,
-    double maximo,
-    Color color,
-    String medida,
-    Map<String, dynamic> r,
-  ) {
-    final valor = v is num ? v.abs().toDouble() : 0.0;
-    final fraccion = (valor / maximo).clamp(0.0, 1.0);
-
-    return Tooltip(
-      message: '${_FormatoCifras.encabezado(medida)}: ${fmt.valor(medida, v)}',
-      child: SizedBox(
-        height: 8,
-        child: Row(
-          children: [
-            // Extremo redondeado de 4px anclado a la línea base, marca delgada.
-            Expanded(
-              flex: (fraccion * 1000).round().clamp(1, 1000),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: const BorderRadius.horizontal(
-                    right: Radius.circular(4),
-                  ),
-                ),
-              ),
-            ),
-            Expanded(
-              flex: (1000 - (fraccion * 1000).round()).clamp(0, 1000),
-              child: const SizedBox.shrink(),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Línea de tiempo. Aquí sí fl_chart: ejes, curva y tooltip son trabajo real que no vale
-/// reimplementar con CustomPainter.
-class _LineaTiempo extends StatelessWidget {
-  final List<Map<String, dynamic>> rows;
-  final _PlanGrafica plan;
-  final _FormatoCifras fmt;
-  final SiColors c;
-
-  const _LineaTiempo({
-    required this.rows,
-    required this.plan,
-    required this.fmt,
-    required this.c,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final etiquetas = rows.map((r) => (r[plan.dimension] ?? '').toString()).toList();
-
-    final series = <LineChartBarData>[];
-    for (int s = 0; s < plan.medidas.length; s++) {
-      final medida = plan.medidas[s];
-      final puntos = <FlSpot>[];
-      for (int i = 0; i < rows.length; i++) {
-        final v = rows[i][medida];
-        if (v is num) puntos.add(FlSpot(i.toDouble(), v.toDouble()));
-      }
-      if (puntos.isEmpty) continue;
-      series.add(LineChartBarData(
-        spots: puntos,
-        color: _paletaSeries[s % _paletaSeries.length],
-        barWidth: 2,
-        isCurved: false,
-        dotData: FlDotData(show: puntos.length <= 20),
-      ));
-    }
-    if (series.isEmpty) return const SizedBox.shrink();
-
-    return Container(
-      margin: const EdgeInsets.only(top: SiSpace.x2),
-      padding: const EdgeInsets.fromLTRB(8, 12, 12, 4),
-      decoration: BoxDecoration(
-        border: Border.all(color: c.line),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Column(
-        children: [
-          if (plan.medidas.length > 1)
-            _Leyenda(medidas: plan.medidas, fmt: fmt, c: c),
-          SizedBox(
-            height: 180,
-            child: LineChart(
-              LineChartData(
-                lineBarsData: series,
-                // Rejilla y ejes recesivos: la línea es el dato, no el marco.
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: false,
-                  getDrawingHorizontalLine: (_) =>
-                      FlLine(color: c.line, strokeWidth: 1),
-                ),
-                borderData: FlBorderData(show: false),
-                titlesData: FlTitlesData(
-                  topTitles: const AxisTitles(),
-                  rightTitles: const AxisTitles(),
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 46,
-                      getTitlesWidget: (v, _) => Text(
-                        fmt.compacto(plan.medidas.first, v),
-                        style: TextStyle(fontSize: 9, color: c.ink3),
-                      ),
-                    ),
-                  ),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 24,
-                      getTitlesWidget: (v, _) {
-                        final i = v.round();
-                        if (i < 0 || i >= etiquetas.length) {
-                          return const SizedBox.shrink();
-                        }
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            etiquetas[i],
-                            style: TextStyle(fontSize: 9, color: c.ink3),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                lineTouchData: LineTouchData(
-                  touchTooltipData: LineTouchTooltipData(
-                    getTooltipItems: (spots) => spots.map((s) {
-                      final medida = plan.medidas[
-                          s.barIndex.clamp(0, plan.medidas.length - 1)];
-                      return LineTooltipItem(
-                        '${_FormatoCifras.encabezado(medida)}\n'
-                        '${fmt.valor(medida, s.y)}',
-                        TextStyle(fontSize: 11, color: c.ink),
-                      );
-                    }).toList(),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// El caso sin agrupación: un total no es una gráfica de una sola barra.
-class _CifrasDestacadas extends StatelessWidget {
-  final Map<String, dynamic> fila;
-  final List<String> medidas;
-  final _FormatoCifras fmt;
-  final SiColors c;
-
-  const _CifrasDestacadas({
-    required this.fila,
-    required this.medidas,
-    required this.fmt,
-    required this.c,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(top: SiSpace.x2),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: c.brandTint,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Wrap(
-        spacing: 24,
-        runSpacing: 12,
-        children: [
-          for (final m in medidas)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _FormatoCifras.encabezado(m),
-                  style: TextStyle(fontSize: 10, color: c.ink3),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  fmt.valor(m, fila[m]),
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: c.brand,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
-                ),
-              ],
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Leyenda: obligatoria con dos o más series, para que la identidad no dependa sólo del
-/// color. El texto va en tinta, no en el color de la serie — el punto de color al lado es
-/// el que carga la identidad.
-class _Leyenda extends StatelessWidget {
-  final List<String> medidas;
-  final _FormatoCifras fmt;
-  final SiColors c;
-
-  const _Leyenda({required this.medidas, required this.fmt, required this.c});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Wrap(
-        spacing: 14,
-        runSpacing: 6,
-        children: [
-          for (int i = 0; i < medidas.length; i++)
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 9,
-                  height: 9,
-                  decoration: BoxDecoration(
-                    color: _paletaSeries[i % _paletaSeries.length],
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(width: 5),
-                Text(
-                  _FormatoCifras.encabezado(medidas[i]),
-                  style: TextStyle(fontSize: 10, color: c.ink2),
-                ),
-              ],
             ),
         ],
       ),
