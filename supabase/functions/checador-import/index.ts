@@ -48,7 +48,37 @@ const reply = (body: unknown, status = 200) =>
 /// Tope de seguridad. El reporte de 15 días trae 877 filas; 50 mil cubre con holgura un año
 /// entero y evita que un archivo equivocado agote la memoria de la función.
 const MAX_FILAS = 50_000;
+
+/// Debe quedar por debajo del tope de filas de PostgREST (`db_max_rows`, 1000 por omisión).
 const CHUNK = 500;
+
+/// Trae una tabla completa, paginando.
+///
+/// Existe por un error real: la primera versión hacía `select()` sin paginar sobre `profiles`.
+/// PostgREST corta la respuesta en 1000 filas y **no devuelve error**, así que de los 2488
+/// perfiles llegaron 1000 y los 16 empleados que vivían en las posiciones 1178 a 2482 quedaron
+/// sin `profile_id`. Se vio porque el resumen del import los enumeró; sin ese resumen habrían
+/// quedado desvinculados en silencio.
+///
+/// El orden por `id` no es cosmético: paginar por rangos sin un orden total estable puede repetir
+/// u omitir filas entre páginas.
+async function traerTodo(
+  db: ReturnType<typeof createClient>,
+  tabla: string,
+  columnas: string,
+): Promise<Record<string, unknown>[]> {
+  const filas: Record<string, unknown>[] = [];
+  for (let desde = 0; ; desde += CHUNK) {
+    const { data, error } = await db
+      .from(tabla)
+      .select(columnas)
+      .order("id")
+      .range(desde, desde + CHUNK - 1);
+    if (error) throw new Error(`No se pudo leer ${tabla}: ${error.message}`);
+    filas.push(...(data ?? []) as Record<string, unknown>[]);
+    if ((data?.length ?? 0) < CHUNK) return filas;
+  }
+}
 
 // ── Normalización ────────────────────────────────────────────────────────────
 
@@ -234,19 +264,19 @@ Deno.serve(async (req: Request) => {
 
     // ── Catálogos para resolver las uniones ──────────────────────────────────
 
-    const { data: horarios } = await db.from("schedules").select("id, name");
+    const horarios = await traerTodo(db, "schedules", "id, name");
     const porHorario = new Map<string, string>();
-    for (const h of horarios ?? []) {
+    for (const h of horarios) {
       porHorario.set(claveHorario(String(h.name)), String(h.id));
     }
 
-    const { data: perfiles } = await db
-      .from("profiles").select("id, numero_empleado, nombre, full_name");
+    const perfiles = await traerTodo(
+      db, "profiles", "id, numero_empleado, nombre, full_name");
     const porNumero = new Map<string, string>();
     // El respaldo por nombre sólo se usa si el nombre es ÚNICO. 'MOISES' aparece 5 veces en
     // profiles, así que emparejar por nombre de pila sería asignarle checadas a otra persona.
     const porNombre = new Map<string, string | null>();
-    for (const p of perfiles ?? []) {
+    for (const p of perfiles) {
       const n = numEmpleado(String(p.numero_empleado ?? ""));
       if (n) porNumero.set(n, String(p.id));
       const nom = claveNombre(String(p.full_name ?? p.nombre ?? ""));
@@ -432,6 +462,10 @@ Deno.serve(async (req: Request) => {
         r.numero_empleado || `n:${r.nombre_reporte}`
       )).size,
       sin_empatar: sinEmpatar,
+      // Cuántos catálogos se leyeron para resolver las uniones. Se reporta porque el bug del
+      // truncamiento a 1000 filas era invisible: un número redondo aquí delata que la paginación
+      // dejó de funcionar.
+      catalogos: { perfiles: perfiles.length, horarios: horarios.length },
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

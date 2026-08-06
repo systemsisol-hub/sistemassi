@@ -210,22 +210,26 @@ class _ChecadorDashboardState extends State<ChecadorDashboard> {
                     ),
                   ])
                 else ...[
-                  Row(children: [
-                    Icon(Icons.warning_amber_rounded, size: 16, color: c.warn),
-                    const SizedBox(width: SiSpace.x2),
-                    Expanded(
-                      child: Text(
-                        'Los registros se guardaron, pero algo no se pudo unir. Esas filas no '
-                        'entran en el cálculo de puntualidad.',
-                        style: TextStyle(fontSize: 12, color: c.ink2),
-                      ),
-                    ),
-                  ]),
+                  // Las dos faltas tienen consecuencias distintas y hay que decirlo por separado:
+                  // un horario sin empatar sí saca esas entradas del cálculo, pero un empleado sin
+                  // perfil no — la puntualidad se calcula con el horario del reporte, no con el
+                  // perfil. Decir que "no entran en el cálculo" en los dos casos alarmaba de más.
                   if (empleadosSin.isNotEmpty) ...[
+                    Row(children: [
+                      Icon(Icons.person_search_outlined, size: 16, color: c.warn),
+                      const SizedBox(width: SiSpace.x2),
+                      Expanded(
+                        child: Text(
+                          '${empleadosSin.length} '
+                          '${empleadosSin.length == 1 ? 'empleado' : 'empleados'} del reporte no '
+                          'se pudo ligar a un colaborador del sistema. Sí cuentan en la '
+                          'puntualidad, con el nombre que trae el reporte, pero quedan sin '
+                          'vincular a su expediente.',
+                          style: TextStyle(fontSize: 12, color: c.ink2),
+                        ),
+                      ),
+                    ]),
                     const SizedBox(height: SiSpace.x2),
-                    Text('Empleados sin perfil (${empleadosSin.length}):',
-                        style: TextStyle(
-                            fontSize: 12, fontWeight: FontWeight.w600, color: c.ink)),
                     Text(
                       empleadosSin
                           .map((e) => '${e['nombre']} (${e['numero']})')
@@ -234,10 +238,22 @@ class _ChecadorDashboardState extends State<ChecadorDashboard> {
                     ),
                   ],
                   if (horariosSin.isNotEmpty) ...[
+                    if (empleadosSin.isNotEmpty) const SizedBox(height: SiSpace.x3),
+                    Row(children: [
+                      Icon(Icons.warning_amber_rounded, size: 16, color: c.danger),
+                      const SizedBox(width: SiSpace.x2),
+                      Expanded(
+                        child: Text(
+                          '${horariosSin.length} '
+                          '${horariosSin.length == 1 ? 'horario' : 'horarios'} del reporte no '
+                          'existe aquí. Esas entradas SÍ quedan fuera del cálculo de puntualidad, '
+                          'porque sin horario no hay hora de entrada contra la que comparar. '
+                          'Créalos con el mismo nombre y vuelve a subir el reporte.',
+                          style: TextStyle(fontSize: 12, color: c.ink2),
+                        ),
+                      ),
+                    ]),
                     const SizedBox(height: SiSpace.x2),
-                    Text('Horarios que no existen aquí (${horariosSin.length}):',
-                        style: TextStyle(
-                            fontSize: 12, fontWeight: FontWeight.w600, color: c.ink)),
                     Text(horariosSin.join(', '),
                         style: TextStyle(fontSize: 12, color: c.ink3)),
                   ],
@@ -456,15 +472,21 @@ class _ChecadorDashboardState extends State<ChecadorDashboard> {
                   const SizedBox(height: SiSpace.x3),
                   Divider(height: 1, color: c.line2),
                   const SizedBox(height: SiSpace.x3),
-                  // El contraste con appchecar hace visible una diferencia que de otro modo
-                  // aparecería como un error: cada sistema tiene su propia configuración de
-                  // horarios, así que los conteos no tienen por qué ser idénticos.
+                  // Contraste con el veredicto propio de appchecar, que viaja en el color de la
+                  // celda de su reporte. Coincidir es la señal de que nuestros horarios están
+                  // bien capturados; separarse apunta a un horario que difiere entre los dos
+                  // sistemas, no a un error de cálculo.
                   _nota(
                     c,
-                    Icons.compare_arrows,
-                    'appchecar marca $_reportadosPorAppchecar fuera de tiempo; el cálculo contra '
-                    'nuestros horarios da $_retardos. La diferencia es configuración distinta '
-                    'entre los dos sistemas.',
+                    _retardos == _reportadosPorAppchecar
+                        ? Icons.check_circle_outline
+                        : Icons.compare_arrows,
+                    _retardos == _reportadosPorAppchecar
+                        ? 'Coincide con appchecar: los dos cuentan $_retardos fuera de tiempo. '
+                            'Los horarios capturados aquí son los mismos que tiene el checador.'
+                        : 'appchecar marca $_reportadosPorAppchecar fuera de tiempo y el cálculo '
+                            'contra nuestros horarios da $_retardos. La diferencia apunta a un '
+                            'horario que no está igual en los dos sistemas.',
                   ),
                 ],
               ),
