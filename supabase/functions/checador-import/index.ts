@@ -173,11 +173,19 @@ interface Celda {
 function filasDelHtml(html: string): Celda[][] {
   const filas: Celda[][] = [];
   const trRe = /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi;
-  const tdRe = /<(t[dh])\b([^>]*)>([\s\S]*?)<\/\1>/gi;
+  // El cierre se acepta como `</td>` o `</th>` sin exigir que coincida con la apertura, porque el
+  // HTML de appchecar está mal formado: la celda de Sucursal abre con <td> y cierra con </th>.
+  //
+  //     <td style="...">Constituyentes</th>
+  //
+  // Con una retrorreferencia que obligara a que coincidieran, el `</th>` no cerraba nada y la
+  // celda se comía la siguiente: las 936 filas quedaban en 12 celdas en lugar de 13, la zona
+  // llegaba como «Constituyentes Ver foto» y `registro_con` se perdía por completo.
+  const tdRe = /<t[dh]\b([^>]*)>([\s\S]*?)<\/t[dh]>/gi;
   for (const tr of html.matchAll(trRe)) {
     const celdas: Celda[] = [];
     for (const td of tr[1].matchAll(tdRe)) {
-      celdas.push({ estilo: td[2], texto: textoDeCelda(td[3]) });
+      celdas.push({ estilo: td[1], texto: textoDeCelda(td[2]) });
     }
     if (celdas.length > 0) filas.push(celdas);
   }
