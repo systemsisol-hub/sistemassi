@@ -355,8 +355,10 @@ class _LightPanel extends StatelessWidget {
               ]),
               const Spacer(),
 
+              // Los saltos son a propósito, para el efecto de cartel. Se cortan por sentido
+              // —sujeto, complemento, cierre— y se mantienen en tres líneas como antes.
               Text(
-                'Opera tu empresa\ndesde un solo\nlugar.',
+                'Gestiona tu\noperación interna\ndesde un solo lugar.',
                 style: SiType.sans(
                   size: 50, weight: FontWeight.w700,
                   color: Colors.white, height: 0.97, letterSpacing: -2.0,
@@ -593,17 +595,25 @@ class _BrandMark extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 10),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Sistemassi',
-                style: SiType.sans(
-                    size: 13.5,
-                    weight: FontWeight.w600,
-                    letterSpacing: -0.2)),
-            Text('SISOL · INTRANET',
-                style: SiType.mono(size: 10, letterSpacing: 1.2)),
-          ],
+        // Flexible porque el Row es MainAxisSize.min: el descriptor es casi tres veces más
+        // largo que el «SISOL · INTRANET» que había, y sin esto se desborda del panel del
+        // formulario, que sólo mide el 40% del ancho menos 104px de padding.
+        Flexible(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('SITE SI SOL',
+                  style: SiType.sans(
+                      size: 13.5,
+                      weight: FontWeight.w600,
+                      letterSpacing: -0.2)),
+              // Menos tamaño y menos letterSpacing que la etiqueta anterior: el espaciado
+              // amplio funciona en un rótulo de dos palabras, no en una frase de 42
+              // caracteres, que además dejaría de caber en una línea.
+              Text('Sistema Integral de Tecnología y Empleados',
+                  style: SiType.mono(size: 9, letterSpacing: 0.3)),
+            ],
+          ),
         ),
       ],
     );
