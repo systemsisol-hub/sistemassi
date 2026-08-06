@@ -1,20 +1,28 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:excel/excel.dart' as xl;
+import 'asistente_store.dart';
 import 'theme/si_theme.dart';
 
+/// El chat del asistente de RH.
+///
+/// La conversación **no** vive aquí: vive en [AsistenteStore]. Este widget sólo la pinta, así que
+/// se puede montar dos veces —la página completa y el panel lateral del shell— y las dos vistas
+/// muestran el mismo hilo. Ver el encabezado de `asistente_store.dart` para el porqué.
 class AiPage extends StatefulWidget {
   final String role;
   final Map<String, dynamic> permissions;
+
+  /// El panel lateral es angosto: quita el saludo de bienvenida grande y aprieta los márgenes.
+  final bool compacto;
 
   const AiPage({
     super.key,
     this.role = 'usuario',
     this.permissions = const {},
+    this.compacto = false,
   });
 
   @override
@@ -22,14 +30,11 @@ class AiPage extends StatefulWidget {
 }
 
 class _AiPageState extends State<AiPage> {
+  // Los controladores sí son de cada vista: el panel y la página desplazan por separado.
   final _inputCtrl  = TextEditingController();
   final _scrollCtrl = ScrollController();
-  final List<_ChatMsg> _messages = [];
-  bool _isLoading = false;
-  _AttachedFile? _attachedFile;
 
-  static const _fnUrl =
-      'https://zkmbebybyyefmqcxjqrg.supabase.co/functions/v1/ai-assistant';
+  final _store = AsistenteStore.instancia;
 
   static const _quickActions = [
     (Icons.search,              'Buscar colaborador',  'Quiero buscar a un colaborador específico'),
@@ -37,10 +42,24 @@ class _AiPageState extends State<AiPage> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    // Se sigue al almacén y no sólo al propio envío: si el mensaje se manda desde la otra vista
+    // —el panel mientras la página está abierta, o al revés— ésta también baja al final.
+    _store.addListener(_scrollToBottom);
+  }
+
+  @override
   void dispose() {
+    _store.removeListener(_scrollToBottom);
     _inputCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
+  }
+
+  void _send(String text) {
+    _inputCtrl.clear();
+    _store.enviar(text);
   }
 
   // ── File attachment ──────────────────────────────────────────────────────────
@@ -76,16 +95,12 @@ class _AiPageState extends State<AiPage> {
     final truncated = content.length > maxChars;
     if (truncated) content = content.substring(0, maxChars);
 
-    if (mounted) {
-      setState(() {
-        _attachedFile = _AttachedFile(
-          name: file.name,
-          ext: ext,
-          content: content,
-          truncated: truncated,
-        );
-      });
-    }
+    _store.adjuntar(ArchivoAdjunto(
+      nombre: file.name,
+      ext: ext,
+      contenido: content,
+      truncado: truncated,
+    ));
   }
 
   String _parseExcel(Uint8List bytes) {
@@ -129,120 +144,45 @@ class _AiPageState extends State<AiPage> {
     });
   }
 
-  Future<void> _send(String text) async {
-    final trimmed = text.trim();
-    if ((trimmed.isEmpty && _attachedFile == null) || _isLoading) return;
-    _inputCtrl.clear();
-
-    // Build the message content, prepending file data if attached
-    final file = _attachedFile;
-    String userText = trimmed;
-    String displayText = trimmed;
-
-    if (file != null) {
-      final truncNote = file.truncated
-          ? '\n\n⚠️ Archivo truncado a los primeros 40 000 caracteres.'
-          : '';
-      userText =
-          '📎 Archivo adjunto: ${file.name}\n\n'
-          '```\n${file.content}\n```$truncNote'
-          '${trimmed.isNotEmpty ? '\n\n$trimmed' : ''}';
-      displayText = trimmed.isNotEmpty ? trimmed : 'Analiza este archivo.';
-    }
-
-    setState(() {
-      _messages.add(_ChatMsg(
-        role: 'user',
-        text: displayText,
-        attachedFileName: file?.name,
-        attachedFileExt: file?.ext,
-      ));
-      _attachedFile = null;
-      _isLoading = true;
-    });
-    _scrollToBottom();
-
-    try {
-      final session = Supabase.instance.client.auth.currentSession;
-      if (session == null) throw Exception('Sin sesión activa');
-
-      // Build history — use displayText for older messages, userText is already
-      // included in the last user message we just added with file content embedded
-      final history = _messages
-          .where((m) => m.text.isNotEmpty)
-          .map((m) => {'role': m.role, 'content': m.text})
-          .toList();
-      // Replace the last user message text with the full content (file + question)
-      if (history.isNotEmpty && history.last['role'] == 'user') {
-        history[history.length - 1] = {'role': 'user', 'content': userText};
-      }
-
-      final resp = await http.post(
-        Uri.parse(_fnUrl),
-        headers: {
-          'Authorization': 'Bearer ${session.accessToken}',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({'messages': history}),
-      ).timeout(const Duration(seconds: 60));
-
-      if (!mounted) return;
-
-      final body = jsonDecode(resp.body) as Map<String, dynamic>;
-
-      if (resp.statusCode != 200) {
-        throw Exception(body['error']?.toString() ?? 'Error ${resp.statusCode}');
-      }
-
-      setState(() {
-        _isLoading = false;
-        _messages.add(_ChatMsg(
-          role: 'assistant',
-          text: body['text'] as String? ?? '',
-          structured: body['structured'] as Map<String, dynamic>?,
-        ));
-      });
-      _scrollToBottom();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _messages.add(_ChatMsg(
-          role: 'assistant',
-          text: 'Error: $e',
-          isError: true,
-        ));
-      });
-      _scrollToBottom();
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
     final c = SiColors.of(context);
-    final isEmpty = _messages.isEmpty;
 
-    return Scaffold(
-      backgroundColor: c.bg,
-      body: Column(
-        children: [
-          Expanded(
-            child: isEmpty
-                ? _buildWelcome(c)
-                : ListView.builder(
-                    controller: _scrollCtrl,
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                    itemCount: _messages.length + (_isLoading ? 1 : 0),
-                    itemBuilder: (context, i) {
-                      if (i == _messages.length) return _TypingBubble(c: c);
-                      return _buildBubble(_messages[i], c);
-                    },
-                  ),
+    // ListenableBuilder y no setState: el estado es del almacén, así que las dos vistas montadas
+    // a la vez se repintan solas cuando cualquiera de las dos manda un mensaje.
+    return ListenableBuilder(
+      listenable: _store,
+      builder: (context, _) {
+        final mensajes = _store.mensajes;
+        final isEmpty = mensajes.isEmpty;
+        final pad = widget.compacto ? 10.0 : 16.0;
+
+        return Scaffold(
+          backgroundColor: c.bg,
+          body: Column(
+            children: [
+              Expanded(
+                child: isEmpty
+                    ? _buildWelcome(c)
+                    : ListView.builder(
+                        controller: _scrollCtrl,
+                        padding: EdgeInsets.fromLTRB(pad, pad, pad, 8),
+                        itemCount: mensajes.length + (_store.cargando ? 1 : 0),
+                        itemBuilder: (context, i) {
+                          if (i == mensajes.length) return _TypingBubble(c: c);
+                          return _buildBubble(mensajes[i], c);
+                        },
+                      ),
+              ),
+              // En el panel angosto las acciones rápidas no caben en una fila y desordenan la
+              // vista; ahí sólo estorban.
+              if (isEmpty && !widget.compacto) _buildQuickActions(c),
+              _buildInputBar(c),
+            ],
           ),
-          if (isEmpty) _buildQuickActions(c),
-          _buildInputBar(c),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -418,7 +358,7 @@ class _AiPageState extends State<AiPage> {
         mainAxisSize: MainAxisSize.min,
         children: [
           // ── Archivo adjunto chip ──────────────────────────────────────
-          if (_attachedFile != null)
+          if (_store.adjunto != null)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Row(
@@ -433,22 +373,22 @@ class _AiPageState extends State<AiPage> {
                       ),
                       child: Row(
                         children: [
-                          Icon(_iconForExt(_attachedFile!.ext), size: 16, color: c.brand),
+                          Icon(_iconForExt(_store.adjunto!.ext), size: 16, color: c.brand),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              _attachedFile!.name,
+                              _store.adjunto!.nombre,
                               style: TextStyle(fontSize: 13, color: c.brand, fontWeight: FontWeight.w500),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          if (_attachedFile!.truncated)
+                          if (_store.adjunto!.truncado)
                             Padding(
                               padding: const EdgeInsets.only(right: 6),
                               child: Text('truncado', style: TextStyle(fontSize: 11, color: c.warn)),
                             ),
                           GestureDetector(
-                            onTap: () => setState(() => _attachedFile = null),
+                            onTap: () => _store.adjuntar(null),
                             child: Icon(Icons.close, size: 16, color: c.brand),
                           ),
                         ],
@@ -465,16 +405,16 @@ class _AiPageState extends State<AiPage> {
             children: [
               // Botón adjuntar archivo
               GestureDetector(
-                onTap: _isLoading ? null : _pickFile,
+                onTap: _store.cargando ? null : _pickFile,
                 child: Container(
                   width: 38,
                   height: 38,
                   margin: const EdgeInsets.only(right: 8),
                   decoration: BoxDecoration(
-                    color: _attachedFile != null ? c.brandTint : c.hover,
+                    color: _store.adjunto != null ? c.brandTint : c.hover,
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: _attachedFile != null
+                      color: _store.adjunto != null
                           ? c.brand.withOpacity(0.4)
                           : c.line,
                     ),
@@ -482,7 +422,7 @@ class _AiPageState extends State<AiPage> {
                   child: Icon(
                     Icons.attach_file_rounded,
                     size: 18,
-                    color: _attachedFile != null ? c.brand : c.ink3,
+                    color: _store.adjunto != null ? c.brand : c.ink3,
                   ),
                 ),
               ),
@@ -500,7 +440,7 @@ class _AiPageState extends State<AiPage> {
                     minLines: 1,
                     textInputAction: TextInputAction.newline,
                     decoration: InputDecoration(
-                      hintText: _attachedFile != null
+                      hintText: _store.adjunto != null
                           ? 'Pregunta sobre el archivo...'
                           : 'Escribe un mensaje...',
                       hintStyle: TextStyle(color: c.ink4, fontSize: 14),
@@ -516,16 +456,16 @@ class _AiPageState extends State<AiPage> {
               const SizedBox(width: 8),
               // Botón enviar
               GestureDetector(
-                onTap: _isLoading ? null : () => _send(_inputCtrl.text),
+                onTap: _store.cargando ? null : () => _send(_inputCtrl.text),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 180),
                   width: 42,
                   height: 42,
                   decoration: BoxDecoration(
-                    color: _isLoading ? c.brand.withOpacity(0.4) : c.brand,
+                    color: _store.cargando ? c.brand.withOpacity(0.4) : c.brand,
                     shape: BoxShape.circle,
                   ),
-                  child: _isLoading
+                  child: _store.cargando
                       ? const Padding(
                           padding: EdgeInsets.all(12),
                           child: CircularProgressIndicator(
@@ -544,7 +484,7 @@ class _AiPageState extends State<AiPage> {
 
   // ── Message bubble ───────────────────────────────────────────────────────────
 
-  Widget _buildBubble(_ChatMsg msg, SiColors c) {
+  Widget _buildBubble(ChatMsg msg, SiColors c) {
     final isUser = msg.role == 'user';
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
@@ -703,40 +643,6 @@ class _AiPageState extends State<AiPage> {
 
     return const SizedBox.shrink();
   }
-}
-
-// ── Data models ───────────────────────────────────────────────────────────────
-
-class _ChatMsg {
-  final String role;
-  final String text;
-  final Map<String, dynamic>? structured;
-  final bool isError;
-  final String? attachedFileName;
-  final String? attachedFileExt;
-
-  const _ChatMsg({
-    required this.role,
-    required this.text,
-    this.structured,
-    this.isError = false,
-    this.attachedFileName,
-    this.attachedFileExt,
-  });
-}
-
-class _AttachedFile {
-  final String name;
-  final String ext;
-  final String content;
-  final bool truncated;
-
-  const _AttachedFile({
-    required this.name,
-    required this.ext,
-    required this.content,
-    required this.truncated,
-  });
 }
 
 // ── Typing indicator ──────────────────────────────────────────────────────────

@@ -11,6 +11,8 @@ import 'incidencias_page.dart';
 import 'social_page.dart';
 import 'external_contacts_page.dart';
 import 'widgets/notification_bell.dart';
+import 'widgets/asistente_panel.dart';
+import 'asistente_store.dart';
 import 'calendar_page.dart';
 import 'schedules_page.dart';
 import 'bi_page.dart';
@@ -656,7 +658,30 @@ class _DesktopShellState extends State<_DesktopShell>
                   onOpenRecord: widget.onOpenRecord,
                   onSelectHome: () => widget.onSelect(0),
                 ),
-                Expanded(child: currentPage['widget']),
+                // El panel va aquí, HERMANO de la página y no dentro de ella: lo que vive dentro
+                // de `currentPage['widget']` lo destruye Flutter al cambiar de página.
+                //
+                // Offstage y no un `if`: mantiene el subárbol en el árbol de widgets, así que el
+                // panel conserva su posición de scroll al ocultarlo. Mismo recurso que usa
+                // bi_page.dart con su propio panel.
+                Expanded(
+                  child: ListenableBuilder(
+                    listenable: AsistenteStore.instancia,
+                    builder: (context, _) => Row(
+                      children: [
+                        Expanded(child: currentPage['widget']),
+                        Offstage(
+                          offstage: !AsistenteStore.instancia.panelAbierto,
+                          child: AsistentePanel(
+                            role: widget.role,
+                            permissions: widget.permissions,
+                            ancho: AsistentePanel.anchoEscritorio,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -715,6 +740,12 @@ class _MobileShell extends StatelessWidget {
                   mode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark,
             ),
           ),
+          _BotonAsistente(
+            c: c,
+            role: role,
+            permissions: permissions,
+            pageTitle: currentPage['title'] as String,
+          ),
           NotificationBell(
             role: role,
             permissions: permissions,
@@ -726,7 +757,27 @@ class _MobileShell extends StatelessWidget {
         ],
       ),
       drawer: _buildDrawer(context, c, fotoUrl),
-      body: currentPage['widget'],
+      // En un teléfono un panel de 380px al lado no cabe, así que el asistente se pone encima
+      // del contenido. Sigue siendo hermano de la página, no hijo, por la misma razón que en
+      // escritorio.
+      body: ListenableBuilder(
+        listenable: AsistenteStore.instancia,
+        builder: (context, _) => Stack(
+          children: [
+            Positioned.fill(child: currentPage['widget']),
+            // Positioned tiene que ser hijo directo del Stack, así que el Offstage va dentro.
+            Positioned.fill(
+              child: Offstage(
+                offstage: !AsistenteStore.instancia.panelAbierto,
+                child: AsistentePanel(
+                  role: role,
+                  permissions: permissions,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -905,6 +956,12 @@ class _Header extends StatelessWidget {
               );
             },
           ),
+          _BotonAsistente(
+            c: c,
+            role: role,
+            permissions: permissions,
+            pageTitle: pageTitle,
+          ),
           NotificationBell(
             role: role,
             permissions: permissions,
@@ -915,6 +972,55 @@ class _Header extends StatelessWidget {
           ),
           const SizedBox(width: SiSpace.x3),
         ],
+      ),
+    );
+  }
+}
+
+/// Abre y cierra el panel del asistente.
+///
+/// Se esconde en dos páginas:
+///
+/// - **BI**, que ya trae su propio analista a la derecha, conectado a otra Edge Function
+///   (`bi-assistant`) con otro modelo y sus herramientas de Power BI. Dos paneles de chat abiertos
+///   a la vez serían un estorbo, y ahí el especializado es el que sirve.
+/// - **IA**, porque ya se está viendo la conversación a pantalla completa.
+class _BotonAsistente extends StatelessWidget {
+  const _BotonAsistente({
+    required this.c,
+    required this.role,
+    required this.permissions,
+    required this.pageTitle,
+  });
+
+  final SiColors c;
+  final String role;
+  final Map<String, dynamic> permissions;
+  final String pageTitle;
+
+  static const _paginasSinBoton = {'BI', 'IA'};
+
+  @override
+  Widget build(BuildContext context) {
+    // Mismo criterio que la página de IA y que la Edge Function: sin esto, quien no tenga el
+    // permiso vería un botón que responde 403.
+    final permitido = role == 'admin' || permissions['show_ai'] == true;
+    if (!permitido || _paginasSinBoton.contains(pageTitle)) {
+      return const SizedBox.shrink();
+    }
+
+    final store = AsistenteStore.instancia;
+    return ListenableBuilder(
+      listenable: store,
+      builder: (context, _) => IconButton(
+        visualDensity: VisualDensity.compact,
+        tooltip: store.panelAbierto ? 'Cerrar asistente' : 'Asistente IA',
+        icon: Icon(
+          store.panelAbierto ? Icons.smart_toy : Icons.smart_toy_outlined,
+          size: 18,
+          color: store.panelAbierto ? c.brand : c.ink3,
+        ),
+        onPressed: store.alternarPanel,
       ),
     );
   }
