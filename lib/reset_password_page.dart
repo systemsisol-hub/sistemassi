@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'auth_errores.dart';
 import 'theme/si_theme.dart';
 
 // Navy constants (same as login page)
@@ -72,10 +73,10 @@ class _ResetPasswordPageState extends State<ResetPasswordPage>
         UserAttributes(password: pass),
       );
       if (mounted) setState(() { _loading = false; _done = true; });
-    } on AuthException catch (e) {
-      if (mounted) setState(() { _loading = false; _error = e.message; });
     } catch (e) {
-      if (mounted) setState(() { _loading = false; _error = e.toString(); });
+      // Todo por el mismo traductor: los mensajes de GoTrue vienen en inglés y aquí arriba las
+      // validaciones ya están en español, así que mostrarlos crudos mezclaba los dos idiomas.
+      if (mounted) setState(() { _loading = false; _error = mensajeDeAuth(e); });
     }
   }
 

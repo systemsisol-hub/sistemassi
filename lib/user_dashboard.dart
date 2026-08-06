@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
+import 'auth_errores.dart';
 import 'theme/si_theme.dart';
 
 class UserDashboard extends StatefulWidget {
@@ -308,11 +309,20 @@ class _UserDashboardState extends State<UserDashboard> {
                                   if (user == null || user.email == null) {
                                     throw Exception('Usuario no encontrado');
                                   }
-                                  await Supabase.instance.client.auth
-                                      .signInWithPassword(
-                                    email: user.email!,
-                                    password: currentPwCtrl.text,
-                                  );
+                                  // Dos pasos que pueden fallar por razones distintas, así que
+                                  // se atrapan por separado: antes un solo catch respondía
+                                  // "Contraseña actual incorrecta" también cuando la que
+                                  // fallaba era la NUEVA (débil, repetida o filtrada), y el
+                                  // usuario reescribía una y otra vez la actual, que estaba bien.
+                                  try {
+                                    await Supabase.instance.client.auth
+                                        .signInWithPassword(
+                                      email: user.email!,
+                                      password: currentPwCtrl.text,
+                                    );
+                                  } catch (_) {
+                                    throw _ErrorContrasenaActual();
+                                  }
                                   await Supabase.instance.client.auth
                                       .updateUser(UserAttributes(
                                           password: newPwCtrl.text));
@@ -351,9 +361,10 @@ class _UserDashboardState extends State<UserDashboard> {
                                 } catch (e) {
                                   if (mounted) {
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                            'Contraseña actual incorrecta'),
+                                      SnackBar(
+                                        content: Text(e is _ErrorContrasenaActual
+                                            ? 'La contraseña actual no es correcta'
+                                            : mensajeDeAuth(e)),
                                         backgroundColor: Colors.red,
                                       ),
                                     );
@@ -1261,3 +1272,8 @@ String _profileInitials(String name) {
   }
   return name.isNotEmpty ? name[0].toUpperCase() : '?';
 }
+
+/// Marca que la reautenticación falló, para distinguir "la contraseña actual está mal" de
+/// cualquier problema con la contraseña nueva. Sin esta distinción, el mensaje culpaba a la
+/// contraseña actual en los dos casos.
+class _ErrorContrasenaActual implements Exception {}

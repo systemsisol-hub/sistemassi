@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'auth_errores.dart';
 import 'theme/si_theme.dart';
 import 'widgets/soporte_chat.dart';
 
@@ -104,20 +105,11 @@ class _LoginPageState extends State<LoginPage>
         'action_type_param': 'INICIO DE SESIÓN',
         'target_info_param': 'Usuario: ${_emailController.text.trim()}',
       });
-    } on AuthException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.message),
-            backgroundColor: SiColors.light.danger,
-          ),
-        );
-      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: $e'),
+            content: Text(mensajeDeAuth(e)),
             backgroundColor: SiColors.light.danger,
           ),
         );
@@ -915,10 +907,8 @@ class _ForgotPasswordDialogState extends State<_ForgotPasswordDialog> {
         redirectTo: redirectTo,
       );
       if (mounted) setState(() { _loading = false; _sent = true; });
-    } on AuthException catch (e) {
-      if (mounted) setState(() { _loading = false; _error = e.message; });
     } catch (e) {
-      if (mounted) setState(() { _loading = false; _error = e.toString(); });
+      if (mounted) setState(() { _loading = false; _error = mensajeDeAuth(e); });
     }
   }
 
