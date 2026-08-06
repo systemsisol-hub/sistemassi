@@ -55,6 +55,7 @@ class _AiPageState extends State<AiPage> {
     // Se sigue al almacén y no sólo al propio envío: si el mensaje se manda desde la otra vista
     // —el panel mientras la página está abierta, o al revés— ésta también baja al final.
     _store.addListener(_scrollToBottom);
+    _store.cargarNombreUsuario();
   }
 
   @override
@@ -220,12 +221,15 @@ class _AiPageState extends State<AiPage> {
               ),
               const SizedBox(height: 20),
               Text(
-                'Asistente de RRHH',
+                // El saludo espera el nombre; sin él, algo que no suene a hueco.
+                _store.nombreUsuario == null
+                    ? '¡Hola!'
+                    : '¡Hola, ${_store.nombreUsuario}!',
                 style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: c.ink),
               ),
               const SizedBox(height: 8),
               Text(
-                'Consulta información del equipo, gestiona incidencias\ny comunícate con lenguaje natural.',
+                'Soy Soli. Pregúntame con tus propias palabras y yo\nbusco en el sistema por ti.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 14, color: c.ink3, height: 1.6),
               ),
@@ -239,25 +243,58 @@ class _AiPageState extends State<AiPage> {
     );
   }
 
-  Widget _buildCapabilitiesCard(SiColors c) {
-    final isAdmin = widget.role == 'admin';
+  /// Lo que este usuario puede pedirle, derivado de sus permisos reales.
+  ///
+  /// Antes eran dos listas fijas según el rol, y prometían de más: la de administrador ofrecía
+  /// inventario y contactos a admins que no tienen esos accesos, y la de usuario ofrecía búsqueda
+  /// de colaboradores a quien no tiene `show_cssi`. Ofrecer algo que después se rechaza es peor que
+  /// no ofrecerlo, así que la lista sigue el mismo mapa que aplica la Edge Function.
+  List<(IconData, String)> _capacidades() {
+    final admin = widget.role == 'admin';
+    final items = <(IconData, String)>[];
 
-    final List<(IconData, String)> items = isAdmin
-        ? [
-            (Icons.people_outline,          'Consultar todos los colaboradores con datos completos'),
-            (Icons.person_add_outlined,     'Dar de alta nuevos colaboradores'),
-            (Icons.edit_outlined,           'Actualizar información de colaboradores'),
-            (Icons.description_outlined,    'Ver y crear incidencias de cualquier usuario'),
-            (Icons.inventory_2_outlined,    'Consultar el inventario completo de equipos'),
-            (Icons.notifications_outlined,  'Enviar notificaciones al equipo'),
-            (Icons.bar_chart_outlined,      'Generar reportes por área y ubicación'),
-          ]
-        : [
-            (Icons.people_outline,         'Buscar colaboradores (nombre, área, puesto, ubicación)'),
-            (Icons.description_outlined,   'Crear y consultar mis propias incidencias'),
-            (Icons.inventory_2_outlined,   'Ver el equipo asignado a mi perfil'),
-            (Icons.notifications_outlined, 'Enviar notificaciones'),
-          ];
+    if (_tienePermiso('show_cssi')) {
+      items.add((Icons.people_outline, admin
+          ? 'Consultar colaboradores con sus datos completos'
+          : 'Buscar colaboradores por nombre, área, puesto o ubicación'));
+      if (admin) {
+        items.add((Icons.person_add_outlined,
+            'Dar de alta colaboradores y actualizar su información'));
+      }
+    }
+    if (_tienePermiso('show_incidencias')) {
+      items.add((Icons.description_outlined, admin
+          ? 'Ver y crear incidencias de cualquier colaborador'
+          : 'Consultar y crear tus propias incidencias'));
+      items.add((Icons.beach_access_outlined, admin
+          ? 'Calcular los días de vacaciones de cualquier colaborador'
+          : 'Calcular tus días de vacaciones disponibles'));
+      if (admin) {
+        items.add((Icons.fact_check_outlined, 'Aprobar o cancelar incidencias'));
+      }
+    }
+    if (_tienePermiso('show_issi')) {
+      items.add((Icons.inventory_2_outlined, admin
+          ? 'Consultar el inventario completo de equipos'
+          : 'Ver el equipo asignado a tu perfil'));
+      if (admin) {
+        items.add((Icons.swap_horiz, 'Asignar o liberar equipos'));
+      }
+    }
+    if (_tienePermiso('show_external_contacts')) {
+      items.add((Icons.contact_phone_outlined, admin
+          ? 'Consultar y editar contactos externos'
+          : 'Consultar contactos externos'));
+    }
+
+    // Estas dos no dependen de ningún permiso de página.
+    items.add((Icons.notifications_outlined, 'Enviar notificaciones'));
+    items.add((Icons.attach_file, 'Analizar un archivo que le adjuntes (CSV o Excel)'));
+    return items;
+  }
+
+  Widget _buildCapabilitiesCard(SiColors c) {
+    final items = _capacidades();
 
     return Container(
       width: double.infinity,
@@ -270,39 +307,12 @@ class _AiPageState extends State<AiPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: c.brandTint,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                isAdmin
-                    ? Icons.admin_panel_settings_outlined
-                    : Icons.person_outline,
-                size: 15,
-                color: c.brand,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isAdmin ? 'Acceso de Administrador' : 'Acceso de Usuario',
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: c.ink),
-                ),
-                Text(
-                  isAdmin ? 'Puedes hacer todo lo siguiente:' : 'Puedes hacer lo siguiente:',
-                  style: TextStyle(fontSize: 11, color: c.ink3),
-                ),
-              ],
-            ),
-          ]),
+          // Sin el rótulo de nivel de acceso: al usuario le sirve saber qué puede pedir, no cómo
+          // se llama su perfil de permisos.
+          Text(
+            'Esto es lo que puedo hacer por ti:',
+            style: TextStyle(fontSize: 12, color: c.ink3),
+          ),
           const SizedBox(height: 14),
           ...items.map((item) => Padding(
             padding: const EdgeInsets.only(bottom: 8),

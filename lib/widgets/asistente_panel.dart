@@ -46,7 +46,7 @@ class AsistentePanel extends StatelessWidget {
             children: [
               Icon(Icons.smart_toy_outlined, size: 17, color: c.brand),
               const SizedBox(width: SiSpace.x2),
-              Text('Asistente',
+              Text('Soli',
                   style: TextStyle(
                       fontSize: 14, fontWeight: FontWeight.w600, color: c.ink)),
               const Spacer(),

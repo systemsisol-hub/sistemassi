@@ -1014,7 +1014,7 @@ class _BotonAsistente extends StatelessWidget {
       listenable: store,
       builder: (context, _) => IconButton(
         visualDensity: VisualDensity.compact,
-        tooltip: store.panelAbierto ? 'Cerrar asistente' : 'Asistente IA',
+        tooltip: store.panelAbierto ? 'Cerrar Soli' : 'Soli, tu asistente',
         icon: Icon(
           store.panelAbierto ? Icons.smart_toy : Icons.smart_toy_outlined,
           size: 18,

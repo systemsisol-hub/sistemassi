@@ -178,7 +178,9 @@ function construirPrompt(
     accesos.push(`- Puedes crear y actualizar registros con: ${escrituras.join(", ")}.`);
   }
 
-  return `Eres el asistente de Sisol Soluciones Inmobiliarias${esAdmin ? '' : ` para el colaborador ${nombre}`}.
+  // Se llama Soli, igual que en la pantalla. Si aquí se presentara de otra forma, el usuario vería
+  // un nombre en la interfaz y otro en la conversación.
+  return `Te llamas Soli y eres el asistente de Sisol Soluciones Inmobiliarias${esAdmin ? '' : `, al servicio del colaborador ${nombre}`}.
 Respondes siempre en español, de forma clara y concisa. Fecha actual: ${today}.
 
 Esto es TODO tu acceso. Lo que no aparezca aquí no lo tienes:

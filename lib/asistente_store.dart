@@ -52,6 +52,7 @@ class AsistenteStore extends ChangeNotifier {
   bool _cargando = false;
   ArchivoAdjunto? _adjunto;
   bool _panelAbierto = false;
+  String? _nombreUsuario;
 
   /// Sólo lectura hacia fuera: las vistas pintan, el almacén decide.
   List<ChatMsg> get mensajes => List.unmodifiable(_mensajes);
@@ -80,6 +81,33 @@ class AsistenteStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Nombre de pila, para el saludo. Null mientras no se haya cargado.
+  String? get nombreUsuario => _nombreUsuario;
+
+  /// Se consulta una sola vez por sesión, aunque estén montadas las dos vistas: viven las dos del
+  /// mismo almacén, así que la segunda encuentra el nombre ya cargado.
+  Future<void> cargarNombreUsuario() async {
+    if (_nombreUsuario != null) return;
+    try {
+      final id = Supabase.instance.client.auth.currentUser?.id;
+      if (id == null) return;
+      final fila = await Supabase.instance.client
+          .from('profiles')
+          .select('nombre')
+          .eq('id', id)
+          .maybeSingle();
+      final crudo = (fila?['nombre'] as String?)?.trim();
+      if (crudo == null || crudo.isEmpty) return;
+      // Sólo el primer nombre: «MARIA GUADALUPE» saluda mejor como «Maria».
+      final pila = crudo.split(RegExp(r'\s+')).first;
+      _nombreUsuario =
+          pila[0].toUpperCase() + pila.substring(1).toLowerCase();
+      notifyListeners();
+    } catch (_) {
+      // Sin nombre el saludo cae a algo genérico; no vale tumbar la pantalla por esto.
+    }
+  }
+
   /// Empieza de cero sin cerrar el panel: es el botón de «Nueva conversación».
   void limpiarConversacion() {
     _mensajes.clear();
@@ -88,10 +116,12 @@ class AsistenteStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Reinicio total, incluido el panel. Es lo que corre al cerrar sesión.
+  /// Reinicio total, incluido el panel y el nombre. Es lo que corre al cerrar sesión: si no se
+  /// borrara el nombre, el siguiente en entrar vería el saludo del anterior.
   void limpiar() {
     limpiarConversacion();
     _panelAbierto = false;
+    _nombreUsuario = null;
     notifyListeners();
   }
 
