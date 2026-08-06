@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'auth_errores.dart';
 import 'theme/si_theme.dart';
 import 'services/trash_service.dart';
 import 'utils/webmail_utils.dart';
@@ -2226,9 +2227,11 @@ class _AccessSheetState extends State<_AccessSheet> {
       );
       return;
     }
-    if (pw.length < 6) {
+    if (pw.length < minimoContrasena) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('La contraseña debe tener al menos 6 caracteres')),
+        SnackBar(
+            content:
+                Text('La contraseña debe tener al menos $minimoContrasena caracteres')),
       );
       return;
     }

@@ -58,8 +58,9 @@ class _ResetPasswordPageState extends State<ResetPasswordPage>
       setState(() => _error = 'Ingresa la nueva contraseña');
       return;
     }
-    if (pass.length < 6) {
-      setState(() => _error = 'La contraseña debe tener al menos 6 caracteres');
+    if (pass.length < minimoContrasena) {
+      setState(() =>
+          _error = 'La contraseña debe tener al menos $minimoContrasena caracteres');
       return;
     }
     if (pass != confirm) {
@@ -215,7 +216,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage>
       const SizedBox(height: 5),
       _passField(
         ctrl: _passCtrl,
-        hint: 'Mínimo 6 caracteres',
+        hint: 'Mínimo $minimoContrasena caracteres',
         obscure: _obscure1,
         onToggle: () => setState(() => _obscure1 = !_obscure1),
         onSubmitted: (_) => FocusScope.of(context).nextFocus(),

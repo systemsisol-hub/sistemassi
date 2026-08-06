@@ -1,6 +1,22 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+/// Longitud mínima de contraseña, **igual a la configurada en Supabase**:
+/// Authentication → Sign In / Providers → Password → Minimum password length.
+/// Verificado contra el panel el 2026-08-06: son 8.
+///
+/// Vive aquí, junto al traductor de errores, porque las dos cosas codifican el mismo contrato con
+/// el servidor. Antes había tres números distintos repartidos por la app —la pantalla de
+/// recuperación pedía 6, el diálogo de cambio 8 y la administración de usuarios 6—, así que la
+/// misma cuenta aceptaba o rechazaba la misma contraseña según por dónde se cambiara, y dos de las
+/// tres pantallas prometían un mínimo que el servidor no iba a aceptar.
+///
+/// Si se cambia la política en el panel, hay que cambiar este número: la validación local sólo
+/// existe para avisar antes de ir al servidor. Cuando el servidor sí rechaza por longitud, el
+/// mensaje usa el número que él reporta y no éste, así que un desajuste se traduce en un aviso
+/// tardío, nunca en un dato incorrecto.
+const int minimoContrasena = 8;
+
 /// Traduce los errores de autenticación de Supabase al español.
 ///
 /// GoTrue responde siempre en inglés y no tiene opción de idioma, así que los mensajes llegaban

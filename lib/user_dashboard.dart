@@ -286,11 +286,11 @@ class _UserDashboardState extends State<UserDashboard> {
                                   );
                                   return;
                                 }
-                                if (newPwCtrl.text.length < 8) {
+                                if (newPwCtrl.text.length < minimoContrasena) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
                                         content: Text(
-                                            'Mínimo 8 caracteres')),
+                                            'Mínimo $minimoContrasena caracteres')),
                                   );
                                   return;
                                 }
@@ -431,7 +431,7 @@ class _UserDashboardState extends State<UserDashboard> {
                     ),
                   ),
                   const SizedBox(height: SiSpace.x2),
-                  Text('Mínimo 8 caracteres',
+                  Text('Mínimo $minimoContrasena caracteres',
                       style: TextStyle(fontSize: 12, color: c.ink3)),
                 ],
               ),
