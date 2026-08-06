@@ -36,10 +36,18 @@ class _AiPageState extends State<AiPage> {
 
   final _store = AsistenteStore.instancia;
 
+  /// Cada sugerencia lleva el permiso que la habilita, el mismo que exige la Edge Function. Sin
+  /// esto se ofrecería un atajo que responde «no tengo acceso a esa información»: peor que no
+  /// ofrecerlo.
   static const _quickActions = [
-    (Icons.search,              'Buscar colaborador',  'Quiero buscar a un colaborador específico'),
-    (Icons.event_note_outlined, 'Nueva incidencia',    'Quiero crear una solicitud de vacaciones'),
+    (Icons.search,              'Buscar colaborador', 'Quiero buscar a un colaborador específico', 'show_cssi'),
+    (Icons.event_note_outlined, 'Nueva incidencia',   'Quiero crear una solicitud de vacaciones',  'show_incidencias'),
   ];
+
+  /// Sin excepción para administradores, igual que la Edge Function: la página de Usuarios es la
+  /// única fuente de verdad. Si aquí se saltara el permiso, se ofrecerían atajos que el servidor
+  /// rechaza.
+  bool _tienePermiso(String clave) => widget.permissions[clave] == true;
 
   @override
   void initState() {
@@ -323,12 +331,16 @@ class _AiPageState extends State<AiPage> {
   // ── Quick action chips ───────────────────────────────────────────────────────
 
   Widget _buildQuickActions(SiColors c) {
+    final disponibles = _quickActions.where((a) => _tienePermiso(a.$4)).toList();
+    // Sin sugerencias disponibles no se deja el hueco del Padding.
+    if (disponibles.isEmpty) return const SizedBox.shrink();
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       child: Wrap(
         spacing: 8,
         runSpacing: 8,
-        children: _quickActions.map((a) {
+        children: disponibles.map((a) {
           return ActionChip(
             avatar: Icon(a.$1, size: 15, color: c.brand),
             label: Text(a.$2, style: TextStyle(fontSize: 13, color: c.brand)),

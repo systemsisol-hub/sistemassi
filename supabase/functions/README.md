@@ -37,15 +37,65 @@ v13 pristina. Un cliente viejo que mande `pbi_context` simplemente lo ve ignorad
 
 ### Permisos
 
-Acceso permitido si `profiles.role == 'admin'` **o** `profiles.permissions->>'show_ai' == true`.
-En cualquier otro caso responde `403 Forbidden`.
+**Entrar:** `profiles.role == 'admin'` **o** `profiles.permissions->>'show_ai' == true`. En
+cualquier otro caso, `403 Forbidden`.
 
-El conjunto de herramientas y el system prompt cambian según el rol:
+**Qué puede hacer una vez dentro:** los **mismos accesos que se asignan en la página de Usuarios**.
+Antes `show_ai` era llave maestra de lectura — quien lo tuviera podía pedirle el directorio
+completo, 2488 personas con teléfono, aunque no pudiera abrir la página de Colaboradores.
 
-- **admin** → las 13 herramientas (`ALL_TOOLS`) y `SYSTEM_ADMIN`.
-- **usuario** → sólo `USER_ALLOWED_TOOLS`; las lecturas de incidencias e inventario se fuerzan a
-  `usuario_id = <el propio>`, y las 5 de `ADMIN_ONLY_TOOLS` quedan bloqueadas por partida doble
-  (filtrado de la lista + verificación dentro de `runTool`).
+Se conservan los dos ejes que ya usan las páginas de Flutter: **`show_*` decide leer, `role` decide
+escribir.** Colgar las escrituras del `show_*` ampliaría permisos en vez de restringirlos:
+cualquiera con `show_incidencias` podría aprobar su propia solicitud de vacaciones.
+
+Son **12 herramientas** (`ALL_TOOLS`):
+
+| Herramienta | Permiso | Además admin |
+|---|---|:--:|
+| `buscar_colaborador` | `show_cssi` | |
+| `crear_colaborador` | `show_cssi` | ✓ |
+| `actualizar_colaborador` | `show_cssi` | ✓ |
+| `buscar_incidencias` | `show_incidencias` | |
+| `crear_incidencia` | `show_incidencias` | |
+| `actualizar_incidencia` | `show_incidencias` | ✓ |
+| `calcular_vacaciones` | `show_incidencias` | |
+| `buscar_inventario` | `show_issi` | |
+| `actualizar_inventario` | `show_issi` | ✓ |
+| `buscar_contactos` | `show_external_contacts` | |
+| `gestionar_contacto` | `show_external_contacts` | ✓ |
+| `enviar_notificacion` | — (no tiene página) | |
+
+Se aplica **también a los administradores**, a propósito: la página de Usuarios es la única fuente
+de verdad, y a un admin al que le falte un acceso se le concede ahí con un interruptor, sin volver
+a desplegar.
+
+Tres capas, y la segunda es la que cuenta:
+
+1. La lista de herramientas que recibe el modelo se filtra: no sabe que existe lo que no puede usar.
+2. `runTool` lo **vuelve a comprobar**. Si el modelo se inventa una llamada, se bloquea igual.
+   Filtrar la lista es comodidad; esto es el control.
+3. Columnas y filas: un usuario normal ve 15 campos del colaborador y no 22, y las lecturas de
+   incidencias e inventario se fuerzan a `usuario_id = <el propio>`. `show_*` no dice «las tuyas» o
+   «las de todos», así que ese alcance se decide por herramienta.
+
+El system prompt se **arma con el acceso real** (`construirPrompt`). Los dos textos fijos anteriores
+afirmaban cosas que podían ser falsas —el de admin decía «acceso completo»— y un modelo que cree
+tener un acceso que no tiene se lo ofrece al usuario y luego falla.
+
+### Los esquemas de las herramientas no son validación
+
+Un esquema JSON es una indicación al modelo. Si el modelo emite una clave extra, un
+`insert({ ...input })` la mandaba tal cual a la base — incluido `role`. Y como el asistente acepta
+archivos adjuntos **cuyo contenido entra en la conversación**, un archivo de origen externo podía
+intentar aprovecharlo.
+
+`CAMPOS_ESCRITURA` + `soloCamposPermitidos()` filtran los seis caminos de escritura contra una
+lista blanca por herramienta, y **registran lo descartado** con `console.warn`: un intento de
+escribir `role` queda en los logs. El prompt además instruye a tratar los adjuntos como datos y
+nunca como instrucciones.
+
+`crear_incidencia` excluye a propósito `usuario_id` y `nombre_usuario` de su lista blanca: se
+fuerzan aparte, después del spread, para que el modelo no pueda elegir a nombre de quién se crea.
 
 ### Variables de entorno
 
