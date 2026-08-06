@@ -90,7 +90,13 @@ const espacios = (s: string) => s.replace(/\s+/g, " ").trim();
 /// Se verificó que quitar ceros no crea colisiones: los 2488 perfiles siguen siendo distintos.
 const numEmpleado = (s: string) => espacios(s).replace(/^0+/, "");
 
-const claveNombre = (s: string) => espacios(s).toLowerCase();
+/// Sin acentos además de sin mayúsculas: el reporte de incidencias escribe «DIAZ SANCHEZ» donde
+/// profiles tiene «DÍAZ SÁNCHEZ», y sin esto esa persona no empataría. Se verificó que quitarlos no
+/// crea ambigüedades: los nombres de los 2488 perfiles siguen siendo únicos con y sin acentos.
+const claveNombre = (s: string) =>
+  espacios(s).toLowerCase().replace(/[áàäâ]/g, "a").replace(/[éèëê]/g, "e")
+    .replace(/[íìïî]/g, "i").replace(/[óòöô]/g, "o").replace(/[úùüû]/g, "u")
+    .replace(/ñ/g, "n");
 const claveHorario = (s: string) => espacios(s).toLowerCase();
 
 const MESES: Record<string, number> = {
@@ -214,6 +220,209 @@ function buscarEncabezado(filas: Celda[][]): { indice: number; cols: MapaCols } 
   return null;
 }
 
+// ── Reporte de Incidencias: faltas justificadas ──────────────────────────────
+//
+// appchecar exporta un segundo reporte con los días justificados. Trae seis columnas, pero sólo
+// tres significan algo: Fecha, Trabajador y Motivo. Hora, Registro y Dirección son informativas
+// —muestran la hora del horario, no una checada— porque en esos días la persona NO checó.
+
+const COLUMNAS_INC = {
+  fecha: "fecha",
+  trabajador: "trabajador",
+  motivo: "motivo",
+} as const;
+
+type MapaInc = Partial<Record<keyof typeof COLUMNAS_INC, number>>;
+
+/// Se busca antes que el de checadas porque es más específico: si aparecen «trabajador» y
+/// «motivo», no hay duda de qué reporte es.
+function buscarEncabezadoIncidencias(
+  filas: Celda[][],
+): { indice: number; cols: MapaInc } | null {
+  for (let i = 0; i < filas.length; i++) {
+    const etiquetas = filas[i].map((c) => c.texto.toLowerCase());
+    const cols: MapaInc = {};
+    for (const [clave, etiqueta] of Object.entries(COLUMNAS_INC)) {
+      const idx = etiquetas.indexOf(etiqueta);
+      if (idx >= 0) cols[clave as keyof typeof COLUMNAS_INC] = idx;
+    }
+    if (cols.fecha === undefined || cols.trabajador === undefined ||
+        cols.motivo === undefined) continue;
+    return { indice: i, cols };
+  }
+  return null;
+}
+
+/// Los motivos vienen escritos a mano y sin criterio: 'Falla APP', 'Falla App', 'falla App' y
+/// 'PROBLEMA CON LA APP' son el mismo. Se clasifica por palabra clave y **se conserva el texto
+/// original**, porque varios son explicaciones de una sola vez que ninguna categoría resume sin
+/// perder información.
+function clasificarMotivo(motivo: string): string {
+  const m = motivo.toUpperCase();
+  if (m.includes("INCAPACID")) return "INCAPACIDAD";
+  if (m.includes("VACACION")) return "VACACIONES";
+  if (m.includes("APP")) return "FALLA_APP";
+  if (m.includes("PERMISO")) return "PERMISO";
+  return "OTRO";
+}
+
+/// Carga las faltas justificadas. Una fila por persona y día, no por checada: el archivo repite el
+/// motivo en el renglón de entrada y en el de salida.
+async function importarIncidencias(
+  db: ReturnType<typeof createClient>,
+  filas: Celda[][],
+  enc: { indice: number; cols: MapaInc },
+  porNombre: Map<string, string | null>,
+  perfilesLeidos: number,
+  archivo: string | null,
+  usuarioId: string,
+): Promise<Response> {
+  const { indice, cols } = enc;
+  const txt = (f: Celda[], k: keyof typeof COLUMNAS_INC) =>
+    espacios((cols[k] !== undefined ? f[cols[k]!]?.texto : "") ?? "");
+
+  // Clave persona-día → fila. El motivo se guarda una vez; si el archivo lo trae escrito distinto
+  // en las dos filas del mismo día —el 30 de julio venía «hospilizado» y «hospitalizado»— se
+  // conserva el texto más largo, que es el más completo.
+  const porDia = new Map<string, Record<string, unknown>>();
+  const sinPerfil = new Map<string, string>();
+  const ambiguos = new Set<string>();
+  const motivosVistos = new Map<string, number>();
+  let omitidas = 0;
+  let minFecha: string | null = null;
+  let maxFecha: string | null = null;
+
+  for (let i = indice + 1; i < filas.length; i++) {
+    const f = filas[i];
+    const fecha = parseFecha(txt(f, "fecha"));
+    const nombre = txt(f, "trabajador");
+    const motivo = txt(f, "motivo");
+
+    // Las filas de relleno del reporte no cuentan como omitidas: sólo lo que parecía una
+    // justificación y no se pudo leer.
+    if (!fecha && !nombre) continue;
+    if (!fecha || !nombre) {
+      omitidas++;
+      continue;
+    }
+
+    const tipo = clasificarMotivo(motivo);
+    motivosVistos.set(tipo, (motivosVistos.get(tipo) ?? 0) + 1);
+
+    // El archivo NO trae número de empleado. Se resuelve por nombre completo exacto y sólo si es
+    // único: `porNombre` guarda null cuando dos perfiles comparten nombre, así que un nombre
+    // ambiguo se reporta en lugar de justificarle el día a la persona equivocada.
+    const clave = claveNombre(nombre);
+    const perfil = porNombre.get(clave) ?? null;
+    if (perfil === null) {
+      if (porNombre.has(clave)) ambiguos.add(nombre);
+      else sinPerfil.set(clave, nombre);
+    }
+
+    if (!minFecha || fecha < minFecha) minFecha = fecha;
+    if (!maxFecha || fecha > maxFecha) maxFecha = fecha;
+
+    const llave = `${perfil ?? `n:${clave}`}|${fecha}`;
+    const previo = porDia.get(llave);
+    if (previo && String(previo.motivo ?? "").length >= motivo.length) continue;
+    porDia.set(llave, {
+      profile_id: perfil,
+      nombre_reporte: nombre,
+      fecha,
+      motivo: motivo || null,
+      motivo_tipo: tipo,
+    });
+  }
+
+  const justificaciones = [...porDia.values()];
+  if (justificaciones.length === 0 || !minFecha || !maxFecha) {
+    return reply({
+      error: "Se reconoció el reporte de incidencias, pero ninguna fila tenía fecha y trabajador " +
+        "legibles. No se guardó nada.",
+      filas_omitidas: omitidas,
+    }, 422);
+  }
+
+  // Cuántas son nuevas, calculado ANTES del upsert, igual que en el reporte de checadas: es lo que
+  // permite comprobar la idempotencia.
+  const yaExisten = new Set<string>();
+  for (let desde = 0; ; desde += CHUNK) {
+    const { data, error } = await db
+      .from("checador_justificaciones")
+      .select("clave_persona, fecha")
+      .gte("fecha", minFecha)
+      .lte("fecha", maxFecha)
+      .order("id")
+      .range(desde, desde + CHUNK - 1);
+    if (error) throw new Error(`No se pudo leer lo ya justificado: ${error.message}`);
+    for (const r of data ?? []) yaExisten.add(`${r.clave_persona}|${r.fecha}`);
+    if ((data?.length ?? 0) < CHUNK) break;
+  }
+  const nuevas = justificaciones.filter((j) => {
+    const cp = j.profile_id
+      ? `id:${j.profile_id}`
+      : `nombre:${claveNombre(String(j.nombre_reporte ?? ""))}`;
+    return !yaExisten.has(`${cp}|${j.fecha}`);
+  }).length;
+
+  const sinEmpatar = {
+    empleados: [...sinPerfil.values()].map((n) => ({ numero: "sin número", nombre: n })),
+    horarios: [] as string[],
+    ambiguos: [...ambiguos],
+  };
+
+  const { data: imp, error: impErr } = await db
+    .from("checador_importaciones")
+    .insert({
+      archivo,
+      fecha_inicio: minFecha,
+      fecha_fin: maxFecha,
+      filas_leidas: justificaciones.length,
+      filas_nuevas: nuevas,
+      importado_por: usuarioId,
+      sin_empatar: sinEmpatar,
+    })
+    .select("id")
+    .single();
+  if (impErr) throw new Error(`No se pudo registrar la importación: ${impErr.message}`);
+
+  for (let i = 0; i < justificaciones.length; i += CHUNK) {
+    const lote = justificaciones.slice(i, i + CHUNK)
+      .map((j) => ({ ...j, importacion_id: imp.id }));
+    const { error } = await db
+      .from("checador_justificaciones")
+      .upsert(lote, { onConflict: "clave_persona,fecha" });
+    if (error) {
+      throw new Error(
+        `Falló al guardar el lote ${i / CHUNK + 1}: ${error.message}. ` +
+          `Se guardaron ${i} de ${justificaciones.length} justificaciones.`,
+      );
+    }
+  }
+
+  return reply({
+    ok: true,
+    tipo: "incidencias",
+    importacion_id: imp.id,
+    archivo,
+    periodo: {
+      inicio: minFecha,
+      fin: maxFecha,
+      dias: new Set(justificaciones.map((j) => j.fecha)).size,
+    },
+    filas: {
+      leidas: justificaciones.length,
+      nuevas,
+      actualizadas: justificaciones.length - nuevas,
+      omitidas,
+    },
+    personas: new Set(justificaciones.map((j) => j.nombre_reporte)).size,
+    motivos: Object.fromEntries(motivosVistos),
+    sin_empatar: sinEmpatar,
+    catalogos: { perfiles: perfilesLeidos, horarios: 0 },
+  });
+}
+
 // ── Handler ──────────────────────────────────────────────────────────────────
 
 Deno.serve(async (req: Request) => {
@@ -252,36 +461,70 @@ Deno.serve(async (req: Request) => {
     }
 
     const filas = filasDelHtml(html);
-    const encabezado = buscarEncabezado(filas);
-    if (!encabezado) {
+
+    // El reporte de Incidencias se detecta primero porque su encabezado es más específico: con
+    // «Trabajador» y «Motivo» presentes no hay ambigüedad sobre cuál de los dos archivos es. Así
+    // el usuario sube los dos por el mismo botón sin tener que elegir el tipo.
+    const encIncidencias = buscarEncabezadoIncidencias(filas);
+
+    const encabezado = encIncidencias ? null : buscarEncabezado(filas);
+    if (!encIncidencias && !encabezado) {
       return reply({
-        error: "No se encontró la tabla del reporte. Se esperaban las columnas " +
-          "'Fecha', 'Hora', 'Registro' y 'Nombre Completo'. ¿Es el reporte de checadas de " +
-          "appchecar, exportado como .xls?",
+        error: "No se reconoció el reporte. Se esperaba el de checadas (columnas 'Fecha', " +
+          "'Hora', 'Registro', 'Nombre Completo') o el de incidencias (columnas 'Fecha', " +
+          "'Trabajador', 'Motivo'), exportados como .xls desde appchecar.",
       }, 422);
     }
-    const { indice, cols } = encabezado;
 
     // ── Catálogos para resolver las uniones ──────────────────────────────────
 
-    const horarios = await traerTodo(db, "schedules", "id, name");
+    const horarios = encIncidencias ? [] : await traerTodo(db, "schedules", "id, name");
     const porHorario = new Map<string, string>();
     for (const h of horarios) {
       porHorario.set(claveHorario(String(h.name)), String(h.id));
     }
 
     const perfiles = await traerTodo(
-      db, "profiles", "id, numero_empleado, nombre, full_name");
+      db, "profiles", "id, numero_empleado, nombre, paterno, materno, full_name");
     const porNumero = new Map<string, string>();
     // El respaldo por nombre sólo se usa si el nombre es ÚNICO. 'MOISES' aparece 5 veces en
     // profiles, así que emparejar por nombre de pila sería asignarle checadas a otra persona.
     const porNombre = new Map<string, string | null>();
+
+    /// Sólo marca ambiguo cuando la misma clave apunta a otra PERSONA. Marcarlo al primer repetido
+    /// anularía casi todo, porque cada perfil registra dos claves que suelen ser idénticas.
+    const registrarNombre = (clave: string, id: string) => {
+      if (!clave) return;
+      const previo = porNombre.get(clave);
+      if (previo === undefined) porNombre.set(clave, id);
+      else if (previo !== id) porNombre.set(clave, null);
+    };
+
     for (const p of perfiles) {
       const n = numEmpleado(String(p.numero_empleado ?? ""));
       if (n) porNumero.set(n, String(p.id));
-      const nom = claveNombre(String(p.full_name ?? p.nombre ?? ""));
-      if (nom) porNombre.set(nom, porNombre.has(nom) ? null : String(p.id));
+
+      const id = String(p.id);
+      registrarNombre(claveNombre(String(p.full_name ?? "")), id);
+      // También el nombre armado con los componentes: 24 de los 2488 perfiles tienen `full_name`
+      // desfasado de nombre+paterno+materno. El caso que lo destapó: el perfil 0163 guarda
+      // materno 'ESCOBAR' pero su full_name dice sólo «ANGEL ANTONIO VARGAS», así que su
+      // justificación del 30 de julio no se podía pegar y ese día seguía contando como puntual.
+      registrarNombre(
+        claveNombre([p.nombre, p.paterno, p.materno]
+          .map((x) => String(x ?? "").trim()).filter((x) => x.length > 0).join(" ")),
+        id,
+      );
     }
+
+    // ── Reporte de Incidencias ───────────────────────────────────────────────
+
+    if (encIncidencias) {
+      return await importarIncidencias(
+        db, filas, encIncidencias, porNombre, perfiles.length, archivo, user.id);
+    }
+
+    const { indice, cols } = encabezado!;
 
     // ── Recorrido de las filas ───────────────────────────────────────────────
 
@@ -448,6 +691,7 @@ Deno.serve(async (req: Request) => {
 
     return reply({
       ok: true,
+      tipo: "checadas",
       importacion_id: imp.id,
       archivo,
       periodo: { inicio: minFecha, fin: maxFecha, dias },

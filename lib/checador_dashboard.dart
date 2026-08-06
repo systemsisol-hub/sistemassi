@@ -103,7 +103,8 @@ class _ChecadorDashboardState extends State<ChecadorDashboard> {
     final datos = await _supabase
         .from('checador_entradas')
         .select('clave, numero_empleado, nombre_reporte, departamento, fecha, hora, '
-            'horario_nombre, limite, minutos_retardo, es_retardo, retardo_reportado')
+            'horario_nombre, limite, minutos_retardo, es_retardo, retardo_reportado, '
+            'justificado, justificacion_motivo, justificacion_tipo')
         .gte('fecha', p['fecha_inicio'])
         .lte('fecha', p['fecha_fin'])
         .order('fecha');
@@ -168,17 +169,30 @@ class _ChecadorDashboardState extends State<ChecadorDashboard> {
   Future<void> _mostrarResumen(Map<String, dynamic> r) async {
     final c = SiColors.of(context);
     final filas = Map<String, dynamic>.from(r['filas'] as Map);
-    final regs = Map<String, dynamic>.from(r['registros'] as Map);
     final periodo = Map<String, dynamic>.from(r['periodo'] as Map);
     final sin = Map<String, dynamic>.from(r['sin_empatar'] as Map);
     final empleadosSin = List<dynamic>.from(sin['empleados'] ?? const []);
     final horariosSin = List<dynamic>.from(sin['horarios'] ?? const []);
-    final todoEmpatado = empleadosSin.isEmpty && horariosSin.isEmpty;
+    final ambiguos = List<dynamic>.from(sin['ambiguos'] ?? const []);
+    final todoEmpatado =
+        empleadosSin.isEmpty && horariosSin.isEmpty && ambiguos.isEmpty;
+
+    // Los dos reportes de appchecar entran por el mismo botón, así que el resumen se adapta: el de
+    // checadas trae entradas/salidas y empleados; el de incidencias, personas y motivos.
+    final esIncidencias = r['tipo'] == 'incidencias';
+    final regs = r['registros'] == null
+        ? null
+        : Map<String, dynamic>.from(r['registros'] as Map);
+    final motivos = r['motivos'] == null
+        ? null
+        : Map<String, dynamic>.from(r['motivos'] as Map);
 
     await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Reporte cargado'),
+        title: Text(esIncidencias
+            ? 'Incidencias cargadas'
+            : 'Reporte de checadas cargado'),
         content: SizedBox(
           width: 460,
           child: SelectionArea(
@@ -189,14 +203,26 @@ class _ChecadorDashboardState extends State<ChecadorDashboard> {
                 _lineaResumen('Periodo',
                     '${_fFecha(periodo['inicio'])} – ${_fFecha(periodo['fin'])}'
                     '  (${periodo['dias']} días)', c),
-                _lineaResumen('Filas leídas', '${filas['leidas']}', c),
+                _lineaResumen(
+                    esIncidencias ? 'Días justificados' : 'Filas leídas',
+                    '${filas['leidas']}', c),
                 _lineaResumen('Nuevas', '${filas['nuevas']}', c),
                 _lineaResumen('Actualizadas', '${filas['actualizadas']}', c),
                 if ((filas['omitidas'] as num? ?? 0) > 0)
                   _lineaResumen('Omitidas', '${filas['omitidas']}', c),
-                _lineaResumen('Entradas / Salidas',
-                    '${regs['entradas']} / ${regs['salidas']}', c),
-                _lineaResumen('Empleados', '${r['empleados']}', c),
+                if (regs != null)
+                  _lineaResumen('Entradas / Salidas',
+                      '${regs['entradas']} / ${regs['salidas']}', c),
+                _lineaResumen(esIncidencias ? 'Personas' : 'Empleados',
+                    '${esIncidencias ? r['personas'] : r['empleados']}', c),
+                if (motivos != null && motivos.isNotEmpty)
+                  _lineaResumen(
+                      'Motivos',
+                      motivos.entries
+                          .map((e) =>
+                              '${_etiquetaMotivo[e.key] ?? e.key}: ${e.value}')
+                          .join(' · '),
+                      c),
                 const SizedBox(height: SiSpace.x3),
                 if (todoEmpatado)
                   Row(children: [
@@ -220,11 +246,19 @@ class _ChecadorDashboardState extends State<ChecadorDashboard> {
                       const SizedBox(width: SiSpace.x2),
                       Expanded(
                         child: Text(
-                          '${empleadosSin.length} '
-                          '${empleadosSin.length == 1 ? 'empleado' : 'empleados'} del reporte no '
-                          'se pudo ligar a un colaborador del sistema. Sí cuentan en la '
-                          'puntualidad, con el nombre que trae el reporte, pero quedan sin '
-                          'vincular a su expediente.',
+                          esIncidencias
+                              // Sin perfil la justificación no se puede pegar al día, así que ese
+                              // día sigue contando como una entrada normal — y como el registro
+                              // viene a la hora del horario, contaría como puntual.
+                              ? '${empleadosSin.length} '
+                                  '${empleadosSin.length == 1 ? 'nombre' : 'nombres'} del reporte '
+                                  'no existe en el sistema, así que esos días NO quedaron '
+                                  'justificados y siguen contando en la puntualidad.'
+                              : '${empleadosSin.length} '
+                                  '${empleadosSin.length == 1 ? 'empleado' : 'empleados'} del '
+                                  'reporte no se pudo ligar a un colaborador del sistema. Sí '
+                                  'cuentan en la puntualidad, con el nombre que trae el reporte, '
+                                  'pero quedan sin vincular a su expediente.',
                           style: TextStyle(fontSize: 12, color: c.ink2),
                         ),
                       ),
@@ -237,8 +271,30 @@ class _ChecadorDashboardState extends State<ChecadorDashboard> {
                       style: TextStyle(fontSize: 12, color: c.ink3),
                     ),
                   ],
-                  if (horariosSin.isNotEmpty) ...[
+                  // Un nombre que aparece en dos perfiles: no se justifica el día de nadie, porque
+                  // adivinar le asignaría la falta a la persona equivocada.
+                  if (ambiguos.isNotEmpty) ...[
                     if (empleadosSin.isNotEmpty) const SizedBox(height: SiSpace.x3),
+                    Row(children: [
+                      Icon(Icons.error_outline, size: 16, color: c.danger),
+                      const SizedBox(width: SiSpace.x2),
+                      Expanded(
+                        child: Text(
+                          '${ambiguos.length} '
+                          '${ambiguos.length == 1 ? 'nombre coincide' : 'nombres coinciden'} con '
+                          'más de un colaborador, así que no se justificó ese día. Hay que '
+                          'distinguirlos en el sistema antes de volver a subir el archivo.',
+                          style: TextStyle(fontSize: 12, color: c.ink2),
+                        ),
+                      ),
+                    ]),
+                    const SizedBox(height: SiSpace.x2),
+                    Text(ambiguos.join(', '),
+                        style: TextStyle(fontSize: 12, color: c.ink3)),
+                  ],
+                  if (horariosSin.isNotEmpty) ...[
+                    if (empleadosSin.isNotEmpty || ambiguos.isNotEmpty)
+                      const SizedBox(height: SiSpace.x3),
                     Row(children: [
                       Icon(Icons.warning_amber_rounded, size: 16, color: c.danger),
                       const SizedBox(width: SiSpace.x2),
@@ -295,7 +351,37 @@ class _ChecadorDashboardState extends State<ChecadorDashboard> {
 
   int get _retardos => _evaluadas.where((e) => e['es_retardo'] == true).length;
   int get _aTiempo => _evaluadas.where((e) => e['es_retardo'] == false).length;
-  int get _sinHorario => _entradas.length - _evaluadas.length;
+
+  /// Días con falta justificada. La persona no checó: el reporte de checadas trae un registro a la
+  /// hora del horario, pero es un relleno administrativo, no una llegada.
+  Iterable<Map<String, dynamic>> get _justificadas =>
+      _entradas.where((e) => e['justificado'] == true);
+
+  /// Los que quedan fuera del cálculo por no tener regla de horario ese día. Se cuentan aparte de
+  /// los justificados: «no sabemos» y «no vino, y está justificado» no son lo mismo, y juntarlos
+  /// en una sola cifra sería engañoso.
+  int get _sinHorario =>
+      _entradas.length - _evaluadas.length - _justificadas.length;
+
+  /// Conteo por motivo, de mayor a menor.
+  List<(String, int)> get _porMotivo {
+    final cuenta = <String, int>{};
+    for (final e in _justificadas) {
+      final tipo = (e['justificacion_tipo'] ?? 'OTRO').toString();
+      cuenta[tipo] = (cuenta[tipo] ?? 0) + 1;
+    }
+    final lista = cuenta.entries.map((e) => (e.key, e.value)).toList()
+      ..sort((a, b) => b.$2.compareTo(a.$2));
+    return lista;
+  }
+
+  static const _etiquetaMotivo = {
+    'INCAPACIDAD': 'Incapacidad',
+    'VACACIONES': 'Vacaciones',
+    'FALLA_APP': 'Falla de la app',
+    'PERMISO': 'Permiso',
+    'OTRO': 'Otros',
+  };
   int get _minutos => _evaluadas.fold<int>(
       0, (s, e) => s + ((e['minutos_retardo'] as num?)?.toInt() ?? 0));
   int get _reportadosPorAppchecar =>
@@ -460,6 +546,17 @@ class _ChecadorDashboardState extends State<ChecadorDashboard> {
                       _cifra('Minutos acumulados', _fNum(_minutos), c.warn, c),
                     ],
                   ),
+                  if (_justificadas.isNotEmpty) ...[
+                    const SizedBox(height: SiSpace.x3),
+                    _nota(
+                      c,
+                      Icons.event_busy_outlined,
+                      '${_justificadas.length} '
+                      '${_justificadas.length == 1 ? 'falta justificada' : 'faltas justificadas'}'
+                      ' — ${_porMotivo.map((m) => '${_etiquetaMotivo[m.$1] ?? m.$1}: ${m.$2}').join(' · ')}.'
+                      ' Esos días la persona no checó, así que quedan fuera de la puntualidad.',
+                    ),
+                  ],
                   if (_sinHorario > 0) ...[
                     const SizedBox(height: SiSpace.x3),
                     _nota(
