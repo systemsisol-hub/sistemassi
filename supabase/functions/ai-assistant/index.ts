@@ -61,6 +61,16 @@ const PERMISO_POR_HERRAMIENTA: Record<string, string> = {
 
 type Permisos = Record<string, unknown>;
 
+/// Quién está usando el asistente. Se inyecta en el prompt para que pueda tratarlo por su nombre y
+/// entender a quién se refiere cuando dice «mis vacaciones».
+interface Identidad {
+  nombreCompleto: string;
+  nombrePila: string;
+  puesto: string | null;
+  area: string | null;
+  numeroEmpleado: string | null;
+}
+
 /// Se aplica también a los administradores, a propósito: el objetivo es que la página de Usuarios
 /// sea la única fuente de verdad. Si a un admin le falta un acceso, se le concede ahí con un
 /// interruptor, sin volver a desplegar nada.
@@ -140,10 +150,11 @@ function soloCamposPermitidos(nombre: string, entrada: ToolInput): ToolInput {
 /// tener un acceso que no tiene se lo ofrece al usuario y luego falla.
 function construirPrompt(
   esAdmin: boolean,
-  nombre: string,
+  quien: Identidad,
   permisos: Permisos,
 ): string {
   const puede = (h: string) => puedeUsarHerramienta(h, esAdmin, permisos);
+  const nombre = quien.nombreCompleto;
   const alcance = esAdmin ? 'de cualquier colaborador' : `de ${nombre}`;
 
   const accesos: string[] = [];
@@ -178,15 +189,34 @@ function construirPrompt(
     accesos.push(`- Puedes crear y actualizar registros con: ${escrituras.join(", ")}.`);
   }
 
+  // Quién está del otro lado. Va para TODOS, admin incluido: antes el nombre sólo se inyectaba
+  // para los usuarios normales, así que con los administradores —que son quienes más lo usan—
+  // Soli no sabía con quién hablaba y no podía resolver un «mis vacaciones».
+  const identidad = [
+    `- Nombre: ${nombre}`,
+    quien.puesto ? `- Puesto: ${quien.puesto}` : null,
+    quien.area ? `- Área: ${quien.area}` : null,
+    quien.numeroEmpleado ? `- Número de empleado: ${quien.numeroEmpleado}` : null,
+    esAdmin ? '- Perfil: administrador del sistema' : null,
+  ].filter((l): l is string => l !== null);
+
   // Se llama Soli, igual que en la pantalla. Si aquí se presentara de otra forma, el usuario vería
   // un nombre en la interfaz y otro en la conversación.
-  return `Te llamas Soli y eres el asistente de Sisol Soluciones Inmobiliarias${esAdmin ? '' : `, al servicio del colaborador ${nombre}`}.
+  return `Te llamas Soli y eres el asistente de Sisol Soluciones Inmobiliarias.
 Respondes siempre en español, de forma clara y concisa. Fecha actual: ${today}.
+
+Estás atendiendo a esta persona:
+${identidad.join('\n')}
+
+Trátala por su nombre de pila (${quien.nombrePila}) y de tú. Cuando diga «mi», «me», «yo» o
+«conmigo» se refiere a sí misma: para sus propios datos NO pases el parámetro usuario_id a las
+herramientas, porque por omisión ya usan su cuenta.
 
 Esto es TODO tu acceso. Lo que no aparezca aquí no lo tienes:
 ${accesos.join('\n')}
 
 Reglas importantes:
+- Si te preguntan quién eres o a quién atiendes, respóndelo con los datos de arriba. No los pidas: ya los tienes.
 - Si te piden algo fuera de tu acceso, dilo con claridad y no lo intentes. NO afirmes que puedes hacer algo que no está en la lista de arriba.
 - Para operaciones de escritura SIEMPRE muestra un resumen y pide confirmación antes de ejecutar.
 - Al buscar colaboradores: NO añadas el parámetro status_rh automáticamente. Devuelve todos los registros que coincidan independientemente de su status, a menos que se pida EXPLÍCITAMENTE.
@@ -720,7 +750,7 @@ Deno.serve(async (req: Request) => {
     if (authErr || !user) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: CORS });
 
     const { data: prof } = await svc.from("profiles")
-      .select("role, permissions, nombre, paterno, materno")
+      .select("role, permissions, nombre, paterno, materno, puesto, area, numero_empleado")
       .eq("id", user.id).single();
 
     const isAdmin    = prof?.role === "admin";
@@ -733,6 +763,20 @@ Deno.serve(async (req: Request) => {
       .filter((p: string) => p.length > 0);
     const userFullName = nameParts.length > 0 ? nameParts.join(" ") : (user.email || "Usuario");
 
+    const limpio = (v: unknown): string | null => {
+      const s = typeof v === "string" ? v.trim() : "";
+      return s.length > 0 ? s : null;
+    };
+    const quien: Identidad = {
+      nombreCompleto: userFullName,
+      // Sólo el primer nombre: «MARIA GUADALUPE» se saluda mejor como «Maria». Si no hay nombre en
+      // el perfil se cae al correo, que al menos identifica a alguien.
+      nombrePila: limpio(prof?.nombre)?.split(/\s+/)[0] ?? userFullName.split(/\s+/)[0],
+      puesto: limpio(prof?.puesto),
+      area: limpio(prof?.area),
+      numeroEmpleado: limpio(prof?.numero_empleado),
+    };
+
     const { messages } = await req.json() as { messages: Array<{ role: string; content: string }> };
 
     const permisos = (prof?.permissions ?? {}) as Permisos;
@@ -740,7 +784,7 @@ Deno.serve(async (req: Request) => {
     const tools = ALL_TOOLS.filter(
       (t) => puedeUsarHerramienta(t.function.name, isAdmin, permisos),
     );
-    const systemPrompt = construirPrompt(isAdmin, userFullName, permisos);
+    const systemPrompt = construirPrompt(isAdmin, quien, permisos);
 
     let msgs: OllamaMessage[] = [
       { role: "system", content: systemPrompt },

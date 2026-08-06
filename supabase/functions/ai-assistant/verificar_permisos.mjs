@@ -131,5 +131,31 @@ console.log('\n7. Sin permisos, no alcanza nada salvo lo exento');
 const nada = Object.keys(HERRAMIENTAS).filter((h) => puedeUsar(h, false, {}));
 check(nada.length === 1 && nada[0] === 'enviar_notificacion', `queda: ${nada.join(',') || '(nada)'}`);
 
+// Regresion real: el nombre se inyectaba solo para los usuarios normales, de modo que con los
+// administradores -que son quienes mas lo usan- Soli no sabia con quien hablaba.
+console.log('\n8. El prompt sabe quien es el usuario, y para TODOS');
+const prompt = src.slice(src.indexOf('function construirPrompt'),
+                         src.indexOf('\n}', src.indexOf('return `Te llamas Soli')));
+
+const lineaNombre = prompt.split('\n').find((l) => l.includes('- Nombre:'));
+check(!!lineaNombre, 'el prompt incluye el nombre');
+check(!!lineaNombre && !/esAdmin/.test(lineaNombre),
+  'la linea del nombre NO depende de esAdmin');
+check(prompt.includes('${identidad.join'), 'el bloque de identidad se inyecta en la plantilla');
+check(/nombrePila/.test(prompt), 'se le indica tratarlo por su nombre de pila');
+check(/no pases el parámetro usuario_id|NO pases el parámetro usuario_id/i.test(prompt),
+  'se le explica como resolver "mis datos" sin pasar usuario_id');
+
+// Todo campo de identidad que se declare debe consultarse, o llegaria vacio en silencio.
+console.log('\n9. Lo que la identidad declara, la consulta lo trae');
+const campos = [...src.slice(src.indexOf('interface Identidad'), src.indexOf('\n}', src.indexOf('interface Identidad')))
+  .matchAll(/^\s+(\w+):/gm)].map((m) => m[1]);
+const consulta = src.slice(src.indexOf('.select("role, permissions'), src.indexOf('\n', src.indexOf('.select("role, permissions')));
+const equivalencias = { nombreCompleto: 'nombre', nombrePila: 'nombre', numeroEmpleado: 'numero_empleado' };
+for (const campo of campos) {
+  const col = equivalencias[campo] ?? campo;
+  check(consulta.includes(col), `${campo} -> columna ${col}`);
+}
+
 console.log(fallas === 0 ? '\nTODO BIEN' : `\n${fallas} FALLAS`);
 process.exit(fallas === 0 ? 0 : 1);
