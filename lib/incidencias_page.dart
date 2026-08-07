@@ -5,6 +5,7 @@ import '../services/notification_service.dart';
 import '../services/incidencias_pdf_service.dart';
 import 'theme/si_theme.dart';
 import 'widgets/calendario_incidencias.dart';
+import 'widgets/grafica_vacaciones_mes.dart';
 
 
 class IncidenciasPage extends StatefulWidget {
@@ -705,9 +706,10 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
               ],
             ),
           ),
-          // Los 366px de columnas eran para el panel lateral de ~360. Ahora la tarjeta ocupa dos
-          // tercios de la página, así que las columnas se reparten el ancho en la misma proporción:
-          // con anchos fijos, la tabla se quedaba en 366 y dejaba el resto de la tarjeta en blanco.
+          // Los 366px de columnas eran para el panel lateral de ~360, y la tarjeta ahora mide un
+          // tercio de la página: entre 390 y 600px según la pantalla. Las columnas se reparten ese
+          // ancho en la misma proporción, porque con anchos fijos la tabla se quedaba en 366 y
+          // dejaba el resto de la tarjeta en blanco.
           LayoutBuilder(
             builder: (context, tableConstraints) {
               const double minW = wPeriodo + wDias + wPedidos + wDisp; // 366
@@ -1821,12 +1823,14 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Expanded(
-                                    flex: 1, child: _buildAntiguedadDesktop()),
+                                Expanded(child: _buildAntiguedadDesktop()),
+                                SizedBox(width: SiSpace.x6),
+                                Expanded(child: _buildHistorialVacaciones()),
                                 SizedBox(width: SiSpace.x6),
                                 Expanded(
-                                    flex: 2,
-                                    child: _buildHistorialVacaciones()),
+                                  child: GraficaVacacionesPorMes(
+                                      incidencias: _incidencias),
+                                ),
                               ],
                             ),
                           ],
