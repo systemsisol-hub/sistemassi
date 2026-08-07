@@ -339,10 +339,9 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
                 builder: (context, box) {
                   final detalle = _tarjetaDetalle(c);
                   final zonas = _tarjetaDescuentoZona(c);
-                  // La tabla necesita 838px para sus ocho columnas; con la gráfica al lado hacen
-                  // falta unos 1200 de área útil. Por debajo se apilan, que es mejor que dejar la
-                  // tabla desplazándose de lado con la gráfica apretada.
-                  if (box.maxWidth < 1200) {
+                  // Mismos flex que la fila de arriba —3 y 2— para que en pantalla ancha los cuatro
+                  // bloques queden alineados en dos columnas.
+                  if (box.maxWidth < _anchoParaDosColumnas) {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -355,9 +354,9 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(child: detalle),
+                      Expanded(flex: 3, child: detalle),
                       const SizedBox(width: SiSpace.x4),
-                      SizedBox(width: 330, child: zonas),
+                      Expanded(flex: 2, child: zonas),
                     ],
                   );
                 },
@@ -724,8 +723,8 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
   Widget _barraVertical(SiColors c, String zona, int valor, int tope) {
     final fraccion = tope == 0 ? 0.0 : (valor / tope).clamp(0.0, 1.0);
 
-    return Padding
-      (padding: const EdgeInsets.symmetric(horizontal: 4),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
       child: Column(
         children: [
           Expanded(
@@ -742,8 +741,11 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
                               color: c.ink2)),
+                    // Tope de ancho: con la tarjeta ensanchada a ~700px, cuatro columnas Expanded
+                    // darían barras de 170px que se ven como bloques, no como una gráfica.
                     Container(
                       height: alto,
+                      width: box.maxWidth.clamp(0.0, 72.0),
                       decoration: BoxDecoration(
                         color: c.brand,
                         borderRadius: const BorderRadius.vertical(
@@ -873,8 +875,8 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: ConstrainedBox(
-                // 838 es la suma de los anchos de las ocho columnas; con menos, la última se corta.
-                constraints: const BoxConstraints(minWidth: 838),
+                // Suma de los anchos de las ocho columnas; con menos, la última se corta.
+                constraints: const BoxConstraints(minWidth: 678),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -917,7 +919,29 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
   static const _rellenoControl =
       EdgeInsets.symmetric(horizontal: 12, vertical: 10);
 
-  static const _anchos = [230.0, 120.0, 110.0, 70.0, 60.0, 80.0, 78.0, 90.0];
+  /// Ancho útil a partir del cual la fila de abajo va en dos columnas. Lo manda la tabla: con flex 3
+  /// recibe 3/5 del ancho, y necesita 762px para sus ocho columnas.
+  ///
+  /// Ancho útil a partir del cual la fila de abajo va en dos columnas.
+  ///
+  /// Sale de la cuenta, no del ojo: la tabla recibe 3/5 del ancho menos el gap, y de ahí hay que
+  /// restar los 32px de relleno de la tarjeta para llegar a las columnas.
+  ///     (678 + 32) × 5/3 + 16 = 1199.3
+  /// Por eso las columnas suman 678 y no más: es lo que cabe sin recortarlas conservando este corte.
+  /// Con los 762 que daban las columnas apenas apretadas haría falta 1340px, y en una laptop —donde
+  /// el área útil ronda los 1200— la fila se habría quedado apilada.
+  ///
+  /// Es más alto que el corte de la fila de arriba (820) a propósito. Igualarlos alinearía los
+  /// cuatro bloques en todo ancho, pero obligaría a apilar también la de arriba a 1200. Entre 820 y
+  /// 1200 la fila de abajo va apilada a lo ancho, que es lo normal cuando dos filas tienen
+  /// contenidos de distinto ancho mínimo.
+  static const _anchoParaDosColumnas = 1200.0;
+
+  /// Suman 678px, apretadas desde 838. Cada ancho está medido contra lo que tiene que caber: el
+  /// encabezado en mono de 9.5 con 0.8 de letterSpacing —'DÍAS DESC.' pide unos 65px— o el
+  /// contenido, que en ZONA es un nombre como 'Baja California' y en ESTATUS la píldora con
+  /// 'Atención'.
+  static const _anchos = [184.0, 96.0, 90.0, 58.0, 50.0, 50.0, 68.0, 82.0];
 
   Widget _encabezadoTabla(SiColors c) {
     const titulos = [
@@ -969,6 +993,10 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(f.nombre,
+                    // Con la columna en 184px, un nombre de cuatro apellidos se iría a tres
+                    // renglones y estiraría toda la fila.
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                         fontSize: 12.5,
                         fontWeight: FontWeight.w600,
@@ -990,6 +1018,8 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
           celda(
             1,
             Text(f.zona.isEmpty ? '—' : f.zona,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(fontSize: 12, color: c.ink2)),
           ),
           celda(
