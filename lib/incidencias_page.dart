@@ -705,25 +705,27 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
               ],
             ),
           ),
-          // Table Content — width = max(container, 366) to avoid scroll on
-          // the lateral panel while still supporting very small screens.
+          // Los 366px de columnas eran para el panel lateral de ~360. Ahora la tarjeta ocupa dos
+          // tercios de la página, así que las columnas se reparten el ancho en la misma proporción:
+          // con anchos fijos, la tabla se quedaba en 366 y dejaba el resto de la tarjeta en blanco.
           LayoutBuilder(
             builder: (context, tableConstraints) {
               const double minW = wPeriodo + wDias + wPedidos + wDisp; // 366
               final double tableWidth = tableConstraints.maxWidth > minW
                   ? tableConstraints.maxWidth
                   : minW;
+              final double factor = tableWidth / minW;
 
               return SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: SizedBox(
                       width: tableWidth,
                       child: Table(
-                      columnWidths: const {
-                        0: FixedColumnWidth(wPeriodo),
-                        1: FixedColumnWidth(wDias),
-                        2: FixedColumnWidth(wPedidos),
-                        3: FixedColumnWidth(wDisp),
+                      columnWidths: {
+                        0: FixedColumnWidth(wPeriodo * factor),
+                        1: FixedColumnWidth(wDias * factor),
+                        2: FixedColumnWidth(wPedidos * factor),
+                        3: FixedColumnWidth(wDisp * factor),
                       },
                       children: [
                         // Header row
@@ -1796,33 +1798,36 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                     builder: (context, constraints) {
                       final isDesktop = constraints.maxWidth > 1100;
                       if (isDesktop) {
-                        return Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        // Arriba, mitad y mitad: la tabla de registros y el calendario. Abajo, la
+                        // fila partida en tres: antigüedad se lleva un tercio y el historial de
+                        // vacaciones los otros dos, que es el que tiene tabla y necesita el ancho.
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            // Main Table
-                            Expanded(
-                              flex: 2,
-                              child: _buildDesktopTable(c),
-                            ),
-                            SizedBox(width: SiSpace.x6),
-                            // Calendario + Historial
-                            Expanded(
-                              flex: 1,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                            // Sin solicitudes el calendario no se pinta, así que la tabla se queda
+                            // con todo el ancho en vez de apretarse contra media página vacía.
+                            if (_incidencias.isEmpty)
+                              _buildDesktopTable(c)
+                            else
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  _buildIncidenciasCalendar(),
-                                  if (_incidencias.isNotEmpty)
-                                    SizedBox(height: SiSpace.x4),
-                                  _buildHistorialVacaciones(),
+                                  Expanded(child: _buildDesktopTable(c)),
+                                  SizedBox(width: SiSpace.x6),
+                                  Expanded(child: _buildIncidenciasCalendar()),
                                 ],
                               ),
-                            ),
-                            SizedBox(width: SiSpace.x6),
-                            // Antigüedad
-                            Expanded(
-                              flex: 1,
-                              child: _buildAntiguedadDesktop(),
+                            SizedBox(height: SiSpace.x6),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                    flex: 1, child: _buildAntiguedadDesktop()),
+                                SizedBox(width: SiSpace.x6),
+                                Expanded(
+                                    flex: 2,
+                                    child: _buildHistorialVacaciones()),
+                              ],
                             ),
                           ],
                         );

@@ -263,28 +263,39 @@ class _CalendarioIncidenciasState extends State<CalendarioIncidencias> {
     final hueco = DateTime(mes.year, mes.month, 1).weekday % 7; // domingo = 0
     final semanas = ((hueco + diasDelMes) / 7).ceil();
 
-    return Column(
-      children: [
-        for (var semana = 0; semana < semanas; semana++)
-          Row(
-            children: List.generate(7, (col) {
-              final dia = semana * 7 + col - hueco + 1;
-              if (dia < 1 || dia > diasDelMes) {
-                return const Expanded(child: SizedBox(height: 32));
-              }
-              final fecha = DateTime(mes.year, mes.month, dia);
-              return Expanded(
-                child: _Celda(
-                  dia: dia,
-                  marca: marcas[_clave(fecha)],
-                  esHoy: DateUtils.isSameDay(fecha, DateTime.now()),
-                  color: (m) => widget.colorDeEstatus(m),
-                  brand: c.brand,
-                ),
-              );
-            }),
-          ),
-      ],
+    return LayoutBuilder(
+      builder: (context, box) {
+        // El alto de la celda sigue al ancho de la columna, pero a media pendiente y con piso en los
+        // 32px de antes. Con 32 fijos, la tarjeta a media página daba columnas de ~85px de ancho por
+        // 32 de alto: celdas achatadas con el círculo perdido en medio. Igualar alto y ancho sería
+        // pasarse al otro lado: en el panel angosto de 320px la celda crecería de 32 a 41 sin
+        // motivo, y eso ya se veía bien. Así, angosto queda intacto y sólo lo ancho se corrige.
+        final alto = (box.maxWidth / 7 * 0.55).clamp(32.0, 52.0);
+        return Column(
+          children: [
+            for (var semana = 0; semana < semanas; semana++)
+              Row(
+                children: List.generate(7, (col) {
+                  final dia = semana * 7 + col - hueco + 1;
+                  if (dia < 1 || dia > diasDelMes) {
+                    return Expanded(child: SizedBox(height: alto));
+                  }
+                  final fecha = DateTime(mes.year, mes.month, dia);
+                  return Expanded(
+                    child: _Celda(
+                      dia: dia,
+                      marca: marcas[_clave(fecha)],
+                      esHoy: DateUtils.isSameDay(fecha, DateTime.now()),
+                      color: (m) => widget.colorDeEstatus(m),
+                      brand: c.brand,
+                      alto: alto,
+                    ),
+                  );
+                }),
+              ),
+          ],
+        );
+      },
     );
   }
 
@@ -338,6 +349,7 @@ class _Celda extends StatelessWidget {
     required this.esHoy,
     required this.color,
     required this.brand,
+    required this.alto,
   });
 
   final int dia;
@@ -345,6 +357,9 @@ class _Celda extends StatelessWidget {
   final bool esHoy;
   final Color Function(String) color;
   final Color brand;
+
+  /// Alto de la celda, que sigue al ancho disponible. El círculo del día y el número crecen con él.
+  final double alto;
 
   @override
   Widget build(BuildContext context) {
@@ -375,8 +390,12 @@ class _Celda extends StatelessWidget {
       circulo = colorEstatus;
     }
 
+    final diametro = alto - 6;
+    // El número acompaña al círculo: 11 en la celda mínima, 13 en la más grande.
+    final tamanoTexto = 11 + (alto - 32) / 10;
+
     final celda = SizedBox(
-      height: 32,
+      height: alto,
       child: Stack(
         children: [
           if (m != null && m.enRango)
@@ -391,8 +410,8 @@ class _Celda extends StatelessWidget {
             ),
           Center(
             child: Container(
-              width: 26,
-              height: 26,
+              width: diametro,
+              height: diametro,
               decoration: circulo != null
                   ? BoxDecoration(color: circulo, shape: BoxShape.circle)
                   : esHoy
@@ -404,7 +423,7 @@ class _Celda extends StatelessWidget {
               child: Text(
                 '$dia',
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: tamanoTexto,
                   fontWeight:
                       (circulo != null || esHoy) ? FontWeight.bold : FontWeight.normal,
                   color: circulo != null ? Colors.white : null,
