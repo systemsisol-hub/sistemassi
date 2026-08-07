@@ -14,7 +14,7 @@ import 'widgets/notification_bell.dart';
 import 'widgets/asistente_panel.dart';
 import 'asistente_store.dart';
 import 'calendar_page.dart';
-import 'schedules_page.dart';
+import 'asistencia_page.dart';
 import 'bi_page.dart';
 import 'signature_generator_page.dart';
 import 'tablas_page.dart';
@@ -176,9 +176,10 @@ class _MainNavigationState extends State<MainNavigation> {
         'title': 'Asistencia',
         'icon': Icons.fingerprint,
         'activeIcon': Icons.fingerprint,
-        // La página ahora sólo administra horarios: el checador y su panel se retiraron. Se
-        // conserva el nombre y el permiso show_asistencia para no alterar accesos existentes.
-        'widget': const SchedulesPage(),
+        // Dos pestañas: Panel para mirar y Configuración para administrar. La segunda sólo
+        // aparece para administradores, y el Panel se recorta solo por RLS: un usuario normal ve
+        // únicamente sus propios días.
+        'widget': const AsistenciaPage(),
       });
     }
     if (widget.permissions['show_powerbi'] == true) {

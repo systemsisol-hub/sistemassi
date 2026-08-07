@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'checador_dashboard.dart';
 import 'theme/si_theme.dart';
 
-/// Administración de horarios. Es lo único que quedó de la página de Asistencia: el checador y
-/// su panel administrativo se retiraron.
+/// Administración de horarios: la tarjeta de creación y listado.
 ///
-/// Antes se dibujaba sin Scaffold porque vivía incrustada en ese panel. Ahora es una página
-/// completa, con los parámetros del modo incrustado retirados.
+/// Vive incrustada en la pestaña de Configuración de `AsistenciaPage`, que aporta el fondo y los
+/// márgenes, así que no trae Scaffold propio.
 class SchedulesPage extends StatefulWidget {
   const SchedulesPage({super.key});
 
@@ -473,40 +471,15 @@ class _SchedulesPageState extends State<SchedulesPage> {
   Widget build(BuildContext context) {
     final c = SiColors.of(context);
 
-    return Scaffold(
-      backgroundColor: c.bg,
-      body: _isLoading
-          ? Center(child: CircularProgressIndicator(color: c.brand))
-          : LayoutBuilder(
-              builder: (context, box) {
-                // Un tercio para los horarios; los otros dos para el dashboard del checador.
-                // Abajo de 900px un tercio sería ilegible, así que se apila todo.
-                final enColumnas = box.maxWidth >= 900;
-                final tarjeta = _buildTarjetaHorarios(c);
-
-                return SingleChildScrollView(
-                  padding: const EdgeInsets.all(SiSpace.x6),
-                  child: enColumnas
-                      ? Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(child: tarjeta),
-                            const SizedBox(width: SiSpace.x4),
-                            const Expanded(flex: 2, child: ChecadorDashboard()),
-                          ],
-                        )
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            tarjeta,
-                            const SizedBox(height: SiSpace.x4),
-                            const ChecadorDashboard(),
-                          ],
-                        ),
-                );
-              },
-            ),
-    );
+    // Sin Scaffold ni padding propios: ahora vive dentro de la pestaña de Configuración de
+    // AsistenciaPage, que ya pone el fondo y los márgenes.
+    if (_isLoading) {
+      return Padding(
+        padding: const EdgeInsets.all(SiSpace.x10),
+        child: Center(child: CircularProgressIndicator(color: c.brand)),
+      );
+    }
+    return _buildTarjetaHorarios(c);
   }
 
   Widget _buildTarjetaHorarios(SiColors c) {
