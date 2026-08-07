@@ -11,6 +11,10 @@ import 'incidencias_page.dart';
 import 'social_page.dart';
 import 'external_contacts_page.dart';
 import 'directorio_page.dart';
+import 'avisos_page.dart';
+import 'avisos_store.dart';
+import 'widgets/banner_avisos.dart';
+import 'widgets/dialogo_aviso.dart';
 import 'widgets/notification_bell.dart';
 import 'widgets/asistente_panel.dart';
 import 'asistente_store.dart';
@@ -31,7 +35,7 @@ class _OpenSearchIntent extends Intent {
 
 // Visual-only nav group definitions — order here is render order.
 final _navGroups = <(String, List<String>)>[
-  ('GENERAL',        ['Mi Perfil', 'Social', 'Directorio', 'Conocimientos', 'Contraseñas', 'Contactos Ext.', 'Firmas', 'Calendario']),
+  ('GENERAL',        ['Mi Perfil', 'Social', 'Avisos', 'Directorio', 'Conocimientos', 'Contraseñas', 'Contactos Ext.', 'Firmas', 'Calendario']),
   ('OPERACIÓN',      ['Incidencias', 'Inventario', 'Colaborador', 'Asistencia']),
   ('ANÁLISIS',       ['BI', 'Logs', 'Tablas']),
   ('ADMINISTRACIÓN', ['Usuarios', 'IA', 'Papelera']),
@@ -64,6 +68,13 @@ class _MainNavigationState extends State<MainNavigation> {
   void initState() {
     super.initState();
     _fetchFotoUrl();
+    // Después del primer frame y no en initState a secas: mostrar un diálogo necesita un Navigator
+    // ya montado. Aquí y no en main.dart para que no dispare sobre la pantalla de login.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await AvisosStore.instancia.cargar();
+      if (!mounted) return;
+      await mostrarAvisosEmergentes(context, AvisosStore.instancia);
+    });
   }
 
   Future<void> _fetchFotoUrl() async {
@@ -94,6 +105,14 @@ class _MainNavigationState extends State<MainNavigation> {
       'activeIcon': Icons.diversity_3,
       'widget': const SocialPage(),
     });
+    if (widget.permissions['show_avisos'] == true) {
+      pages.add({
+        'title': 'Avisos',
+        'icon': Icons.campaign_outlined,
+        'activeIcon': Icons.campaign,
+        'widget': const AvisosPage(),
+      });
+    }
     if (widget.permissions['show_directorio'] == true) {
       pages.add({
         'title': 'Directorio',
@@ -668,6 +687,16 @@ class _DesktopShellState extends State<_DesktopShell>
                   onOpenRecord: widget.onOpenRecord,
                   onSelectHome: () => widget.onSelect(0),
                 ),
+                // Hermano de la página y no hijo, por lo mismo que el panel del asistente: dentro de
+                // `currentPage['widget']` el cambio de página lo destruiría, y con él el estado de
+                // «ya descarté este aviso».
+                ListenableBuilder(
+                  listenable: AvisosStore.instancia,
+                  builder: (context, _) => BannerAvisos(
+                    avisos: AvisosStore.instancia.banners,
+                    alDescartar: AvisosStore.instancia.marcarVisto,
+                  ),
+                ),
                 // El panel va aquí, HERMANO de la página y no dentro de ella: lo que vive dentro
                 // de `currentPage['widget']` lo destruye Flutter al cambiar de página.
                 //
@@ -770,7 +799,17 @@ class _MobileShell extends StatelessWidget {
       // En un teléfono un panel de 380px al lado no cabe, así que el asistente se pone encima
       // del contenido. Sigue siendo hermano de la página, no hijo, por la misma razón que en
       // escritorio.
-      body: ListenableBuilder(
+      body: Column(
+        children: [
+          ListenableBuilder(
+            listenable: AvisosStore.instancia,
+            builder: (context, _) => BannerAvisos(
+              avisos: AvisosStore.instancia.banners,
+              alDescartar: AvisosStore.instancia.marcarVisto,
+            ),
+          ),
+          Expanded(
+            child: ListenableBuilder(
         listenable: AsistenteStore.instancia,
         builder: (context, _) => Stack(
           children: [
@@ -787,6 +826,9 @@ class _MobileShell extends StatelessWidget {
             ),
           ],
         ),
+            ),
+          ),
+        ],
       ),
     );
   }

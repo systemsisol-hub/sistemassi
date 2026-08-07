@@ -550,6 +550,7 @@ const _categoryIcons = <String, IconData>{
   'Colaboradores': Icons.group_outlined,
   'Usuarios': Icons.manage_accounts_outlined,
   'Inventario': Icons.inventory_2_outlined,
+  'Avisos': Icons.campaign_outlined,
   'Contactos Ext.': Icons.contact_phone_outlined,
 };
 

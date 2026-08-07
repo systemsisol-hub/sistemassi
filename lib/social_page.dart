@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
-import 'dart:math';
-import 'widgets/page_header.dart';
 import 'calendar_event_form_dialog.dart';
 import 'theme/si_theme.dart';
+import 'avisos_store.dart';
+import 'widgets/lista_avisos.dart';
 
 class SocialPage extends StatefulWidget {
   const SocialPage({super.key});
@@ -165,15 +165,19 @@ class _SocialPageState extends State<SocialPage> {
                             child: _buildWeeklyEventsSection(),
                           ),
                           const SizedBox(width: 24),
-                          // Right Column (Future Section)
+                          // Right Column: Avisos
                           Expanded(
                             flex: 1,
-                            child: _buildPlaceholderSection('Próximamente', Icons.upcoming_outlined),
+                            child: _buildAvisos(),
                           ),
                         ],
                       )
                     : Column(
                         children: [
+                          // En móvil no hay tercera columna, así que los avisos van al principio:
+                          // son lo único de esta página que puede ser urgente.
+                          _buildAvisos(),
+                          const SizedBox(height: 24),
                           _buildBirthdaySection(upcoming, theme),
                           const SizedBox(height: 24),
                           _buildWeeklyEventsSection(),
@@ -185,6 +189,17 @@ class _SocialPageState extends State<SocialPage> {
     );
   }
 
+  /// Los avisos vigentes, en la columna que hasta ahora decía «Próximamente».
+  ///
+  /// Lee del almacén compartido: el banner y la ventana emergente muestran los mismos avisos, y con
+  /// una consulta propia esta columna se desincronizaría de ellos.
+  Widget _buildAvisos() {
+    return ListenableBuilder(
+      listenable: AvisosStore.instancia,
+      builder: (context, _) =>
+          ListaAvisos(avisos: AvisosStore.instancia.social),
+    );
+  }
 
   Widget _buildWeeklyEventsSection() {
     final c = SiColors.of(context);
@@ -527,25 +542,4 @@ class _SocialPageState extends State<SocialPage> {
     );
   }
 
-  Widget _buildPlaceholderSection(String title, IconData icon) {
-    final c = SiColors.of(context);
-    return Container(
-      height: 300,
-      decoration: BoxDecoration(
-        color: c.panel,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: c.line2),
-      ),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 40, color: c.line2),
-            const SizedBox(height: 12),
-            Text(title, style: TextStyle(color: c.line, fontWeight: FontWeight.w500)),
-          ],
-        ),
-      ),
-    );
-  }
 }
