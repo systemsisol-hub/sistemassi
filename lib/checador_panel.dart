@@ -93,9 +93,11 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
 
       final dias = await _supabase
           .from('checador_dias')
-          .select('profile_id, fecha, estado, horario_ambiguo, checo, incompleta, '
-              'tiene_entrada, tiene_salida, justificado, justificacion_motivo, '
-              'justificacion_tipo')
+          .select('profile_id, fecha, estado, horario_ambiguo, esperado, checo, incompleta, '
+              'tiene_entrada, tiene_salida, hora_entrada, hora_salida, foto_entrada, '
+              'foto_salida, limite_entrada, salida_esperada, es_retardo, minutos_retardo, '
+              'salida_temprano, minutos_antes, justificado, justificacion_motivo, '
+              'justificacion_tipo, horario_nombre')
           .order('fecha');
       _dias = List<Map<String, dynamic>>.from(dias);
 
@@ -124,8 +126,14 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
 
   int get _retardos => _evaluadas.where((e) => e['es_retardo'] == true).length;
   int get _aTiempo => _evaluadas.where((e) => e['es_retardo'] == false).length;
-  int get _faltas => _dias.where((d) => d['estado'] == 'FALTA').length;
-  int get _justificados => _dias.where((d) => d['estado'] == 'JUSTIFICADO').length;
+  /// Sólo los días que el horario pedía. La vista también trae los que alguien trabajó fuera de
+  /// su horario —un sábado en una jornada L-V—, y ésos no entran en ninguna métrica.
+  Iterable<Map<String, dynamic>> get _diasEsperados =>
+      _dias.where((d) => d['esperado'] == true);
+
+  int get _faltas => _diasEsperados.where((d) => d['estado'] == 'FALTA').length;
+  int get _justificados =>
+      _diasEsperados.where((d) => d['estado'] == 'JUSTIFICADO').length;
   bool get _hayHorarioAmbiguo => _dias.any((d) => d['horario_ambiguo'] == true);
 
   double? get _puntualidad {
@@ -165,7 +173,7 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
     }
 
     // Las faltas y las checadas a medias viven en la otra vista, indexada por profile_id.
-    for (final d in _dias) {
+    for (final d in _diasEsperados) {
       final clave = (d['profile_id'] ?? '?').toString();
       final fila = porPersona[clave];
       if (fila == null) continue;
@@ -767,20 +775,11 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
     final dias = _dias.where((d) => d['profile_id'].toString() == f.id).toList()
       ..sort((a, b) => a['fecha'].toString().compareTo(b['fecha'].toString()));
 
-    // Entradas de esta persona, indexadas por fecha, para poder poner la hora en cada renglón.
-    final entradaPorFecha = <String, Map<String, dynamic>>{};
-    for (final e in _entradas) {
-      if (e['profile_id']?.toString() == f.id) {
-        entradaPorFecha[e['fecha'].toString()] = e;
-      }
-    }
-
     if (!mounted) return;
     await showDialog(
       context: context,
       builder: (ctx) {
         final c = SiColors.of(ctx);
-        final fmtDia = DateFormat('d MMM', 'es_MX');
         final pct = f.puntualidad;
         final color = f.estatus == 'critico'
             ? c.danger
@@ -790,114 +789,10 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
                     ? c.success
                     : c.ink3;
 
-        String hora(String fecha) {
-          final h = entradaPorFecha[fecha]?['hora'];
-          return h == null ? '' : h.toString().substring(0, 5);
-        }
-
-        Widget seccion(String titulo, IconData icono, Color colorTitulo,
-            List<(String, String, String?)> renglones, String vacio) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: SiSpace.x4),
-              Row(children: [
-                Icon(icono, size: 15, color: colorTitulo),
-                const SizedBox(width: SiSpace.x2),
-                Text('${titulo.toUpperCase()} · ${renglones.length}',
-                    style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.3,
-                        color: colorTitulo)),
-              ]),
-              const SizedBox(height: SiSpace.x2),
-              if (renglones.isEmpty)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: SiSpace.x3, vertical: SiSpace.x3),
-                  decoration: BoxDecoration(
-                    color: c.successTint,
-                    borderRadius: SiRadius.rMd,
-                  ),
-                  child: Text(vacio,
-                      style: TextStyle(fontSize: 12, color: c.ink2)),
-                )
-              else
-                for (final r in renglones)
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 4),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: SiSpace.x3, vertical: SiSpace.x2),
-                    decoration: BoxDecoration(
-                      color: c.hover,
-                      borderRadius: SiRadius.rMd,
-                      border: Border(
-                          left: BorderSide(color: colorTitulo, width: 3)),
-                    ),
-                    child: Row(children: [
-                      SizedBox(
-                        width: 62,
-                        child: Text(r.$1,
-                            style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: c.ink)),
-                      ),
-                      Expanded(
-                        child: Text(r.$2,
-                            style: TextStyle(fontSize: 12, color: c.ink3)),
-                      ),
-                      // La foto que appchecar toma al registrar. Se abre en otra pestaña en lugar
-                      // de dibujarla aquí: está en appchecar.com y no manda cabeceras CORS, así que
-                      // renderizarla en línea fallaría en web.
-                      if (r.$3 != null) _botonFoto(c, r.$3!),
-                    ]),
-                  ),
-            ],
-          );
-        }
-
-        final retardos = <(String, String, String?)>[
-          for (final d in dias)
-            if (entradaPorFecha[d['fecha'].toString()]?['es_retardo'] == true)
-              (
-                fmtDia.format(DateTime.parse(d['fecha'].toString())),
-                'Entró ${hora(d['fecha'].toString())} · '
-                    '+${entradaPorFecha[d['fecha'].toString()]!['minutos_retardo']} min',
-                entradaPorFecha[d['fecha'].toString()]?['foto_url'] as String?,
-              ),
-        ];
-        final faltas = <(String, String, String?)>[
-          for (final d in dias)
-            if (d['estado'] == 'FALTA')
-              (
-                fmtDia.format(DateTime.parse(d['fecha'].toString())),
-                'Sin ninguna checada',
-                null, // Sin checada no hay foto que mostrar.
-              ),
-        ];
-        final justificados = <(String, String, String?)>[
-          for (final d in dias)
-            if (d['justificado'] == true)
-              (
-                fmtDia.format(DateTime.parse(d['fecha'].toString())),
-                (d['justificacion_motivo'] ?? 'Justificado').toString(),
-                entradaPorFecha[d['fecha'].toString()]?['foto_url'] as String?,
-              ),
-        ];
-        final incompletas = <(String, String, String?)>[
-          for (final d in dias)
-            if (d['incompleta'] == true)
-              (
-                fmtDia.format(DateTime.parse(d['fecha'].toString())),
-                d['tiene_entrada'] == true
-                    ? 'Sólo entrada${hora(d['fecha'].toString()).isEmpty ? '' : ' (${hora(d['fecha'].toString())})'}'
-                    : 'Sólo salida',
-                entradaPorFecha[d['fecha'].toString()]?['foto_url'] as String?,
-              ),
-        ];
+        // El detalle va en calendario y no en listas: una cuadrícula del mes deja ver de un
+        // golpe los huecos —los días sin salida, los faltantes— que en cuatro listas separadas hay
+        // que ir cruzando a mano.
+        final porFecha = {for (final d in dias) d['fecha'].toString(): d};
 
         return AlertDialog(
           backgroundColor: c.panel,
@@ -958,7 +853,7 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
             ),
           ),
           content: SizedBox(
-            width: 620,
+            width: 780,
             child: SingleChildScrollView(
               child: SelectionArea(
                 child: Column(
@@ -980,18 +875,12 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
                         _fichaKpi(c, '${f.minutos}', 'Min. tarde', c.ink2),
                       ],
                     ),
-                    seccion('Días con retardo', Icons.alarm, c.warn, retardos,
-                        'Ningún retardo en el periodo.'),
-                    seccion('Faltas (sin ninguna checada)', Icons.block,
-                        c.danger, faltas, 'Ninguna falta sin justificar.'),
-                    seccion('Días justificados', Icons.description_outlined,
-                        c.ink3, justificados, 'Sin días justificados.'),
-                    seccion(
-                        'Checadas incompletas (sólo entrada o sólo salida)',
-                        Icons.warning_amber_rounded,
-                        c.warn,
-                        incompletas,
-                        'Todos los días quedaron completos.'),
+                    const SizedBox(height: SiSpace.x5),
+                    for (final mes in _mesesDe(porFecha.keys)) ...[
+                      _calendarioMes(c, mes, porFecha),
+                      const SizedBox(height: SiSpace.x4),
+                    ],
+                    _leyendaCalendario(c),
                     const SizedBox(height: SiSpace.x2),
                   ],
                 ),
@@ -1000,6 +889,199 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
           ),
         );
       },
+    );
+  }
+
+  // ── Calendario ─────────────────────────────────────────────────────────────
+
+  /// Los meses que toca el periodo, en orden. Casi siempre es uno, pero una quincena a caballo
+  /// entre dos meses debe pintar los dos.
+  static List<DateTime> _mesesDe(Iterable<String> fechas) {
+    final meses = <String, DateTime>{};
+    for (final f in fechas) {
+      final d = DateTime.parse(f);
+      meses['${d.year}-${d.month}'] = DateTime(d.year, d.month);
+    }
+    final lista = meses.values.toList()..sort();
+    return lista;
+  }
+
+  static const _diasSemana = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+
+  Widget _calendarioMes(
+      SiColors c, DateTime mes, Map<String, Map<String, dynamic>> porFecha) {
+    final primero = DateTime(mes.year, mes.month);
+    final diasDelMes = DateTime(mes.year, mes.month + 1, 0).day;
+    // DateTime.weekday va de 1 (lunes) a 7 (domingo); la cuadrícula arranca en domingo.
+    final huecoInicial = primero.weekday % 7;
+    final celdas = huecoInicial + diasDelMes;
+    final semanas = (celdas / 7).ceil();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(DateFormat('MMMM y', 'es_MX').format(mes).toUpperCase(),
+            style: SiType.mono(size: 10, color: c.ink3, letterSpacing: 1)),
+        const SizedBox(height: SiSpace.x2),
+        Row(
+          children: [
+            for (final d in _diasSemana)
+              Expanded(
+                child: Center(
+                  child: Text(d,
+                      style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          color: c.ink3)),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        for (var semana = 0; semana < semanas; semana++)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var col = 0; col < 7; col++)
+                Expanded(
+                  child: _celdaDia(
+                    c,
+                    (semana * 7 + col) - huecoInicial + 1,
+                    diasDelMes,
+                    mes,
+                    porFecha,
+                  ),
+                ),
+            ],
+          ),
+      ],
+    );
+  }
+
+  Widget _celdaDia(SiColors c, int dia, int diasDelMes, DateTime mes,
+      Map<String, Map<String, dynamic>> porFecha) {
+    if (dia < 1 || dia > diasDelMes) {
+      return Container(
+        height: 64,
+        decoration: BoxDecoration(border: Border.all(color: c.line2, width: 0.5)),
+      );
+    }
+
+    final fecha = DateTime(mes.year, mes.month, dia);
+    final clave = DateFormat('yyyy-MM-dd').format(fecha);
+    final d = porFecha[clave];
+
+    final esFalta = d?['estado'] == 'FALTA';
+    final justificado = d?['justificado'] == true;
+
+    return Container(
+      height: 64,
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+      decoration: BoxDecoration(
+        // Un tinte de fondo para lo que exige atención: se distingue antes de leer las horas.
+        color: esFalta
+            ? c.dangerTint
+            : justificado
+                ? c.warnTint
+                : null,
+        border: Border.all(color: c.line2, width: 0.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(dia.toString().padLeft(2, '0'),
+                  style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
+                      color: d == null ? c.ink4 : c.ink2)),
+              const Spacer(),
+              if (d != null && (d['foto_entrada'] != null || d['foto_salida'] != null))
+                _botonFoto(
+                    c, (d['foto_entrada'] ?? d['foto_salida']).toString()),
+            ],
+          ),
+          if (d != null) ...[
+            if (esFalta)
+              Text('Falta',
+                  style: TextStyle(
+                      fontSize: 10, fontWeight: FontWeight.w600, color: c.danger))
+            else ...[
+              _horaCelda(c, d['hora_entrada'], d['es_retardo'] == true,
+                  d['minutos_retardo']),
+              _horaCelda(c, d['hora_salida'], d['salida_temprano'] == true,
+                  d['minutos_antes'],
+                  faltante: d['tiene_salida'] != true),
+            ],
+            if (justificado)
+              Text(
+                (d['justificacion_tipo'] ?? 'Justificado')
+                    .toString()
+                    .replaceAll('_', ' ')
+                    .toLowerCase(),
+                style: TextStyle(fontSize: 9, color: c.ink3),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// Una hora del día. Verde cuando está en regla, rojo cuando no, y un guion cuando falta el
+  /// registro —que es el caso de 140 de los 588 días esperados, casi siempre la salida—.
+  Widget _horaCelda(SiColors c, dynamic hora, bool malo, dynamic minutos,
+      {bool faltante = false}) {
+    if (faltante || hora == null) {
+      return Text('—  sin registro',
+          style: TextStyle(fontSize: 10, color: c.warn));
+    }
+    return Row(
+      children: [
+        Text(hora.toString().substring(0, 5),
+            style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: malo ? c.danger : c.success,
+                fontFeatures: const [FontFeature.tabularFigures()])),
+        if (malo && (minutos as num?) != null && (minutos as num) > 0) ...[
+          const SizedBox(width: 3),
+          Text('+$minutos',
+              style: TextStyle(fontSize: 9, color: c.danger)),
+        ],
+      ],
+    );
+  }
+
+  Widget _leyendaCalendario(SiColors c) {
+    Widget punto(Color color, String texto) => Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 8, height: 8,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 5),
+            Text(texto, style: TextStyle(fontSize: 10.5, color: c.ink3)),
+          ],
+        );
+
+    return Wrap(
+      spacing: SiSpace.x4,
+      runSpacing: SiSpace.x2,
+      children: [
+        punto(c.success, 'En regla'),
+        punto(c.danger, 'Retardo o salida antes de hora'),
+        punto(c.warn, 'Sin registro / justificado'),
+        Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.photo_camera_outlined, size: 12, color: c.brand),
+          const SizedBox(width: 4),
+          Text('Foto de la checada',
+              style: TextStyle(fontSize: 10.5, color: c.ink3)),
+        ]),
+      ],
     );
   }
 
