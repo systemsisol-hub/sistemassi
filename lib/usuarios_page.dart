@@ -1319,6 +1319,7 @@ class _PermIcons extends StatelessWidget {
       _PermIcon(Icons.fingerprint, perms['show_asistencia'] == true),
       _PermIcon(Icons.bar_chart_outlined, perms['show_powerbi'] == true),
       _PermIcon(Icons.vpn_key_outlined, perms['show_passwords'] == true),
+      _PermIcon(Icons.contacts_outlined, perms['show_directorio'] == true),
       _PermIcon(Icons.smart_toy_outlined, perms['show_ai'] == true),
       _PermIcon(Icons.delete_outline, perms['show_trash'] == true),
     ];
@@ -1421,6 +1422,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
       'show_incidencias': false,
       'show_logs': false,
       'show_external_contacts': false,
+      'show_directorio': false,
       'show_asistencia': false,
       'show_powerbi': false,
       'show_passwords': false,
@@ -1906,6 +1908,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
         _permSwitch(c, 'Colaboradores CSSI', 'show_cssi', Icons.badge_outlined),
         _permSwitch(c, 'Incidencias', 'show_incidencias', Icons.description_outlined),
         _permSwitch(c, 'Logs del sistema', 'show_logs', Icons.assignment_outlined),
+        _permSwitch(c, 'Directorio', 'show_directorio', Icons.contacts_outlined),
         _permSwitch(c, 'Contactos externos', 'show_external_contacts', Icons.contact_phone_outlined),
         _permSwitch(c, 'Asistencia', 'show_asistencia', Icons.fingerprint),
         _permSwitch(c, 'Power BI', 'show_powerbi', Icons.bar_chart_outlined),

@@ -94,15 +94,14 @@ class _MainNavigationState extends State<MainNavigation> {
       'activeIcon': Icons.diversity_3,
       'widget': const SocialPage(),
     });
-    pages.add({
-      // Sin permiso, igual que Mi Perfil o Social: es el directorio interno, y su dato ya era
-      // legible por cualquier autenticado —la politica de profiles es `true`—. La pagina solo lo
-      // presenta, filtrado a personal vigente.
-      'title': 'Directorio',
-      'icon': Icons.contacts_outlined,
-      'activeIcon': Icons.contacts,
-      'widget': const DirectorioPage(),
-    });
+    if (widget.permissions['show_directorio'] == true) {
+      pages.add({
+        'title': 'Directorio',
+        'icon': Icons.contacts_outlined,
+        'activeIcon': Icons.contacts,
+        'widget': const DirectorioPage(),
+      });
+    }
     pages.add({
       'title': 'Conocimientos',
       'icon': Icons.library_books_outlined,
