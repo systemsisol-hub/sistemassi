@@ -124,85 +124,101 @@ class _DirectorioPageState extends State<DirectorioPage> {
     );
   }
 
+  /// Buscador y ubicación en un solo renglón y a la misma altura.
+  ///
+  /// Antes las 16 ubicaciones eran pastillas en una fila con desplazamiento horizontal: las de la
+  /// derecha quedaban fuera de vista y nada indicaba que hubiera más. Un desplegable las muestra
+  /// todas y ocupa un ancho fijo.
   Widget _barraBusqueda(SiColors c) {
     final total = _personas.length;
     final visibles = _filtradas.length;
 
+    // Misma altura en los dos controles: el relleno vertical del campo y del desplegable se define
+    // aquí una sola vez para que no se desalineen.
+    const relleno = EdgeInsets.symmetric(horizontal: 12, vertical: 11);
+
     return Container(
       padding: const EdgeInsets.fromLTRB(
-          SiSpace.x6, SiSpace.x4, SiSpace.x6, SiSpace.x3),
+          SiSpace.x5, SiSpace.x3, SiSpace.x5, SiSpace.x3),
       decoration: BoxDecoration(
         color: c.panel,
         border: Border(bottom: BorderSide(color: c.line)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Row(children: [
-            Expanded(
-              child: TextField(
-                controller: _buscarCtrl,
-                onChanged: (v) => setState(() => _busqueda = v),
-                style: const TextStyle(fontSize: 13.5),
-                decoration: InputDecoration(
-                  hintText: 'Buscar por nombre, puesto, área, ubicación, teléfono o correo…',
-                  hintStyle: TextStyle(fontSize: 13, color: c.ink4),
-                  prefixIcon: Icon(Icons.search, size: 18, color: c.ink3),
-                  suffixIcon: _busqueda.isEmpty
-                      ? null
-                      : IconButton(
-                          icon: Icon(Icons.close, size: 17, color: c.ink3),
-                          onPressed: () {
-                            _buscarCtrl.clear();
-                            setState(() => _busqueda = '');
-                          },
-                        ),
-                  isDense: true,
-                  border: OutlineInputBorder(borderRadius: SiRadius.rMd),
-                ),
+          Expanded(
+            child: TextField(
+              controller: _buscarCtrl,
+              onChanged: (v) => setState(() => _busqueda = v),
+              style: const TextStyle(fontSize: 13.5),
+              decoration: InputDecoration(
+                hintText: 'Buscar por nombre, puesto, área, teléfono o correo…',
+                hintStyle: TextStyle(fontSize: 13, color: c.ink4),
+                prefixIcon: Icon(Icons.search, size: 18, color: c.ink3),
+                prefixIconConstraints:
+                    const BoxConstraints(minWidth: 38, minHeight: 0),
+                suffixIcon: _busqueda.isEmpty
+                    ? null
+                    : InkWell(
+                        onTap: () {
+                          _buscarCtrl.clear();
+                          setState(() => _busqueda = '');
+                        },
+                        child: Icon(Icons.close, size: 16, color: c.ink3),
+                      ),
+                suffixIconConstraints:
+                    const BoxConstraints(minWidth: 34, minHeight: 0),
+                isDense: true,
+                contentPadding: relleno,
+                border: OutlineInputBorder(borderRadius: SiRadius.rMd),
               ),
             ),
-            const SizedBox(width: SiSpace.x3),
-            Text(
-              visibles == total ? '$total personas' : '$visibles de $total',
-              style: TextStyle(fontSize: 12, color: c.ink3),
+          ),
+          const SizedBox(width: SiSpace.x3),
+          SizedBox(
+            width: 230,
+            child: DropdownButtonFormField<String>(
+              value: _ubicacion,
+              isExpanded: true,
+              isDense: true,
+              style: TextStyle(fontSize: 13, color: c.ink),
+              icon: Icon(Icons.expand_more, size: 18, color: c.ink3),
+              decoration: InputDecoration(
+                isDense: true,
+                contentPadding: relleno,
+                prefixIcon: Icon(Icons.place_outlined, size: 16, color: c.ink3),
+                prefixIconConstraints:
+                    const BoxConstraints(minWidth: 34, minHeight: 0),
+                border: OutlineInputBorder(borderRadius: SiRadius.rMd),
+              ),
+              items: [
+                DropdownMenuItem(
+                  value: 'todas',
+                  child: Text('Todas las ubicaciones',
+                      style: TextStyle(fontSize: 13, color: c.ink2)),
+                ),
+                for (final u in _ubicaciones)
+                  DropdownMenuItem(
+                    value: u,
+                    child: Text(u.replaceAll('_', ' '),
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 13, color: c.ink2)),
+                  ),
+              ],
+              onChanged: (v) =>
+                  setState(() => _ubicacion = v ?? 'todas'),
             ),
-          ]),
-          const SizedBox(height: SiSpace.x3),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(children: [
-              _chipUbicacion(c, 'todas', 'Todas'),
-              for (final u in _ubicaciones) _chipUbicacion(c, u, u),
-            ]),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _chipUbicacion(SiColors c, String valor, String etiqueta) {
-    final activo = _ubicacion == valor;
-    return Padding(
-      padding: const EdgeInsets.only(right: SiSpace.x2),
-      child: InkWell(
-        onTap: () => setState(() => _ubicacion = valor),
-        borderRadius: SiRadius.rPill,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: activo ? c.brand : c.bg,
-            borderRadius: SiRadius.rPill,
-            border: Border.all(color: activo ? c.brand : c.line),
-          ),
-          child: Text(
-            etiqueta.replaceAll('_', ' '),
+          const SizedBox(width: SiSpace.x3),
+          Text(
+            visibles == total ? '$total' : '$visibles de $total',
             style: TextStyle(
                 fontSize: 12,
-                fontWeight: activo ? FontWeight.w600 : FontWeight.normal,
-                color: activo ? Colors.white : c.ink2),
+                color: c.ink3,
+                fontFeatures: const [FontFeature.tabularFigures()]),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -229,76 +245,119 @@ class _DirectorioPageState extends State<DirectorioPage> {
     // SelectionArea para poder copiar a mano un fragmento; además cada dato de contacto se copia
     // completo con un toque, que es lo que uno quiere de un directorio.
     return SelectionArea(
-      child: ListView.separated(
-        padding: const EdgeInsets.symmetric(
-            horizontal: SiSpace.x6, vertical: SiSpace.x4),
-        itemCount: filas.length,
-        separatorBuilder: (_, __) => Divider(height: 1, color: c.line2),
-        itemBuilder: (ctx, i) => _fila(c, filas[i]),
+      child: LayoutBuilder(
+        builder: (context, box) {
+          // En una pantalla ancha un solo renglón por persona dejaba un hueco enorme entre el
+          // nombre y sus datos de contacto, en los dos extremos. Con varias columnas ese espacio
+          // se usa y se ve más gente sin desplazarse.
+          final columnas = box.maxWidth >= 1500
+              ? 3
+              : box.maxWidth >= 1000
+                  ? 2
+                  : 1;
+
+          // Se agrupa en renglones de `columnas` en lugar de armar columnas completas, para que
+          // ListView siga construyendo sólo lo visible: son 283 personas.
+          final grupos = <List<_Persona>>[];
+          for (var i = 0; i < filas.length; i += columnas) {
+            grupos.add(filas.sublist(
+                i, (i + columnas).clamp(0, filas.length)));
+          }
+
+          return ListView.separated(
+            padding: const EdgeInsets.symmetric(
+                horizontal: SiSpace.x5, vertical: SiSpace.x2),
+            itemCount: grupos.length,
+            separatorBuilder: (_, __) => Divider(height: 1, color: c.line2),
+            itemBuilder: (ctx, i) {
+              final grupo = grupos[i];
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (var j = 0; j < columnas; j++) ...[
+                    if (j > 0) const SizedBox(width: SiSpace.x5),
+                    Expanded(
+                      child: j < grupo.length
+                          ? _fila(c, grupo[j])
+                          : const SizedBox.shrink(),
+                    ),
+                  ],
+                ],
+              );
+            },
+          );
+        },
       ),
     );
   }
 
   Widget _fila(SiColors c, _Persona p) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: SiSpace.x3),
-      child: LayoutBuilder(
-        builder: (context, box) {
-          final identidad = Row(
+    final identidad = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _avatar(c, p),
+        const SizedBox(width: SiSpace.x2),
+        Expanded(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _avatar(c, p),
-              const SizedBox(width: SiSpace.x3),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(p.nombre,
-                        style: TextStyle(
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w600,
-                            color: c.ink)),
-                    if (p.puesto.isNotEmpty)
-                      Text(p.puesto,
-                          style: TextStyle(fontSize: 12, color: c.ink2)),
-                    Text(
-                      [
-                        if (p.numero.isNotEmpty) '#${p.numero}',
-                        if (p.area.isNotEmpty) p.area,
-                        if (p.ubicacion.isNotEmpty) p.ubicacion.replaceAll('_', ' '),
-                      ].join(' · '),
-                      style: TextStyle(fontSize: 11, color: c.ink3),
-                    ),
-                  ],
-                ),
+              Text(p.nombre,
+                  style: TextStyle(
+                      fontSize: 13,
+                      height: 1.25,
+                      fontWeight: FontWeight.w600,
+                      color: c.ink)),
+              // Puesto y datos en un solo renglón: eran dos líneas casi vacías cada una.
+              Text(
+                [
+                  if (p.puesto.isNotEmpty) p.puesto,
+                  if (p.numero.isNotEmpty) '#${p.numero}',
+                  if (p.ubicacion.isNotEmpty) p.ubicacion.replaceAll('_', ' '),
+                ].join(' · '),
+                style: TextStyle(fontSize: 11, height: 1.3, color: c.ink3),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
-          );
+          ),
+        ),
+      ],
+    );
 
-          final contacto = Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (p.correo.isNotEmpty)
-                _contacto(c, Icons.mail_outline, p.correo, 'Correo'),
-              if (p.celular.isNotEmpty)
-                _contacto(c, Icons.smartphone_outlined, p.celular, 'Celular'),
-              if (p.telefono.isNotEmpty)
-                _contacto(c, Icons.phone_outlined, p.telefono, 'Teléfono'),
-              if (p.correo.isEmpty && p.celular.isEmpty && p.telefono.isEmpty)
-                Text('Sin datos de contacto',
-                    style: TextStyle(fontSize: 11.5, color: c.ink4)),
-            ],
-          );
+    final contacto = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (p.correo.isNotEmpty)
+          _contacto(c, Icons.mail_outline, p.correo, 'Correo'),
+        if (p.celular.isNotEmpty)
+          _contacto(c, Icons.smartphone_outlined, p.celular, 'Celular'),
+        if (p.telefono.isNotEmpty)
+          _contacto(c, Icons.phone_outlined, p.telefono, 'Teléfono'),
+        if (p.correo.isEmpty && p.celular.isEmpty && p.telefono.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(left: 4, top: 2),
+            child: Text('Sin datos de contacto',
+                style: TextStyle(fontSize: 11, color: c.ink4)),
+          ),
+      ],
+    );
 
-          // Abajo de 760px el contacto no cabe al lado sin cortar los correos.
-          if (box.maxWidth < 760) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: SiSpace.x2),
+      child: LayoutBuilder(
+        builder: (context, box) {
+          // Sólo se pone el contacto al lado cuando de verdad cabe. El corte está en 700 y no en
+          // 640 a propósito: con dos columnas la celda mide entre 540 y 660px según la ventana, y
+          // con 640 el formato cambiaba a media franja —lado a lado a 1440px, apilado a 1200px—.
+          // Así multicolumna siempre apila, y sólo la columna única usa el formato ancho.
+          if (box.maxWidth < 700) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 identidad,
-                const SizedBox(height: SiSpace.x2),
+                const SizedBox(height: 3),
                 Padding(
-                  padding: const EdgeInsets.only(left: 46),
+                  padding: const EdgeInsets.only(left: 36),
                   child: contacto,
                 ),
               ],
@@ -307,9 +366,9 @@ class _DirectorioPageState extends State<DirectorioPage> {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(flex: 3, child: identidad),
-              const SizedBox(width: SiSpace.x4),
-              Expanded(flex: 2, child: contacto),
+              Expanded(flex: 5, child: identidad),
+              const SizedBox(width: SiSpace.x3),
+              Expanded(flex: 4, child: contacto),
             ],
           );
         },
@@ -322,7 +381,7 @@ class _DirectorioPageState extends State<DirectorioPage> {
       return ClipOval(
         child: Image.network(
           p.fotoUrl,
-          width: 34, height: 34, fit: BoxFit.cover,
+          width: 28, height: 28, fit: BoxFit.cover,
           // Si la foto no carga se cae a las iniciales, en lugar de dejar el hueco roto.
           errorBuilder: (_, __, ___) => _iniciales(c, p),
         ),
@@ -333,40 +392,37 @@ class _DirectorioPageState extends State<DirectorioPage> {
 
   Widget _iniciales(SiColors c, _Persona p) {
     return Container(
-      width: 34, height: 34,
+      width: 28, height: 28,
       decoration: BoxDecoration(color: c.brandTint, shape: BoxShape.circle),
       child: Center(
         child: Text(p.iniciales,
             style: TextStyle(
-                fontSize: 12, fontWeight: FontWeight.w700, color: c.brand)),
+                fontSize: 11, fontWeight: FontWeight.w700, color: c.brand)),
       ),
     );
   }
 
   Widget _contacto(SiColors c, IconData icono, String valor, String que) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 3),
-      child: InkWell(
-        onTap: () => _copiar(valor, que),
-        borderRadius: BorderRadius.circular(6),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
-          child: Row(children: [
-            Icon(icono, size: 13, color: c.ink4),
-            const SizedBox(width: 7),
-            Expanded(
-              child: Text(valor,
-                  style: TextStyle(fontSize: 12, color: c.ink2),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis),
-            ),
-            const SizedBox(width: 4),
-            Tooltip(
-              message: 'Copiar $que'.toLowerCase(),
-              child: Icon(Icons.copy_rounded, size: 12, color: c.ink4),
-            ),
-          ]),
-        ),
+    return InkWell(
+      onTap: () => _copiar(valor, que),
+      borderRadius: BorderRadius.circular(5),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 1.5, horizontal: 4),
+        child: Row(children: [
+          Icon(icono, size: 12, color: c.ink4),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(valor,
+                style: TextStyle(fontSize: 11.5, color: c.ink2),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis),
+          ),
+          const SizedBox(width: 4),
+          Tooltip(
+            message: 'Copiar ${que.toLowerCase()}',
+            child: Icon(Icons.copy_rounded, size: 11, color: c.ink4),
+          ),
+        ]),
       ),
     );
   }
