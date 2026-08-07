@@ -71,7 +71,7 @@ class DialogoAviso extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  if (aviso.insistir)
+                  if (aviso.insistirModal)
                     Expanded(
                       child: Text('Este aviso volverá a mostrarse',
                           style: TextStyle(fontSize: 11.5, color: c.ink3)),
@@ -96,9 +96,10 @@ class DialogoAviso extends StatelessWidget {
 ///
 /// * `barrierDismissible: false`. Un aviso emergente existe para que se lea; cerrarlo con un clic
 ///   fuera lo convertiría en un estorbo que se quita sin mirar.
-/// * Se acusa sólo si la persona apretó «Entendido». Si cerró con Escape, [AvisosStore.marcarMostrado]
-///   evita que reaparezca en esta sesión, pero el aviso sigue sin acuse y vuelve la próxima. Acusar en
-///   los dos casos convertiría un Escape accidental en un «ya lo vi» permanente.
+/// * Se acusa sólo si la persona apretó «Entendido», y sólo el canal MODAL: el banner del mismo aviso
+///   sigue en pie. Si cerró con Escape, [AvisosStore.marcarMostrado] evita que reaparezca en esta
+///   pantalla, pero el aviso sigue sin acuse y vuelve a la próxima. Acusar en los dos casos
+///   convertiría un Escape accidental en un «ya lo vi» permanente.
 /// * Se revisa `context.mounted` entre diálogos: entre uno y otro la persona puede haber cerrado
 ///   sesión, y seguir empujando ventanas sobre la pantalla de login sería un error.
 Future<void> mostrarAvisosEmergentes(
@@ -113,6 +114,8 @@ Future<void> mostrarAvisosEmergentes(
       barrierDismissible: false,
       builder: (_) => DialogoAviso(aviso: aviso),
     );
-    if (confirmado == true) await store.marcarVisto(aviso.id);
+    if (confirmado == true) {
+      await store.marcarVisto(aviso.id, CanalAviso.modal);
+    }
   }
 }

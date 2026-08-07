@@ -389,8 +389,10 @@ class _AvisosPageState extends State<AvisosPage> {
                       _dato(c, Icons.groups_outlined, _destino(a)),
                       _dato(c, Icons.visibility_outlined,
                           '$vistos ${vistos == 1 ? 'acuse' : 'acuses'}'),
-                      if (aviso.insistir)
-                        _dato(c, Icons.repeat, 'Insiste cada sesión'),
+                      if (aviso.insistirModal)
+                        _dato(c, Icons.repeat, 'Emergente insiste'),
+                      if (aviso.insistirBanner)
+                        _dato(c, Icons.repeat_on_outlined, 'Banner insiste'),
                       if (apagado) _dato(c, Icons.pause_circle_outline, 'Apagado'),
                     ],
                   ),
@@ -568,7 +570,8 @@ class _FormularioAvisoState extends State<_FormularioAviso> {
   bool _enModal = false;
   bool _enBanner = true;
   bool _enSocial = false;
-  bool _insistir = false;
+  bool _insistirModal = false;
+  bool _insistirBanner = false;
   bool _paraTodos = true;
   final Set<String> _ubicaciones = {};
   final Set<String> _areas = {};
@@ -590,7 +593,8 @@ class _FormularioAvisoState extends State<_FormularioAviso> {
       _enModal = a['en_modal'] == true;
       _enBanner = a['en_banner'] == true;
       _enSocial = a['en_social'] == true;
-      _insistir = a['insistir'] == true;
+      _insistirModal = a['insistir_modal'] == true;
+      _insistirBanner = a['insistir_banner'] == true;
       _paraTodos = a['para_todos'] == true;
       _ubicaciones.addAll(((a['ubicaciones'] as List?) ?? []).cast<String>());
       _areas.addAll(((a['areas'] as List?) ?? []).cast<String>());
@@ -675,7 +679,8 @@ class _FormularioAvisoState extends State<_FormularioAviso> {
         'en_modal': _enModal,
         'en_banner': _enBanner,
         'en_social': _enSocial,
-        'insistir': _insistir,
+        'insistir_modal': _insistirModal,
+        'insistir_banner': _insistirBanner,
         'para_todos': _paraTodos,
         // Dirigido a todos, las listas se limpian: dejarlas guardadas haría que al reactivar
         // «dirigido» reaparecieran destinos viejos que nadie volvió a revisar.
@@ -800,14 +805,24 @@ class _FormularioAvisoState extends State<_FormularioAviso> {
                     if (_enModal)
                       Padding(
                         padding: const EdgeInsets.only(left: SiSpace.x6),
-                        child: _casilla(c, 'Insistir en cada sesión', _insistir,
-                            (v) => setState(() => _insistir = v),
+                        child: _casilla(
+                            c, 'Insistir en cada sesión', _insistirModal,
+                            (v) => setState(() => _insistirModal = v),
                             ayuda:
-                                'Vuelve a aparecer aunque ya lo hayan cerrado'),
+                                'Vuelve a abrirse aunque ya lo hayan cerrado'),
                       ),
                     _casilla(c, 'Banner bajo la barra', _enBanner,
                         (v) => setState(() => _enBanner = v),
                         ayuda: 'Una franja de color, se puede descartar'),
+                    if (_enBanner)
+                      Padding(
+                        padding: const EdgeInsets.only(left: SiSpace.x6),
+                        child: _casilla(
+                            c, 'Insistir al recargar', _insistirBanner,
+                            (v) => setState(() => _insistirBanner = v),
+                            ayuda:
+                                'Vuelve a salir al refrescar la pantalla aunque lo hayan descartado'),
+                      ),
                     _casilla(c, 'Muro social', _enSocial,
                         (v) => setState(() => _enSocial = v),
                         ayuda: 'Queda como consulta en la página Social'),

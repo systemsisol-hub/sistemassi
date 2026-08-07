@@ -694,7 +694,8 @@ class _DesktopShellState extends State<_DesktopShell>
                   listenable: AvisosStore.instancia,
                   builder: (context, _) => BannerAvisos(
                     avisos: AvisosStore.instancia.banners,
-                    alDescartar: AvisosStore.instancia.marcarVisto,
+                    alDescartar: (id) => AvisosStore.instancia
+                        .marcarVisto(id, CanalAviso.banner),
                   ),
                 ),
                 // El panel va aquí, HERMANO de la página y no dentro de ella: lo que vive dentro
@@ -805,7 +806,8 @@ class _MobileShell extends StatelessWidget {
             listenable: AvisosStore.instancia,
             builder: (context, _) => BannerAvisos(
               avisos: AvisosStore.instancia.banners,
-              alDescartar: AvisosStore.instancia.marcarVisto,
+              alDescartar: (id) =>
+                  AvisosStore.instancia.marcarVisto(id, CanalAviso.banner),
             ),
           ),
           Expanded(

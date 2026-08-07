@@ -20,8 +20,10 @@ void main() {
     bool enModal = false,
     bool enBanner = true,
     bool enSocial = false,
-    bool insistir = false,
-    bool visto = false,
+    bool insistirModal = false,
+    bool insistirBanner = false,
+    bool vistoModal = false,
+    bool vistoBanner = false,
     DateTime? hasta,
   }) =>
       Aviso(
@@ -32,8 +34,10 @@ void main() {
         enModal: enModal,
         enBanner: enBanner,
         enSocial: enSocial,
-        insistir: insistir,
-        visto: visto,
+        insistirModal: insistirModal,
+        insistirBanner: insistirBanner,
+        vistoModal: vistoModal,
+        vistoBanner: vistoBanner,
         hasta: hasta,
       );
 
@@ -59,8 +63,10 @@ void main() {
         'en_modal': true,
         'en_banner': false,
         'en_social': true,
-        'insistir': true,
-        'visto': true,
+        'insistir_modal': true,
+        'insistir_banner': false,
+        'visto_modal': true,
+        'visto_banner': false,
         'desde': '2026-08-01T00:00:00Z',
         'hasta': null,
       });
@@ -68,8 +74,10 @@ void main() {
       expect(a.enModal, isTrue);
       expect(a.enBanner, isFalse);
       expect(a.enSocial, isTrue);
-      expect(a.insistir, isTrue);
-      expect(a.visto, isTrue);
+      expect(a.insistirModal, isTrue);
+      expect(a.insistirBanner, isFalse);
+      expect(a.vistoModal, isTrue);
+      expect(a.vistoBanner, isFalse);
       expect(a.hasta, isNull);
     });
 
@@ -86,6 +94,63 @@ void main() {
         aviso(id: '3', nivel: NivelAviso.advertencia),
       ]..sort((a, b) => a.peso.compareTo(b.peso));
       expect(lista.map((a) => a.id), ['2', '3', '1']);
+    });
+  });
+
+  // ── Las reglas por canal ──────────────────────────────────────────────────
+  //
+  // Aquí vivía el fallo que se reportó: un aviso publicado en los tres lugares perdía el banner al
+  // apretar «Entendido» en el emergente, porque había UN acuse para tres canales.
+
+  group('reglas por canal', () {
+    test('cerrar el emergente NO descarta el banner del mismo aviso', () {
+      // El caso exacto reportado: aviso en los tres canales, acuse sólo del emergente.
+      final a = aviso(enModal: true, enBanner: true, enSocial: true, vistoModal: true);
+      expect(a.debeVerseEnModal(), isFalse, reason: 'el emergente ya se acusó');
+      expect(a.debeVerseEnBanner(), isTrue,
+          reason: 'nadie descartó el banner: debe seguir ahí');
+    });
+
+    test('descartar el banner NO cierra el emergente', () {
+      final a = aviso(enModal: true, enBanner: true, vistoBanner: true);
+      expect(a.debeVerseEnBanner(), isFalse);
+      expect(a.debeVerseEnModal(), isTrue);
+    });
+
+    test('sin insistir, el banner descartado no vuelve al recargar', () {
+      final a = aviso(enBanner: true, vistoBanner: true);
+      expect(a.debeVerseEnBanner(), isFalse);
+    });
+
+    test('con insistir_banner, el banner descartado vuelve al recargar', () {
+      // Recargar es una sesión nueva: el conjunto de descartados de la pantalla empieza vacío.
+      final a = aviso(enBanner: true, vistoBanner: true, insistirBanner: true);
+      expect(a.debeVerseEnBanner(descartadoEnSesion: false), isTrue);
+      // Pero dentro de la misma pantalla, la ✕ tiene que surtir efecto: si no, no serviría de nada.
+      expect(a.debeVerseEnBanner(descartadoEnSesion: true), isFalse);
+    });
+
+    test('con insistir_modal el emergente vuelve, pero una vez por pantalla', () {
+      final a = aviso(enModal: true, vistoModal: true, insistirModal: true);
+      expect(a.debeVerseEnModal(mostradoEnSesion: false), isTrue);
+      expect(a.debeVerseEnModal(mostradoEnSesion: true), isFalse);
+    });
+
+    test('los canales apagados no se muestran ni sin acuse', () {
+      final a = aviso(enModal: false, enBanner: false, enSocial: true);
+      expect(a.debeVerseEnModal(), isFalse);
+      expect(a.debeVerseEnBanner(), isFalse);
+    });
+
+    test('copiaVista sólo toca el canal que se acusó', () {
+      final a = aviso(enModal: true, enBanner: true);
+      final trasModal = a.copiaVista(CanalAviso.modal);
+      expect(trasModal.vistoModal, isTrue);
+      expect(trasModal.vistoBanner, isFalse);
+
+      final trasBanner = trasModal.copiaVista(CanalAviso.banner);
+      expect(trasBanner.vistoModal, isTrue, reason: 'no se debe perder el acuse anterior');
+      expect(trasBanner.vistoBanner, isTrue);
     });
   });
 
@@ -174,7 +239,7 @@ void main() {
 
     testWidgets('avisa cuando el aviso va a insistir', (tester) async {
       await tester.pumpWidget(
-          envolver(DialogoAviso(aviso: aviso(insistir: true, enModal: true))));
+          envolver(DialogoAviso(aviso: aviso(insistirModal: true, enModal: true))));
       await tester.pumpAndSettle();
       expect(find.text('Este aviso volverá a mostrarse'), findsOneWidget);
     });
@@ -218,7 +283,7 @@ void main() {
       // El muro es a donde uno vuelve a consultar lo que ya quitó de en medio; esconder lo acusado
       // vaciaría justo eso.
       await tester.pumpWidget(envolver(
-        ListaAvisos(avisos: [aviso(visto: true, enSocial: true)]),
+        ListaAvisos(avisos: [aviso(vistoBanner: true, enSocial: true)]),
         ancho: 380,
       ));
       await tester.pumpAndSettle();
