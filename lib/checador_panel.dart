@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'theme/si_theme.dart';
+import 'widgets/ficha_asistencia.dart';
 
 /// Panel de asistencia: puntualidad, faltas y detalle por persona.
 ///
@@ -767,392 +767,6 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
     );
   }
 
-  // ── Ficha por empleado ─────────────────────────────────────────────────────
-
-  /// Abre el detalle al tocar el renglón. No hace otra consulta: los días y las entradas ya están
-  /// cargados para toda la vista, así que basta con filtrar por la persona.
-  Future<void> _mostrarFicha(_FilaEmpleado f) async {
-    final dias = _dias.where((d) => d['profile_id'].toString() == f.id).toList()
-      ..sort((a, b) => a['fecha'].toString().compareTo(b['fecha'].toString()));
-
-    if (!mounted) return;
-    await showDialog(
-      context: context,
-      builder: (ctx) {
-        final c = SiColors.of(ctx);
-        final pct = f.puntualidad;
-        final color = f.estatus == 'critico'
-            ? c.danger
-            : f.estatus == 'atencion'
-                ? c.warn
-                : f.estatus == 'puntual'
-                    ? c.success
-                    : c.ink3;
-
-        // El detalle va en calendario y no en listas: una cuadrícula del mes deja ver de un
-        // golpe los huecos —los días sin salida, los faltantes— que en cuatro listas separadas hay
-        // que ir cruzando a mano.
-        final porFecha = {for (final d in dias) d['fecha'].toString(): d};
-
-        return AlertDialog(
-          backgroundColor: c.panel,
-          titlePadding: EdgeInsets.zero,
-          contentPadding: const EdgeInsets.fromLTRB(
-              SiSpace.x5, 0, SiSpace.x5, SiSpace.x2),
-          title: Container(
-            padding: const EdgeInsets.all(SiSpace.x5),
-            decoration: BoxDecoration(
-              border: Border(bottom: BorderSide(color: c.line)),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(f.nombre,
-                          style: TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w700,
-                              color: c.ink)),
-                      const SizedBox(height: 4),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 2,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Text(
-                            [
-                              if (f.numero.isNotEmpty) '#${f.numero}',
-                              if (f.zona.isNotEmpty) f.zona,
-                              if (f.horario.isNotEmpty) f.horario,
-                            ].join(' · '),
-                            style: TextStyle(fontSize: 11.5, color: c.ink3),
-                          ),
-                          Container(
-                            width: 7, height: 7,
-                            decoration: BoxDecoration(
-                                color: color, shape: BoxShape.circle),
-                          ),
-                          Text(_etiquetaEstatus[f.estatus] ?? f.estatus,
-                              style: TextStyle(
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.w600,
-                                  color: color)),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  icon: Icon(Icons.close, size: 19, color: c.ink3),
-                  onPressed: () => Navigator.pop(ctx),
-                ),
-              ],
-            ),
-          ),
-          content: SizedBox(
-            width: 780,
-            child: SingleChildScrollView(
-              child: SelectionArea(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const SizedBox(height: SiSpace.x4),
-                    Wrap(
-                      spacing: SiSpace.x2,
-                      runSpacing: SiSpace.x2,
-                      children: [
-                        _fichaKpi(c, pct == null ? '—' : '${pct.toStringAsFixed(1)}%',
-                            'Puntualidad', color),
-                        _fichaKpi(c, '${f.asistio}/${f.esperados}',
-                            'Asistió/esper.', c.ink),
-                        _fichaKpi(c, '${f.retardos}', 'Retardos', c.warn),
-                        _fichaKpi(c, '${f.faltas}', 'Faltas', c.danger),
-                        _fichaKpi(c, '${f.incompletas}', 'Incompletas', c.warn),
-                        _fichaKpi(c, '${f.justificados}', 'Justificados', c.ink2),
-                        _fichaKpi(c, '${f.minutos}', 'Min. tarde', c.ink2),
-                      ],
-                    ),
-                    const SizedBox(height: SiSpace.x5),
-                    for (final mes in _mesesDe(porFecha.keys)) ...[
-                      _calendarioMes(c, mes, porFecha),
-                      const SizedBox(height: SiSpace.x4),
-                    ],
-                    _leyendaCalendario(c),
-                    const SizedBox(height: SiSpace.x2),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  // ── Calendario ─────────────────────────────────────────────────────────────
-
-  /// Los meses que toca el periodo, en orden. Casi siempre es uno, pero una quincena a caballo
-  /// entre dos meses debe pintar los dos.
-  static List<DateTime> _mesesDe(Iterable<String> fechas) {
-    final meses = <String, DateTime>{};
-    for (final f in fechas) {
-      final d = DateTime.parse(f);
-      meses['${d.year}-${d.month}'] = DateTime(d.year, d.month);
-    }
-    final lista = meses.values.toList()..sort();
-    return lista;
-  }
-
-  static const _diasSemana = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-
-  Widget _calendarioMes(
-      SiColors c, DateTime mes, Map<String, Map<String, dynamic>> porFecha) {
-    final primero = DateTime(mes.year, mes.month);
-    final diasDelMes = DateTime(mes.year, mes.month + 1, 0).day;
-    // DateTime.weekday va de 1 (lunes) a 7 (domingo); la cuadrícula arranca en domingo.
-    final huecoInicial = primero.weekday % 7;
-    final celdas = huecoInicial + diasDelMes;
-    final semanas = (celdas / 7).ceil();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(DateFormat('MMMM y', 'es_MX').format(mes).toUpperCase(),
-            style: SiType.mono(size: 10, color: c.ink3, letterSpacing: 1)),
-        const SizedBox(height: SiSpace.x2),
-        Row(
-          children: [
-            for (final d in _diasSemana)
-              Expanded(
-                child: Center(
-                  child: Text(d,
-                      style: TextStyle(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w700,
-                          color: c.ink3)),
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        for (var semana = 0; semana < semanas; semana++)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (var col = 0; col < 7; col++)
-                Expanded(
-                  child: _celdaDia(
-                    c,
-                    (semana * 7 + col) - huecoInicial + 1,
-                    diasDelMes,
-                    mes,
-                    porFecha,
-                  ),
-                ),
-            ],
-          ),
-      ],
-    );
-  }
-
-  Widget _celdaDia(SiColors c, int dia, int diasDelMes, DateTime mes,
-      Map<String, Map<String, dynamic>> porFecha) {
-    if (dia < 1 || dia > diasDelMes) {
-      return Container(
-        height: 64,
-        decoration: BoxDecoration(border: Border.all(color: c.line2, width: 0.5)),
-      );
-    }
-
-    final fecha = DateTime(mes.year, mes.month, dia);
-    final clave = DateFormat('yyyy-MM-dd').format(fecha);
-    final d = porFecha[clave];
-
-    final esFalta = d?['estado'] == 'FALTA';
-    final justificado = d?['justificado'] == true;
-
-    return Container(
-      height: 64,
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
-      decoration: BoxDecoration(
-        // Un tinte de fondo para lo que exige atención: se distingue antes de leer las horas.
-        color: esFalta
-            ? c.dangerTint
-            : justificado
-                ? c.warnTint
-                : null,
-        border: Border.all(color: c.line2, width: 0.5),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(dia.toString().padLeft(2, '0'),
-                  style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w600,
-                      color: d == null ? c.ink4 : c.ink2)),
-              const Spacer(),
-              if (d != null && (d['foto_entrada'] != null || d['foto_salida'] != null))
-                _botonFoto(
-                    c, (d['foto_entrada'] ?? d['foto_salida']).toString()),
-            ],
-          ),
-          if (d != null) ...[
-            if (esFalta)
-              Text('Falta',
-                  style: TextStyle(
-                      fontSize: 10, fontWeight: FontWeight.w600, color: c.danger))
-            else ...[
-              _horaCelda(c, d['hora_entrada'], d['es_retardo'] == true,
-                  d['minutos_retardo']),
-              _horaCelda(c, d['hora_salida'], d['salida_temprano'] == true,
-                  d['minutos_antes'],
-                  faltante: d['tiene_salida'] != true),
-            ],
-            if (justificado)
-              Text(
-                (d['justificacion_tipo'] ?? 'Justificado')
-                    .toString()
-                    .replaceAll('_', ' ')
-                    .toLowerCase(),
-                style: TextStyle(fontSize: 9, color: c.ink3),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  /// Una hora del día. Verde cuando está en regla, rojo cuando no, y un guion cuando falta el
-  /// registro —que es el caso de 140 de los 588 días esperados, casi siempre la salida—.
-  Widget _horaCelda(SiColors c, dynamic hora, bool malo, dynamic minutos,
-      {bool faltante = false}) {
-    if (faltante || hora == null) {
-      return Text('—  sin registro',
-          style: TextStyle(fontSize: 10, color: c.warn));
-    }
-    return Row(
-      children: [
-        Text(hora.toString().substring(0, 5),
-            style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: malo ? c.danger : c.success,
-                fontFeatures: const [FontFeature.tabularFigures()])),
-        if (malo && (minutos as num?) != null && (minutos as num) > 0) ...[
-          const SizedBox(width: 3),
-          Text('+$minutos',
-              style: TextStyle(fontSize: 9, color: c.danger)),
-        ],
-      ],
-    );
-  }
-
-  Widget _leyendaCalendario(SiColors c) {
-    Widget punto(Color color, String texto) => Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 8, height: 8,
-              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-            ),
-            const SizedBox(width: 5),
-            Text(texto, style: TextStyle(fontSize: 10.5, color: c.ink3)),
-          ],
-        );
-
-    return Wrap(
-      spacing: SiSpace.x4,
-      runSpacing: SiSpace.x2,
-      children: [
-        punto(c.success, 'En regla'),
-        punto(c.danger, 'Retardo o salida antes de hora'),
-        punto(c.warn, 'Sin registro / justificado'),
-        Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.photo_camera_outlined, size: 12, color: c.brand),
-          const SizedBox(width: 4),
-          Text('Foto de la checada',
-              style: TextStyle(fontSize: 10.5, color: c.ink3)),
-        ]),
-      ],
-    );
-  }
-
-  /// Abre la foto de la checada en otra pestaña.
-  ///
-  /// No se dibuja en línea a propósito: la imagen vive en appchecar.com, que no manda cabeceras
-  /// CORS, así que en web `Image.network` fallaría bajo CanvasKit y quedaría un hueco roto. Un
-  /// enlace siempre funciona, y además deja copiar la dirección.
-  Widget _botonFoto(SiColors c, String url) {
-    return Tooltip(
-      message: 'Ver la foto de la checada',
-      child: InkWell(
-        onTap: () async {
-          final ok = await launchUrl(Uri.parse(url),
-              mode: LaunchMode.externalApplication);
-          if (!ok && mounted) {
-            // Si el navegador la bloquea, al menos que se pueda copiar el enlace.
-            await Clipboard.setData(ClipboardData(text: url));
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                    content: Text('No se pudo abrir. Enlace copiado.')),
-              );
-            }
-          }
-        },
-        onLongPress: () async {
-          await Clipboard.setData(ClipboardData(text: url));
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Enlace de la foto copiado')),
-            );
-          }
-        },
-        borderRadius: BorderRadius.circular(5),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-          child: Icon(Icons.photo_camera_outlined, size: 15, color: c.brand),
-        ),
-      ),
-    );
-  }
-
-  Widget _fichaKpi(SiColors c, String valor, String etiqueta, Color color) {
-    return Container(
-      width: 88,
-      padding: const EdgeInsets.symmetric(
-          horizontal: SiSpace.x2, vertical: SiSpace.x3),
-      decoration: BoxDecoration(
-        color: c.hover,
-        borderRadius: SiRadius.rMd,
-        border: Border.all(color: c.line),
-      ),
-      child: Column(
-        children: [
-          Text(valor,
-              style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                  height: 1.1,
-                  color: color,
-                  fontFeatures: const [FontFeature.tabularFigures()])),
-          const SizedBox(height: 3),
-          Text(etiqueta.toUpperCase(),
-              textAlign: TextAlign.center,
-              style: SiType.mono(size: 8.5, color: c.ink3, letterSpacing: 0.4)),
-        ],
-      ),
-    );
-  }
-
   static const _etiquetaEstatus = {
     'critico': 'Crítico',
     'atencion': 'Atención',
@@ -1166,6 +780,40 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
           fontWeight: n > 0 ? FontWeight.w600 : FontWeight.normal,
           color: color,
           fontFeatures: const [FontFeature.tabularFigures()]));
+
+  // ── Ficha por empleado ─────────────────────────────────────────────────────
+
+  /// Abre el detalle al tocar el renglón. No hace otra consulta: los días ya están cargados para
+  /// toda la vista, así que basta filtrar por la persona.
+  ///
+  /// La ficha vive en su propio widget con datos planos para poder probarse. Salió de un fallo real:
+  /// incrustada aquí, su cuerpo aparecía en blanco y no había forma de reproducirlo, porque montar
+  /// este panel exige sesión, permisos y tres consultas.
+  Future<void> _mostrarFicha(_FilaEmpleado f) async {
+    final dias = _dias.where((d) => d['profile_id'].toString() == f.id).toList()
+      ..sort((a, b) => a['fecha'].toString().compareTo(b['fecha'].toString()));
+
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      builder: (ctx) => FichaAsistencia(
+        nombre: f.nombre,
+        numero: f.numero,
+        zona: f.zona,
+        horario: f.horario,
+        estatus: f.estatus,
+        puntualidad: f.puntualidad,
+        asistio: f.asistio,
+        esperados: f.esperados,
+        retardos: f.retardos,
+        faltas: f.faltas,
+        incompletas: f.incompletas,
+        justificados: f.justificados,
+        minutosTarde: f.minutos,
+        dias: dias,
+      ),
+    );
+  }
 
   // ── Vista personal (usuario) ──────────────────────────────────────────────
 
