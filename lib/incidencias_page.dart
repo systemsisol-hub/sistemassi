@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/notification_service.dart';
 import '../services/incidencias_pdf_service.dart';
 import 'theme/si_theme.dart';
+import 'widgets/calendario_incidencias.dart';
 
 
 class IncidenciasPage extends StatefulWidget {
@@ -1810,7 +1811,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  _buildLastIncidenciaCalendar(),
+                                  _buildIncidenciasCalendar(),
                                   if (_incidencias.isNotEmpty)
                                     SizedBox(height: SiSpace.x4),
                                   _buildHistorialVacaciones(),
@@ -1830,7 +1831,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                           children: [
                             _buildAntiguedadMobile(),
                             SizedBox(height: SiSpace.x4),
-                            _buildLastIncidenciaCalendar(),
+                            _buildIncidenciasCalendar(),
                             if (_incidencias.isNotEmpty)
                               SizedBox(height: SiSpace.x4),
                             _buildHistorialVacaciones(),
@@ -1855,27 +1856,11 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
   }
 
 
-  Widget _buildLastIncidenciaCalendar() {
+  Widget _buildIncidenciasCalendar() {
     if (_incidencias.isEmpty) return const SizedBox.shrink();
-    final last = (List.of(_incidencias)
-          ..sort((a, b) => (b['created_at'] as String)
-              .compareTo(a['created_at'] as String)))
-        .first;
-    final inicio = last['fecha_inicio'] != null
-        ? DateTime.tryParse(last['fecha_inicio'])
-        : null;
-    if (inicio == null) return const SizedBox.shrink();
-    return _IncidenciaCalendarCard(
-      fechaInicio: inicio,
-      fechaFin: last['fecha_fin'] != null
-          ? DateTime.tryParse(last['fecha_fin'])
-          : null,
-      fechaRegreso: last['fecha_regreso'] != null
-          ? DateTime.tryParse(last['fecha_regreso'])
-          : null,
-      status: last['status'] ?? 'PENDIENTE',
-      periodo: last['periodo'] ?? '',
-      getStatusColor: _getStatusColor,
+    return CalendarioIncidencias(
+      incidencias: _incidencias,
+      colorDeEstatus: _getStatusColor,
     );
   }
 
@@ -2067,338 +2052,4 @@ class _IncidenciasDataSource extends DataTableSource {
 
   @override
   int get selectedRowCount => 0;
-}
-
-// ── Calendario de última incidencia ───────────────────────────────────────────
-
-class _IncidenciaCalendarCard extends StatefulWidget {
-  final DateTime fechaInicio;
-  final DateTime? fechaFin;
-  final DateTime? fechaRegreso;
-  final String status;
-  final String periodo;
-  final Color Function(String) getStatusColor;
-
-  const _IncidenciaCalendarCard({
-    required this.fechaInicio,
-    required this.status,
-    required this.periodo,
-    required this.getStatusColor,
-    this.fechaFin,
-    this.fechaRegreso,
-  });
-
-  @override
-  State<_IncidenciaCalendarCard> createState() =>
-      _IncidenciaCalendarCardState();
-}
-
-class _IncidenciaCalendarCardState extends State<_IncidenciaCalendarCard> {
-  late DateTime _month;
-
-  static const _weekdays = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
-  static const _months = [
-    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    _month = DateTime(widget.fechaInicio.year, widget.fechaInicio.month);
-  }
-
-  DateTime _d(DateTime dt) => DateTime(dt.year, dt.month, dt.day);
-
-  bool _inRange(DateTime day) {
-    final d = _d(day);
-    final start = _d(widget.fechaInicio);
-    final end = widget.fechaFin != null ? _d(widget.fechaFin!) : start;
-    return !d.isBefore(start) && !d.isAfter(end);
-  }
-
-  bool _isStart(DateTime day) => _d(day) == _d(widget.fechaInicio);
-  bool _isEnd(DateTime day) =>
-      widget.fechaFin != null && _d(day) == _d(widget.fechaFin!);
-  bool _isRegreso(DateTime day) =>
-      widget.fechaRegreso != null && _d(day) == _d(widget.fechaRegreso!);
-  bool _isToday(DateTime day) => _d(day) == _d(DateTime.now());
-
-  @override
-  Widget build(BuildContext context) {
-    final c = SiColors.of(context);
-    final statusColor = widget.getStatusColor(widget.status);
-    final daysInMonth =
-        DateUtils.getDaysInMonth(_month.year, _month.month);
-    final offset =
-        DateTime(_month.year, _month.month, 1).weekday % 7; // Sun=0
-
-    // Build flat list of cells
-    final cells = <_CellData>[];
-    for (int i = 0; i < offset; i++) cells.add(_CellData.empty());
-    for (int d = 1; d <= daysInMonth; d++) {
-      final date = DateTime(_month.year, _month.month, d);
-      cells.add(_CellData(
-        day: d,
-        inRange: _inRange(date),
-        isStart: _isStart(date),
-        isEnd: _isEnd(date),
-        isRegreso: _isRegreso(date),
-        isToday: _isToday(date),
-      ));
-    }
-    while (cells.length % 7 != 0) cells.add(_CellData.empty());
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(SiSpace.x4),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Header
-            Row(
-              children: [
-                Container(
-                  width: 8, height: 8,
-                  decoration:
-                      BoxDecoration(color: statusColor, shape: BoxShape.circle),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text('Última solicitud',
-                      style: TextStyle(fontSize: 12, color: c.ink3)),
-                ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.12),
-                    borderRadius: SiRadius.rPill,
-                  ),
-                  child: Text(widget.status,
-                      style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: statusColor)),
-                ),
-              ],
-            ),
-            if (widget.periodo.isNotEmpty) ...[
-              const SizedBox(height: 2),
-              Text(widget.periodo,
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: c.ink)),
-            ],
-            const SizedBox(height: SiSpace.x3),
-
-            // Month navigation
-            Row(
-              children: [
-                _NavBtn(
-                  icon: Icons.chevron_left,
-                  onTap: () => setState(() =>
-                      _month = DateTime(_month.year, _month.month - 1)),
-                ),
-                Expanded(
-                  child: Text(
-                    '${_months[_month.month - 1]} ${_month.year}',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: c.ink),
-                  ),
-                ),
-                _NavBtn(
-                  icon: Icons.chevron_right,
-                  onTap: () => setState(() =>
-                      _month = DateTime(_month.year, _month.month + 1)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-
-            // Weekday labels
-            Row(
-              children: _weekdays
-                  .map((w) => Expanded(
-                        child: Center(
-                          child: Text(w,
-                              style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: c.ink4)),
-                        ),
-                      ))
-                  .toList(),
-            ),
-            const SizedBox(height: 2),
-
-            // Day grid
-            for (int row = 0; row < cells.length ~/ 7; row++)
-              Row(
-                children: List.generate(7, (col) {
-                  final cell = cells[row * 7 + col];
-                  if (cell.day == null) return const Expanded(child: SizedBox(height: 32));
-                  return Expanded(
-                    child: _DayCell(data: cell, brand: c.brand),
-                  );
-                }),
-              ),
-
-            const SizedBox(height: SiSpace.x3),
-
-            // Legend
-            Row(
-              children: [
-                _LegendDot(color: c.brand.withOpacity(0.25), label: 'Período'),
-                const SizedBox(width: SiSpace.x4),
-                _LegendDot(color: Colors.green.shade500, label: 'Regreso'),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CellData {
-  final int? day;
-  final bool inRange;
-  final bool isStart;
-  final bool isEnd;
-  final bool isRegreso;
-  final bool isToday;
-
-  const _CellData({
-    required this.day,
-    this.inRange = false,
-    this.isStart = false,
-    this.isEnd = false,
-    this.isRegreso = false,
-    this.isToday = false,
-  });
-
-  factory _CellData.empty() => const _CellData(day: null);
-}
-
-class _DayCell extends StatelessWidget {
-  final _CellData data;
-  final Color brand;
-
-  const _DayCell({required this.data, required this.brand});
-
-  @override
-  Widget build(BuildContext context) {
-    final d = data;
-    final isEndpoint = d.isStart || d.isEnd;
-
-    // Background for range middle (not endpoints)
-    BorderRadius? bgRadius;
-    if (d.inRange && !isEndpoint) {
-      bgRadius = BorderRadius.zero;
-    } else if (d.inRange && d.isStart && !d.isEnd) {
-      bgRadius = const BorderRadius.horizontal(left: Radius.circular(20));
-    } else if (d.inRange && d.isEnd && !d.isStart) {
-      bgRadius = const BorderRadius.horizontal(right: Radius.circular(20));
-    } else if (d.inRange) {
-      bgRadius = BorderRadius.circular(20);
-    }
-
-    Color? circleColor;
-    if (d.isRegreso) {
-      circleColor = Colors.green.shade500;
-    } else if (isEndpoint) {
-      circleColor = brand;
-    }
-
-    return SizedBox(
-      height: 32,
-      child: Stack(
-        children: [
-          // Range fill
-          if (d.inRange)
-            Positioned.fill(
-              child: Container(
-                margin: const EdgeInsets.symmetric(vertical: 3),
-                decoration: BoxDecoration(
-                  color: brand.withOpacity(0.18),
-                  borderRadius: bgRadius,
-                ),
-              ),
-            ),
-          // Circle marker
-          Center(
-            child: Container(
-              width: 26,
-              height: 26,
-              decoration: circleColor != null
-                  ? BoxDecoration(color: circleColor, shape: BoxShape.circle)
-                  : d.isToday
-                      ? BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: brand, width: 1.5))
-                      : null,
-              alignment: Alignment.center,
-              child: Text(
-                '${d.day}',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: (circleColor != null || d.isToday)
-                      ? FontWeight.bold
-                      : FontWeight.normal,
-                  color: circleColor != null ? Colors.white : null,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _NavBtn extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-  const _NavBtn({required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = SiColors.of(context);
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 28,
-        height: 28,
-        alignment: Alignment.center,
-        child: Icon(icon, size: 18, color: c.ink3),
-      ),
-    );
-  }
-}
-
-class _LegendDot extends StatelessWidget {
-  final Color color;
-  final String label;
-  const _LegendDot({required this.color, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = SiColors.of(context);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-        const SizedBox(width: 4),
-        Text(label, style: TextStyle(fontSize: 11, color: c.ink3)),
-      ],
-    );
-  }
 }
