@@ -26,6 +26,8 @@ class FichaAsistencia extends StatelessWidget {
     required this.incompletas,
     required this.justificados,
     required this.minutosTarde,
+    required this.diasDescuento,
+    required this.reglaDescuento,
     required this.dias,
   });
 
@@ -45,6 +47,10 @@ class FichaAsistencia extends StatelessWidget {
   final int incompletas;
   final int justificados;
   final int minutosTarde;
+
+  /// Días a descontar de esta persona y la regla con la que se calcularon, para poder explicarla.
+  final int diasDescuento;
+  final String reglaDescuento;
 
   /// Filas de `checador_dias` de esta persona, ordenadas por fecha.
   final List<Map<String, dynamic>> dias;
@@ -192,6 +198,11 @@ class FichaAsistencia extends StatelessWidget {
         _kpi(c, '$incompletas', 'Incompletas', c.warn),
         _kpi(c, '$justificados', 'Justificados', c.ink2),
         _kpi(c, '$minutosTarde', 'Min. tarde', c.ink2),
+        Tooltip(
+          message: reglaDescuento,
+          child: _kpi(c, '$diasDescuento', 'Días desc.',
+              diasDescuento > 0 ? c.danger : c.success),
+        ),
       ],
     );
   }

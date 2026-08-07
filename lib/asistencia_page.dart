@@ -188,6 +188,7 @@ class _UmbralesState extends State<_Umbrales> {
 
   double _critico = 70;
   double _atencion = 90;
+  int _retardosPorDescuento = 3;
   bool _cargando = true;
   bool _guardando = false;
 
@@ -201,12 +202,15 @@ class _UmbralesState extends State<_Umbrales> {
     try {
       final fila = await _supabase
           .from('checador_umbrales')
-          .select('critico_max, atencion_max')
+          .select('critico_max, atencion_max, retardos_por_descuento')
           .maybeSingle();
       if (fila != null && mounted) {
         setState(() {
           _critico = (fila['critico_max'] as num).toDouble();
           _atencion = (fila['atencion_max'] as num).toDouble();
+          _retardosPorDescuento =
+              ((fila['retardos_por_descuento'] as num?)?.toInt() ?? 3)
+                  .clamp(1, 20);
           _cargando = false;
         });
         return;
@@ -223,13 +227,14 @@ class _UmbralesState extends State<_Umbrales> {
       await _supabase.from('checador_umbrales').update({
         'critico_max': _critico,
         'atencion_max': _atencion,
+        'retardos_por_descuento': _retardosPorDescuento,
         'actualizado_en': DateTime.now().toIso8601String(),
         'actualizado_por': _supabase.auth.currentUser?.id,
       }).eq('id', true);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text('Umbrales guardados. El panel los toma al recargar.')),
+              content: Text('Configuración guardada. El panel la toma al recargar.')),
         );
       }
     } catch (e) {
@@ -259,7 +264,7 @@ class _UmbralesState extends State<_Umbrales> {
           Row(children: [
             Icon(Icons.tune, size: 16, color: c.brand),
             const SizedBox(width: SiSpace.x2),
-            Text('Umbrales del semáforo',
+            Text('Semáforo y descuentos',
                 style: TextStyle(
                     fontSize: 14, fontWeight: FontWeight.w600, color: c.ink)),
           ]),
@@ -301,6 +306,58 @@ class _UmbralesState extends State<_Umbrales> {
                   'Puntual: más de ${_atencion.toStringAsFixed(0)}%',
                   style: TextStyle(fontSize: 12.5, color: c.ink2)),
             ]),
+            const SizedBox(height: SiSpace.x5),
+            Divider(height: 1, color: c.line),
+            const SizedBox(height: SiSpace.x4),
+            Row(children: [
+              Icon(Icons.money_off, size: 16, color: c.brand),
+              const SizedBox(width: SiSpace.x2),
+              Text('Días a descontar',
+                  style: TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.w600, color: c.ink)),
+            ]),
+            const SizedBox(height: SiSpace.x2),
+            Text(
+              'Cada falta sin justificar es 1 día. Los retardos se acumulan y el cociente se '
+              'redondea hacia abajo POR PERSONA: dos personas con 2 retardos cada una no hacen un '
+              'día de descuento.',
+              style: TextStyle(fontSize: 12, color: c.ink3, height: 1.4),
+            ),
+            const SizedBox(height: SiSpace.x3),
+            Row(children: [
+              Icon(Icons.alarm, size: 15, color: c.warn),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 118,
+                child: Text('Retardos por día:',
+                    style: TextStyle(fontSize: 12.5, color: c.ink2)),
+              ),
+              Expanded(
+                child: Slider(
+                  value: _retardosPorDescuento.toDouble(),
+                  min: 1,
+                  max: 10,
+                  divisions: 9,
+                  activeColor: c.warn,
+                  label: '$_retardosPorDescuento',
+                  onChanged: (v) =>
+                      setState(() => _retardosPorDescuento = v.round()),
+                ),
+              ),
+              SizedBox(
+                width: 44,
+                child: Text('$_retardosPorDescuento',
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: c.warn,
+                        fontFeatures: const [FontFeature.tabularFigures()])),
+              ),
+            ]),
+            const SizedBox(height: SiSpace.x2),
+            Text('$_retardosPorDescuento retardos = 1 día de descuento.',
+                style: TextStyle(fontSize: 11.5, color: c.ink3)),
             const SizedBox(height: SiSpace.x4),
             SizedBox(
               height: 38,
@@ -312,7 +369,7 @@ class _UmbralesState extends State<_Umbrales> {
                   elevation: 0,
                   shape: RoundedRectangleBorder(borderRadius: SiRadius.rMd),
                 ),
-                child: Text(_guardando ? 'Guardando…' : 'Guardar umbrales'),
+                child: Text(_guardando ? 'Guardando…' : 'Guardar configuración'),
               ),
             ),
           ],

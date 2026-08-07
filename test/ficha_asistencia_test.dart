@@ -61,6 +61,9 @@ void main() {
         incompletas: 3,
         justificados: 0,
         minutosTarde: 16,
+        // 4 retardos ÷ 3 = 1, más 1 falta = 2 días.
+        diasDescuento: 2,
+        reglaDescuento: 'Cada 3 retardos son 1 día, y cada falta sin justificar es 1 día.',
         dias: dias,
       );
 
@@ -81,6 +84,8 @@ void main() {
     expect(find.text('MOISES CALDERA MEZA'), findsOneWidget);
     expect(find.text('93.3%'), findsOneWidget);
     expect(find.text('14/15'), findsOneWidget);
+    // Días a descontar: sale del cálculo del panel, la ficha sólo lo pinta.
+    expect(find.text('2'), findsWidgets);
 
     // El mes y los encabezados de la cuadrícula.
     expect(find.text('JULIO 2026'), findsOneWidget);

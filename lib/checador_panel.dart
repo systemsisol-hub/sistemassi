@@ -39,6 +39,7 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
   List<Map<String, dynamic>> _dias = [];
   double _criticoMax = 70;
   double _atencionMax = 90;
+  int _retardosPorDescuento = 3;
 
   DateTime? _desde;
   DateTime? _hasta;
@@ -73,11 +74,14 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
 
       final umbrales = await _supabase
           .from('checador_umbrales')
-          .select('critico_max, atencion_max')
+          .select('critico_max, atencion_max, retardos_por_descuento')
           .maybeSingle();
       if (umbrales != null) {
         _criticoMax = (umbrales['critico_max'] as num).toDouble();
         _atencionMax = (umbrales['atencion_max'] as num).toDouble();
+        _retardosPorDescuento =
+            ((umbrales['retardos_por_descuento'] as num?)?.toInt() ?? 3)
+                .clamp(1, 100);
       }
 
       // El rango sale de los propios datos visibles y no de checador_importaciones, que es sólo
@@ -132,6 +136,11 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
       _dias.where((d) => d['esperado'] == true);
 
   int get _faltas => _diasEsperados.where((d) => d['estado'] == 'FALTA').length;
+
+  /// Suma de los días a descontar de cada persona. Se suman los cocientes individuales y no se
+  /// divide el total de retardos: eso daría 34 donde son 25.
+  int get _diasDescuento =>
+      _empleados.fold<int>(0, (a, f) => a + f.diasDescuento);
   int get _justificados =>
       _diasEsperados.where((d) => d['estado'] == 'JUSTIFICADO').length;
   bool get _hayHorarioAmbiguo => _dias.any((d) => d['horario_ambiguo'] == true);
@@ -186,15 +195,15 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
 
     for (final f in porPersona.values) {
       f.estatus = _estatusDe(f.puntualidad);
+      f.retardosPorDescuento = _retardosPorDescuento;
     }
 
     final lista = porPersona.values.toList()
-      ..sort((a, b) {
-        // Primero quien peor está: es lo que se necesita atender.
-        final pa = a.puntualidad ?? 999;
-        final pb = b.puntualidad ?? 999;
-        return pa.compareTo(pb);
-      });
+      // Alfabético. Antes iba por puntualidad ascendente para poner arriba a quien atender, pero
+      // con 45 personas se vuelve imposible localizar a alguien concreto; para eso están el
+      // buscador y los filtros de estatus.
+      ..sort((a, b) =>
+          a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase()));
     return lista;
   }
 
@@ -364,6 +373,8 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
         _tarjetaKpi(c, 'Retardos', '$_retardos', 'llegadas tarde', c.warn),
         _tarjetaKpi(c, 'Faltas', '$_faltas', 'sin justificar', c.danger),
         _tarjetaKpi(c, 'Justificados', '$_justificados', 'días', c.ink2),
+        _tarjetaKpi(c, 'Días a descontar', '$_diasDescuento', 'para nómina',
+            _diasDescuento > 0 ? c.danger : c.success),
         _tarjetaKpi(c, 'Días evaluados', '${_evaluadas.length}', 'con checada', c.ink2),
         if (_esAdmin)
           _tarjetaKpi(c, 'Empleados', '${_empleados.length}', 'en el periodo', c.ink2),
@@ -605,7 +616,8 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: ConstrainedBox(
-                constraints: const BoxConstraints(minWidth: 720),
+                // 838 es la suma de los anchos de las ocho columnas; con menos, la última se corta.
+                constraints: const BoxConstraints(minWidth: 838),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -643,11 +655,12 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
     );
   }
 
-  static const _anchos = [230.0, 120.0, 110.0, 70.0, 60.0, 80.0, 90.0];
+  static const _anchos = [230.0, 120.0, 110.0, 70.0, 60.0, 80.0, 78.0, 90.0];
 
   Widget _encabezadoTabla(SiColors c) {
     const titulos = [
-      'EMPLEADO', 'ZONA', '% PUNT.', 'RETARDOS', 'FALTAS', 'JUSTIF.', 'ESTATUS'
+      'EMPLEADO', 'ZONA', '% PUNT.', 'RETARDOS', 'FALTAS', 'JUSTIF.',
+      'DÍAS DESC.', 'ESTATUS'
     ];
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: SiSpace.x2),
@@ -747,6 +760,18 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
           celda(5, _num(c, f.justificados, c.ink3)),
           celda(
             6,
+            Tooltip(
+              message: f.diasDescuento == 0
+                  ? 'Sin días a descontar'
+                  : '${f.retardos} retardos ÷ ${f.retardosPorDescuento} = '
+                      '${f.retardos ~/ f.retardosPorDescuento} · '
+                      'faltas: ${f.faltas}',
+              child: _num(c, f.diasDescuento,
+                  f.diasDescuento > 0 ? c.danger : c.ink3),
+            ),
+          ),
+          celda(
+            7,
             Align(
               alignment: Alignment.centerLeft,
               child: Container(
@@ -810,6 +835,9 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
         incompletas: f.incompletas,
         justificados: f.justificados,
         minutosTarde: f.minutos,
+        diasDescuento: f.diasDescuento,
+        reglaDescuento: 'Cada ${f.retardosPorDescuento} retardos son 1 día, '
+            'y cada falta sin justificar es 1 día.',
         dias: dias,
       ),
     );
@@ -990,8 +1018,18 @@ class _FilaEmpleado {
   int incompletas = 0;
   String estatus = 'sin datos';
 
+  /// Cuántos retardos equivalen a un día de descuento, según la configuración vigente.
+  int retardosPorDescuento = 3;
+
   double? get puntualidad =>
       evaluadas == 0 ? null : (evaluadas - retardos) / evaluadas * 100;
+
+  /// Días a descontar: el cociente de los retardos más las faltas sin justificar.
+  ///
+  /// Se redondea hacia abajo y POR PERSONA. Hacerlo sobre el total daría 34 días donde en realidad
+  /// son 25: dos personas con 2 retardos cada una no hacen un día de descuento, y el error siempre
+  /// caería en contra del trabajador.
+  int get diasDescuento => (retardos ~/ retardosPorDescuento) + faltas;
 }
 
 /// Dona del semáforo. Se dibuja a mano en lugar de agregar una librería de gráficas: son tres
