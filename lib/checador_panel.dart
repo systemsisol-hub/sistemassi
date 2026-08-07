@@ -362,7 +362,11 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
                 },
               ),
             ] else
-              _tarjetaMisDias(c),
+              // Al usuario le toca el mismo calendario que el administrador ve en la ficha de
+              // cualquiera. Sus KPIs ya están arriba, así que aquí sólo va el calendario, sin la
+              // cabecera ni las métricas que la ficha repite dentro del diálogo.
+              _tarjeta(c, Icons.calendar_month_outlined, 'Mis días',
+                  CalendarioAsistencia(dias: _dias)),
           ],
         ),
       ),
@@ -1166,92 +1170,6 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
   }
 
   // ── Vista personal (usuario) ──────────────────────────────────────────────
-
-  Widget _tarjetaMisDias(SiColors c) {
-    // Un renglón por día que el horario pedía, con lo que pasó ese día.
-    final porFecha = <String, Map<String, dynamic>>{};
-    for (final e in _entradas) {
-      porFecha[e['fecha'].toString()] = e;
-    }
-    final dias = [..._dias]..sort(
-        (a, b) => b['fecha'].toString().compareTo(a['fecha'].toString()));
-
-    final fmt = DateFormat('EEE d MMM', 'es_MX');
-
-    return _tarjeta(
-      c,
-      Icons.event_note_outlined,
-      'Mis días',
-      dias.isEmpty
-          ? _sinDatos(c)
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (final d in dias)
-                  _filaMiDia(c, d, porFecha[d['fecha'].toString()], fmt),
-              ],
-            ),
-    );
-  }
-
-  Widget _filaMiDia(SiColors c, Map<String, dynamic> dia,
-      Map<String, dynamic>? entrada, DateFormat fmt) {
-    final estado = dia['estado'].toString();
-    final (Color color, String etiqueta) = switch (estado) {
-      'FALTA' => (c.danger, 'Falta'),
-      'JUSTIFICADO' => (c.ink3, 'Justificado'),
-      _ => entrada?['es_retardo'] == true
-          ? (c.warn, 'Retardo')
-          : (c.success, 'A tiempo'),
-    };
-
-    final detalle = <String>[
-      if (entrada?['hora'] != null && estado != 'JUSTIFICADO')
-        'Entró ${entrada!['hora'].toString().substring(0, 5)}',
-      if (entrada?['limite'] != null && estado != 'JUSTIFICADO')
-        'límite ${entrada!['limite'].toString().substring(0, 5)}',
-      if ((entrada?['minutos_retardo'] as num? ?? 0) > 0)
-        '${entrada!['minutos_retardo']} min tarde',
-      if (dia['estado'] == 'JUSTIFICADO' && entrada?['justificacion_motivo'] != null)
-        entrada!['justificacion_motivo'].toString(),
-    ];
-
-    return Container(
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: c.line2)),
-      ),
-      padding: const EdgeInsets.symmetric(vertical: SiSpace.x2),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 4, height: 34,
-            margin: const EdgeInsets.only(right: SiSpace.x3),
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          SizedBox(
-            width: 96,
-            child: Text(fmt.format(DateTime.parse(dia['fecha'].toString())),
-                style: TextStyle(
-                    fontSize: 12.5, fontWeight: FontWeight.w600, color: c.ink)),
-          ),
-          SizedBox(
-            width: 88,
-            child: Text(etiqueta,
-                style: TextStyle(
-                    fontSize: 12, fontWeight: FontWeight.w600, color: color)),
-          ),
-          Expanded(
-            child: Text(detalle.join(' · '),
-                style: TextStyle(fontSize: 11.5, color: c.ink3)),
-          ),
-        ],
-      ),
-    );
-  }
 
   // ── Piezas compartidas ────────────────────────────────────────────────────
 

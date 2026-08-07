@@ -53,7 +53,8 @@ class _AsistenciaPageState extends State<AsistenciaPage>
     }
     if (!mounted) return;
     setState(() {
-      _tabs = TabController(length: _esAdmin ? 2 : 1, vsync: this);
+      // Sólo para administradores: es el único caso con dos pestañas entre las que cambiar.
+      if (_esAdmin) _tabs = TabController(length: 2, vsync: this);
       _cargando = false;
     });
   }
@@ -62,10 +63,20 @@ class _AsistenciaPageState extends State<AsistenciaPage>
   Widget build(BuildContext context) {
     final c = SiColors.of(context);
 
-    if (_cargando || _tabs == null) {
+    if (_cargando) {
       return Scaffold(
         backgroundColor: c.bg,
         body: Center(child: CircularProgressIndicator(color: c.brand)),
+      );
+    }
+
+    // Un usuario sin rol de administrador no tiene a dónde cambiar: Configuración no existe para
+    // él. Una barra con una sola pestaña subrayada es cromo que promete una navegación que no hay,
+    // así que en ese caso el panel se pinta solo.
+    if (!_esAdmin) {
+      return Scaffold(
+        backgroundColor: c.bg,
+        body: ChecadorPanel(key: ValueKey(_version)),
       );
     }
 
@@ -81,7 +92,7 @@ class _AsistenciaPageState extends State<AsistenciaPage>
             child: Align(
               alignment: Alignment.centerLeft,
               child: TabBar(
-                controller: _tabs,
+                controller: _tabs!,
                 isScrollable: true,
                 tabAlignment: TabAlignment.start,
                 labelColor: c.brand,
@@ -98,26 +109,24 @@ class _AsistenciaPageState extends State<AsistenciaPage>
                     iconMargin: EdgeInsets.zero,
                     text: 'Panel',
                   ),
-                  if (_esAdmin)
-                    const Tab(
-                      height: 42,
-                      icon: Icon(Icons.settings_outlined, size: 16),
-                      iconMargin: EdgeInsets.zero,
-                      text: 'Configuración',
-                    ),
+                  const Tab(
+                    height: 42,
+                    icon: Icon(Icons.settings_outlined, size: 16),
+                    iconMargin: EdgeInsets.zero,
+                    text: 'Configuración',
+                  ),
                 ],
               ),
             ),
           ),
           Expanded(
             child: TabBarView(
-              controller: _tabs,
+              controller: _tabs!,
               children: [
                 ChecadorPanel(key: ValueKey(_version)),
-                if (_esAdmin)
-                  _Configuracion(
-                    alCargarReporte: () => setState(() => _version++),
-                  ),
+                _Configuracion(
+                  alCargarReporte: () => setState(() => _version++),
+                ),
               ],
             ),
           ),

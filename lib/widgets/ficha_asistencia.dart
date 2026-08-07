@@ -62,8 +62,6 @@ class FichaAsistencia extends StatelessWidget {
     'sin datos': 'Sin datos',
   };
 
-  static const _diasSemana = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-
   @override
   Widget build(BuildContext context) {
     final c = SiColors.of(context);
@@ -73,9 +71,6 @@ class FichaAsistencia extends StatelessWidget {
       'puntual' => c.success,
       _ => c.ink3,
     };
-    final porFecha = {for (final d in dias) d['fecha'].toString(): d};
-    final anchoPantalla = MediaQuery.of(context).size.width;
-
     // Dialog y no AlertDialog: aquí el alto lo manda un Column con mainAxisSize.min y un Flexible
     // alrededor del área desplazable, que es una estructura predecible. AlertDialog mide su
     // contenido por dimensiones intrínsecas, y un viewport desplazable no las sabe calcular.
@@ -101,26 +96,7 @@ class FichaAsistencia extends StatelessWidget {
                   children: [
                     _kpis(c, color),
                     const SizedBox(height: SiSpace.x5),
-                    // Abajo de 760px una cuadrícula de siete columnas deja celdas de ~50px, donde
-                    // no cabe una hora. Ahí se cae a lista: es la misma información en el formato
-                    // que el ancho permite.
-                    if (anchoPantalla < 760)
-                      _listaDias(context, c, porFecha)
-                    else
-                      for (final mes in _mesesDe(porFecha.keys)) ...[
-                        _calendarioMes(context, c, mes, porFecha),
-                        const SizedBox(height: SiSpace.x4),
-                      ],
-                    if (porFecha.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: SiSpace.x6),
-                        child: Center(
-                          child: Text('Sin días registrados en el periodo',
-                              style: TextStyle(fontSize: 12.5, color: c.ink3)),
-                        ),
-                      )
-                    else
-                      _leyenda(c),
+                    CalendarioAsistencia(dias: dias),
                   ],
                 ),
               ),
@@ -238,6 +214,71 @@ class FichaAsistencia extends StatelessWidget {
 
   // ── Calendario ─────────────────────────────────────────────────────────────
 
+}
+
+
+/// El calendario del periodo: un mes por cuadrícula, con la entrada y la salida de cada día.
+///
+/// Separado de [FichaAsistencia] para poder usarse de dos maneras. En la ficha del administrador va
+/// dentro del diálogo, debajo de las métricas de la persona; en la vista de un usuario va incrustado
+/// en la página, donde los KPIs ya están arriba y repetirlos no aportaría nada.
+class CalendarioAsistencia extends StatelessWidget {
+  const CalendarioAsistencia({super.key, required this.dias});
+
+  /// Filas de `checador_dias`, ordenadas por fecha.
+  final List<Map<String, dynamic>> dias;
+
+  /// Ancho mínimo para la cuadrícula: siete columnas a 78px, que es lo que necesita una celda para
+  /// una hora de cinco dígitos más el icono de la cámara.
+  static const _anchoParaCuadricula = 546.0;
+
+  static const _diasSemana = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+
+  @override
+  Widget build(BuildContext context) {
+    final c = SiColors.of(context);
+    final porFecha = {for (final d in dias) d['fecha'].toString(): d};
+
+    if (porFecha.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: SiSpace.x6),
+        child: Center(
+          child: Text('Sin días registrados en el periodo',
+              style: TextStyle(fontSize: 12.5, color: c.ink3)),
+        ),
+      );
+    }
+
+    // Se mide el contenedor y no la pantalla: el mismo calendario va dentro de un diálogo de 820px
+    // y dentro de una tarjeta junto a una barra de navegación, y la pantalla no dice nada de
+    // cuánto espacio le queda a la cuadrícula en cada caso.
+    return LayoutBuilder(
+      builder: (context, box) {
+        // Por debajo del mínimo, siete columnas dejarían celdas donde no cabe una hora. Ahí se cae
+        // a lista: la misma información en el formato que el ancho permite.
+        if (box.maxWidth < _anchoParaCuadricula) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _listaDias(context, c, porFecha),
+              _leyenda(c),
+            ],
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final mes in _mesesDe(porFecha.keys)) ...[
+              _calendarioMes(context, c, mes, porFecha),
+              const SizedBox(height: SiSpace.x4),
+            ],
+            _leyenda(c),
+          ],
+        );
+      },
+    );
+  }
+
   /// Los meses que toca el periodo. Casi siempre uno, pero una quincena a caballo entre dos meses
   /// debe pintar los dos.
   static List<DateTime> _mesesDe(Iterable<String> fechas) {
@@ -323,8 +364,17 @@ class FichaAsistencia extends StatelessWidget {
     final esFalta = d?['estado'] == 'FALTA';
     final justificado = d?['justificado'] == true;
     final foto = (d?['foto_entrada'] ?? d?['foto_salida'])?.toString();
+    // El tinte amarillo dice que el día está justificado, pero no por qué. El motivo va en un
+    // tooltip: en una celda de 78px no cabe, y perderlo dejaría al usuario sin saber si su día
+    // quedó cubierto por una incapacidad o por vacaciones.
+    final motivo = justificado
+        ? [
+            if (d?['justificacion_tipo'] != null) d!['justificacion_tipo'],
+            if (d?['justificacion_motivo'] != null) d!['justificacion_motivo'],
+          ].join(' · ')
+        : '';
 
-    return Container(
+    final celda = Container(
       constraints: const BoxConstraints(minHeight: minAlto),
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
       decoration: BoxDecoration(
@@ -369,6 +419,8 @@ class FichaAsistencia extends StatelessWidget {
         ],
       ),
     );
+
+    return motivo.isEmpty ? celda : Tooltip(message: motivo, child: celda);
   }
 
   /// Los mismos días en lista, para cuando la cuadrícula no cabe.
