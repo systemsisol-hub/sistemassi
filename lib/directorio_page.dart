@@ -6,15 +6,20 @@ import 'theme/si_theme.dart';
 
 /// Directorio interno: nombre, ubicación y cómo contactar a cada quien.
 ///
+/// ─── Quién ve los teléfonos ──────────────────────────────────────────────────
+///
+/// Un administrador ve todo; a los demás los teléfonos les llegan en NULL. El enmascarado NO está
+/// aquí: lo hace la vista `directorio`, porque esconder una columna en la pantalla no la esconde
+/// —la consulta la seguiría trayendo y cualquiera la leería desde la API—. Esta página sólo deja de
+/// pintar lo que llega vacío, que es lo que ya hacía con quien no tiene celular capturado.
+///
+/// El número de empleado no se muestra a nadie, y tampoco viaja: la vista no lo expone.
+///
 /// ─── Sólo personal vigente ───────────────────────────────────────────────────
 ///
-/// `profiles` tiene 2488 registros, pero **2192 son bajas**. Un directorio con todos sería 88% de
-/// exempleados —inútil para buscar a un compañero, y además publicaría el celular de gente que ya
-/// no trabaja aquí.
-///
-/// Se filtra por las DOS señales a la vez: `status_rh` vigente **y** sin `fecha_baja`. Las dos se
-/// contradicen en unos 45 casos, así que se toma la intersección: quedan 283 personas. Omitir a
-/// alguien vigente por un dato mal capturado se nota y se corrige; publicar a quien ya se fue, no.
+/// El filtro también se mudó a la vista. `profiles` tiene 2488 registros pero **2192 son bajas**, y
+/// se exige `status_rh` vigente **y** sin `fecha_baja`: las dos señales se contradicen en unos 45
+/// casos, así que se toma la intersección y quedan 283 personas.
 class DirectorioPage extends StatefulWidget {
   const DirectorioPage({super.key});
 
@@ -28,6 +33,7 @@ class _DirectorioPageState extends State<DirectorioPage> {
 
   bool _cargando = true;
   String? _error;
+  bool _esAdmin = false;
   List<_Persona> _personas = [];
   String _busqueda = '';
   String _ubicacion = 'todas';
@@ -50,12 +56,20 @@ class _DirectorioPageState extends State<DirectorioPage> {
       _error = null;
     });
     try {
+      // El rol se consulta sólo para redactar la ayuda del buscador: si a esta persona no le llegan
+      // teléfonos, ofrecerle «buscar por teléfono» es prometer algo que no va a funcionar. El
+      // enmascarado en sí no depende de esto, lo hace la vista.
+      final uid = _supabase.auth.currentUser?.id;
+      if (uid != null) {
+        final perfil = await _supabase
+            .from('profiles').select('role').eq('id', uid).maybeSingle();
+        _esAdmin = perfil?['role'] == 'admin';
+      }
+
       final datos = await _supabase
-          .from('profiles')
-          .select('numero_empleado, nombre, paterno, materno, full_name, puesto, area, '
+          .from('directorio')
+          .select('nombre, paterno, materno, full_name, puesto, area, '
               'ubicacion, empresa, telefono, celular, mail_user, email, foto_url')
-          .inFilter('status_rh', ['ACTIVO', 'CAMBIO', 'REINGRESO'])
-          .isFilter('fecha_baja', null)
           .order('nombre');
 
       _personas = [
@@ -153,7 +167,9 @@ class _DirectorioPageState extends State<DirectorioPage> {
               onChanged: (v) => setState(() => _busqueda = v),
               style: const TextStyle(fontSize: 13.5),
               decoration: InputDecoration(
-                hintText: 'Buscar por nombre, puesto, área, teléfono o correo…',
+                hintText: _esAdmin
+                    ? 'Buscar por nombre, puesto, área, teléfono o correo…'
+                    : 'Buscar por nombre, puesto, área o correo…',
                 hintStyle: TextStyle(fontSize: 13, color: c.ink4),
                 prefixIcon: Icon(Icons.search, size: 18, color: c.ink3),
                 prefixIconConstraints:
@@ -311,7 +327,6 @@ class _DirectorioPageState extends State<DirectorioPage> {
               Text(
                 [
                   if (p.puesto.isNotEmpty) p.puesto,
-                  if (p.numero.isNotEmpty) '#${p.numero}',
                   if (p.ubicacion.isNotEmpty) p.ubicacion.replaceAll('_', ' '),
                 ].join(' · '),
                 style: TextStyle(fontSize: 11, height: 1.3, color: c.ink3),
@@ -431,7 +446,6 @@ class _DirectorioPageState extends State<DirectorioPage> {
 class _Persona {
   _Persona({
     required this.nombre,
-    required this.numero,
     required this.puesto,
     required this.area,
     required this.ubicacion,
@@ -454,7 +468,6 @@ class _Persona {
       nombre: partes.isNotEmpty ? partes : (t(p['full_name']).isNotEmpty
           ? t(p['full_name'])
           : 'Sin nombre'),
-      numero: t(p['numero_empleado']).replaceFirst(RegExp(r'^0+'), ''),
       puesto: t(p['puesto']),
       area: t(p['area']),
       ubicacion: t(p['ubicacion']),
@@ -467,7 +480,6 @@ class _Persona {
   }
 
   final String nombre;
-  final String numero;
   final String puesto;
   final String area;
   final String ubicacion;
@@ -495,7 +507,8 @@ class _Persona {
         area.toLowerCase().contains(q) ||
         ubicacion.toLowerCase().replaceAll('_', ' ').contains(q) ||
         correo.toLowerCase().contains(q) ||
-        numero.contains(q) ||
+        // Los teléfonos llegan vacíos a quien no es administrador, así que para esa persona estas dos
+        // comparaciones simplemente no encuentran nada. No hace falta un caso aparte.
         tel(telefono) ||
         tel(celular);
   }
