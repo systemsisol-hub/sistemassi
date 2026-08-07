@@ -91,7 +91,9 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
 
       final dias = await _supabase
           .from('checador_dias')
-          .select('profile_id, fecha, estado, horario_ambiguo')
+          .select('profile_id, fecha, estado, horario_ambiguo, checo, incompleta, '
+              'tiene_entrada, tiene_salida, justificado, justificacion_motivo, '
+              'justificacion_tipo')
           .order('fecha');
       _dias = List<Map<String, dynamic>>.from(dias);
 
@@ -144,6 +146,7 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
       final fila = porPersona.putIfAbsent(
         clave,
         () => _FilaEmpleado(
+          id: clave,
           nombre: (e['nombre_reporte'] ?? 'Sin nombre').toString(),
           numero: (e['numero_empleado'] ?? '').toString(),
           zona: (e['sucursal'] ?? '').toString(),
@@ -159,11 +162,14 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
       }
     }
 
-    // Las faltas viven en la otra vista, indexada por profile_id.
+    // Las faltas y las checadas a medias viven en la otra vista, indexada por profile_id.
     for (final d in _dias) {
       final clave = (d['profile_id'] ?? '?').toString();
       final fila = porPersona[clave];
       if (fila == null) continue;
+      fila.esperados++;
+      if (d['checo'] == true) fila.asistio++;
+      if (d['incompleta'] == true) fila.incompletas++;
       if (d['estado'] == 'FALTA') fila.faltas++;
       if (d['estado'] == 'JUSTIFICADO') fila.justificados++;
     }
@@ -662,7 +668,9 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
     Widget celda(int i, Widget hijo) =>
         SizedBox(width: _anchos[i], child: hijo);
 
-    return Container(
+    return InkWell(
+      onTap: () => _mostrarFicha(f),
+      child: Container(
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: c.line2)),
       ),
@@ -677,7 +685,11 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
               children: [
                 Text(f.nombre,
                     style: TextStyle(
-                        fontSize: 12.5, fontWeight: FontWeight.w600, color: c.ink)),
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: c.brand,
+                        decoration: TextDecoration.underline,
+                        decorationColor: c.brand.withValues(alpha: 0.3))),
                 Text(
                   [
                     if (f.numero.isNotEmpty) '#${f.numero}',
@@ -739,6 +751,271 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
               ),
             ),
           ),
+        ],
+      ),
+      ),
+    );
+  }
+
+  // ── Ficha por empleado ─────────────────────────────────────────────────────
+
+  /// Abre el detalle al tocar el renglón. No hace otra consulta: los días y las entradas ya están
+  /// cargados para toda la vista, así que basta con filtrar por la persona.
+  Future<void> _mostrarFicha(_FilaEmpleado f) async {
+    final dias = _dias.where((d) => d['profile_id'].toString() == f.id).toList()
+      ..sort((a, b) => a['fecha'].toString().compareTo(b['fecha'].toString()));
+
+    // Entradas de esta persona, indexadas por fecha, para poder poner la hora en cada renglón.
+    final entradaPorFecha = <String, Map<String, dynamic>>{};
+    for (final e in _entradas) {
+      if (e['profile_id']?.toString() == f.id) {
+        entradaPorFecha[e['fecha'].toString()] = e;
+      }
+    }
+
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        final c = SiColors.of(ctx);
+        final fmtDia = DateFormat('d MMM', 'es_MX');
+        final pct = f.puntualidad;
+        final color = f.estatus == 'critico'
+            ? c.danger
+            : f.estatus == 'atencion'
+                ? c.warn
+                : f.estatus == 'puntual'
+                    ? c.success
+                    : c.ink3;
+
+        String hora(String fecha) {
+          final h = entradaPorFecha[fecha]?['hora'];
+          return h == null ? '' : h.toString().substring(0, 5);
+        }
+
+        Widget seccion(String titulo, IconData icono, Color colorTitulo,
+            List<(String, String)> renglones, String vacio) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(height: SiSpace.x4),
+              Row(children: [
+                Icon(icono, size: 15, color: colorTitulo),
+                const SizedBox(width: SiSpace.x2),
+                Text('${titulo.toUpperCase()} · ${renglones.length}',
+                    style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.3,
+                        color: colorTitulo)),
+              ]),
+              const SizedBox(height: SiSpace.x2),
+              if (renglones.isEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: SiSpace.x3, vertical: SiSpace.x3),
+                  decoration: BoxDecoration(
+                    color: c.successTint,
+                    borderRadius: SiRadius.rMd,
+                  ),
+                  child: Text(vacio,
+                      style: TextStyle(fontSize: 12, color: c.ink2)),
+                )
+              else
+                for (final r in renglones)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 4),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: SiSpace.x3, vertical: SiSpace.x2),
+                    decoration: BoxDecoration(
+                      color: c.hover,
+                      borderRadius: SiRadius.rMd,
+                      border: Border(
+                          left: BorderSide(color: colorTitulo, width: 3)),
+                    ),
+                    child: Row(children: [
+                      SizedBox(
+                        width: 62,
+                        child: Text(r.$1,
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: c.ink)),
+                      ),
+                      Expanded(
+                        child: Text(r.$2,
+                            style: TextStyle(fontSize: 12, color: c.ink3)),
+                      ),
+                    ]),
+                  ),
+            ],
+          );
+        }
+
+        final retardos = <(String, String)>[
+          for (final d in dias)
+            if (entradaPorFecha[d['fecha'].toString()]?['es_retardo'] == true)
+              (
+                fmtDia.format(DateTime.parse(d['fecha'].toString())),
+                'Entró ${hora(d['fecha'].toString())} · '
+                    '+${entradaPorFecha[d['fecha'].toString()]!['minutos_retardo']} min',
+              ),
+        ];
+        final faltas = <(String, String)>[
+          for (final d in dias)
+            if (d['estado'] == 'FALTA')
+              (
+                fmtDia.format(DateTime.parse(d['fecha'].toString())),
+                'Sin ninguna checada',
+              ),
+        ];
+        final justificados = <(String, String)>[
+          for (final d in dias)
+            if (d['justificado'] == true)
+              (
+                fmtDia.format(DateTime.parse(d['fecha'].toString())),
+                (d['justificacion_motivo'] ?? 'Justificado').toString(),
+              ),
+        ];
+        final incompletas = <(String, String)>[
+          for (final d in dias)
+            if (d['incompleta'] == true)
+              (
+                fmtDia.format(DateTime.parse(d['fecha'].toString())),
+                d['tiene_entrada'] == true
+                    ? 'Sólo entrada${hora(d['fecha'].toString()).isEmpty ? '' : ' (${hora(d['fecha'].toString())})'}'
+                    : 'Sólo salida',
+              ),
+        ];
+
+        return AlertDialog(
+          backgroundColor: c.panel,
+          titlePadding: EdgeInsets.zero,
+          contentPadding: const EdgeInsets.fromLTRB(
+              SiSpace.x5, 0, SiSpace.x5, SiSpace.x2),
+          title: Container(
+            padding: const EdgeInsets.all(SiSpace.x5),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: c.line)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(f.nombre,
+                          style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700,
+                              color: c.ink)),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 2,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                            [
+                              if (f.numero.isNotEmpty) '#${f.numero}',
+                              if (f.zona.isNotEmpty) f.zona,
+                              if (f.horario.isNotEmpty) f.horario,
+                            ].join(' · '),
+                            style: TextStyle(fontSize: 11.5, color: c.ink3),
+                          ),
+                          Container(
+                            width: 7, height: 7,
+                            decoration: BoxDecoration(
+                                color: color, shape: BoxShape.circle),
+                          ),
+                          Text(_etiquetaEstatus[f.estatus] ?? f.estatus,
+                              style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: color)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(Icons.close, size: 19, color: c.ink3),
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+              ],
+            ),
+          ),
+          content: SizedBox(
+            width: 620,
+            child: SingleChildScrollView(
+              child: SelectionArea(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SizedBox(height: SiSpace.x4),
+                    Wrap(
+                      spacing: SiSpace.x2,
+                      runSpacing: SiSpace.x2,
+                      children: [
+                        _fichaKpi(c, pct == null ? '—' : '${pct.toStringAsFixed(1)}%',
+                            'Puntualidad', color),
+                        _fichaKpi(c, '${f.asistio}/${f.esperados}',
+                            'Asistió/esper.', c.ink),
+                        _fichaKpi(c, '${f.retardos}', 'Retardos', c.warn),
+                        _fichaKpi(c, '${f.faltas}', 'Faltas', c.danger),
+                        _fichaKpi(c, '${f.incompletas}', 'Incompletas', c.warn),
+                        _fichaKpi(c, '${f.justificados}', 'Justificados', c.ink2),
+                        _fichaKpi(c, '${f.minutos}', 'Min. tarde', c.ink2),
+                      ],
+                    ),
+                    seccion('Días con retardo', Icons.alarm, c.warn, retardos,
+                        'Ningún retardo en el periodo.'),
+                    seccion('Faltas (sin ninguna checada)', Icons.block,
+                        c.danger, faltas, 'Ninguna falta sin justificar.'),
+                    seccion('Días justificados', Icons.description_outlined,
+                        c.ink3, justificados, 'Sin días justificados.'),
+                    seccion(
+                        'Checadas incompletas (sólo entrada o sólo salida)',
+                        Icons.warning_amber_rounded,
+                        c.warn,
+                        incompletas,
+                        'Todos los días quedaron completos.'),
+                    const SizedBox(height: SiSpace.x2),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _fichaKpi(SiColors c, String valor, String etiqueta, Color color) {
+    return Container(
+      width: 88,
+      padding: const EdgeInsets.symmetric(
+          horizontal: SiSpace.x2, vertical: SiSpace.x3),
+      decoration: BoxDecoration(
+        color: c.hover,
+        borderRadius: SiRadius.rMd,
+        border: Border.all(color: c.line),
+      ),
+      child: Column(
+        children: [
+          Text(valor,
+              style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  height: 1.1,
+                  color: color,
+                  fontFeatures: const [FontFeature.tabularFigures()])),
+          const SizedBox(height: 3),
+          Text(etiqueta.toUpperCase(),
+              textAlign: TextAlign.center,
+              style: SiType.mono(size: 8.5, color: c.ink3, letterSpacing: 0.4)),
         ],
       ),
     );
@@ -909,12 +1186,15 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
 
 class _FilaEmpleado {
   _FilaEmpleado({
+    required this.id,
     required this.nombre,
     required this.numero,
     required this.zona,
     required this.horario,
   });
 
+  /// `profile_id`, para volver a filtrar sus días al abrir la ficha.
+  final String id;
   final String nombre;
   final String numero;
   final String zona;
@@ -925,6 +1205,9 @@ class _FilaEmpleado {
   int faltas = 0;
   int justificados = 0;
   int minutos = 0;
+  int esperados = 0;
+  int asistio = 0;
+  int incompletas = 0;
   String estatus = 'sin datos';
 
   double? get puntualidad =>
