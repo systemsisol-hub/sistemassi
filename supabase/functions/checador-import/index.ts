@@ -168,6 +168,16 @@ function textoDeCelda(html: string): string {
 interface Celda {
   estilo: string;
   texto: string;
+  /// El HTML interno, sin tocar. Hace falta porque hay datos que no están en el texto: la columna
+  /// Foto dice siempre «Ver foto» y el enlace a la imagen vive en el href.
+  html: string;
+}
+
+/// Primer href de una celda. Devuelve null si no hay enlace, que es lo correcto para una celda sin
+/// foto: mejor vacío que una cadena inventada.
+function primerHref(html: string): string | null {
+  const m = html.match(/href\s*=\s*["']([^"']+)["']/i);
+  return m ? m[1].trim() : null;
 }
 
 function filasDelHtml(html: string): Celda[][] {
@@ -185,7 +195,7 @@ function filasDelHtml(html: string): Celda[][] {
   for (const tr of html.matchAll(trRe)) {
     const celdas: Celda[] = [];
     for (const td of tr[1].matchAll(tdRe)) {
-      celdas.push({ estilo: td[1], texto: textoDeCelda(td[2]) });
+      celdas.push({ estilo: td[1], texto: textoDeCelda(td[2]), html: td[2] });
     }
     if (celdas.length > 0) filas.push(celdas);
   }
@@ -206,6 +216,7 @@ const COLUMNAS = {
   horario: "horario",
   direccion: "dirección",
   sucursal: "sucursal",
+  foto: "foto",
   registroCon: "registro con",
 } as const;
 
@@ -537,7 +548,8 @@ Deno.serve(async (req: Request) => {
     // ── Recorrido de las filas ───────────────────────────────────────────────
 
     const cel = (f: Celda[], k: keyof typeof COLUMNAS): Celda =>
-      (cols[k] !== undefined ? f[cols[k]!] : undefined) ?? { estilo: "", texto: "" };
+      (cols[k] !== undefined ? f[cols[k]!] : undefined) ??
+          { estilo: "", texto: "", html: "" };
 
     const registros: Record<string, unknown>[] = [];
     const empleadosSinEmpatar = new Map<string, string>();
@@ -619,6 +631,8 @@ Deno.serve(async (req: Request) => {
         direccion: cel(f, "direccion").texto || null,
         sucursal: cel(f, "sucursal").texto || null,
         registro_con: cel(f, "registroCon").texto || null,
+        // El texto de esa celda es siempre «Ver foto»; lo que sirve es el href.
+        foto_url: primerHref(cel(f, "foto").html),
       });
     }
 

@@ -1,8 +1,10 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'theme/si_theme.dart';
 
@@ -85,7 +87,7 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
           .from('checador_entradas')
           .select('profile_id, nombre_reporte, numero_empleado, sucursal, departamento, '
               'horario_nombre, fecha, hora, limite, es_retardo, minutos_retardo, '
-              'justificado, justificacion_tipo, justificacion_motivo')
+              'justificado, justificacion_tipo, justificacion_motivo, foto_url')
           .order('fecha');
       _entradas = List<Map<String, dynamic>>.from(entradas);
 
@@ -794,7 +796,7 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
         }
 
         Widget seccion(String titulo, IconData icono, Color colorTitulo,
-            List<(String, String)> renglones, String vacio) {
+            List<(String, String, String?)> renglones, String vacio) {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -847,38 +849,45 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
                         child: Text(r.$2,
                             style: TextStyle(fontSize: 12, color: c.ink3)),
                       ),
+                      // La foto que appchecar toma al registrar. Se abre en otra pestaña en lugar
+                      // de dibujarla aquí: está en appchecar.com y no manda cabeceras CORS, así que
+                      // renderizarla en línea fallaría en web.
+                      if (r.$3 != null) _botonFoto(c, r.$3!),
                     ]),
                   ),
             ],
           );
         }
 
-        final retardos = <(String, String)>[
+        final retardos = <(String, String, String?)>[
           for (final d in dias)
             if (entradaPorFecha[d['fecha'].toString()]?['es_retardo'] == true)
               (
                 fmtDia.format(DateTime.parse(d['fecha'].toString())),
                 'Entró ${hora(d['fecha'].toString())} · '
                     '+${entradaPorFecha[d['fecha'].toString()]!['minutos_retardo']} min',
+                entradaPorFecha[d['fecha'].toString()]?['foto_url'] as String?,
               ),
         ];
-        final faltas = <(String, String)>[
+        final faltas = <(String, String, String?)>[
           for (final d in dias)
             if (d['estado'] == 'FALTA')
               (
                 fmtDia.format(DateTime.parse(d['fecha'].toString())),
                 'Sin ninguna checada',
+                null, // Sin checada no hay foto que mostrar.
               ),
         ];
-        final justificados = <(String, String)>[
+        final justificados = <(String, String, String?)>[
           for (final d in dias)
             if (d['justificado'] == true)
               (
                 fmtDia.format(DateTime.parse(d['fecha'].toString())),
                 (d['justificacion_motivo'] ?? 'Justificado').toString(),
+                entradaPorFecha[d['fecha'].toString()]?['foto_url'] as String?,
               ),
         ];
-        final incompletas = <(String, String)>[
+        final incompletas = <(String, String, String?)>[
           for (final d in dias)
             if (d['incompleta'] == true)
               (
@@ -886,6 +895,7 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
                 d['tiene_entrada'] == true
                     ? 'Sólo entrada${hora(d['fecha'].toString()).isEmpty ? '' : ' (${hora(d['fecha'].toString())})'}'
                     : 'Sólo salida',
+                entradaPorFecha[d['fecha'].toString()]?['foto_url'] as String?,
               ),
         ];
 
@@ -990,6 +1000,46 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
           ),
         );
       },
+    );
+  }
+
+  /// Abre la foto de la checada en otra pestaña.
+  ///
+  /// No se dibuja en línea a propósito: la imagen vive en appchecar.com, que no manda cabeceras
+  /// CORS, así que en web `Image.network` fallaría bajo CanvasKit y quedaría un hueco roto. Un
+  /// enlace siempre funciona, y además deja copiar la dirección.
+  Widget _botonFoto(SiColors c, String url) {
+    return Tooltip(
+      message: 'Ver la foto de la checada',
+      child: InkWell(
+        onTap: () async {
+          final ok = await launchUrl(Uri.parse(url),
+              mode: LaunchMode.externalApplication);
+          if (!ok && mounted) {
+            // Si el navegador la bloquea, al menos que se pueda copiar el enlace.
+            await Clipboard.setData(ClipboardData(text: url));
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                    content: Text('No se pudo abrir. Enlace copiado.')),
+              );
+            }
+          }
+        },
+        onLongPress: () async {
+          await Clipboard.setData(ClipboardData(text: url));
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Enlace de la foto copiado')),
+            );
+          }
+        },
+        borderRadius: BorderRadius.circular(5),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+          child: Icon(Icons.photo_camera_outlined, size: 15, color: c.brand),
+        ),
+      ),
     );
   }
 
