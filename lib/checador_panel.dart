@@ -870,22 +870,29 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
               ),
             )
           else
-            // Desplazable en horizontal por dentro: con ocho columnas la tabla no cabe en
-            // pantallas medianas, y el cuerpo de la página no debe desplazarse de lado.
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: ConstrainedBox(
-                // Suma de los anchos de las ocho columnas; con menos, la última se corta.
-                constraints: const BoxConstraints(minWidth: 678),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _encabezadoTabla(c),
-                    Divider(height: 1, color: c.line),
-                    for (final f in filas) _filaTabla(c, f),
-                  ],
-                ),
-              ),
+            // El LayoutBuilder va FUERA del scroll: dentro de un desplazamiento horizontal el
+            // ancho es infinito y no habría contra qué repartir. Aquí sí mide la tarjeta, y la
+            // tabla la ocupa completa en lugar de quedarse en sus 678px mínimos.
+            LayoutBuilder(
+              builder: (context, box) {
+                final anchos = _anchosEn(box.maxWidth);
+                return SingleChildScrollView(
+                  // Sólo se desplaza cuando la tarjeta es más angosta que el mínimo; de ahí para
+                  // arriba no hay nada que desplazar y el cuerpo de la página tampoco se mueve.
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(
+                    width: anchos.reduce((a, b) => a + b),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _encabezadoTabla(c, anchos),
+                        Divider(height: 1, color: c.line),
+                        for (final f in filas) _filaTabla(c, f, anchos),
+                      ],
+                    ),
+                  ),
+                );
+              },
             ),
         ],
       ),
@@ -937,13 +944,36 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
   /// contenidos de distinto ancho mínimo.
   static const _anchoParaDosColumnas = 1200.0;
 
-  /// Suman 678px, apretadas desde 838. Cada ancho está medido contra lo que tiene que caber: el
-  /// encabezado en mono de 9.5 con 0.8 de letterSpacing —'DÍAS DESC.' pide unos 65px— o el
-  /// contenido, que en ZONA es un nombre como 'Baja California' y en ESTATUS la píldora con
-  /// 'Atención'.
+  /// Anchos MÍNIMOS de las ocho columnas: lo que cada una necesita para no recortar su encabezado
+  /// —en mono de 9.5 con 0.8 de letterSpacing, 'DÍAS DESC.' pide unos 65px— ni su contenido, que en
+  /// ZONA es un nombre como 'Baja California' y en ESTATUS la píldora con 'Atención'.
+  ///
+  /// Suman 678. Por debajo de eso la tabla se desplaza de lado; por encima crece con la tarjeta.
   static const _anchos = [184.0, 96.0, 90.0, 58.0, 50.0, 50.0, 68.0, 82.0];
+  static const _anchoMinimoTabla = 678.0;
 
-  Widget _encabezadoTabla(SiColors c) {
+  /// Cómo se reparte el ancho que sobra cuando la tarjeta es más ancha que 678px.
+  ///
+  /// A propósito NO es proporcional. Escalar las ocho por igual separaría los números de RETARDOS,
+  /// FALTAS y JUSTIF. hasta que dejara de verse bajo qué encabezado cae cada uno. El sobrante se va
+  /// a las tres columnas que lo aprovechan: el nombre deja de partirse en dos renglones, la zona
+  /// entra completa y la barra de puntualidad se lee mejor larga. Las de números se quedan quietas,
+  /// y ESTATUS termina pegado al borde derecho.
+  static const _repartoSobrante = [3, 1, 2, 0, 0, 0, 0, 0];
+
+  /// Los anchos con los que se pinta la tabla en un ancho dado.
+  static List<double> _anchosEn(double disponible) {
+    if (!disponible.isFinite) return _anchos;
+    final sobra = disponible - _anchoMinimoTabla;
+    if (sobra <= 0) return _anchos;
+    const pesos = 3 + 1 + 2;
+    return [
+      for (var i = 0; i < _anchos.length; i++)
+        _anchos[i] + sobra * _repartoSobrante[i] / pesos,
+    ];
+  }
+
+  Widget _encabezadoTabla(SiColors c, List<double> anchos) {
     const titulos = [
       'EMPLEADO', 'ZONA', '% PUNT.', 'RETARDOS', 'FALTAS', 'JUSTIF.',
       'DÍAS DESC.', 'ESTATUS'
@@ -954,7 +984,7 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
         children: [
           for (var i = 0; i < titulos.length; i++)
             SizedBox(
-              width: _anchos[i],
+              width: anchos[i],
               child: Text(titulos[i],
                   style: SiType.mono(
                       size: 9.5, color: c.ink3, letterSpacing: 0.8)),
@@ -964,7 +994,7 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
     );
   }
 
-  Widget _filaTabla(SiColors c, _FilaEmpleado f) {
+  Widget _filaTabla(SiColors c, _FilaEmpleado f, List<double> anchos) {
     final pct = f.puntualidad;
     final color = f.estatus == 'critico'
         ? c.danger
@@ -975,7 +1005,7 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
                 : c.ink3;
 
     Widget celda(int i, Widget hijo) =>
-        SizedBox(width: _anchos[i], child: hijo);
+        SizedBox(width: anchos[i], child: hijo);
 
     return InkWell(
       onTap: () => _mostrarFicha(f),
