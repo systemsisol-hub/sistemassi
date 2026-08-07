@@ -10,6 +10,7 @@ import 'colaborador_page.dart';
 import 'incidencias_page.dart';
 import 'social_page.dart';
 import 'external_contacts_page.dart';
+import 'directorio_page.dart';
 import 'widgets/notification_bell.dart';
 import 'widgets/asistente_panel.dart';
 import 'asistente_store.dart';
@@ -30,7 +31,7 @@ class _OpenSearchIntent extends Intent {
 
 // Visual-only nav group definitions — order here is render order.
 final _navGroups = <(String, List<String>)>[
-  ('GENERAL',        ['Mi Perfil', 'Social', 'Conocimientos', 'Contraseñas', 'Contactos', 'Firmas', 'Calendario']),
+  ('GENERAL',        ['Mi Perfil', 'Social', 'Directorio', 'Conocimientos', 'Contraseñas', 'Contactos', 'Firmas', 'Calendario']),
   ('OPERACIÓN',      ['Incidencias', 'Inventario', 'Colaborador', 'Asistencia']),
   ('ANÁLISIS',       ['BI', 'Logs', 'Tablas']),
   ('ADMINISTRACIÓN', ['Usuarios', 'IA', 'Papelera']),
@@ -92,6 +93,15 @@ class _MainNavigationState extends State<MainNavigation> {
       'icon': Icons.diversity_3_outlined,
       'activeIcon': Icons.diversity_3,
       'widget': const SocialPage(),
+    });
+    pages.add({
+      // Sin permiso, igual que Mi Perfil o Social: es el directorio interno, y su dato ya era
+      // legible por cualquier autenticado —la politica de profiles es `true`—. La pagina solo lo
+      // presenta, filtrado a personal vigente.
+      'title': 'Directorio',
+      'icon': Icons.contacts_outlined,
+      'activeIcon': Icons.contacts,
+      'widget': const DirectorioPage(),
     });
     pages.add({
       'title': 'Conocimientos',

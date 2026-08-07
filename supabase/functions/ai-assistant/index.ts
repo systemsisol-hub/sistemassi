@@ -16,8 +16,13 @@ const today = new Date().toLocaleDateString("es-MX", {
   year: "numeric", month: "long", day: "numeric",
 });
 
+// Lo que ve un usuario normal: datos de directorio. Incluye teléfono fijo, celular y el correo de
+// trabajo (`mail_user` y `email` guardan el mismo valor; se piden los dos porque la cobertura de
+// cada uno difiere en una docena de perfiles). NO incluye `correo_personal`, ni fecha de ingreso,
+// status, foto ni horario, que sí ve un administrador.
 const USER_COLABORADOR_FIELDS =
-  "numero_empleado,nombre,paterno,materno,telefono,celular,empresa_tipo,area,puesto,ubicacion,empresa,jefe_inmediato,lider,gerente_regional,director";
+  "numero_empleado,nombre,paterno,materno,telefono,celular,mail_user,email," +
+  "empresa_tipo,area,puesto,ubicacion,empresa,jefe_inmediato,lider,gerente_regional,director";
 
 const ADMIN_COLABORADOR_FIELDS =
   "id,numero_empleado,nombre,paterno,materno,area,puesto,ubicacion,empresa,empresa_tipo," +
@@ -168,8 +173,9 @@ function construirPrompt(
   if (puede("buscar_colaborador")) {
     accesos.push(esAdmin
       ? '- Colaboradores: puedes consultarlos.'
-      : '- Colaboradores: puedes consultar datos básicos (número de empleado, nombre, teléfono, '
-        + 'área, puesto, ubicación, empresa y línea de mando). No los datos privados.');
+      : '- Directorio: puedes consultar número de empleado, nombre, teléfono fijo, celular, '
+        + 'correo de trabajo, área, puesto, ubicación, empresa y línea de mando. No el correo '
+        + 'personal ni la fecha de ingreso, el status o el horario.');
   }
   if (puede("buscar_incidencias")) {
     accesos.push(`- Incidencias: puedes consultar las ${esAdmin ? 'de todos' : `PROPIAS de ${nombre}`}.`);
