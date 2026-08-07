@@ -185,6 +185,29 @@ void main() {
     expect(find.text('Regreso'), findsOneWidget);
   });
 
+  testWidgets('el regreso no se pinta del color de una aprobada', (tester) async {
+    // El regreso salía en verde igual que APROBADA, así que se leía como un día más de vacaciones.
+    await tester.pumpWidget(envolver([
+      inc('2026-07-28', '2026-07-31', regreso: '2026-08-01'),
+    ]));
+    await tester.pumpAndSettle();
+
+    // El 1 de agosto: único día del mes visible, y el único '1' suelto de la cuadrícula.
+    final circulo = tester
+        .widgetList<Container>(find.ancestor(
+            of: find.text('1'), matching: find.byType(Container)))
+        .map((w) => w.decoration)
+        .whereType<BoxDecoration>()
+        .firstWhere((d) => d.shape == BoxShape.circle && d.color != null);
+
+    final color = circulo.color!;
+    expect(color, isNot(colorDeEstatus('APROBADA')));
+    // Y se lee como azul: el canal azul domina sobre los otros dos.
+    expect(color.b, greaterThan(color.g),
+        reason: 'el día de regreso debe ser azul, no verde');
+    expect(color.b, greaterThan(color.r));
+  });
+
   testWidgets('sin fechas utilizables no pinta tarjeta a medias',
       (tester) async {
     await tester.pumpWidget(envolver([

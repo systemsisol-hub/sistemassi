@@ -20,6 +20,9 @@ import '../theme/si_theme.dart';
 ///   llegar a la primera. Las flechas saltan al mes anterior o siguiente **con solicitudes**.
 /// * Hay una fila con `fecha_fin` anterior a `fecha_inicio`. El rango se corrige al vuelo en lugar
 ///   de dejar de pintarla, que es lo que hacía antes: un dato sucio no debe volverse invisible.
+///
+/// El día de regreso va en azul —`brand`— y no en verde: el verde es el color de APROBADA, y con
+/// los dos iguales el regreso se leía como un día más de la solicitud.
 class CalendarioIncidencias extends StatefulWidget {
   const CalendarioIncidencias({
     super.key,
@@ -298,7 +301,7 @@ class _CalendarioIncidenciasState extends State<CalendarioIncidencias> {
           _PuntoLeyenda(
               color: widget.colorDeEstatus(e), etiqueta: _titulo(e)),
         if (marcas.values.any((m) => m.esRegreso))
-          _PuntoLeyenda(color: Colors.green.shade500, etiqueta: 'Regreso'),
+          _PuntoLeyenda(color: c.brand, etiqueta: 'Regreso'),
       ],
     );
   }
@@ -364,7 +367,10 @@ class _Celda extends StatelessWidget {
 
     Color? circulo;
     if (m?.esRegreso ?? false) {
-      circulo = Colors.green.shade500;
+      // Azul, no verde: el verde ya es el color de APROBADA, y con los dos en verde el día de
+      // regreso se leía como un día más de la solicitud. Se usa `brand` en lugar de un Colors.blue
+      // suelto porque es el azul de la paleta y cambia solo en tema oscuro.
+      circulo = brand;
     } else if (extremo) {
       circulo = colorEstatus;
     }
