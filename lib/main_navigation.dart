@@ -31,7 +31,7 @@ class _OpenSearchIntent extends Intent {
 
 // Visual-only nav group definitions — order here is render order.
 final _navGroups = <(String, List<String>)>[
-  ('GENERAL',        ['Mi Perfil', 'Social', 'Directorio', 'Conocimientos', 'Contraseñas', 'Contactos', 'Firmas', 'Calendario']),
+  ('GENERAL',        ['Mi Perfil', 'Social', 'Directorio', 'Conocimientos', 'Contraseñas', 'Contactos Ext.', 'Firmas', 'Calendario']),
   ('OPERACIÓN',      ['Incidencias', 'Inventario', 'Colaborador', 'Asistencia']),
   ('ANÁLISIS',       ['BI', 'Logs', 'Tablas']),
   ('ADMINISTRACIÓN', ['Usuarios', 'IA', 'Papelera']),
@@ -174,7 +174,7 @@ class _MainNavigationState extends State<MainNavigation> {
     }
     if (widget.permissions['show_external_contacts'] == true) {
       pages.add({
-        'title': 'Contactos',
+        'title': 'Contactos Ext.',
         'icon': Icons.contact_phone_outlined,
         'activeIcon': Icons.contact_phone,
         'widget': const ExternalContactsPage(),

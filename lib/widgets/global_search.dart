@@ -194,7 +194,7 @@ class _GlobalSearchDialogState extends State<_GlobalSearchDialog> {
         _searchUsuarios(lower),
       if (hasPage('Inventario'))
         _searchInventario(lower),
-      if (hasPage('Contactos'))
+      if (hasPage('Contactos Ext.'))
         _searchContactos(lower),
     ];
     final groups = await Future.wait(futures);
@@ -366,12 +366,12 @@ class _GlobalSearchDialogState extends State<_GlobalSearchDialog> {
           if (r['correo'] != null) r['correo'] as String,
         ];
         return _Result(
-          category: 'Contactos',
+          category: 'Contactos Ext.',
           icon: Icons.contact_phone_outlined,
           title: r['nombre'] ?? '---',
           subtitle: parts.isEmpty ? null : parts.join(' · '),
           onTap: () => widget.onSelectPage(widget.pages
-              .indexWhere((p) => p['title'] == 'Contactos')),
+              .indexWhere((p) => p['title'] == 'Contactos Ext.')),
         );
       }).toList();
     } catch (_) {
@@ -550,7 +550,7 @@ const _categoryIcons = <String, IconData>{
   'Colaboradores': Icons.group_outlined,
   'Usuarios': Icons.manage_accounts_outlined,
   'Inventario': Icons.inventory_2_outlined,
-  'Contactos': Icons.contact_phone_outlined,
+  'Contactos Ext.': Icons.contact_phone_outlined,
 };
 
 class _SectionLabel extends StatelessWidget {

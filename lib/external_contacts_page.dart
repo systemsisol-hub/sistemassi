@@ -16,6 +16,7 @@ class _ExternalContactsPageState extends State<ExternalContactsPage> {
   bool _isLoading = true;
   final _searchController = TextEditingController();
   String _searchQuery = '';
+  String _empresa = 'todas';
 
   @override
   void initState() {
@@ -66,15 +67,23 @@ class _ExternalContactsPageState extends State<ExternalContactsPage> {
   }
 
   List<Map<String, dynamic>> get _filteredContacts {
-    if (_searchQuery.isEmpty) return _contacts;
+    final query = _searchQuery.trim().toLowerCase();
+    // Los dígitos se comparan sin espacios ni guiones, que es como los teclea la gente cuando
+    // quiere saber de quién fue una llamada.
+    final soloDigitos = query.replaceAll(RegExp(r'\D'), '');
+
     return _contacts.where((c) {
-      final nombre = (c['nombre'] ?? '').toString().toLowerCase();
-      final empresa = (c['empresa'] ?? '').toString().toLowerCase();
-      final correo = (c['correo'] ?? '').toString().toLowerCase();
-      final query = _searchQuery.toLowerCase();
-      return nombre.contains(query) ||
-          empresa.contains(query) ||
-          correo.contains(query);
+      String t(String k) => (c[k] ?? '').toString().trim();
+
+      if (_empresa != 'todas' && t('empresa') != _empresa) return false;
+      if (query.isEmpty) return true;
+
+      final telefono = t('telefono').replaceAll(RegExp(r'\D'), '');
+      return t('nombre').toLowerCase().contains(query) ||
+          t('empresa').toLowerCase().contains(query) ||
+          t('correo').toLowerCase().contains(query) ||
+          t('otro').toLowerCase().contains(query) ||
+          (soloDigitos.isNotEmpty && telefono.contains(soloDigitos));
     }).toList();
   }
 
@@ -274,7 +283,33 @@ class _ExternalContactsPageState extends State<ExternalContactsPage> {
         },
       ),
     );
-  }  @override
+  }
+
+  // ── Presentación ────────────────────────────────────────────────────────────
+  //
+  // Mismo diseño que la página de Directorio: buscador y filtro en un solo renglón a la misma
+  // altura, y la lista en varias columnas para no dejar un hueco enorme entre el nombre y los
+  // datos de contacto en pantallas anchas.
+
+  List<String> get _empresas {
+    final e = _contacts
+        .map((c) => (c['empresa'] ?? '').toString().trim())
+        .where((x) => x.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+    return e;
+  }
+
+  Future<void> _copiar(String valor, String que) async {
+    await Clipboard.setData(ClipboardData(text: valor));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$que copiado'), duration: const Duration(seconds: 2)),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final c = SiColors.of(context);
     final isNarrow = MediaQuery.of(context).size.width < 600;
@@ -292,568 +327,322 @@ class _ExternalContactsPageState extends State<ExternalContactsPage> {
             )
           : null,
       body: _isLoading
-          ? Center(
-              child:
-                  CircularProgressIndicator(color: c.brand, strokeWidth: 2),
-            )
-          : _buildMainTable(c, filtered),
-    );
-  }
-
-  Widget _buildMainTable(SiColors c, List<Map<String, dynamic>> items) {
-    final isNarrow = MediaQuery.of(context).size.width < 600;
-
-    final searchField = Container(
-      height: 38,
-      decoration: BoxDecoration(
-        color: c.bg,
-        borderRadius: SiRadius.rMd,
-        border: Border.all(color: c.line),
-      ),
-      child: TextField(
-        controller: _searchController,
-        style: const TextStyle(fontSize: 13),
-        decoration: InputDecoration(
-          hintText: 'Buscar contacto, empresa...',
-          hintStyle: TextStyle(fontSize: 13, color: c.ink4),
-          prefixIcon: Icon(Icons.search, size: 16, color: c.ink3),
-          suffixIcon: _searchQuery.isNotEmpty
-              ? IconButton(
-                  icon: Icon(Icons.clear, size: 14, color: c.ink3),
-                  onPressed: () {
-                    _searchController.clear();
-                    setState(() => _searchQuery = '');
-                  },
-                )
-              : null,
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(vertical: 10),
-          isDense: true,
-        ),
-        onChanged: (v) => setState(() => _searchQuery = v),
-      ),
-    );
-
-    // ── Mobile layout ──────────────────────────────────────────────────
-    if (isNarrow) {
-      return Column(
-        children: [
-          // Toolbar: buscador full-width
-          Container(
-            decoration: BoxDecoration(
-              color: c.panel,
-              border: Border(bottom: BorderSide(color: c.line)),
-            ),
-            padding: const EdgeInsets.fromLTRB(
-                SiSpace.x4, SiSpace.x3, SiSpace.x4, SiSpace.x3),
-            child: searchField,
-          ),
-          // List
-          Expanded(
-            child: items.isEmpty
-                ? _buildEmptyState(c)
-                : RefreshIndicator(
-                    onRefresh: _fetchContacts,
-                    color: c.brand,
-                    child: ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(
-                          SiSpace.x4, SiSpace.x4, SiSpace.x4, 96),
-                      itemCount: items.length,
-                      separatorBuilder: (_, __) =>
-                          const SizedBox(height: SiSpace.x3),
-                      itemBuilder: (context, index) {
-                        final item = items[index];
-                        return _ContactMobileCard(
-                          item: item,
-                          onEdit: () => _showContactForm(contact: item),
-                          onDelete: () => _deleteContact(item['id']),
-                        );
-                      },
-                    ),
-                  ),
-          ),
-        ],
-      );
-    }
-
-    // ── Desktop layout ─────────────────────────────────────────────────
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(SiSpace.x6),
-      child: Center(
-        child: Card(
-          elevation: 0,
-          clipBehavior: Clip.antiAlias,
-          shape: RoundedRectangleBorder(
-            borderRadius: SiRadius.rLg,
-            side: BorderSide(color: c.line),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                child: Row(
-                  children: [
-                    SizedBox(width: 320, child: searchField),
-                    const Spacer(),
-                    ElevatedButton.icon(
-                      onPressed: () => _showContactForm(),
-                      icon: const Icon(Icons.add, size: 16),
-                      label: const Text('Contacto',
-                          style: TextStyle(fontWeight: FontWeight.w600)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: c.brand,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        minimumSize: const Size(0, 38),
-                        padding:
-                            const EdgeInsets.symmetric(horizontal: 16),
-                        shape: const RoundedRectangleBorder(
-                            borderRadius: SiRadius.rMd),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              if (items.isEmpty)
-                SizedBox(height: 300, child: _buildEmptyState(c))
-              else
-                GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate:
-                      const SliverGridDelegateWithMaxCrossAxisExtent(
-                    maxCrossAxisExtent: 466,
-                    mainAxisExtent: 180,
-                    crossAxisSpacing: 1,
-                    mainAxisSpacing: 1,
-                  ),
-                  itemCount: items.length,
-                  itemBuilder: (context, index) {
-                    final item = items[index];
-                    return Container(
-                      decoration: BoxDecoration(
-                        color: c.panel,
-                        border: Border(
-                          right: BorderSide(color: c.line2, width: 0.5),
-                          bottom: BorderSide(color: c.line2, width: 0.5),
-                        ),
-                      ),
-                      child: _ContactGridTile(
-                        item: item,
-                        onEdit: () => _showContactForm(contact: item),
-                        onDelete: () => _deleteContact(item['id']),
-                      ),
-                    );
-                  },
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Mobile contact card ───────────────────────────────────────────────────────
-
-class _ContactMobileCard extends StatelessWidget {
-  final Map<String, dynamic> item;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
-
-  const _ContactMobileCard({
-    required this.item,
-    required this.onEdit,
-    required this.onDelete,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = SiColors.of(context);
-    final name     = item['nombre']   ?? 'Sin Nombre';
-    final company  = item['empresa']  ?? '';
-    final email    = item['correo']   ?? '';
-    final phone    = item['telefono'] ?? '';
-    final category = item['otro']     ?? '';
-    final initials = (name as String).split(' ').take(2)
-        .map((e) => e.isNotEmpty ? e[0] : '')
-        .join()
-        .toUpperCase();
-
-    void copyText(String text, String label) {
-      Clipboard.setData(ClipboardData(text: text));
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('$label copiado'),
-        duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-        width: 240,
-      ));
-    }
-
-    return Container(
-      decoration: BoxDecoration(
-        color: c.panel,
-        borderRadius: SiRadius.rLg,
-        border: Border.all(color: c.line),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Header ──────────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-                SiSpace.x4, SiSpace.x4, SiSpace.x2, SiSpace.x3),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
+          ? Center(child: CircularProgressIndicator(color: c.brand, strokeWidth: 2))
+          : Column(
               children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: c.brandTint,
-                    borderRadius: SiRadius.rMd,
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    initials,
-                    style: TextStyle(
-                      color: c.brand,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: SiSpace.x3),
+                _barraBusqueda(c, isNarrow, filtered.length),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(name,
-                          style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: c.ink),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis),
-                      if ((company as String).isNotEmpty)
-                        Text(company,
-                            style: TextStyle(fontSize: 13, color: c.ink3),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis),
-                    ],
-                  ),
-                ),
-                PopupMenuButton<String>(
-                  icon: Icon(Icons.more_vert, size: 18, color: c.ink4),
-                  onSelected: (v) {
-                    if (v == 'edit') onEdit();
-                    if (v == 'delete') onDelete();
-                  },
-                  itemBuilder: (context) => [
-                    PopupMenuItem(
-                      value: 'edit',
-                      child: Row(children: [
-                        Icon(Icons.edit_outlined, size: 16, color: c.ink2),
-                        const SizedBox(width: 12),
-                        const Text('Editar'),
-                      ]),
-                    ),
-                    PopupMenuItem(
-                      value: 'delete',
-                      child: Row(children: [
-                        Icon(Icons.delete_outline, size: 16, color: c.danger),
-                        const SizedBox(width: 12),
-                        Text('Eliminar',
-                            style: TextStyle(color: c.danger)),
-                      ]),
-                    ),
-                  ],
+                  child: filtered.isEmpty
+                      ? _buildEmptyState(c)
+                      : RefreshIndicator(
+                          onRefresh: _fetchContacts,
+                          color: c.brand,
+                          child: _lista(c, filtered, isNarrow),
+                        ),
                 ),
               ],
             ),
-          ),
-
-          Divider(height: 1, color: c.line),
-
-          // ── Phone (tap to copy) ──────────────────────────────────────
-          if ((phone as String).isNotEmpty)
-            InkWell(
-              onTap: () => copyText(phone, 'Teléfono'),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: SiSpace.x4, vertical: 14),
-                child: Row(
-                  children: [
-                    Icon(Icons.phone_outlined, size: 17, color: c.ink3),
-                    const SizedBox(width: SiSpace.x3),
-                    Expanded(
-                      child: Text(phone,
-                          style: TextStyle(fontSize: 14, color: c.ink2),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis),
-                    ),
-                    Icon(Icons.copy_outlined, size: 17, color: c.ink4),
-                  ],
-                ),
-              ),
-            ),
-
-          // ── Email (tap to copy) ──────────────────────────────────────
-          if ((email as String).isNotEmpty)
-            InkWell(
-              onTap: () => copyText(email, 'Correo'),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: SiSpace.x4, vertical: 14),
-                child: Row(
-                  children: [
-                    Icon(Icons.mail_outline, size: 17, color: c.ink3),
-                    const SizedBox(width: SiSpace.x3),
-                    Expanded(
-                      child: Text(email,
-                          style: TextStyle(fontSize: 14, color: c.ink2),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis),
-                    ),
-                    Icon(Icons.copy_outlined, size: 17, color: c.ink4),
-                  ],
-                ),
-              ),
-            ),
-
-          // ── Category tag ─────────────────────────────────────────────
-          if ((category as String).isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                  SiSpace.x4, 0, SiSpace.x4, SiSpace.x3),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: c.bg,
-                  borderRadius: SiRadius.rPill,
-                  border: Border.all(color: c.line),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 4,
-                      height: 4,
-                      decoration: BoxDecoration(
-                          color: c.ink4, shape: BoxShape.circle),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(category,
-                        style: TextStyle(
-                            fontSize: 11,
-                            color: c.ink3,
-                            fontWeight: FontWeight.w500)),
-                  ],
-                ),
-              ),
-            ),
-        ],
-      ),
     );
   }
-}
 
-// ── Desktop grid tile ─────────────────────────────────────────────────────────
+  /// Buscador, filtro de empresa y el botón de alta, todos en el mismo renglón y a la misma altura:
+  /// el relleno vertical se define una vez y lo comparten los controles para que no se desalineen.
+  Widget _barraBusqueda(SiColors c, bool isNarrow, int visibles) {
+    const relleno = EdgeInsets.symmetric(horizontal: 12, vertical: 11);
+    final total = _contacts.length;
 
-class _ContactGridTile extends StatelessWidget {
-  final Map<String, dynamic> item;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
+    final buscador = TextField(
+      controller: _searchController,
+      onChanged: (v) => setState(() => _searchQuery = v),
+      style: const TextStyle(fontSize: 13.5),
+      decoration: InputDecoration(
+        hintText: 'Buscar por nombre, empresa, correo o teléfono…',
+        hintStyle: TextStyle(fontSize: 13, color: c.ink4),
+        prefixIcon: Icon(Icons.search, size: 18, color: c.ink3),
+        prefixIconConstraints: const BoxConstraints(minWidth: 38, minHeight: 0),
+        suffixIcon: _searchQuery.isEmpty
+            ? null
+            : InkWell(
+                onTap: () {
+                  _searchController.clear();
+                  setState(() => _searchQuery = '');
+                },
+                child: Icon(Icons.close, size: 16, color: c.ink3),
+              ),
+        suffixIconConstraints: const BoxConstraints(minWidth: 34, minHeight: 0),
+        isDense: true,
+        contentPadding: relleno,
+        border: OutlineInputBorder(borderRadius: SiRadius.rMd),
+      ),
+    );
 
-  const _ContactGridTile({
-    required this.item,
-    required this.onEdit,
-    required this.onDelete,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = SiColors.of(context);
-    final name = item['nombre'] ?? 'Sin Nombre';
-    final company = item['empresa'] ?? '';
-    final email = item['correo'] ?? '';
-    final phone = item['telefono'] ?? '';
-    final category = item['otro'] ?? '';
-    final initials = name.split(' ').take(2).map((e) => e.isNotEmpty ? e[0] : '').join('').toUpperCase();
+    final empresas = _empresas;
 
     return Container(
+      padding: EdgeInsets.fromLTRB(
+          isNarrow ? SiSpace.x4 : SiSpace.x5, SiSpace.x3,
+          isNarrow ? SiSpace.x4 : SiSpace.x5, SiSpace.x3),
       decoration: BoxDecoration(
-        border: Border.all(color: c.line.withOpacity(0.5), width: 0.5),
+        color: c.panel,
+        border: Border(bottom: BorderSide(color: c.line)),
       ),
-      padding: EdgeInsets.all(SiSpace.x5),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Avatar
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: c.brandTint,
-                  borderRadius: SiRadius.rMd,
+          Expanded(child: buscador),
+          // Con una sola empresa el filtro no filtra nada; sólo estorbaría.
+          if (!isNarrow && empresas.length > 1) ...[
+            const SizedBox(width: SiSpace.x3),
+            SizedBox(
+              width: 230,
+              child: DropdownButtonFormField<String>(
+                value: _empresa,
+                isExpanded: true,
+                isDense: true,
+                style: TextStyle(fontSize: 13, color: c.ink),
+                icon: Icon(Icons.expand_more, size: 18, color: c.ink3),
+                decoration: InputDecoration(
+                  isDense: true,
+                  contentPadding: relleno,
+                  prefixIcon: Icon(Icons.business_outlined, size: 16, color: c.ink3),
+                  prefixIconConstraints:
+                      const BoxConstraints(minWidth: 34, minHeight: 0),
+                  border: OutlineInputBorder(borderRadius: SiRadius.rMd),
                 ),
-                alignment: Alignment.center,
-                child: Text(
-                  initials,
-                  style: TextStyle(
-                    color: c.brand,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 15,
+                items: [
+                  DropdownMenuItem(
+                    value: 'todas',
+                    child: Text('Todas las empresas',
+                        style: TextStyle(fontSize: 13, color: c.ink2)),
                   ),
-                ),
-              ),
-              SizedBox(width: SiSpace.x4),
-              // Name & Company
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: c.ink,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                  for (final e in empresas)
+                    DropdownMenuItem(
+                      value: e,
+                      child: Text(e,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 13, color: c.ink2)),
                     ),
-                    if (company.isNotEmpty)
-                      Text(
-                        company,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: c.ink3,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                  ],
-                ),
-              ),
-              // Actions
-              _buildPopupMenu(c),
-            ],
-          ),
-          const Spacer(),
-          // Details
-          if (phone.isNotEmpty)
-            _buildDetailRow(Icons.phone_outlined, phone, c),
-          if (email.isNotEmpty)
-            _buildDetailRow(Icons.mail_outline, email, c, copyable: true),
-          
-          SizedBox(height: SiSpace.x3),
-          // Tag
-          if (category.isNotEmpty)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: c.bg,
-                borderRadius: SiRadius.rPill,
-                border: Border.all(color: c.line),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 4,
-                    height: 4,
-                    decoration: BoxDecoration(color: c.ink4, shape: BoxShape.circle),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    category,
-                    style: TextStyle(fontSize: 11, color: c.ink3, fontWeight: FontWeight.w500),
-                  ),
                 ],
+                onChanged: (v) => setState(() => _empresa = v ?? 'todas'),
               ),
             ),
+          ],
+          const SizedBox(width: SiSpace.x3),
+          Text(
+            visibles == total ? '$total' : '$visibles de $total',
+            style: TextStyle(
+                fontSize: 12,
+                color: c.ink3,
+                fontFeatures: const [FontFeature.tabularFigures()]),
+          ),
+          if (!isNarrow) ...[
+            const SizedBox(width: SiSpace.x3),
+            SizedBox(
+              height: 40,
+              child: ElevatedButton.icon(
+                onPressed: () => _showContactForm(),
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('Contacto',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: c.brand,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  shape: const RoundedRectangleBorder(borderRadius: SiRadius.rMd),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildDetailRow(IconData icon, String text, SiColors c, {bool copyable = false}) {
-    final content = Row(
-      children: [
-        Icon(icon, size: 14, color: c.ink4),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            text,
-            style: TextStyle(fontSize: 13, color: c.ink2),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        if (copyable)
-          Icon(Icons.copy_outlined, size: 13, color: c.ink4),
-      ],
-    );
+  Widget _lista(SiColors c, List<Map<String, dynamic>> items, bool isNarrow) {
+    return SelectionArea(
+      child: LayoutBuilder(
+        builder: (context, box) {
+          final columnas = box.maxWidth >= 1500
+              ? 3
+              : box.maxWidth >= 1000
+                  ? 2
+                  : 1;
 
-    if (!copyable) {
-      return Padding(padding: const EdgeInsets.only(bottom: 2), child: content);
-    }
+          // Se agrupa en renglones de N en lugar de armar columnas completas, para que ListView
+          // siga construyendo sólo lo visible.
+          final grupos = <List<Map<String, dynamic>>>[];
+          for (var i = 0; i < items.length; i += columnas) {
+            grupos.add(items.sublist(i, (i + columnas).clamp(0, items.length)));
+          }
 
-    return Builder(
-      builder: (context) => InkWell(
-        borderRadius: BorderRadius.circular(4),
-        onTap: () {
-          Clipboard.setData(ClipboardData(text: text));
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Correo copiado: $text'),
-              duration: const Duration(seconds: 2),
-              behavior: SnackBarBehavior.floating,
-              width: 320,
-            ),
+          return ListView.separated(
+            padding: EdgeInsets.fromLTRB(
+                isNarrow ? SiSpace.x4 : SiSpace.x5, SiSpace.x2,
+                isNarrow ? SiSpace.x4 : SiSpace.x5, isNarrow ? 96 : SiSpace.x4),
+            itemCount: grupos.length,
+            separatorBuilder: (_, __) => Divider(height: 1, color: c.line2),
+            itemBuilder: (ctx, i) {
+              final grupo = grupos[i];
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (var j = 0; j < columnas; j++) ...[
+                    if (j > 0) const SizedBox(width: SiSpace.x5),
+                    Expanded(
+                      child: j < grupo.length
+                          ? _fila(c, grupo[j])
+                          : const SizedBox.shrink(),
+                    ),
+                  ],
+                ],
+              );
+            },
           );
         },
-        child: Padding(padding: const EdgeInsets.only(bottom: 2), child: content),
       ),
     );
   }
 
-  Widget _buildPopupMenu(SiColors c) {
-    return PopupMenuButton<String>(
-      icon: Icon(Icons.more_vert, size: 18, color: c.ink4),
-      onSelected: (v) {
-        if (v == 'edit') onEdit();
-        if (v == 'delete') onDelete();
-      },
-      itemBuilder: (context) => [
-        PopupMenuItem(
-          value: 'edit',
-          child: Row(
+  Widget _fila(SiColors c, Map<String, dynamic> item) {
+    String t(String k) => (item[k] ?? '').toString().trim();
+    final nombre = t('nombre').isEmpty ? 'Sin nombre' : t('nombre');
+    final empresa = t('empresa');
+    final correo = t('correo');
+    final telefono = t('telefono');
+    final otro = t('otro');
+
+    final identidad = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 28, height: 28,
+          decoration: BoxDecoration(color: c.brandTint, shape: BoxShape.circle),
+          child: Center(
+            child: Text(_iniciales(nombre),
+                style: TextStyle(
+                    fontSize: 11, fontWeight: FontWeight.w700, color: c.brand)),
+          ),
+        ),
+        const SizedBox(width: SiSpace.x2),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.edit_outlined, size: 16, color: c.ink2),
-              const SizedBox(width: 12),
-              const Text('Editar'),
+              Text(nombre,
+                  style: TextStyle(
+                      fontSize: 13,
+                      height: 1.25,
+                      fontWeight: FontWeight.w600,
+                      color: c.ink)),
+              if (empresa.isNotEmpty)
+                Text(empresa,
+                    style: TextStyle(fontSize: 11, height: 1.3, color: c.ink3),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis),
             ],
           ),
         ),
-        PopupMenuItem(
-          value: 'delete',
-          child: Row(
-            children: [
-              Icon(Icons.delete_outline, size: 16, color: c.danger),
-              const SizedBox(width: 12),
-              Text('Eliminar', style: TextStyle(color: c.danger)),
+        // El menú va aquí y no al final del renglón: en varias columnas el extremo derecho de la
+        // celda queda lejos del nombre al que pertenece.
+        SizedBox(
+          width: 26,
+          child: PopupMenuButton<String>(
+            icon: Icon(Icons.more_vert, size: 16, color: c.ink3),
+            padding: EdgeInsets.zero,
+            tooltip: 'Opciones',
+            onSelected: (v) {
+              if (v == 'editar') _showContactForm(contact: item);
+              if (v == 'eliminar') _deleteContact(item['id']);
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'editar', child: Text('Editar')),
+              PopupMenuItem(value: 'eliminar', child: Text('Eliminar')),
             ],
           ),
         ),
       ],
     );
+
+    final contacto = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (correo.isNotEmpty) _contacto(c, Icons.mail_outline, correo, 'Correo'),
+        if (telefono.isNotEmpty)
+          _contacto(c, Icons.phone_outlined, telefono, 'Teléfono'),
+        if (otro.isNotEmpty)
+          _contacto(c, Icons.info_outline, otro, 'Dato'),
+        if (correo.isEmpty && telefono.isEmpty && otro.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(left: 4, top: 2),
+            child: Text('Sin datos de contacto',
+                style: TextStyle(fontSize: 11, color: c.ink4)),
+          ),
+      ],
+    );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: SiSpace.x2),
+      child: LayoutBuilder(
+        builder: (context, box) {
+          // Igual que en el Directorio: multicolumna siempre apila, y sólo la columna única usa el
+          // formato ancho. Con el corte en 640 el formato cambiaba a media franja.
+          if (box.maxWidth < 700) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                identidad,
+                const SizedBox(height: 3),
+                Padding(
+                  padding: const EdgeInsets.only(left: 36),
+                  child: contacto,
+                ),
+              ],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(flex: 5, child: identidad),
+              const SizedBox(width: SiSpace.x3),
+              Expanded(flex: 4, child: contacto),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _contacto(SiColors c, IconData icono, String valor, String que) {
+    return InkWell(
+      onTap: () => _copiar(valor, que),
+      borderRadius: BorderRadius.circular(5),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 1.5, horizontal: 4),
+        child: Row(children: [
+          Icon(icono, size: 12, color: c.ink4),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(valor,
+                style: TextStyle(fontSize: 11.5, color: c.ink2),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis),
+          ),
+          const SizedBox(width: 4),
+          Tooltip(
+            message: 'Copiar ${que.toLowerCase()}',
+            child: Icon(Icons.copy_rounded, size: 11, color: c.ink4),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  static String _iniciales(String nombre) {
+    final partes =
+        nombre.split(RegExp(r'\s+')).where((x) => x.isNotEmpty).toList();
+    if (partes.isEmpty) return '?';
+    if (partes.length == 1) return partes.first[0].toUpperCase();
+    return (partes[0][0] + partes[1][0]).toUpperCase();
   }
 }
