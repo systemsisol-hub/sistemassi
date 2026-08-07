@@ -45,6 +45,7 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
   DateTime? _hasta;
 
   String _filtroEstatus = 'todos';
+  String _filtroZona = 'todas';
   String _busqueda = '';
 
   @override
@@ -207,9 +208,21 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
     return lista;
   }
 
+  /// Las zonas presentes, para el desplegable.
+  List<String> get _zonas {
+    final z = _empleados
+        .map((f) => f.zona)
+        .where((x) => x.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+    return z;
+  }
+
   List<_FilaEmpleado> get _empleadosFiltrados {
     final q = _busqueda.trim().toLowerCase();
     return _empleados.where((f) {
+      if (_filtroZona != 'todas' && f.zona != _filtroZona) return false;
       if (_filtroEstatus != 'todos' && f.estatus != _filtroEstatus) return false;
       if (q.isEmpty) return true;
       return f.nombre.toLowerCase().contains(q) ||
@@ -232,6 +245,23 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
         .map((t) => (t.key, (aTiempo[t.key] ?? 0) / t.value * 100, t.value))
         .toList()
       ..sort((a, b) => a.$2.compareTo(b.$2));
+    return lista;
+  }
+
+  /// Días a descontar por zona. Se suma el descuento de CADA PERSONA y no se recalcula sobre los
+  /// totales de la zona: el cociente de los retardos se redondea por persona, y hacerlo sobre el
+  /// agregado inflaría la cifra.
+  ///
+  /// No respeta el filtro de zona de la tabla a propósito: la gráfica existe para comparar las
+  /// zonas entre sí, y filtrada a una sola dejaría una barra.
+  List<(String, int)> get _descuentoPorZona {
+    final porZona = <String, int>{};
+    for (final f in _empleados) {
+      final z = f.zona.isEmpty ? 'Sin zona' : f.zona;
+      porZona[z] = (porZona[z] ?? 0) + f.diasDescuento;
+    }
+    final lista = porZona.entries.map((e) => (e.key, e.value)).toList()
+      ..sort((a, b) => b.$2.compareTo(a.$2));
     return lista;
   }
 
@@ -305,7 +335,33 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
                 },
               ),
               const SizedBox(height: SiSpace.x5),
-              _tarjetaDetalle(c),
+              LayoutBuilder(
+                builder: (context, box) {
+                  final detalle = _tarjetaDetalle(c);
+                  final zonas = _tarjetaDescuentoZona(c);
+                  // La tabla necesita 838px para sus ocho columnas; con la gráfica al lado hacen
+                  // falta unos 1200 de área útil. Por debajo se apilan, que es mejor que dejar la
+                  // tabla desplazándose de lado con la gráfica apretada.
+                  if (box.maxWidth < 1200) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        detalle,
+                        const SizedBox(height: SiSpace.x4),
+                        zonas,
+                      ],
+                    );
+                  }
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: detalle),
+                      const SizedBox(width: SiSpace.x4),
+                      SizedBox(width: 330, child: zonas),
+                    ],
+                  );
+                },
+              ),
             ] else
               _tarjetaMisDias(c),
           ],
@@ -565,6 +621,159 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
     );
   }
 
+  Widget _nota(SiColors c, IconData icono, String texto) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icono, size: 13, color: c.ink4),
+        const SizedBox(width: SiSpace.x2),
+        Expanded(
+          child: Text(texto,
+              style: TextStyle(fontSize: 10.5, color: c.ink3, height: 1.4)),
+        ),
+      ],
+    );
+  }
+
+  // ── Días a descontar por zona ──────────────────────────────────────────────
+
+  Widget _tarjetaDescuentoZona(SiColors c) {
+    final zonas = _descuentoPorZona;
+    final maximo = zonas.isEmpty
+        ? 0
+        : zonas.map((z) => z.$2).reduce((a, b) => a > b ? a : b);
+    // La escala se redondea al múltiplo de 5 de arriba para que las marcas salgan en números
+    // redondos en lugar de terminar en 47 o 82.
+    final tope = maximo == 0 ? 5 : ((maximo / 5).ceil() * 5);
+    final total = zonas.fold<int>(0, (a, z) => a + z.$2);
+
+    return _tarjeta(
+      c,
+      Icons.money_off,
+      'Días a descontar por zona',
+      zonas.isEmpty
+          ? _sinDatos(c)
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(
+                  height: 190,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Eje: sólo tres marcas. Con la tarjeta a 330px, más números se encimarían.
+                      SizedBox(
+                        width: 22,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            for (final v in [tope, tope ~/ 2, 0])
+                              Text('$v',
+                                  style: TextStyle(
+                                      fontSize: 9,
+                                      color: c.ink4,
+                                      fontFeatures: const [
+                                        FontFeature.tabularFigures()
+                                      ])),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            for (final z in zonas)
+                              Expanded(
+                                child: _barraVertical(c, z.$1, z.$2, tope),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: SiSpace.x3),
+                Divider(height: 1, color: c.line2),
+                const SizedBox(height: SiSpace.x2),
+                Row(children: [
+                  Text('Total del periodo',
+                      style: TextStyle(fontSize: 11.5, color: c.ink3)),
+                  const Spacer(),
+                  Text('$total ${total == 1 ? 'día' : 'días'}',
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: total > 0 ? c.danger : c.success)),
+                ]),
+                const SizedBox(height: SiSpace.x2),
+                _nota(
+                  c,
+                  Icons.info_outline,
+                  'Cada falta sin justificar es 1 día, y los retardos se acumulan según la regla '
+                  'de Configuración. El cociente se redondea por persona.',
+                ),
+              ],
+            ),
+    );
+  }
+
+  /// Una barra con su valor dentro y el nombre de la zona debajo. El texto sale arriba de la barra
+  /// cuando ésta es demasiado baja para contenerlo.
+  Widget _barraVertical(SiColors c, String zona, int valor, int tope) {
+    final fraccion = tope == 0 ? 0.0 : (valor / tope).clamp(0.0, 1.0);
+
+    return Padding
+      (padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Column(
+        children: [
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, box) {
+                final alto = box.maxHeight * fraccion;
+                final cabeDentro = alto >= 22;
+                return Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    if (!cabeDentro)
+                      Text('$valor',
+                          style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: c.ink2)),
+                    Container(
+                      height: alto,
+                      decoration: BoxDecoration(
+                        color: c.brand,
+                        borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(4)),
+                      ),
+                      alignment: Alignment.center,
+                      child: cabeDentro
+                          ? Text('$valor',
+                              style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white))
+                          : null,
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 5),
+          Text(zona,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 9.5, height: 1.2, color: c.ink3)),
+        ],
+      ),
+    );
+  }
+
   // ── Detalle por empleado (administrador) ───────────────────────────────────
 
   Widget _tarjetaDetalle(SiColors c) {
@@ -578,18 +787,66 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
       Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TextField(
-            controller: _buscarCtrl,
-            onChanged: (v) => setState(() => _busqueda = v),
-            style: const TextStyle(fontSize: 13),
-            decoration: InputDecoration(
-              hintText: 'Buscar por nombre, número o zona…',
-              hintStyle: TextStyle(fontSize: 13, color: c.ink4),
-              prefixIcon: Icon(Icons.search, size: 17, color: c.ink3),
-              isDense: true,
-              border: OutlineInputBorder(borderRadius: SiRadius.rMd),
+          // Buscador y zona en el mismo renglón. El relleno vertical se define una vez y lo
+          // comparten los dos controles, para que no se desalineen.
+          Row(children: [
+            Expanded(
+              child: TextField(
+                controller: _buscarCtrl,
+                onChanged: (v) => setState(() => _busqueda = v),
+                style: const TextStyle(fontSize: 13),
+                decoration: InputDecoration(
+                  hintText: 'Buscar por nombre o número…',
+                  hintStyle: TextStyle(fontSize: 13, color: c.ink4),
+                  prefixIcon: Icon(Icons.search, size: 17, color: c.ink3),
+                  prefixIconConstraints:
+                      const BoxConstraints(minWidth: 36, minHeight: 0),
+                  isDense: true,
+                  contentPadding: _rellenoControl,
+                  border: OutlineInputBorder(borderRadius: SiRadius.rMd),
+                ),
+              ),
             ),
-          ),
+            // Con una sola zona el filtro no filtra nada; sólo estorbaría.
+            if (_zonas.length > 1) ...[
+              const SizedBox(width: SiSpace.x3),
+              SizedBox(
+                width: 190,
+                child: DropdownButtonFormField<String>(
+                  value: _zonas.contains(_filtroZona) ? _filtroZona : 'todas',
+                  isExpanded: true,
+                  isDense: true,
+                  style: TextStyle(fontSize: 13, color: c.ink),
+                  icon: Icon(Icons.expand_more, size: 18, color: c.ink3),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    contentPadding: _rellenoControl,
+                    prefixIcon:
+                        Icon(Icons.place_outlined, size: 15, color: c.ink3),
+                    prefixIconConstraints:
+                        const BoxConstraints(minWidth: 32, minHeight: 0),
+                    border: OutlineInputBorder(borderRadius: SiRadius.rMd),
+                  ),
+                  items: [
+                    DropdownMenuItem(
+                      value: 'todas',
+                      child: Text('Todas las zonas',
+                          style: TextStyle(fontSize: 13, color: c.ink2)),
+                    ),
+                    for (final z in _zonas)
+                      DropdownMenuItem(
+                        value: z,
+                        child: Text(z,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 13, color: c.ink2)),
+                      ),
+                  ],
+                  onChanged: (v) =>
+                      setState(() => _filtroZona = v ?? 'todas'),
+                ),
+              ),
+            ],
+          ]),
           const SizedBox(height: SiSpace.x3),
           Wrap(
             spacing: SiSpace.x2,
@@ -654,6 +911,11 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
       ),
     );
   }
+
+  /// Relleno vertical compartido por el buscador y el desplegable, para que queden a la
+  /// misma altura sin ajustarlo a ojo en cada uno.
+  static const _rellenoControl =
+      EdgeInsets.symmetric(horizontal: 12, vertical: 10);
 
   static const _anchos = [230.0, 120.0, 110.0, 70.0, 60.0, 80.0, 78.0, 90.0];
 
