@@ -39,15 +39,18 @@ class _AiPageState extends State<AiPage> {
   /// Cada sugerencia lleva el permiso que la habilita, el mismo que exige la Edge Function. Sin
   /// esto se ofrecería un atajo que responde «no tengo acceso a esa información»: peor que no
   /// ofrecerlo.
+  /// La clave vacía significa que no depende de ningún permiso de página. Buscar en el directorio
+  /// está al alcance de cualquiera que use el asistente.
   static const _quickActions = [
-    (Icons.search,              'Buscar colaborador', 'Quiero buscar a un colaborador específico', 'show_cssi'),
+    (Icons.search,              'Buscar colaborador', 'Quiero buscar a un colaborador específico', ''),
     (Icons.event_note_outlined, 'Nueva incidencia',   'Quiero crear una solicitud de vacaciones',  'show_incidencias'),
   ];
 
   /// Sin excepción para administradores, igual que la Edge Function: la página de Usuarios es la
   /// única fuente de verdad. Si aquí se saltara el permiso, se ofrecerían atajos que el servidor
-  /// rechaza.
-  bool _tienePermiso(String clave) => widget.permissions[clave] == true;
+  /// rechaza. La clave vacía es «no requiere permiso».
+  bool _tienePermiso(String clave) =>
+      clave.isEmpty || widget.permissions[clave] == true;
 
   @override
   void initState() {

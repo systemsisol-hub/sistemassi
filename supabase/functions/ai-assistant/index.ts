@@ -43,10 +43,17 @@ const ADMIN_ONLY_TOOLS = new Set([
 // Colgar las escrituras del `show_*` ampliaría permisos en lugar de restringirlos: cualquiera con
 // `show_incidencias` podría aprobar su propia solicitud de vacaciones.
 //
-// `enviar_notificacion` no aparece porque no corresponde a ninguna página; queda disponible para
-// cualquiera que pueda usar el asistente.
+// Dos herramientas no aparecen aquí, y por razones distintas:
+//
+// - `enviar_notificacion` no corresponde a ninguna página.
+// - `buscar_colaborador` es consulta de DIRECTORIO, que es una operación de menor privilegio que
+//   ver la página de Colaboradores. Atarla a `show_cssi` dejó a un gerente sin poder preguntar
+//   quién lleva Recursos Humanos, y concederle el permiso le habría abierto los expedientes
+//   completos: mucho más de lo que necesitaba. Los campos siguen recortados por rol —un usuario
+//   normal ve 15 y un administrador 22— así que lo privado queda fuera igual.
+//
+// Crear y actualizar colaboradores SÍ siguen pidiendo `show_cssi` y administrador.
 const PERMISO_POR_HERRAMIENTA: Record<string, string> = {
-  buscar_colaborador:     "show_cssi",
   crear_colaborador:      "show_cssi",
   actualizar_colaborador: "show_cssi",
   buscar_incidencias:     "show_incidencias",

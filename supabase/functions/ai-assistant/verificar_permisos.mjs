@@ -69,7 +69,10 @@ console.log(`Con permiso mapeado: ${Object.keys(PERMISO).length} | solo-admin: $
 console.log();
 
 console.log('1. Toda herramienta tiene permiso, o esta exenta a proposito');
-const EXENTAS = new Set(['enviar_notificacion']);
+// enviar_notificacion: no corresponde a ninguna pagina.
+// buscar_colaborador: consulta de directorio, menor privilegio que ver la pagina de Colaboradores.
+//   Los campos siguen recortados por rol, asi que lo privado no se expone.
+const EXENTAS = new Set(['enviar_notificacion', 'buscar_colaborador']);
 for (const h of Object.keys(HERRAMIENTAS)) {
   check(h in PERMISO || EXENTAS.has(h),
     `${h} ${h in PERMISO ? '-> ' + PERMISO[h] : '(exenta)'}`);
@@ -128,8 +131,13 @@ for (const [quien, esAdmin, perms] of REALES.filter((r) => !r[1])) {
 }
 
 console.log('\n7. Sin permisos, no alcanza nada salvo lo exento');
+// Se compara contra EXENTAS y no contra una lista escrita a mano: asi la comprobacion sigue
+// significando algo cuando cambie el conjunto de exentas, en lugar de haber que editarla.
 const nada = Object.keys(HERRAMIENTAS).filter((h) => puedeUsar(h, false, {}));
-check(nada.length === 1 && nada[0] === 'enviar_notificacion', `queda: ${nada.join(',') || '(nada)'}`);
+const sobran = nada.filter((h) => !EXENTAS.has(h));
+check(sobran.length === 0,
+  `alcanza sin permisos: ${nada.join(',') || '(nada)'}`
+  + (sobran.length ? ` | NO deberia: ${sobran.join(',')}` : ''));
 
 // Regresion real: el nombre se inyectaba solo para los usuarios normales, de modo que con los
 // administradores -que son quienes mas lo usan- Soli no sabia con quien hablaba.
