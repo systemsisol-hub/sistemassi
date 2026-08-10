@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -6,6 +9,7 @@ import 'avisos_store.dart';
 import 'theme/si_theme.dart';
 import 'widgets/banner_avisos.dart';
 import 'widgets/dialogo_aviso.dart';
+import 'widgets/imagen_aviso.dart';
 import 'widgets/lista_avisos.dart';
 
 /// Gestión de avisos: los redacta, programa y apaga quien tenga el permiso `show_avisos`.
@@ -582,6 +586,15 @@ class _FormularioAvisoState extends State<_FormularioAviso> {
   bool _guardando = false;
   int? _alcance;
 
+  /// La imagen ya publicada, si el aviso la traia.
+  String? _imagenUrl;
+
+  /// La recien elegida, todavia sin subir. Se sube al guardar y no al elegir: si la persona
+  /// cancela el formulario, no queda un archivo huerfano en el bucket.
+  Uint8List? _imagenBytes;
+  String? _imagenNombre;
+  bool _subiendo = false;
+
   @override
   void initState() {
     super.initState();
@@ -599,6 +612,9 @@ class _FormularioAvisoState extends State<_FormularioAviso> {
       _ubicaciones.addAll(((a['ubicaciones'] as List?) ?? []).cast<String>());
       _areas.addAll(((a['areas'] as List?) ?? []).cast<String>());
       _empresas.addAll(((a['empresas'] as List?) ?? []).cast<String>());
+      _imagenUrl = (a['imagen_url'] ?? '').toString().trim().isEmpty
+          ? null
+          : a['imagen_url'].toString();
       _desde = DateTime.tryParse((a['desde'] ?? '').toString())?.toLocal() ??
           DateTime.now();
       _hasta = DateTime.tryParse((a['hasta'] ?? '').toString())?.toLocal();
@@ -668,6 +684,17 @@ class _FormularioAvisoState extends State<_FormularioAviso> {
     }
     setState(() => _guardando = true);
     try {
+      // Se sube ANTES de escribir la fila: si la subida falla, el aviso no queda apuntando a una
+      // imagen que no existe.
+      if (_imagenBytes != null) {
+        final url = await _subirImagen();
+        if (url == null) {
+          setState(() => _guardando = false);
+          return;
+        }
+        _imagenUrl = url;
+      }
+
       final datos = {
         'titulo': _titulo.text.trim(),
         'cuerpo': _cuerpo.text.trim(),
@@ -679,6 +706,7 @@ class _FormularioAvisoState extends State<_FormularioAviso> {
         'en_modal': _enModal,
         'en_banner': _enBanner,
         'en_social': _enSocial,
+        'imagen_url': _imagenUrl,
         'insistir_modal': _insistirModal,
         'insistir_banner': _insistirBanner,
         'para_todos': _paraTodos,
@@ -708,6 +736,66 @@ class _FormularioAvisoState extends State<_FormularioAviso> {
           backgroundColor: Colors.red,
         ));
       }
+    }
+  }
+
+  /// Elige la imagen. Solo la carga en memoria: la subida ocurre al guardar.
+  Future<void> _elegirImagen() async {
+    final r = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['jpg', 'jpeg', 'png', 'webp', 'gif'],
+      withData: true,
+    );
+    final archivo = r?.files.firstOrNull;
+    if (archivo == null || archivo.bytes == null) return;
+
+    // El mismo tope que impone el bucket. Validarlo aqui evita que la persona espere la subida
+    // completa para recibir un error del servidor; el tope de verdad sigue siendo el del servidor.
+    const maximo = 5 * 1024 * 1024;
+    if (archivo.bytes!.length > maximo) {
+      if (!mounted) return;
+      final mb = (archivo.bytes!.length / 1024 / 1024).toStringAsFixed(1);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('La imagen pesa $mb MB y el maximo es 5 MB.'),
+      ));
+      return;
+    }
+
+    setState(() {
+      _imagenBytes = archivo.bytes;
+      _imagenNombre = archivo.name;
+    });
+  }
+
+  Future<String?> _subirImagen() async {
+    setState(() => _subiendo = true);
+    try {
+      final ext = (_imagenNombre ?? 'imagen.jpg').split('.').last.toLowerCase();
+      final almacen = Supabase.instance.client.storage.from('avisos-imagenes');
+      // El nombre lleva marca de tiempo para no pisar la imagen de otro aviso ni la anterior de
+      // este: con upsert sobre un nombre fijo, editar un aviso cambiaria la imagen de golpe en las
+      // pantallas que ya la tuvieran en cache.
+      final ruta = '${DateTime.now().millisecondsSinceEpoch}.$ext';
+      await almacen.uploadBinary(ruta, _imagenBytes!,
+          fileOptions: FileOptions(
+              contentType: switch (ext) {
+                'png' => 'image/png',
+                'webp' => 'image/webp',
+                'gif' => 'image/gif',
+                _ => 'image/jpeg',
+              },
+              upsert: false));
+      return almacen.getPublicUrl(ruta);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('No se pudo subir la imagen: $e'),
+          backgroundColor: Colors.red,
+        ));
+      }
+      return null;
+    } finally {
+      if (mounted) setState(() => _subiendo = false);
     }
   }
 
@@ -786,6 +874,9 @@ class _FormularioAvisoState extends State<_FormularioAviso> {
                         border: OutlineInputBorder(borderRadius: SiRadius.rMd),
                       ),
                     ),
+                    const SizedBox(height: SiSpace.x5),
+                    _rotulo(c, 'Imagen (opcional)'),
+                    _bloqueImagen(c),
                     const SizedBox(height: SiSpace.x5),
                     _rotulo(c, 'Nivel'),
                     Row(
@@ -922,6 +1013,70 @@ class _FormularioAvisoState extends State<_FormularioAviso> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _bloqueImagen(SiColors c) {
+    final hayNueva = _imagenBytes != null;
+    final hayAlguna = hayNueva || _imagenUrl != null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (hayAlguna)
+          ClipRRect(
+            borderRadius: SiRadius.rSm,
+            child: Container(
+              color: c.bg,
+              constraints: const BoxConstraints(maxHeight: 150),
+              width: double.infinity,
+              // La elegida se pinta desde memoria: se ve antes de subirla, que es cuando todavia se
+              // puede cambiar de opinion.
+              child: hayNueva
+                  ? Image.memory(_imagenBytes!, fit: BoxFit.contain)
+                  : ImagenAviso(url: _imagenUrl!, altoMaximo: 150),
+            ),
+          ),
+        if (hayAlguna) const SizedBox(height: SiSpace.x2),
+        Row(children: [
+          OutlinedButton.icon(
+            onPressed: _subiendo ? null : _elegirImagen,
+            icon: const Icon(Icons.image_outlined, size: 16),
+            label: Text(hayAlguna ? 'Cambiar imagen' : 'Elegir imagen'),
+          ),
+          if (hayAlguna) ...[
+            const SizedBox(width: SiSpace.x2),
+            TextButton.icon(
+              onPressed: _subiendo
+                  ? null
+                  : () => setState(() {
+                        _imagenBytes = null;
+                        _imagenNombre = null;
+                        _imagenUrl = null;
+                      }),
+              icon: const Icon(Icons.close, size: 16),
+              label: const Text('Quitar'),
+            ),
+          ],
+          if (_subiendo) ...[
+            const SizedBox(width: SiSpace.x3),
+            SizedBox(
+                width: 16,
+                height: 16,
+                child:
+                    CircularProgressIndicator(strokeWidth: 2, color: c.brand)),
+          ],
+        ]),
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(
+            hayNueva
+                ? 'Se sube al guardar. Solo se muestra en la ventana emergente y en el muro social.'
+                : 'JPG, PNG, WEBP o GIF, hasta 5 MB. El banner no muestra imagenes: es una franja.',
+            style: TextStyle(fontSize: 11, color: c.ink4),
+          ),
+        ),
+      ],
     );
   }
 

@@ -4,6 +4,7 @@ import 'package:sistemassi/avisos_store.dart';
 import 'package:sistemassi/theme/si_theme.dart';
 import 'package:sistemassi/widgets/banner_avisos.dart';
 import 'package:sistemassi/widgets/dialogo_aviso.dart';
+import 'package:sistemassi/widgets/imagen_aviso.dart';
 import 'package:sistemassi/widgets/lista_avisos.dart';
 
 /// Los tres lugares donde sale un aviso —banner, ventana emergente y muro social— y la traducción de
@@ -24,6 +25,7 @@ void main() {
     bool insistirBanner = false,
     bool vistoModal = false,
     bool vistoBanner = false,
+    String? imagenUrl,
     DateTime? hasta,
   }) =>
       Aviso(
@@ -31,6 +33,7 @@ void main() {
         titulo: titulo,
         cuerpo: cuerpo,
         nivel: nivel,
+        imagenUrl: imagenUrl,
         enModal: enModal,
         enBanner: enBanner,
         enSocial: enSocial,
@@ -79,6 +82,25 @@ void main() {
       expect(a.vistoModal, isTrue);
       expect(a.vistoBanner, isFalse);
       expect(a.hasta, isNull);
+    });
+
+    test('la imagen vacia o ausente queda en null, no en cadena vacia', () {
+      // Importa: los widgets deciden con `imagenUrl != null`, y una cadena vacia pintaria un hueco
+      // con el mensaje de error de carga en lugar de nada.
+      expect(Aviso.desde({'id': 'x', 'titulo': 'T', 'cuerpo': 'C'}).imagenUrl, isNull);
+      expect(Aviso.desde({'id': 'x', 'titulo': 'T', 'cuerpo': 'C', 'imagen_url': ''})
+          .imagenUrl, isNull);
+      expect(Aviso.desde({'id': 'x', 'titulo': 'T', 'cuerpo': 'C', 'imagen_url': '   '})
+          .imagenUrl, isNull);
+      expect(
+          Aviso.desde({'id': 'x', 'titulo': 'T', 'cuerpo': 'C',
+                       'imagen_url': 'https://x/y.png'}).imagenUrl,
+          'https://x/y.png');
+    });
+
+    test('copiaVista conserva la imagen', () {
+      final a = aviso(enModal: true, imagenUrl: 'https://x/y.png');
+      expect(a.copiaVista(CanalAviso.modal).imagenUrl, 'https://x/y.png');
     });
 
     test('un nivel desconocido cae a informativo en lugar de reventar', () {
@@ -252,6 +274,70 @@ void main() {
   });
 
   // ── Muro social ───────────────────────────────────────────────────────────
+
+  // ── La imagen ─────────────────────────────────────────────────────────────
+  //
+  // En las pruebas ninguna descarga funciona, asi que Image.network cae siempre a su errorBuilder.
+  // Eso resulta util: es exactamente el caso de una imagen borrada del bucket, y aqui se comprueba
+  // que el aviso se siga leyendo en lugar de romper la tarjeta.
+
+  group('imagen', () {
+    testWidgets('el emergente la pinta y no tapa el texto', (tester) async {
+      await tester.pumpWidget(envolver(DialogoAviso(
+          aviso: aviso(enModal: true, imagenUrl: 'https://x/cartel.png'))));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ImagenAviso), findsOneWidget);
+      expect(find.text('Mantenimiento del sistema'), findsOneWidget);
+      expect(find.textContaining('fuera de servicio'), findsOneWidget);
+      expect(find.text('Entendido'), findsOneWidget);
+    });
+
+    testWidgets('sin imagen el emergente no deja hueco', (tester) async {
+      await tester.pumpWidget(envolver(DialogoAviso(aviso: aviso(enModal: true))));
+      await tester.pumpAndSettle();
+      expect(find.byType(ImagenAviso), findsNothing);
+    });
+
+    testWidgets('el muro social la pinta', (tester) async {
+      await tester.pumpWidget(envolver(
+        ListaAvisos(avisos: [
+          aviso(enSocial: true, imagenUrl: 'https://x/cartel.png'),
+        ]),
+        ancho: 380,
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ImagenAviso), findsOneWidget);
+      expect(find.text('Mantenimiento del sistema'), findsOneWidget);
+    });
+
+    testWidgets('una imagen que no carga avisa y no rompe la tarjeta',
+        (tester) async {
+      await tester.pumpWidget(envolver(
+        ListaAvisos(avisos: [
+          aviso(enSocial: true, imagenUrl: 'https://no-existe/nada.png'),
+        ]),
+        ancho: 380,
+      ));
+      await tester.pumpAndSettle();
+
+      // El aviso se sigue leyendo; solo falta la ilustracion.
+      expect(find.text('No se pudo cargar la imagen'), findsOneWidget);
+      expect(find.textContaining('fuera de servicio'), findsOneWidget);
+    });
+
+    testWidgets('el banner NO pinta imagenes: es una franja', (tester) async {
+      await tester.pumpWidget(envolver(BannerAvisos(
+        avisos: [aviso(imagenUrl: 'https://x/cartel.png')],
+        alDescartar: (_) {},
+      )));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ImagenAviso), findsNothing);
+      expect(find.text('Mantenimiento del sistema'), findsOneWidget);
+    });
+  });
 
   group('ListaAvisos', () {
     testWidgets('sin avisos lo dice en lugar de dejar la columna vacía',

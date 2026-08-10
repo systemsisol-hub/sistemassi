@@ -85,7 +85,7 @@ class AvisosStore extends ChangeNotifier {
           .from('avisos_para_mi')
           .select('id, titulo, cuerpo, nivel, en_modal, en_banner, en_social, '
               'insistir_modal, insistir_banner, visto_modal, visto_banner, '
-              'desde, hasta')
+              'imagen_url, desde, hasta')
           // El orden del nivel se resuelve en Dart —`peso`— porque en SQL sería un CASE repetido en
           // cada consulta.
           .order('creado_en', ascending: false);
@@ -166,6 +166,7 @@ class Aviso {
     required this.titulo,
     required this.cuerpo,
     required this.nivel,
+    this.imagenUrl,
     required this.enModal,
     required this.enBanner,
     required this.enSocial,
@@ -191,6 +192,9 @@ class Aviso {
         enModal: f['en_modal'] == true,
         enBanner: f['en_banner'] == true,
         enSocial: f['en_social'] == true,
+        imagenUrl: (f['imagen_url'] ?? '').toString().trim().isEmpty
+            ? null
+            : f['imagen_url'].toString(),
         insistirModal: f['insistir_modal'] == true,
         insistirBanner: f['insistir_banner'] == true,
         vistoModal: f['visto_modal'] == true,
@@ -203,6 +207,11 @@ class Aviso {
   final String titulo;
   final String cuerpo;
   final NivelAviso nivel;
+
+  /// URL pública de la imagen, o `null`. La pintan el emergente y el muro social; el banner no, que
+  /// es una franja de 40px.
+  final String? imagenUrl;
+
   final bool enModal;
   final bool enBanner;
   final bool enSocial;
@@ -235,6 +244,7 @@ class Aviso {
         titulo: titulo,
         cuerpo: cuerpo,
         nivel: nivel,
+        imagenUrl: imagenUrl,
         enModal: enModal,
         enBanner: enBanner,
         enSocial: enSocial,

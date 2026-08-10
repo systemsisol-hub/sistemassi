@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../avisos_store.dart';
 import '../theme/si_theme.dart';
 import 'banner_avisos.dart' show colorDeNivel, etiquetaDeNivel;
+import 'imagen_aviso.dart';
 
 /// La ventana emergente de un aviso.
 ///
@@ -61,8 +62,20 @@ class DialogoAviso extends StatelessWidget {
             Flexible(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(SiSpace.x5),
-                child: SelectableText(aviso.cuerpo,
-                    style: TextStyle(fontSize: 13.5, height: 1.5, color: c.ink2)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // La imagen va ANTES del texto: en un cartel es lo que se mira primero, y dejarla
+                    // al final obligaría a desplazarse para descubrir que existe.
+                    if (aviso.imagenUrl != null) ...[
+                      ImagenAviso(url: aviso.imagenUrl!, altoMaximo: 260),
+                      const SizedBox(height: SiSpace.x4),
+                    ],
+                    SelectableText(aviso.cuerpo,
+                        style: TextStyle(
+                            fontSize: 13.5, height: 1.5, color: c.ink2)),
+                  ],
+                ),
               ),
             ),
             Padding(

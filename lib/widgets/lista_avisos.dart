@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../avisos_store.dart';
 import '../theme/si_theme.dart';
 import 'banner_avisos.dart' show colorDeNivel, etiquetaDeNivel;
+import 'imagen_aviso.dart';
 
 /// Los avisos vigentes para la tercera columna de Social, que hasta ahora decía «Próximamente».
 ///
@@ -125,6 +126,12 @@ class _Tarjeta extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (aviso.imagenUrl != null) ...[
+                  // Más baja que en el emergente: en la columna de Social conviven varias tarjetas y
+                  // una imagen alta dejaría las demás fuera de vista. Se toca para verla completa.
+                  ImagenAviso(url: aviso.imagenUrl!, altoMaximo: 160),
+                  const SizedBox(height: SiSpace.x2),
+                ],
                 Text(aviso.cuerpo,
                     style:
                         TextStyle(fontSize: 12.5, height: 1.45, color: c.ink2)),
