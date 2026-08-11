@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart' show MediaType;
 
 /// Cliente del convertidor de documentos (Stirling PDF, autoalojado).
 ///
@@ -44,7 +45,12 @@ class ConvertidorService {
     final peticion =
         http.MultipartRequest('POST', Uri.parse('$_base/${destino.ruta}'))
           ..files.add(http.MultipartFile.fromBytes('fileInput', bytes,
-              filename: nombreOriginal))
+              filename: nombreOriginal,
+              // Sin esto el servidor rechaza con 400 «File must be in PDF format».
+              // `fromBytes` declara `application/octet-stream` por omisión, y los endpoints que
+              // validan el tipo —`pdf/word` y `pdf/pdfa`— lo dan por no-PDF. Markdown, texto e
+              // imágenes no lo validan, y por eso el fallo parecía cosa de sólo dos formatos.
+              contentType: tipoMimeDe(nombreOriginal)))
           ..fields.addAll(destino.campos);
 
     final http.StreamedResponse respuesta;
@@ -136,6 +142,48 @@ class ConvertidorService {
     if (t.isEmpty) return null;
     return t.length > 240 ? '${t.substring(0, 240)}…' : t;
   }
+
+  /// El tipo MIME que corresponde a la extensión del archivo.
+  ///
+  /// Hace falta declararlo en la parte del multipart: el servidor valida el tipo en algunos endpoints
+  /// y rechaza con 400 «File must be in PDF format» si le llega `application/octet-stream`. Un
+  /// navegador lo pone solo cuando se elige el archivo; `MultipartFile.fromBytes` no.
+  ///
+  /// Lo desconocido cae a `application/octet-stream`, que es lo que había antes: mejor intentarlo y
+  /// que el servidor decida que quedarse sin convertir.
+  static MediaType tipoMimeDe(String nombreArchivo) {
+    final ext = nombreArchivo.split('.').last.toLowerCase();
+    final crudo = _mimePorExtension[ext] ?? 'application/octet-stream';
+    final partes = crudo.split('/');
+    return MediaType(partes.first, partes.last);
+  }
+
+  static const _mimePorExtension = <String, String>{
+    'pdf': 'application/pdf',
+    // Los de oficina, para la conversión hacia PDF. LibreOffice se apoya en el tipo declarado.
+    'doc': 'application/msword',
+    'docx':
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'odt': 'application/vnd.oasis.opendocument.text',
+    'rtf': 'application/rtf',
+    'txt': 'text/plain',
+    'md': 'text/markdown',
+    'xls': 'application/vnd.ms-excel',
+    'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'ods': 'application/vnd.oasis.opendocument.spreadsheet',
+    'csv': 'text/csv',
+    'ppt': 'application/vnd.ms-powerpoint',
+    'pptx':
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'odp': 'application/vnd.oasis.opendocument.presentation',
+    'html': 'text/html',
+    'htm': 'text/html',
+    'png': 'image/png',
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'webp': 'image/webp',
+    'gif': 'image/gif',
+  };
 
   /// El nombre que propone el servidor, o el de respaldo.
   ///

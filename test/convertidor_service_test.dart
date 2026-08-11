@@ -122,6 +122,48 @@ void main() {
     });
   });
 
+  group('tipoMimeDe', () {
+    // La causa del fallo reportado. Medido contra la instancia: pdf/word con la parte declarada como
+    // `application/pdf` devuelve 200 y 5 990 bytes; con `application/octet-stream` devuelve 400 y cero
+    // bytes, con el detalle «File must be in PDF format». MultipartFile.fromBytes declara
+    // octet-stream por omision, asi que sin esto Word y PDF/A no funcionan nunca.
+    test('un PDF se declara como application/pdf', () {
+      expect(ConvertidorService.tipoMimeDe('reporte.pdf').toString(),
+          'application/pdf');
+    });
+
+    test('no importan las mayusculas de la extension', () {
+      expect(ConvertidorService.tipoMimeDe('REPORTE.PDF').toString(),
+          'application/pdf');
+    });
+
+    test('los de oficina llevan su tipo, que LibreOffice usa', () {
+      expect(ConvertidorService.tipoMimeDe('a.docx').toString(),
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+      expect(ConvertidorService.tipoMimeDe('a.xlsx').toString(),
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      expect(ConvertidorService.tipoMimeDe('a.png').toString(), 'image/png');
+      expect(ConvertidorService.tipoMimeDe('a.txt').toString(), 'text/plain');
+    });
+
+    test('lo desconocido cae a octet-stream y no revienta', () {
+      expect(ConvertidorService.tipoMimeDe('a.xyz').toString(),
+          'application/octet-stream');
+      expect(ConvertidorService.tipoMimeDe('sin_extension').toString(),
+          'application/octet-stream');
+    });
+
+    test('toda extension aceptada tiene un tipo declarado', () {
+      // Si alguien agrega una extension al selector y olvida el tipo, el servidor la rechazaria con
+      // un 400 dificil de explicar.
+      for (final e in ConvertidorService.extensionesAceptadas) {
+        expect(ConvertidorService.tipoMimeDe('archivo.$e').toString(),
+            isNot('application/octet-stream'),
+            reason: 'falta el tipo MIME de .$e');
+      }
+    });
+  });
+
   group('mensajes de error', () {
     // El fallo que costo una sesion: se comprobaba «cuerpo vacio» ANTES del estado, y como este
     // servidor devuelve 400 con CERO bytes, cualquier peticion mal formada se reportaba como «no

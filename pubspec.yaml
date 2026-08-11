@@ -21,6 +21,9 @@ dependencies:
   syncfusion_localizations: any
   url_launcher: ^6.3.0
   http: ^1.2.0
+  # Se usa directo para declarar el tipo MIME de las partes multipart
+  # (ver convertidor_service.dart). Ya venia como transitiva de http.
+  http_parser: ^4.0.2
   web: ^1.1.1
   app_links: 6.3.2
   pdf: ^3.11.3
