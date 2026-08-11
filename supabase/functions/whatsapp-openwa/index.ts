@@ -86,7 +86,7 @@ function igualesEnTiempoConstante(a: string, b: string): boolean {
 /// aceptar las tres formas es más robusto que acertar la exacta, y `detalle` guarda las claves que
 /// llegaron para poder confirmarlo con el primer mensaje real en lugar de adivinar.
 function extraerMensaje(cuerpo: Record<string, unknown>): {
-  chatId: string | null; telefono: string | null; texto: string | null;
+  id: string | null; chatId: string | null; telefono: string | null; texto: string | null;
   deMi: boolean; grupo: boolean; candidatos: string;
 } {
   const p = (cuerpo.payload ?? cuerpo) as Record<string, unknown>;
@@ -119,6 +119,7 @@ function extraerMensaje(cuerpo: Record<string, unknown>): {
   const texto = (d.body ?? d.text ?? d.message ?? null) as string | null;
 
   return {
+    id: typeof d.id === "string" ? d.id : null,
     chatId: paraResponder,
     telefono,
     texto: typeof texto === "string" ? texto : null,
@@ -196,9 +197,49 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({ ok: true, ignorado: true }), { status: 200 });
   }
 
+  // ── Se responde YA, y el trabajo va en segundo plano ──────────────────────
+  //
+  // Aqui estuvo el fallo que se vio en la primera prueba real: una pregunta llego TRES veces en 32
+  // segundos y otra DOS en 11. No eran webhooks duplicados —esos entregan en el mismo segundo— eran
+  // REINTENTOS: la funcion contestaba de forma sincrona y una consulta con herramienta se lleva unos
+  // 7 segundos, mas de lo que OpenWA espera. Cada reintento repetia todo el trabajo y mandaba otra
+  // respuesta al telefono.
+  //
+  // `EdgeRuntime.waitUntil` mantiene vivo el proceso hasta que la promesa termina, aunque la
+  // respuesta HTTP ya se haya ido. Es la forma correcta de atender un webhook lento.
+  const trabajo = atender(svc, m);
+  try {
+    (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } })
+      .EdgeRuntime?.waitUntil(trabajo);
+  } catch {
+    // Sin waitUntil disponible se espera: mejor tardar que cortar el trabajo a medias.
+    await trabajo;
+  }
+  return new Response(JSON.stringify({ ok: true, recibido: true }), { status: 200 });
+});
+
+/// Todo lo que tarda: identificar, preguntarle a Soli y contestar.
+async function atender(
+  svc: ReturnType<typeof createClient>,
+  m: ReturnType<typeof extraerMensaje>,
+): Promise<void> {
+  // Segunda linea de defensa contra reintentos: si este mensaje ya se atendio, no se contesta otra
+  // vez. Con la respuesta inmediata de arriba no deberia hacer falta, pero un corte de red entre
+  // OpenWA y la funcion volveria a entregarlo.
+  if (m.id) {
+    const { data: ya } = await svc
+      .from("whatsapp_bitacora")
+      .select("id").eq("mensaje_id", m.id).maybeSingle();
+    if (ya) {
+      console.log(`mensaje ${m.id} ya atendido; se ignora el reenvio`);
+      return;
+    }
+  }
+
   // Si ningun campo del evento traia un telefono, se le pregunta a OpenWA por el identificador del
   // remitente. Es el caso normal con @lid, no la excepcion.
   let telefono = m.telefono;
+
   let resueltoPorOpenwa = false;
   if (!telefono && m.chatId) {
     telefono = await telefonoDeContacto(m.chatId);
@@ -210,7 +251,7 @@ Deno.serve(async (req: Request) => {
     // el numero venia en otro campo o si de plano no viene, que se arregla de maneras distintas.
     await registrar(svc, String(m.chatId ?? "?").slice(0, 40), null, "SIN_REGISTRO",
       m.texto, null, `ni los campos del evento ni contacts/phone dieron un telefono de 10 digitos. ${m.candidatos}`);
-    return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    return;
   }
 
   // Para contestar se usa el `chatId` TAL COMO LLEGO, no uno reconstruido.
@@ -232,12 +273,12 @@ Deno.serve(async (req: Request) => {
     if (coincidencias === 0) {
       await registrar(svc, telefono, null, "SIN_REGISTRO", m.texto, null,
         "el teléfono no está capturado en ningún colaborador vigente");
-      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      return;
     }
     if (!profileId) {
       await registrar(svc, telefono, null, "AMBIGUO", m.texto, null,
         `el teléfono está en ${coincidencias} perfiles vigentes; no se puede saber a quién contestar`);
-      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      return;
     }
 
     // ── Puerta 3: la lista blanca ────────────────────────────────────────────
@@ -247,7 +288,7 @@ Deno.serve(async (req: Request) => {
     if (!aut || aut.activo !== true) {
       await registrar(svc, telefono, profileId, "NO_AUTORIZADO", m.texto, null,
         aut ? "el número está en la lista pero apagado" : "el número no está en la lista");
-      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      return;
     }
 
     // ── Límite por hora ──────────────────────────────────────────────────────
@@ -261,7 +302,7 @@ Deno.serve(async (req: Request) => {
         `${count} mensajes atendidos en la última hora`);
       // Aquí SÍ se avisa: es alguien autorizado, y el silencio parecería una avería.
       await enviar(destino, "Has hecho muchas consultas seguidas. Espera un momento y vuelve a intentarlo.");
-      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      return;
     }
 
     // ── El hilo ──────────────────────────────────────────────────────────────
@@ -288,13 +329,13 @@ Deno.serve(async (req: Request) => {
     if (r.status === 403) {
       await registrar(svc, telefono, profileId, "SIN_PERMISO", m.texto, null,
         "la persona no tiene el permiso de Asistente IA");
-      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      return;
     }
     if (!r.ok) {
       const detalle = (await r.text()).slice(0, 300);
       await registrar(svc, telefono, profileId, "ERROR", m.texto, null,
         `ai-assistant respondió ${r.status}: ${detalle}`);
-      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      return;
     }
 
     // `text` es la clave real: `ai-assistant` responde `{ text, structured }`. Se comprobo leyendo
@@ -306,7 +347,7 @@ Deno.serve(async (req: Request) => {
     if (!respuesta) {
       await registrar(svc, telefono, profileId, "ERROR", m.texto, null,
         `Soli respondio sin texto; claves recibidas: ${Object.keys(datos).join(",")}`);
-      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      return;
     }
 
     await enviar(destino, respuesta);
@@ -319,17 +360,18 @@ Deno.serve(async (req: Request) => {
       actualizado_en: new Date().toISOString(),
     }, { onConflict: "telefono" });
 
+    // El id va SIEMPRE en el ATENDIDO: es lo que hace que un reenvio no vuelva a contestar.
     await registrar(svc, telefono, profileId, "ATENDIDO", m.texto, respuesta,
-      resueltoPorOpenwa ? `telefono resuelto por OpenWA desde ${m.chatId}` : null);
-    return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      resueltoPorOpenwa ? `telefono resuelto por OpenWA desde ${m.chatId}` : null, m.id);
+    return;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     await registrar(svc, telefono, null, "ERROR", m.texto, null, msg.slice(0, 300));
     // 200 igual: un 500 haría que OpenWA reintentara, y si el fallo es nuestro el reintento sólo
     // multiplica el problema. El renglón de la bitácora es lo que hay que mirar.
-    return new Response(JSON.stringify({ ok: false }), { status: 200 });
+    return;
   }
-});
+}
 
 /// Le pregunta a OpenWA a qué teléfono corresponde un identificador de contacto.
 ///
@@ -385,10 +427,11 @@ async function registrar(
   pregunta: string | null,
   respuesta: string | null,
   detalle: string | null,
+  mensajeId: string | null = null,
 ): Promise<void> {
   try {
     await svc.from("whatsapp_bitacora").insert({
-      telefono, profile_id: profileId, resultado,
+      telefono, profile_id: profileId, resultado, mensaje_id: mensajeId,
       pregunta: pregunta?.slice(0, 500) ?? null,
       respuesta: respuesta?.slice(0, 2000) ?? null,
       detalle,
