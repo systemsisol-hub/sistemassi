@@ -6,6 +6,20 @@ const OLLAMA_MODEL = Deno.env.get("OLLAMA_MODEL") ?? "llama3.2";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_KEY  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
+/// Secreto de la vía servidor-a-servidor, la que usa el puente de WhatsApp.
+///
+/// Si está vacío, esa vía queda APAGADA: no configurarlo no debe abrirla. Se compara en tiempo
+/// constante porque un `===` sobre secretos filtra, por el tiempo de respuesta, cuántos caracteres
+/// iniciales acertó quien lo está probando.
+const INTERNAL_SECRET = Deno.env.get("SOLI_INTERNAL_SECRET") ?? "";
+
+function igualesEnTiempoConstante(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let dif = 0;
+  for (let i = 0; i < a.length; i++) dif |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return dif === 0;
+}
+
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -762,16 +776,54 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
 
   try {
-    const auth = req.headers.get("Authorization");
-    if (!auth) return new Response(JSON.stringify({ error: "No authorization" }), { status: 401, headers: CORS });
-
     const svc = createClient(SUPABASE_URL, SERVICE_KEY);
-    const { data: { user }, error: authErr } = await svc.auth.getUser(auth.replace("Bearer ", ""));
-    if (authErr || !user) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: CORS });
+
+    // El cuerpo se lee ANTES de decidir la identidad, porque `actuar_como` viaja en él.
+    const cuerpo = await req.json() as {
+      messages: Array<{ role: string; content: string }>;
+      actuar_como?: string;
+    };
+
+    // ── Quién habla ────────────────────────────────────────────────────────────
+    //
+    // Dos caminos, y el orden importa:
+    //
+    // 1. Con `Authorization` —la aplicación— la identidad sale del JWT y `actuar_como` se IGNORA.
+    //    Sin esto, cualquier usuario de la app podría mandar `actuar_como` y conversar como su jefe.
+    //
+    // 2. Sin `Authorization`, se acepta una llamada de servidor a servidor que declara a nombre de
+    //    quién actúa. Es lo que usa el puente de WhatsApp: el webhook ya identificó a la persona por
+    //    su teléfono, pero no tiene su sesión. Va cerrado con un secreto compartido.
+    //
+    // Lo que NO cambia en ninguno de los dos: el rol, los permisos y la identidad se leen de
+    // `profiles`, y el 403 de abajo es el mismo. Ni un permiso se reimplementa por este camino.
+    const auth = req.headers.get("Authorization");
+    const interno = req.headers.get("X-Interno");
+
+    let actorId: string | null = null;
+    let correoActor: string | null = null;
+
+    if (auth) {
+      const { data: { user }, error: authErr } = await svc.auth.getUser(auth.replace("Bearer ", ""));
+      if (authErr || !user) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: CORS });
+      actorId = user.id;
+      correoActor = user.email ?? null;
+    } else if (INTERNAL_SECRET.length > 0 && interno && igualesEnTiempoConstante(interno, INTERNAL_SECRET)) {
+      const id = (cuerpo.actuar_como ?? "").trim();
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+        return new Response(JSON.stringify({ error: "actuar_como debe ser el uuid de un perfil" }), { status: 400, headers: CORS });
+      }
+      actorId = id;
+    } else {
+      // Un secreto vacío en el entorno deja la vía interna APAGADA. Si no, no configurarlo la
+      // abriría para cualquiera que mandara la cabecera vacía.
+      return new Response(JSON.stringify({ error: "No authorization" }), { status: 401, headers: CORS });
+    }
 
     const { data: prof } = await svc.from("profiles")
-      .select("role, permissions, nombre, paterno, materno, puesto, area, numero_empleado")
-      .eq("id", user.id).single();
+      .select("role, permissions, nombre, paterno, materno, full_name, puesto, area, numero_empleado")
+      .eq("id", actorId).single();
+    if (!prof) return new Response(JSON.stringify({ error: "Perfil no encontrado" }), { status: 404, headers: CORS });
 
     const isAdmin    = prof?.role === "admin";
     const hasAiPerm  = (prof?.permissions as Record<string, unknown>)?.show_ai === true;
@@ -781,7 +833,11 @@ Deno.serve(async (req: Request) => {
 
     const nameParts  = [prof?.nombre || "", prof?.paterno || "", prof?.materno || ""]
       .filter((p: string) => p.length > 0);
-    const userFullName = nameParts.length > 0 ? nameParts.join(" ") : (user.email || "Usuario");
+    // Por la vía interna no hay correo al que caerse, así que el respaldo es el full_name del perfil
+    // y, en último caso, «Usuario». Antes esto usaba `user.email`, que sólo existe con JWT.
+    const userFullName = nameParts.length > 0
+      ? nameParts.join(" ")
+      : (correoActor || (prof?.full_name as string | undefined) || "Usuario");
 
     const limpio = (v: unknown): string | null => {
       const s = typeof v === "string" ? v.trim() : "";
@@ -797,7 +853,7 @@ Deno.serve(async (req: Request) => {
       numeroEmpleado: limpio(prof?.numero_empleado),
     };
 
-    const { messages } = await req.json() as { messages: Array<{ role: string; content: string }> };
+    const { messages } = cuerpo;
 
     const permisos = (prof?.permissions ?? {}) as Permisos;
 
@@ -836,7 +892,9 @@ Deno.serve(async (req: Request) => {
       for (const tc of msg.tool_calls) {
         const { name, arguments: args } = tc.function;
         const result =
-          await runTool(name, args, svc, isAdmin, user.id, userFullName, permisos);
+          // `actorId` y no `user.id`: por la vía interna no hay objeto `user`, y con él aquí la
+          // primera herramienta que pidiera WhatsApp habría reventado con `user is not defined`.
+          await runTool(name, args, svc, isAdmin, actorId, userFullName, permisos);
         const r = result as Record<string, unknown>;
 
         // Capturar datos estructurados para el UI de Flutter

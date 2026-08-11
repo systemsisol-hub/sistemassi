@@ -165,5 +165,55 @@ for (const campo of campos) {
   check(consulta.includes(col), `${campo} -> columna ${col}`);
 }
 
+
+// -- 10. La via servidor-a-servidor -------------------------------------------
+//
+// Es la puerta que abre el puente de WhatsApp, y la que mas dano hace si se afloja: por ahi se
+// declara a nombre de QUIEN se actua, sin sesion. Las comprobaciones son estructurales porque el
+// riesgo no esta en un calculo, esta en el ORDEN de las condiciones.
+console.log('\n10. La via interna (WhatsApp) esta bien cerrada');
+
+const bloqueIdentidad = src.slice(
+  src.indexOf('const auth = req.headers.get("Authorization");'),
+  src.indexOf('const { data: prof }'));
+
+// El camino del JWT va PRIMERO. Si `actuar_como` se leyera antes, cualquier usuario de la app
+// podria conversar como su jefe.
+const iJwt = bloqueIdentidad.indexOf('if (auth)');
+const iInterno = bloqueIdentidad.indexOf('INTERNAL_SECRET');
+check(iJwt >= 0 && iInterno > iJwt, 'el camino del JWT se evalua antes que el interno');
+
+// Y dentro de esa rama no se toca `actuar_como`.
+const ramaJwt = bloqueIdentidad.slice(iJwt, bloqueIdentidad.indexOf('} else if'));
+check(!ramaJwt.includes('actuar_como'), 'con Authorization presente, actuar_como se IGNORA');
+
+// Un secreto sin configurar deja la via APAGADA, no abierta.
+check(/INTERNAL_SECRET\.length\s*>\s*0/.test(bloqueIdentidad),
+  'un SOLI_INTERNAL_SECRET vacio apaga la via interna');
+
+// Comparacion en tiempo constante, no ===.
+check(bloqueIdentidad.includes('igualesEnTiempoConstante'),
+  'el secreto se compara en tiempo constante');
+check(!/interno\s*===\s*INTERNAL_SECRET/.test(src), 'el secreto NO se compara con ===');
+
+// El uuid se valida antes de usarse como id de perfil.
+check(/\[0-9a-f\]\{8\}-/.test(bloqueIdentidad), 'actuar_como se valida como uuid');
+
+// La puerta de show_ai es UNA sola y se aplica despues de resolver la identidad: con dos
+// comprobaciones, una se quedaria atras.
+check((src.match(/!isAdmin && !hasAiPerm/g) || []).length === 1,
+  'la puerta de show_ai es una sola y vale para los dos caminos');
+check(src.indexOf('!isAdmin && !hasAiPerm') > src.indexOf('const { data: prof }'),
+  'la puerta de show_ai se aplica DESPUES de resolver la identidad');
+
+// Nada de `user.` despues de la identidad: por la via interna ese objeto no existe, y con el ahi la
+// primera herramienta que pidiera WhatsApp habria reventado.
+// Se quitan los comentarios antes de mirar: uno que EXPLIQUE por que ya no se usa `user.id` es
+// justo lo que conviene conservar, y la primera version de esta comprobacion lo marcaba como falla.
+const trasIdentidad = src.slice(src.indexOf('const { data: prof }'))
+  .split('\n').map((l) => l.replace(/\/\/.*$/, '')).join('\n');
+check(!/\buser\.(id|email)\b/.test(trasIdentidad),
+  'no queda ningun user.id ni user.email en CODIGO despues de la identidad');
+
 console.log(fallas === 0 ? '\nTODO BIEN' : `\n${fallas} FALLAS`);
 process.exit(fallas === 0 ? 0 : 1);
