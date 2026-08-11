@@ -1911,7 +1911,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
         _permSwitch(c, 'Incidencias', 'show_incidencias', Icons.description_outlined),
         _permSwitch(c, 'Logs del sistema', 'show_logs', Icons.assignment_outlined),
         _permSwitch(c, 'Avisos', 'show_avisos', Icons.campaign_outlined),
-        _permSwitch(c, 'Convertidor', 'show_convertidor', Icons.swap_horiz_outlined),
+        _permSwitch(c, 'Convertidor', 'show_convertidor', Icons.swap_horiz),
         _permSwitch(c, 'Directorio', 'show_directorio', Icons.contacts_outlined),
         _permSwitch(c, 'Contactos externos', 'show_external_contacts', Icons.contact_phone_outlined),
         _permSwitch(c, 'Asistencia', 'show_asistencia', Icons.fingerprint),

@@ -109,7 +109,21 @@ class _MainNavigationState extends State<MainNavigation> {
     if (widget.permissions['show_convertidor'] == true) {
       pages.add({
         'title': 'Convertidor',
-        'icon': Icons.swap_horiz_outlined,
+        // El mismo glifo en los dos estados, y no la variante `_outlined`.
+        //
+        // Se reportó que el icono no se veía hasta seleccionar la página. La causa NO es el glifo:
+        // `swap_horiz_outlined` (0xf408) existe, tiene contorno y sí llega a la fuente recortada
+        // —comprobado con fontTools contra `build/web/assets/fonts/MaterialIcons-Regular.otf`—. Es
+        // la CACHÉ: `flutter build web` recorta MaterialIcons a los iconos usados, pero el archivo
+        // se sirve siempre en la misma URL, así que un navegador con la fuente de un despliegue
+        // anterior no tiene los glifos NUEVOS. `swap_horiz` (0xe625) ya se usaba en ai_page.dart, así
+        // que estaba en la fuente vieja y se veía; el `_outlined` era nuevo y salía en blanco.
+        //
+        // Usar un glifo que ya estaba en circulación lo arregla sin depender de que nadie recargue.
+        // Vale para cualquier icono nuevo: si aparece un hueco tras un despliegue, es esto, y se
+        // quita con Ctrl+Shift+R. Asistencia ya repetía glifo con `Icons.fingerprint`; el estado
+        // activo se distingue por color y fondo.
+        'icon': Icons.swap_horiz,
         'activeIcon': Icons.swap_horiz,
         'widget': const ConvertidorPage(),
       });
