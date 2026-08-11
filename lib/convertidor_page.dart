@@ -139,9 +139,14 @@ class _ConvertidorPageState extends State<ConvertidorPage> {
   /// Qué pasa con el documento que sube la persona.
   ///
   /// Se dice porque no es evidente: un convertidor en línea normalmente manda tu archivo a un
-  /// tercero. Este no. Y se dice completo —incluido el nombre en el registro— porque prometer más
-  /// privacidad de la que hay es peor que no decir nada: lo comprobé midiendo, y el nombre del
-  /// archivo sí aparece en el registro técnico del servidor aunque el contenido no se guarde.
+  /// tercero. Este no.
+  ///
+  /// ⚠️ Dato que NO está en pantalla por decisión del negocio, y que conviene no perder: el nombre
+  /// del archivo —no su contenido— sí queda en el registro del contenedor. Medido convirtiendo un PDF
+  /// de 60 páginas: `/configs` no crece, la caché queda en cero y no sobrevive ningún archivo del
+  /// trabajo, pero el registro menciona el nombre. Lo que el aviso afirma sigue siendo cierto, el
+  /// archivo y el resultado no se guardan; el registro tiene rotación de 3×10 MB para que ese rastro
+  /// no se acumule indefinidamente.
   Widget _notaPrivacidad(SiColors c) => Container(
         padding: const EdgeInsets.all(SiSpace.x4),
         decoration: BoxDecoration(
@@ -167,9 +172,7 @@ class _ConvertidorPageState extends State<ConvertidorPage> {
                   Text(
                       'Se procesan en un servidor de la empresa, no en un servicio '
                       'de terceros. Ni el archivo que subes ni el resultado quedan '
-                      'guardados: el resultado se descarga a tu equipo y nada más. '
-                      'El nombre del archivo sí aparece en el registro técnico del '
-                      'servidor.',
+                      'guardados: el resultado se descarga a tu equipo y nada más.',
                       style: TextStyle(fontSize: 11.5, height: 1.4, color: c.ink3)),
                 ],
               ),

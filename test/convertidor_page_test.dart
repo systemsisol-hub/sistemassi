@@ -33,9 +33,10 @@ void main() {
 
     expect(find.text('Tus documentos no se conservan'), findsOneWidget);
     expect(find.textContaining('servidor de la empresa'), findsOneWidget);
-    // La parte incómoda también: medido contra la instancia, el nombre del archivo aparece en el
-    // registro del servidor. Si alguien recorta el aviso, esta prueba falla.
-    expect(find.textContaining('registro técnico'), findsOneWidget);
+    // Lo que el aviso afirma tiene que seguir siendo comprobable: ni el archivo ni el resultado se
+    // guardan, y eso se verificó midiendo el disco antes y después de convertir.
+    expect(find.textContaining('no en un servicio de terceros'), findsOneWidget);
+    expect(find.textContaining('se descarga a tu equipo'), findsOneWidget);
   });
 
   testWidgets('sin archivo no ofrece formatos ni botón de convertir',
