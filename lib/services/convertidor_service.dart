@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:http/http.dart' as http;
 
 /// Cliente del convertidor de documentos (Stirling PDF, autoalojado).
@@ -59,20 +60,27 @@ class ConvertidorService {
 
     final cuerpo = await respuesta.stream.toBytes();
 
-    // 204 no es un fallo de red ni un archivo corrupto: el servidor no encontró nada que extraer.
-    // Pasa con las conversiones a tabla —Excel y CSV— y devolver un archivo de 0 bytes haría pensar
-    // que la página está rota.
-    if (respuesta.statusCode == 204 || cuerpo.isEmpty) {
-      throw ConvertidorError(
-          'El servidor no encontró contenido que convertir a ${destino.etiqueta}. '
-          'Suele pasar con documentos escaneados, que son imágenes sin texto.');
-    }
-    if (respuesta.statusCode == 413) {
-      throw ConvertidorError('El servidor rechazó el archivo por tamaño.');
-    }
+    // ⚠️ EL ORDEN DE ESTAS COMPROBACIONES IMPORTA, y tenerlo al revés costó una sesión de
+    // diagnóstico. Antes se miraba «cuerpo vacío» ANTES del código de estado, y como este servidor
+    // devuelve 400 con CERO bytes —comprobado: un `outputFormat` inválido da `400` y cuerpo vacío—,
+    // cualquier petición mal formada se reportaba como «no encontró contenido». El mensaje culpaba al
+    // documento cuando el problema era la petición.
+    //
+    // Primero el estado, y siempre diciendo el número: un mensaje que no dice qué respondió el
+    // servidor no se puede diagnosticar desde el otro lado del teléfono.
     if (respuesta.statusCode != 200) {
+      throw ConvertidorError(_mensajeDeError(
+          respuesta.statusCode, destino, cuerpo, respuesta.reasonPhrase));
+    }
+
+    // 200 con cuerpo vacío es otra cosa: la petición estaba bien y el servidor no encontró nada que
+    // extraer. Es lo que hacen las conversiones a tabla —Excel y CSV, que por eso no se ofrecen— y lo
+    // que pasa con un escaneo sin capa de texto.
+    if (cuerpo.isEmpty) {
       throw ConvertidorError(
-          'El servidor respondió ${respuesta.statusCode} al convertir a ${destino.etiqueta}.');
+          'El servidor aceptó el archivo pero devolvió un resultado vacío al '
+          'convertir a ${destino.etiqueta} (200 sin contenido). Suele pasar con '
+          'documentos escaneados, que son imágenes sin texto.');
     }
 
     return ArchivoConvertido(
@@ -82,6 +90,51 @@ class ConvertidorService {
         respaldo: nombreConExtension(nombreOriginal, destino.extension),
       ),
     );
+  }
+
+  /// Puerta para las pruebas: el mensaje de error se arma con lógica que conviene fijar, y montar un
+  /// servidor falso para comprobar un `switch` sería desproporcionado.
+  @visibleForTesting
+  static String mensajeDeErrorParaPruebas(
+          int estado, FormatoDestino destino, Uint8List cuerpo) =>
+      _mensajeDeError(estado, destino, cuerpo, null);
+
+  /// Traduce un fallo del servidor a algo que se pueda leer y, sobre todo, diagnosticar.
+  ///
+  /// Siempre incluye el código: este servidor devuelve el 400 con cuerpo vacío, así que el número es
+  /// a veces la única pista que hay. Si además manda texto —a veces responde
+  /// `application/problem+json`— se agrega recortado.
+  static String _mensajeDeError(
+      int estado, FormatoDestino destino, Uint8List cuerpo, String? razon) {
+    final detalle = _textoCorto(cuerpo);
+    final cola = detalle == null ? '' : ' El servidor dijo: $detalle';
+
+    return switch (estado) {
+      400 =>
+        'El servidor rechazó la petición al convertir a ${destino.etiqueta} '
+            '(400). Suele ser un archivo que no es el que dice ser —un PDF '
+            'dañado, o un documento con otra extensión—.$cola',
+      413 => 'El servidor rechazó el archivo por tamaño (413).',
+      415 => 'El servidor no acepta este tipo de archivo (415).$cola',
+      422 =>
+        'El servidor no pudo procesar el documento (422). Puede estar protegido '
+            'con contraseña o dañado.$cola',
+      500 || 502 || 503 || 504 =>
+        'El servidor de conversión falló ($estado). Si se repite, el servicio '
+            'puede estar caído o sin memoria para este documento.$cola',
+      _ => 'El servidor respondió $estado${razon == null || razon.isEmpty ? '' : ' $razon'} '
+          'al convertir a ${destino.etiqueta}.$cola',
+    };
+  }
+
+  /// El cuerpo como texto, si es texto y es corto. Nunca se vuelca un binario en un mensaje.
+  static String? _textoCorto(Uint8List cuerpo) {
+    if (cuerpo.isEmpty || cuerpo.length > 2000) return null;
+    // Un binario trae bytes de control; si los hay, no es un mensaje para leer.
+    if (cuerpo.any((b) => b < 9 || (b > 13 && b < 32))) return null;
+    final t = String.fromCharCodes(cuerpo).trim();
+    if (t.isEmpty) return null;
+    return t.length > 240 ? '${t.substring(0, 240)}…' : t;
   }
 
   /// El nombre que propone el servidor, o el de respaldo.

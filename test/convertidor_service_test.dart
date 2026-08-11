@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sistemassi/services/convertidor_service.dart';
 
@@ -117,6 +119,43 @@ void main() {
       final ids = ConvertidorService.destinosPara('x.pdf').map((d) => d.id);
       expect(ids, isNot(contains('xlsx')));
       expect(ids, isNot(contains('csv')));
+    });
+  });
+
+  group('mensajes de error', () {
+    // El fallo que costo una sesion: se comprobaba «cuerpo vacio» ANTES del estado, y como este
+    // servidor devuelve 400 con CERO bytes, cualquier peticion mal formada se reportaba como «no
+    // encontro contenido» y culpaba al documento. Estas pruebas fijan que el numero salga siempre.
+    test('un 400 con cuerpo vacio NO se reporta como falta de contenido', () {
+      final m = ConvertidorService.mensajeDeErrorParaPruebas(
+          400, ConvertidorService.desdePdf.first, Uint8List(0));
+      expect(m, contains('400'));
+      expect(m.toLowerCase(), isNot(contains('no encontró contenido')));
+    });
+
+    test('cada estado conocido menciona su codigo', () {
+      for (final e in [400, 413, 415, 422, 500, 502, 504, 418]) {
+        final m = ConvertidorService.mensajeDeErrorParaPruebas(
+            e, ConvertidorService.aPdf, Uint8List(0));
+        expect(m, contains('$e'), reason: 'estado $e');
+      }
+    });
+
+    test('agrega el texto del servidor cuando lo manda', () {
+      final cuerpo = Uint8List.fromList(
+          '{"detail":"outputFormat invalido"}'.codeUnits);
+      final m = ConvertidorService.mensajeDeErrorParaPruebas(
+          400, ConvertidorService.aPdf, cuerpo);
+      expect(m, contains('outputFormat invalido'));
+    });
+
+    test('nunca vuelca un binario en el mensaje', () {
+      // Un ZIP empieza con PK y trae bytes de control: no es un mensaje para leer.
+      final zip = Uint8List.fromList([0x50, 0x4B, 0x03, 0x04, 0x00, 0x01, 0x02]);
+      final m = ConvertidorService.mensajeDeErrorParaPruebas(
+          500, ConvertidorService.aPdf, zip);
+      expect(m, isNot(contains('PK')));
+      expect(m, contains('500'));
     });
   });
 
