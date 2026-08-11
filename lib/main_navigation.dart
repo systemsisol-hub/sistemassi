@@ -12,6 +12,7 @@ import 'social_page.dart';
 import 'external_contacts_page.dart';
 import 'directorio_page.dart';
 import 'avisos_page.dart';
+import 'convertidor_page.dart';
 import 'avisos_store.dart';
 import 'widgets/banner_avisos.dart';
 import 'widgets/dialogo_aviso.dart';
@@ -35,7 +36,7 @@ class _OpenSearchIntent extends Intent {
 
 // Visual-only nav group definitions — order here is render order.
 final _navGroups = <(String, List<String>)>[
-  ('GENERAL',        ['Mi Perfil', 'Social', 'Avisos', 'Directorio', 'Conocimientos', 'Contraseñas', 'Contactos Ext.', 'Firmas', 'Calendario']),
+  ('GENERAL',        ['Mi Perfil', 'Social', 'Avisos', 'Directorio', 'Conocimientos', 'Contraseñas', 'Contactos Ext.', 'Firmas', 'Convertidor', 'Calendario']),
   ('OPERACIÓN',      ['Incidencias', 'Inventario', 'Colaborador', 'Asistencia']),
   ('ANÁLISIS',       ['BI', 'Logs', 'Tablas']),
   ('ADMINISTRACIÓN', ['Usuarios', 'IA', 'Papelera']),
@@ -105,6 +106,14 @@ class _MainNavigationState extends State<MainNavigation> {
       'activeIcon': Icons.diversity_3,
       'widget': const SocialPage(),
     });
+    if (widget.permissions['show_convertidor'] == true) {
+      pages.add({
+        'title': 'Convertidor',
+        'icon': Icons.swap_horiz_outlined,
+        'activeIcon': Icons.swap_horiz,
+        'widget': const ConvertidorPage(),
+      });
+    }
     if (widget.permissions['show_avisos'] == true) {
       pages.add({
         'title': 'Avisos',

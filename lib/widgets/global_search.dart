@@ -551,6 +551,7 @@ const _categoryIcons = <String, IconData>{
   'Usuarios': Icons.manage_accounts_outlined,
   'Inventario': Icons.inventory_2_outlined,
   'Avisos': Icons.campaign_outlined,
+  'Convertidor': Icons.swap_horiz_outlined,
   'Contactos Ext.': Icons.contact_phone_outlined,
 };
 
