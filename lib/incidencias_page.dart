@@ -584,12 +584,12 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
 
     final usedDaysMap = <String, int>{};
     for (final inc in _incidencias) {
-      // ⚠️ Aquí sólo se cuenta APROBADA, mientras que `_getAvailablePeriods` —el que alimenta el
-      // formulario— y Soli cuentan también PENDIENTE. Es una diferencia de criterio, no un fallo:
-      // decidir si una solicitud pendiente ya «reserva» los días es de negocio. Se deja como estaba
-      // para no cambiar dos cosas a la vez, pero conviene resolverlo: hoy la tabla puede mostrar más
-      // días disponibles de los que el formulario permitirá pedir.
-      if (inc['usuario_id'] == targetUserId && inc['status'] == 'APROBADA') {
+      // Cuenta APROBADA **y PENDIENTE**: una solicitud pendiente ya reserva los días. Es decisión
+      // de RH, y con ella las tres implementaciones dicen lo mismo — antes esta tabla contaba sólo
+      // las aprobadas mientras `_getAvailablePeriods` —el que alimenta el formulario— y Soli contaban
+      // las dos, así que la tabla mostraba más días disponibles de los que el formulario dejaba pedir.
+      if (inc['usuario_id'] == targetUserId &&
+          (inc['status'] == 'APROBADA' || inc['status'] == 'PENDIENTE')) {
         final normP = normalizePeriod(inc['periodo'] as String?);
         final dias = inc['dias'] as int? ?? 0;
         if (normP.isNotEmpty) {
