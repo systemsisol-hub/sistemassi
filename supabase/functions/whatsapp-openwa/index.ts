@@ -86,18 +86,45 @@ function igualesEnTiempoConstante(a: string, b: string): boolean {
 /// aceptar las tres formas es más robusto que acertar la exacta, y `detalle` guarda las claves que
 /// llegaron para poder confirmarlo con el primer mensaje real en lugar de adivinar.
 function extraerMensaje(cuerpo: Record<string, unknown>): {
-  chatId: string | null; texto: string | null; deMi: boolean; grupo: boolean; claves: string;
+  chatId: string | null; telefono: string | null; texto: string | null;
+  deMi: boolean; grupo: boolean; candidatos: string;
 } {
   const p = (cuerpo.payload ?? cuerpo) as Record<string, unknown>;
   const d = (p.data ?? p) as Record<string, unknown>;
-  const chatId = (d.from ?? d.sender ?? d.chatId ?? d.author ?? null) as string | null;
+
+  // No se toma el primer campo que exista: se prueban TODOS y gana el primero del que sale un
+  // telefono de diez digitos.
+  //
+  // Hace falta porque WhatsApp ya no siempre manda el numero. El primer mensaje real llego con
+  // `from: "135231491317781@lid"` —el direccionamiento nuevo, un identificador opaco que sustituye
+  // al telefono— mientras el mismo evento traia tambien `chatId`. Quedarse con `from` a secas dejaba
+  // sin identificar a alguien que si era identificable por otro campo.
+  const nombres = ["from", "chatId", "author", "participant", "sender", "senderId"];
+  const vistos: string[] = [];
+  let telefono: string | null = null;
+  let deQuien: string | null = null;
+
+  for (const n of nombres) {
+    const v = d[n];
+    if (typeof v !== "string" || v.length === 0) continue;
+    vistos.push(`${n}=${v}`);
+    const t = normalizarTelefono(v);
+    if (t && !telefono) { telefono = t; deQuien = n; }
+  }
+  if (deQuien) vistos.push(`(sirvio ${deQuien})`);
+
+  // Para responder se usa `chatId` si viene, y si no el `from`: es la direccion tal como la maneja
+  // WhatsApp, valida aunque sea un @lid.
+  const paraResponder = (d.chatId ?? d.from ?? null) as string | null;
   const texto = (d.body ?? d.text ?? d.message ?? null) as string | null;
+
   return {
-    chatId,
+    chatId: paraResponder,
+    telefono,
     texto: typeof texto === "string" ? texto : null,
     deMi: d.fromMe === true,
-    grupo: d.isGroup === true || esGrupo(chatId),
-    claves: Object.keys(d).join(","),
+    grupo: d.isGroup === true || esGrupo(paraResponder),
+    candidatos: vistos.join(" | "),
   };
 }
 
@@ -119,10 +146,27 @@ Deno.serve(async (req: Request) => {
     // Un secreto sin configurar cierra la puerta, no la abre.
     return new Response(JSON.stringify({ error: "sin secreto de webhook" }), { status: 503 });
   }
+  // Dos formas de acreditarse, y basta con una:
+  //
+  //   a) La firma HMAC del cuerpo, que es la buena: ata la credencial AL CONTENIDO, asi que ni
+  //      siquiera sirve reenviar una peticion valida con el cuerpo cambiado.
+  //   b) El mismo secreto en la cadena de consulta: `?k=<secreto>`.
+  //
+  // La (b) existe porque el panel de OpenWA NO expone el campo `secret` del webhook —comprobado en
+  // los formularios de alta y de edicion— y sin llave de API no se puede registrar por API. La URL
+  // si es editable, asi que es la unica via que queda con las herramientas disponibles.
+  //
+  // Es mas debil que la firma y conviene saber por que: no va atada al cuerpo, y una URL con secreto
+  // acaba en los registros de quien la llama. Aqui eso es el propio servidor de OpenWA, y el trafico
+  // va por TLS, asi que el riesgo real es acotado. En cuanto haya una llave de API conviene
+  // registrar el `secret` de verdad y quitar el `?k=`.
   const cabeceraFirma = req.headers.get("X-OpenWA-Signature");
+  const claveUrl = new URL(req.url).searchParams.get("k") ?? "";
+  const porUrl = claveUrl.length > 0 && igualesEnTiempoConstante(claveUrl, WEBHOOK_SECRET);
+
   const recibida = (cabeceraFirma ?? "").replace(/^sha256=/i, "");
   const esperada = await hmacSha256Hex(WEBHOOK_SECRET, crudo);
-  if (!igualesEnTiempoConstante(recibida.toLowerCase(), esperada)) {
+  if (!porUrl && !igualesEnTiempoConstante(recibida.toLowerCase(), esperada)) {
     // Se distinguen los dos casos, porque se arreglan de formas distintas y el rechazo NO deja
     // rastro en la bitacora: sin telefono no hay a quien atribuirle el renglon, y registrar todo lo
     // que llame a la funcion la convertiria en un buzon de basura para cualquiera.
@@ -132,8 +176,8 @@ Deno.serve(async (req: Request) => {
     console.log(cabeceraFirma
       ? "firma invalida: llego X-OpenWA-Signature pero no coincide. El `secret` del webhook en " +
         "OpenWA y OPENWA_WEBHOOK_SECRET no son iguales."
-      : "sin firma: la peticion llego SIN cabecera X-OpenWA-Signature. Al webhook de OpenWA le " +
-        "falta el campo `secret`.");
+      : "sin credencial: ni cabecera X-OpenWA-Signature ni ?k= valido. Al webhook de OpenWA le " +
+        "falta el `secret`, o la URL no lleva el ?k= correcto.");
     return new Response(JSON.stringify({ error: "firma inválida" }), { status: 401 });
   }
 
@@ -152,10 +196,20 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({ ok: true, ignorado: true }), { status: 200 });
   }
 
-  const telefono = normalizarTelefono(m.chatId);
+  // Si ningun campo del evento traia un telefono, se le pregunta a OpenWA por el identificador del
+  // remitente. Es el caso normal con @lid, no la excepcion.
+  let telefono = m.telefono;
+  let resueltoPorOpenwa = false;
+  if (!telefono && m.chatId) {
+    telefono = await telefonoDeContacto(m.chatId);
+    resueltoPorOpenwa = telefono !== null;
+  }
+
   if (!telefono) {
-    await registrar(svc, String(m.chatId ?? "?").slice(0, 32), null, "SIN_REGISTRO",
-      m.texto, null, `no se pudo normalizar; claves del evento: ${m.claves}`);
+    // Se guardan los VALORES de los candidatos, no solo los nombres: es la unica forma de saber si
+    // el numero venia en otro campo o si de plano no viene, que se arregla de maneras distintas.
+    await registrar(svc, String(m.chatId ?? "?").slice(0, 40), null, "SIN_REGISTRO",
+      m.texto, null, `ni los campos del evento ni contacts/phone dieron un telefono de 10 digitos. ${m.candidatos}`);
     return new Response(JSON.stringify({ ok: true }), { status: 200 });
   }
 
@@ -265,7 +319,8 @@ Deno.serve(async (req: Request) => {
       actualizado_en: new Date().toISOString(),
     }, { onConflict: "telefono" });
 
-    await registrar(svc, telefono, profileId, "ATENDIDO", m.texto, respuesta, null);
+    await registrar(svc, telefono, profileId, "ATENDIDO", m.texto, respuesta,
+      resueltoPorOpenwa ? `telefono resuelto por OpenWA desde ${m.chatId}` : null);
     return new Response(JSON.stringify({ ok: true }), { status: 200 });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -275,6 +330,34 @@ Deno.serve(async (req: Request) => {
     return new Response(JSON.stringify({ ok: false }), { status: 200 });
   }
 });
+
+/// Le pregunta a OpenWA a qué teléfono corresponde un identificador de contacto.
+///
+/// Hace falta porque WhatsApp ya no siempre manda el número: el primer mensaje real llegó con
+/// `from: "135231491317781@lid"`, el direccionamiento nuevo que sustituye el teléfono por un
+/// identificador opaco. Sin esto, la lista blanca tendría que llevar @lid dados de alta a mano, sin
+/// forma de saber a quién pertenecen; con esto se sigue usando el celular que ya está en el perfil.
+///
+/// La propia API lo llama «best-effort» y `phone` puede venir en null, así que quien llame tiene que
+/// contemplar que no se resuelva. Devuelve null en vez de lanzar: un fallo aquí es «no se pudo
+/// identificar», no una avería.
+async function telefonoDeContacto(contactId: string): Promise<string | null> {
+  if (!OPENWA_BASE || !OPENWA_KEY || !OPENWA_SESSION) return null;
+  try {
+    const r = await fetch(
+      `${OPENWA_BASE}/api/sessions/${OPENWA_SESSION}/contacts/${encodeURIComponent(contactId)}/phone`,
+      { headers: { "X-API-Key": OPENWA_KEY } });
+    if (!r.ok) {
+      console.log(`contacts/phone respondio ${r.status} para ${contactId}`);
+      return null;
+    }
+    const d = await r.json() as { phone?: string | null };
+    return normalizarTelefono(d.phone ?? null);
+  } catch (e) {
+    console.log("contacts/phone fallo:", e instanceof Error ? e.message : String(e));
+    return null;
+  }
+}
 
 /// Manda el texto por WhatsApp, al mismo chatId desde el que escribieron.
 async function enviar(chatId: string, texto: string): Promise<void> {
