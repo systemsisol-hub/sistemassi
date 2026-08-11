@@ -13,6 +13,7 @@ import 'external_contacts_page.dart';
 import 'directorio_page.dart';
 import 'avisos_page.dart';
 import 'convertidor_page.dart';
+import 'whatsapp_page.dart';
 import 'avisos_store.dart';
 import 'widgets/banner_avisos.dart';
 import 'widgets/dialogo_aviso.dart';
@@ -39,7 +40,7 @@ final _navGroups = <(String, List<String>)>[
   ('GENERAL',        ['Mi Perfil', 'Social', 'Avisos', 'Directorio', 'Conocimientos', 'Contraseñas', 'Contactos Ext.', 'Firmas', 'Convertidor', 'Calendario']),
   ('OPERACIÓN',      ['Incidencias', 'Inventario', 'Colaborador', 'Asistencia']),
   ('ANÁLISIS',       ['BI', 'Logs', 'Tablas']),
-  ('ADMINISTRACIÓN', ['Usuarios', 'IA', 'Papelera']),
+  ('ADMINISTRACIÓN', ['Usuarios', 'IA', 'WhatsApp', 'Papelera']),
 ];
 
 class MainNavigation extends StatefulWidget {
@@ -106,6 +107,16 @@ class _MainNavigationState extends State<MainNavigation> {
       'activeIcon': Icons.diversity_3,
       'widget': const SocialPage(),
     });
+    if (widget.permissions['show_whatsapp'] == true) {
+      pages.add({
+        'title': 'WhatsApp',
+        // Mismo glifo en los dos estados: `chat_outlined` es nuevo en la fuente y saldría en blanco
+        // para quien tenga la anterior en caché, como pasó con el Convertidor.
+        'icon': Icons.chat,
+        'activeIcon': Icons.chat,
+        'widget': const WhatsappPage(),
+      });
+    }
     if (widget.permissions['show_convertidor'] == true) {
       pages.add({
         'title': 'Convertidor',
