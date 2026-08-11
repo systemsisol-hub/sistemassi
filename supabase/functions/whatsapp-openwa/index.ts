@@ -119,9 +119,21 @@ Deno.serve(async (req: Request) => {
     // Un secreto sin configurar cierra la puerta, no la abre.
     return new Response(JSON.stringify({ error: "sin secreto de webhook" }), { status: 503 });
   }
-  const recibida = (req.headers.get("X-OpenWA-Signature") ?? "").replace(/^sha256=/i, "");
+  const cabeceraFirma = req.headers.get("X-OpenWA-Signature");
+  const recibida = (cabeceraFirma ?? "").replace(/^sha256=/i, "");
   const esperada = await hmacSha256Hex(WEBHOOK_SECRET, crudo);
   if (!igualesEnTiempoConstante(recibida.toLowerCase(), esperada)) {
+    // Se distinguen los dos casos, porque se arreglan de formas distintas y el rechazo NO deja
+    // rastro en la bitacora: sin telefono no hay a quien atribuirle el renglon, y registrar todo lo
+    // que llame a la funcion la convertiria en un buzon de basura para cualquiera.
+    //
+    // Sin cabecera  -> al webhook de OpenWA le falta el campo `secret`.
+    // Con cabecera  -> el secreto de los dos lados no es el mismo.
+    console.log(cabeceraFirma
+      ? "firma invalida: llego X-OpenWA-Signature pero no coincide. El `secret` del webhook en " +
+        "OpenWA y OPENWA_WEBHOOK_SECRET no son iguales."
+      : "sin firma: la peticion llego SIN cabecera X-OpenWA-Signature. Al webhook de OpenWA le " +
+        "falta el campo `secret`.");
     return new Response(JSON.stringify({ error: "firma inválida" }), { status: 401 });
   }
 
@@ -146,6 +158,15 @@ Deno.serve(async (req: Request) => {
       m.texto, null, `no se pudo normalizar; claves del evento: ${m.claves}`);
     return new Response(JSON.stringify({ ok: true }), { status: 200 });
   }
+
+  // Para contestar se usa el `chatId` TAL COMO LLEGO, no uno reconstruido.
+  //
+  // El numero propio de la sesion aparece en el panel como `5215580180569`: con el `1` que WhatsApp
+  // arrastra para Mexico. Yo construia `52` + diez digitos, sin ese `1`, y no hay forma de saber
+  // desde aqui cual de las dos formas acepta `send-text`. Devolver la que vino elimina la duda: si
+  // WhatsApp la uso para hablarnos, es valida para responder. El telefono normalizado se sigue
+  // usando para identificar a la persona, que es otra cosa.
+  const destino = String(m.chatId);
 
   try {
     // ── Puerta 2: el teléfono resuelve a UNA persona ─────────────────────────
@@ -185,7 +206,7 @@ Deno.serve(async (req: Request) => {
       await registrar(svc, telefono, profileId, "LIMITE", m.texto, null,
         `${count} mensajes atendidos en la última hora`);
       // Aquí SÍ se avisa: es alguien autorizado, y el silencio parecería una avería.
-      await enviar(telefono, "Has hecho muchas consultas seguidas. Espera un momento y vuelve a intentarlo.");
+      await enviar(destino, "Has hecho muchas consultas seguidas. Espera un momento y vuelve a intentarlo.");
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }
 
@@ -234,7 +255,7 @@ Deno.serve(async (req: Request) => {
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }
 
-    await enviar(telefono, respuesta);
+    await enviar(destino, respuesta);
 
     // El hilo se guarda DESPUÉS de enviar: si el envío falla, la pregunta no queda en la memoria
     // como si se hubiera contestado.
@@ -255,8 +276,8 @@ Deno.serve(async (req: Request) => {
   }
 });
 
-/// Manda el texto por WhatsApp.
-async function enviar(telefono: string, texto: string): Promise<void> {
+/// Manda el texto por WhatsApp, al mismo chatId desde el que escribieron.
+async function enviar(chatId: string, texto: string): Promise<void> {
   if (!OPENWA_BASE || !OPENWA_KEY || !OPENWA_SESSION) {
     throw new Error("falta configurar OPENWA_BASE_URL, OPENWA_API_KEY u OPENWA_SESSION_ID");
   }
@@ -265,8 +286,7 @@ async function enviar(telefono: string, texto: string): Promise<void> {
     {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-API-Key": OPENWA_KEY },
-      // `52` sin el `1`: es la forma que WhatsApp acepta hoy para México.
-      body: JSON.stringify({ chatId: `52${telefono}@c.us`, text: texto }),
+      body: JSON.stringify({ chatId, text: texto }),
     });
   if (!r.ok) {
     throw new Error(`send-text respondió ${r.status}: ${(await r.text()).slice(0, 200)}`);
