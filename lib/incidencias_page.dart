@@ -565,12 +565,30 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
     final c = SiColors.of(context);
     final completedYears = _calcYears();
 
-    final String targetUserId = _selectedUserId ?? '';
+    // Antes esto era `_selectedUserId ?? ''`, y con eso la tabla mentía.
+    //
+    // Cuando alguien ve SU PROPIA página no hay usuario seleccionado, así que `targetUserId` quedaba
+    // en cadena vacía, ninguna incidencia coincidía con la comparación de abajo, y `usedDaysMap`
+    // salía vacío: la columna «Solicitados» mostraba 0 y «Disponible» los días de ley completos.
+    // Medido con un caso real —ingreso 2014, 108 días ya tomados—: la tabla decía **182 días
+    // disponibles** donde había **74**. El formulario de solicitud sí los restaba, así que las dos
+    // partes de la misma página se contradecían.
+    //
+    // `_fetchIncidencias` ya trae sólo las de la persona correcta, así que basta con resolver el id
+    // igual que hace `_getAvailablePeriods`.
+    final String targetUserId = _selectedUserId ??
+        Supabase.instance.client.auth.currentUser?.id ??
+        '';
     String normalizePeriod(String? p) =>
         (p ?? '').replaceAll(RegExp(r'\D'), '');
 
     final usedDaysMap = <String, int>{};
     for (final inc in _incidencias) {
+      // ⚠️ Aquí sólo se cuenta APROBADA, mientras que `_getAvailablePeriods` —el que alimenta el
+      // formulario— y Soli cuentan también PENDIENTE. Es una diferencia de criterio, no un fallo:
+      // decidir si una solicitud pendiente ya «reserva» los días es de negocio. Se deja como estaba
+      // para no cambiar dos cosas a la vez, pero conviene resolverlo: hoy la tabla puede mostrar más
+      // días disponibles de los que el formulario permitirá pedir.
       if (inc['usuario_id'] == targetUserId && inc['status'] == 'APROBADA') {
         final normP = normalizePeriod(inc['periodo'] as String?);
         final dias = inc['dias'] as int? ?? 0;
