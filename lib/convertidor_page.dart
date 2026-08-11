@@ -126,6 +126,8 @@ class _ConvertidorPageState extends State<ConvertidorPage> {
                   const SizedBox(height: SiSpace.x4),
                   _tarjetaResultado(c),
                 ],
+                const SizedBox(height: SiSpace.x5),
+                _notaPrivacidad(c),
               ],
             ),
           ),
@@ -133,6 +135,48 @@ class _ConvertidorPageState extends State<ConvertidorPage> {
       ),
     );
   }
+
+  /// Qué pasa con el documento que sube la persona.
+  ///
+  /// Se dice porque no es evidente: un convertidor en línea normalmente manda tu archivo a un
+  /// tercero. Este no. Y se dice completo —incluido el nombre en el registro— porque prometer más
+  /// privacidad de la que hay es peor que no decir nada: lo comprobé midiendo, y el nombre del
+  /// archivo sí aparece en el registro técnico del servidor aunque el contenido no se guarde.
+  Widget _notaPrivacidad(SiColors c) => Container(
+        padding: const EdgeInsets.all(SiSpace.x4),
+        decoration: BoxDecoration(
+          color: c.panel,
+          borderRadius: SiRadius.rMd,
+          border: Border.all(color: c.line),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.lock_outline, size: 16, color: c.ink3),
+            const SizedBox(width: SiSpace.x3),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Tus documentos no se conservan',
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: c.ink2)),
+                  const SizedBox(height: 2),
+                  Text(
+                      'Se procesan en un servidor de la empresa, no en un servicio '
+                      'de terceros. Ni el archivo que subes ni el resultado quedan '
+                      'guardados: el resultado se descarga a tu equipo y nada más. '
+                      'El nombre del archivo sí aparece en el registro técnico del '
+                      'servidor.',
+                      style: TextStyle(fontSize: 11.5, height: 1.4, color: c.ink3)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
 
   Widget _encabezado(SiColors c) => Row(
         children: [
