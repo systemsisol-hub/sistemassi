@@ -1147,6 +1147,15 @@ Deno.serve(async (req: Request) => {
       ...messages.map(m => ({ role: m.role, content: m.content })),
     ];
 
+    // Qué modelo y con cuántas herramientas se está trabajando.
+    //
+    // No es un secreto y hace falta: `OLLAMA_MODEL` vive en las variables del proyecto, no en el
+    // repositorio, así que desde el código sólo se ve el respaldo del `??` —que no es lo que corre si
+    // la variable está configurada, y lo está—. Sin esto, diagnosticar por qué el modelo se salta las
+    // herramientas es adivinar. El número de herramientas va aquí porque mandarle quince de golpe es
+    // una de las causas candidatas.
+    console.log(`modelo ${OLLAMA_MODEL} en ${OLLAMA_BASE}, ${tools.length} herramientas`);
+
     // ── Via directa: sus propias vacaciones ────────────────────────────────
     //
     // Se resuelve sin pasar por el modelo; ver `preguntaSusVacaciones`. El permiso se comprueba con
