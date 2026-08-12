@@ -5,12 +5,18 @@
 // separada del esquema, un campo peligroso colado.
 //
 // Correr con:  node supabase/functions/ai-assistant/verificar_permisos.mjs
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-const RUTA = join(dirname(fileURLToPath(import.meta.url)), 'index.ts');
-const src = readFileSync(RUTA, 'utf8');
+// Se leen LOS OCHO modulos, no `index.ts` solo.
+//
+// Antes todo vivia en un archivo. Al partirlo, el prompt quedo en prompt.ts, el catalogo en
+// herramientas.ts y los permisos en permisos.ts, y este arnes cruza los tres. Leer el directorio
+// completo tambien evita tener que volver aqui la proxima vez que algo se mueva de sitio.
+const aqui = dirname(fileURLToPath(import.meta.url));
+const src = readdirSync(aqui).filter((f) => f.endsWith('.ts')).sort()
+  .map((f) => readFileSync(join(aqui, f), 'utf8')).join('\n');
 
 const bloque = (nombre) => {
   const i = src.indexOf(nombre);
@@ -241,6 +247,17 @@ if (iniPrompt > 0 && finPrompt > iniPrompt) {
   const sueltos = [...cuerpo].filter((c, i) => c === '`' && cuerpo[i - 1] !== '\\').length;
   check(sueltos === 0,
     `ningun acento grave sin escapar dentro del prompt (hay ${sueltos})`);
+}
+
+// ── 12. Toda herramienta se explica en la pagina de configuracion ────────────
+//
+// `QUE_HACE` alimenta la pagina que ven los administradores. Si alguien agrega una herramienta y se
+// olvida de la descripcion, la pagina la mostraria con la celda vacia: una capacidad del agente
+// visible pero sin explicar, que es peor que no tener la pagina.
+console.log('\n12. Toda herramienta tiene descripcion para la pagina');
+const queHace = src.slice(src.indexOf('const QUE_HACE'), src.indexOf('const VIAS_DIRECTAS'));
+for (const h of Object.keys(HERRAMIENTAS)) {
+  check(new RegExp(`(^|\\s)${h}:`, 'm').test(queHace), `${h} se explica en QUE_HACE`);
 }
 
 console.log(fallas === 0 ? '\nTODO BIEN' : `\n${fallas} FALLAS`);

@@ -268,6 +268,9 @@ class _MainNavigationState extends State<MainNavigation> {
         'widget': AiPage(role: widget.role, permissions: widget.permissions),
       });
     }
+    // La configuración del agente NO va aquí: vive en una pestaña dentro de la propia página de IA.
+    // Es configuración de ese agente, no una sección más del sistema, y el menú principal ya es
+    // largo. Ver `_buildTabBar` en ai_page.dart.
     if (widget.permissions['show_trash'] == true) {
       pages.add({
         'title': 'Papelera',

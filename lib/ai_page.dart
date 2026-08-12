@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:excel/excel.dart' as xl;
+import 'agente_config_page.dart';
 import 'asistente_store.dart';
 import 'theme/si_theme.dart';
 
@@ -29,12 +30,26 @@ class AiPage extends StatefulWidget {
   State<AiPage> createState() => _AiPageState();
 }
 
-class _AiPageState extends State<AiPage> {
+class _AiPageState extends State<AiPage> with SingleTickerProviderStateMixin {
   // Los controladores sí son de cada vista: el panel y la página desplazan por separado.
   final _inputCtrl  = TextEditingController();
   final _scrollCtrl = ScrollController();
 
   final _store = AsistenteStore.instancia;
+
+  /// Las pestañas Chat / Configuración, sólo para administradores y sólo en la página completa.
+  ///
+  /// Es `null` para todos los demás: una barra con una sola pestaña subrayada es cromo que promete
+  /// una navegación que no existe. Mismo criterio que en la página de Asistencia.
+  TabController? _tabs;
+
+  /// La configuración no se pide hasta que alguien abre esa pestaña.
+  ///
+  /// `TabBarView` construye a los vecinos por su cuenta, así que sin esto cada vez que se abriera el
+  /// chat saldría una petición a la función que nadie pidió.
+  bool _configVisitada = false;
+
+  bool get _muestraPestanas => !widget.compacto && widget.role == 'admin';
 
   /// Cada sugerencia lleva el permiso que la habilita, el mismo que exige la Edge Function. Sin
   /// esto se ofrecería un atajo que responde «no tengo acceso a esa información»: peor que no
@@ -59,6 +74,14 @@ class _AiPageState extends State<AiPage> {
     // —el panel mientras la página está abierta, o al revés— ésta también baja al final.
     _store.addListener(_scrollToBottom);
     _store.cargarNombreUsuario();
+    if (_muestraPestanas) {
+      _tabs = TabController(length: 2, vsync: this)
+        ..addListener(() {
+          if (_tabs!.index == 1 && !_configVisitada) {
+            setState(() => _configVisitada = true);
+          }
+        });
+    }
   }
 
   @override
@@ -66,6 +89,7 @@ class _AiPageState extends State<AiPage> {
     _store.removeListener(_scrollToBottom);
     _inputCtrl.dispose();
     _scrollCtrl.dispose();
+    _tabs?.dispose();
     super.dispose();
   }
 
@@ -170,31 +194,98 @@ class _AiPageState extends State<AiPage> {
         final isEmpty = mensajes.isEmpty;
         final pad = widget.compacto ? 10.0 : 16.0;
 
+        final chat = Column(
+          children: [
+            Expanded(
+              child: isEmpty
+                  ? _buildWelcome(c)
+                  : ListView.builder(
+                      controller: _scrollCtrl,
+                      padding: EdgeInsets.fromLTRB(pad, pad, pad, 8),
+                      itemCount: mensajes.length + (_store.cargando ? 1 : 0),
+                      itemBuilder: (context, i) {
+                        if (i == mensajes.length) return _TypingBubble(c: c);
+                        return _buildBubble(mensajes[i], c);
+                      },
+                    ),
+            ),
+            // En el panel angosto las acciones rápidas no caben en una fila y desordenan la
+            // vista; ahí sólo estorban.
+            if (isEmpty && !widget.compacto) _buildQuickActions(c),
+            _buildInputBar(c),
+          ],
+        );
+
+        if (_tabs == null) {
+          return Scaffold(backgroundColor: c.bg, body: chat);
+        }
+
+        // La configuración vive DENTRO de la página de IA, no en el menú principal: es de este
+        // agente y no una sección aparte del sistema. Pedido tal cual por el usuario.
         return Scaffold(
           backgroundColor: c.bg,
           body: Column(
             children: [
+              _buildTabBar(c),
               Expanded(
-                child: isEmpty
-                    ? _buildWelcome(c)
-                    : ListView.builder(
-                        controller: _scrollCtrl,
-                        padding: EdgeInsets.fromLTRB(pad, pad, pad, 8),
-                        itemCount: mensajes.length + (_store.cargando ? 1 : 0),
-                        itemBuilder: (context, i) {
-                          if (i == mensajes.length) return _TypingBubble(c: c);
-                          return _buildBubble(mensajes[i], c);
-                        },
-                      ),
+                child: TabBarView(
+                  controller: _tabs,
+                  // La configuración es una lista larga que se lee, no se desliza: cambiar de
+                  // pestaña arrastrando la haría saltar al chat al intentar bajar por ella.
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: [
+                    chat,
+                    _configVisitada ? const AgenteConfigPage() : const SizedBox.shrink(),
+                  ],
+                ),
               ),
-              // En el panel angosto las acciones rápidas no caben en una fila y desordenan la
-              // vista; ahí sólo estorban.
-              if (isEmpty && !widget.compacto) _buildQuickActions(c),
-              _buildInputBar(c),
             ],
           ),
         );
       },
+    );
+  }
+
+  /// Mismo cromo que la barra de Asistencia, para que las dos páginas con pestañas se vean igual.
+  Widget _buildTabBar(SiColors c) {
+    return Container(
+      decoration: BoxDecoration(
+        color: c.panel,
+        border: Border(bottom: BorderSide(color: c.line)),
+      ),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: TabBar(
+          controller: _tabs,
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
+          labelColor: c.brand,
+          unselectedLabelColor: c.ink3,
+          indicatorColor: c.brand,
+          indicatorSize: TabBarIndicatorSize.label,
+          labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          unselectedLabelStyle: const TextStyle(fontSize: 13),
+          tabs: const [
+            // `smart_toy_outlined` y no `forum_outlined`: los dos glifos valen, pero éste ya se usa
+            // en nueve sitios, así que está en la fuente recortada de los despliegues anteriores.
+            // Uno nuevo sale en BLANCO para quien tenga esa fuente en caché —`flutter build web`
+            // recorta MaterialIcons a los iconos usados y la sirve siempre en la misma URL—, que es
+            // lo que pasó con el icono del Convertidor.
+            Tab(
+              height: 42,
+              icon: Icon(Icons.smart_toy_outlined, size: 16),
+              iconMargin: EdgeInsets.zero,
+              text: 'Chat',
+            ),
+            Tab(
+              height: 42,
+              icon: Icon(Icons.settings_outlined, size: 16),
+              iconMargin: EdgeInsets.zero,
+              text: 'Configuración',
+            ),
+          ],
+        ),
+      ),
     );
   }
 

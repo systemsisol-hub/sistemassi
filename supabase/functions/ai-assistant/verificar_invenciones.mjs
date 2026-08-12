@@ -9,13 +9,17 @@
 // comparan estan verificadas en SQL. Dos de ellos salieron en la aplicacion, no por WhatsApp: la
 // pagina parecia acertar porque pinta una tarjeta con los datos crudos y la vista va a la tarjeta,
 // pero su prosa tiene el mismo problema. De ahi que el guardia viva en la funcion y no en el puente.
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// Se leen LOS OCHO modulos, no `index.ts` solo: al partir el archivo estas funciones se fueron a
+// nombres.ts y respuestas.ts. Leer el directorio completo evita volver aqui cada vez que algo se
+// mueva de sitio.
 const aqui = dirname(fileURLToPath(import.meta.url));
-const src = readFileSync(join(aqui, 'index.ts'), 'utf8');
+const src = readdirSync(aqui).filter((f) => f.endsWith('.ts')).sort()
+  .map((f) => readFileSync(join(aqui, f), 'utf8')).join('\n');
 
 function extraerFuncion(nombre) {
   const i = src.indexOf(`function ${nombre}(`);
@@ -56,17 +60,28 @@ function extraerConst(nombre) {
 const tmp = join(tmpdir(), 'ai-assistant-invenciones.ts');
 writeFileSync(tmp, `${extraerConst('MESES')}\n\n`
   + `${extraerConst('NOMBRE_MES')}\n\n`
+  + `${extraerConst('DATOS_QUE_NO_SE_INVENTAN')}\n\n`
   + `${extraerFuncion('sinAcentos')}\n\n`
   + `${extraerFuncion('afirmaDatoSinRespaldo')}\n\n`
   + `${extraerFuncion('preguntaSusVacaciones')}\n\n`
   + `${extraerFuncion('textoUltimaSolicitud')}\n\n`
   + `${extraerFuncion('textoVacacionesPropias')}\n\n`
+  + `${extraerFuncion('soloUnIdentificador')}\n\n`
+  + `${extraerFuncion('preguntaIncidenciasDe')}\n\n`
+  + `${extraerFuncion('textoIncidencias')}\n\n`
+  + `${extraerFuncion('preguntaSuEquipo')}\n\n`
+  + `${extraerFuncion('textoEquipoPropio')}\n\n`
+  + `${extraerFuncion('alcanceDeLaConsulta')}\n\n`
   + `${extraerFuncion('preguntaCumpleanos')}\n\n`
   + `${extraerFuncion('textoCumpleanos')}\n`
   + 'export { afirmaDatoSinRespaldo, preguntaSusVacaciones, textoVacacionesPropias,\n'
-  + '  preguntaCumpleanos, textoCumpleanos, textoUltimaSolicitud };\n', 'utf8');
+  + '  preguntaCumpleanos, textoCumpleanos, textoUltimaSolicitud,\n'
+  + '  preguntaSuEquipo, textoEquipoPropio, alcanceDeLaConsulta, soloUnIdentificador,\n'
+  + '  preguntaIncidenciasDe, textoIncidencias };\n', 'utf8');
 const { afirmaDatoSinRespaldo, preguntaSusVacaciones, textoVacacionesPropias,
-  preguntaCumpleanos, textoCumpleanos, textoUltimaSolicitud } =
+  preguntaCumpleanos, textoCumpleanos, textoUltimaSolicitud,
+  preguntaSuEquipo, textoEquipoPropio, alcanceDeLaConsulta, soloUnIdentificador,
+  preguntaIncidenciasDe, textoIncidencias } =
   await import('file://' + tmp.replace(/\\/g, '/'));
 
 let fallos = 0;
@@ -123,6 +138,13 @@ ok('con buscar_cumpleanos detras SI pasa',
      new Set(['buscar_cumpleanos'])));
 ok('decir que no cumple nadie NO se bloquea: no lleva fecha',
    !afirmaDatoSinRespaldo('Esta semana no cumple años nadie.', nada));
+// El falso positivo que tenia esta regla: «cumple» mas un digito la disparaba, y la antiguedad no
+// es un cumpleaños. El modelo la calcula con la fecha de ingreso que ya trae la ficha, asi que no
+// necesita buscar_cumpleanos detras.
+ok('la antiguedad NO se confunde con un cumpleaños',
+   !afirmaDatoSinRespaldo('En marzo cumple 5 años en la empresa.', nada));
+ok('ni dicha al reves',
+   !afirmaDatoSinRespaldo('Lleva 12 años de antigüedad, así que le tocan 22 días de ley.', nada));
 
 console.log('\nSin haber consultado nada, no se entrega una lista de registros');
 // La regla que NO depende de ninguna palabra. El caso real: «umpleaños en septiembre (4):» con cuatro
@@ -244,6 +266,160 @@ ok('sin solicitudes lo dice, no deja la frase colgando',
 ok('un solo dia va en singular',
    textoUltimaSolicitud({ solicitudes: [{ ...conSalida.solicitudes[1] }] }, 'Su')
      .includes('1 día'));
+
+console.log('\nLas incidencias de alguien: la pregunta donde mas se invento');
+// El caso real: pedido el historial de Marco, se invento una incidencia entera y la defendio con
+// «No invento». De las 1167 incidencias de la base, cero coinciden en ningun campo.
+for (const [q, esperado] of [
+  ['incidencias de marco montoya', 'marco montoya'],
+  ['las incidencias de hector figueroa vallejo', 'hector figueroa vallejo'],
+  ['que incidencias tiene bravo lomeli', 'bravo lomeli'],
+  ['dame las incidencias del 0186', '0186'],
+  ['incidencias de la sra lopez vigil', 'lopez vigil'],
+]) {
+  const r = preguntaIncidenciasDe(q);
+  ok(`"${q}" -> "${esperado}"`, r?.quien === esperado, JSON.stringify(r));
+}
+for (const q of ['mis incidencias', 'que incidencias tengo', 'mis incidencias pendientes?']) {
+  const r = preguntaIncidenciasDe(q);
+  ok(`"${q}" es propia`, r?.propio === true, JSON.stringify(r));
+}
+for (const q of [
+  // Del conjunto, no de una persona: eso lo contesta el modelo con la herramienta.
+  'cuantas incidencias hay',
+  'todas las incidencias de la empresa',
+  'incidencias pendientes',
+  // Lo que va detras de «de» no siempre es una persona.
+  'incidencias de agosto',
+  'incidencias de este mes',
+  'incidencias de vacaciones',
+  'incidencias de 2026',
+  // Y «vacaciones» a secas la atiende calcular_vacaciones, que ya da la tabla y la ultima salida.
+  'vacaciones de marco montoya',
+  'cuantas vacaciones tengo',
+  'hola',
+]) {
+  ok(`no se la queda: "${q}"`, preguntaIncidenciasDe(q) === null);
+}
+
+// El texto sale de los renglones, con las fechas REALES de Marco.
+const incMarco = { count: 3, results: [
+  { periodo: '2020 - 2021', dias: 1, status: 'APROBADA', fecha_inicio: '2026-04-06',
+    fecha_fin: '2026-04-06', fecha_regreso: '2026-04-07' },
+  { periodo: '2016 - 2017', dias: 6, status: 'APROBADA', fecha_inicio: '2026-08-21',
+    fecha_fin: '2026-08-28', fecha_regreso: '2026-08-31' },
+  { periodo: '2020 - 2021', dias: 6, status: 'APROBADA', fecha_inicio: '2026-01-02',
+    fecha_fin: '2026-01-09', fecha_regreso: '2026-01-12' },
+] };
+const txtInc = textoIncidencias(incMarco, 'MARCO ANTONIO MONTOYA LOPEZ (empleado 0186)');
+console.log(`  -> ${txtInc.replace(/\n/g, ' | ')}`);
+ok('dice cuantas son', txtInc.includes('3 incidencias'));
+ok('la mas reciente va primero, por fecha de SALIDA y no de captura',
+   txtInc.indexOf('21/08/2026') < txtInc.indexOf('06/04/2026'));
+ok('trae el regreso, que es lo que usa un jefe', txtInc.includes('regreso 31/08/2026'));
+ok('las fechas van en dia/mes/año', txtInc.includes('21/08/2026 al 28/08/2026'));
+// Lo que importa: que NO aparezca la incidencia inventada.
+ok('NO aparece la incidencia inventada del 31/08 al 31/08',
+   !txtInc.includes('31/08/2026 al 31/08/2026'));
+ok('ni un periodo «2026» que no existe en la base', !/periodo 2026\b/.test(txtInc));
+ok('sin incidencias lo dice, no deja la lista vacia',
+   textoIncidencias({ count: 0, results: [] }, 'Enrique').includes('no tiene incidencias'));
+ok('una sola va en singular',
+   textoIncidencias({ count: 1, results: [incMarco.results[0]] }, 'X').includes('tiene 1 incidencia'));
+
+console.log('\nUn mensaje que es SOLO un identificador no pasa por el modelo');
+// Los tres casos reales del historial de WhatsApp del 12/08/2026. «0170» acabo con el nombre de otra
+// persona pegado al numero, y los dos uuid en «no tengo acceso por UUID», que es falso.
+ok('«0170» es un numero de empleado',
+   soloUnIdentificador('0170')?.numero_empleado === '0170');
+ok('con espacios alrededor tambien',
+   soloUnIdentificador('  0170 ')?.numero_empleado === '0170');
+ok('un uuid pegado es un usuario_id',
+   soloUnIdentificador('a1d4a9fb-9173-4690-aba8-da604eade495')?.usuario_id
+     === 'a1d4a9fb-9173-4690-aba8-da604eade495');
+ok('el otro uuid del historial, tambien',
+   soloUnIdentificador('9cf3eb50-a410-4f89-8752-182c8b918583')?.usuario_id !== undefined);
+ok('un uuid en mayusculas', soloUnIdentificador('9CF3EB50-A410-4F89-8752-182C8B918583') !== null);
+for (const q of [
+  // Con una intencion pegada, la resuelve el modelo: puede no ser una ficha lo que se pide.
+  'vacaciones de 0170',
+  'incidencias del 0170',
+  'busca a 0170',
+  // Un numero corto puede ser la respuesta a otra pregunta -«¿cuantos dias?» «5»-.
+  '5',
+  '26',
+  // Y lo que no es un identificador.
+  'hola',
+  '',
+  'a1d4a9fb-9173-4690',
+  '2026-08-31',
+]) {
+  ok(`no se la queda: "${q}"`, soloUnIdentificador(q) === null);
+}
+
+console.log('\nLa via directa del equipo propio, y lo que NO se queda');
+// El caso real del 12/08/2026: un administrador pregunto esto y recibio el LAP-TOP de otra persona,
+// porque `buscar_inventario` le devuelve TODO el inventario si no se le pasa usuario_id.
+for (const q of [
+  'hola me puedes decir que equipo de computo tengo asignado?',
+  'que equipo tengo asignado',
+  'cual es mi equipo',
+  'que laptop tengo',
+  'mi celular de la empresa',
+  'que tengo asignado del inventario',
+  'que equipos me asignaron',
+  'mi computadora',
+]) {
+  ok(`la atiende: "${q}"`, preguntaSuEquipo(q));
+}
+for (const q of [
+  // De otra persona: lo resuelve el modelo, que sabe buscar el nombre.
+  'que equipo tiene abraham acuña',
+  'el equipo de hector figueroa',
+  'que laptop trae marco montoya',
+  // Del inventario entero, no de nadie en particular.
+  'cuantas laptops hay',
+  'equipos sin asignar',
+  'que equipos hay en vidamar',
+  'dame todo el inventario',
+  'cuantos equipos hay en total',
+  // No son preguntas de inventario.
+  'cuantas vacaciones tengo',
+  'mis incidencias',
+  'Soli?',
+]) {
+  ok(`la deja pasar: "${q}"`, !preguntaSuEquipo(q));
+}
+
+const equipoReal = { count: 2, results: [
+  { tipo: 'TEL. CELULAR', marca: 'XIAOMI', modelo: 'A10', n_s: '38905/62TB05473',
+    condicion: 'NUEVO', ubicacion: 'CONSTITUYENTES' },
+  { tipo: 'LAPTOP', marca: 'DELL', modelo: 'X15', n_s: 'DERTY5676',
+    condicion: 'USADO', ubicacion: 'CONSTITUYENTES' },
+] };
+const txtEquipo = textoEquipoPropio(equipoReal);
+console.log(`  -> ${txtEquipo.replace(/\n/g, ' | ')}`);
+ok('dice cuantos son', txtEquipo.includes('2 equipos'));
+ok('trae la serie, que es lo que sirve para un ticket', txtEquipo.includes('DERTY5676'));
+ok('trae marca y modelo', txtEquipo.includes('DELL') && txtEquipo.includes('X15'));
+// Lo que de verdad importa: que NO aparezca el equipo de Abraham, que es lo que se contesto.
+ok('NO aparece el equipo de otra persona', !txtEquipo.includes('PF4ZDWD'));
+ok('sin equipos lo dice, no deja la lista vacia',
+   textoEquipoPropio({ count: 0, results: [] }).startsWith('No tienes ningun equipo'));
+ok('un solo equipo va en singular',
+   textoEquipoPropio({ count: 1, results: [equipoReal.results[1]] }).includes('1 equipo asignado'));
+
+console.log('\nCada consulta dice DE QUIEN son los renglones que devuelve');
+ok('sin usuario_id avisa de que son de toda la empresa',
+   alcanceDeLaConsulta('', 'equipos').includes('TODA la empresa'));
+ok('y avisa de que no hay que atribuirlos a quien pregunta',
+   alcanceDeLaConsulta('', 'equipos').includes('no atribuyas ninguno a quien pregunta'));
+ok('con el usuario_id propio lo dice claro',
+   alcanceDeLaConsulta('propio', 'equipos') === 'Solo los equipos de quien pregunta.');
+ok('con el de otro, tambien',
+   alcanceDeLaConsulta('de un usuario', 'incidencias').includes('del usuario que se pidio'));
+ok('los que no tienen dueño se distinguen',
+   alcanceDeLaConsulta('sin asignar', 'equipos').includes('no tienen usuario asignado'));
 
 console.log('\nLa via directa de cumpleaños lee el mes de la pregunta');
 // «cumpleaños de septiembre» acabo en el guardia porque el modelo no llamo a la herramienta, aunque

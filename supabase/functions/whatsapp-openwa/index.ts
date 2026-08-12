@@ -170,6 +170,44 @@ function textoDeVacaciones(structured: unknown): string | null {
   if (agotados > 0) {
     lineas.push("", `(${agotados} periodo${agotados === 1 ? "" : "s"} anterior${agotados === 1 ? "" : "es"} ya consumido${agotados === 1 ? "" : "s"})`);
   }
+
+  // La salida por venir o la ultima, que es el dato que de verdad se pide.
+  //
+  // ─── Por que se agrega ──────────────────────────────────────────────────────
+  //
+  // La aplicacion ya la mostraba y el puente no, y esa ausencia costo caro. El 12/08/2026 a las 13:00
+  // alguien pregunto por las incidencias de Marco y el modelo se INVENTO una entera: «#200, periodo
+  // 2026, 1 dia, del 31/08/2026 al 31/08/2026, regreso 01/09/2026, PENDIENTE». Comprobado en SQL: de
+  // las 1167 incidencias de la base, CERO empiezan el 31/08/2026, cero regresan el 01/09/2026, cero
+  // tienen periodo «2026» y cero estan en PENDIENTE. Y al reclamarselo contesto «No invento».
+  //
+  // El 31/08/2026 no salio de la nada: es la fecha de REGRESO real de Marco. Su salida verdadera es
+  // del 21 al 28 de agosto, y el modelo la reconstruyo mal porque no la tenia delante. Poniendola
+  // aqui, escrita desde los datos, deja de haber nada que reconstruir.
+  //
+  // `por_venir` lo decide la funcion, no esto: aqui solo se da formato.
+  const solicitudes = Array.isArray(d.solicitudes)
+    ? d.solicitudes as Array<Record<string, unknown>>
+    : [];
+  if (solicitudes.length > 0) {
+    const s0 = solicitudes[0];
+    const dia = (v: unknown) => {
+      const t = String(v ?? "");
+      const p = t.slice(0, 10).split("-");
+      return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : t;
+    };
+    const dias = typeof s0.dias === "number" ? s0.dias : null;
+    lineas.push(
+      "",
+      s0.por_venir === true ? "*Proxima salida:*" : "*Ultima salida:*",
+      `${dia(s0.fecha_inicio)} al ${dia(s0.fecha_fin)}`
+        + (dias !== null ? ` (${dias} dia${dias === 1 ? "" : "s"})` : ""),
+      `Regreso: ${dia(s0.fecha_regreso)}`,
+      `Periodo ${s0.periodo}, ${s0.status}`,
+    );
+  } else {
+    lineas.push("", "No tiene solicitudes registradas.");
+  }
   return lineas.join("\n");
 }
 
@@ -225,13 +263,174 @@ function extraerMensaje(cuerpo: Record<string, unknown>): {
 
 // ─── La función ──────────────────────────────────────────────────────────────
 
+/** Le pone el `secret` al webhook que ya existe, para que OpenWA empiece a firmar sus entregas.
+ *
+ * ─── Por que ACTUALIZAR y no crear ──────────────────────────────────────────
+ *
+ * `POST /api/sessions/:id/webhooks` crea uno nuevo, y con dos webhooks apuntando aqui cada mensaje
+ * llegaria DOS veces y el usuario recibiria la respuesta duplicada. Es exactamente el fallo que se
+ * arreglo al principio de todo esto, asi que no se vuelve a abrir: se lista, se busca el que apunta a
+ * esta funcion, y se hace `PUT` sobre EL MISMO.
+ *
+ * `url` y `events` son obligatorios en el PUT, asi que se reenvian TAL CUAL vienen del GET. Inventar
+ * la lista de eventos aqui seria apagar en silencio los que estuvieran activos.
+ *
+ * La URL se reenvia TAL CUAL, con el `?k=` que pueda llevar pegado. Esta funcion ya no lo mira, asi
+ * que es inofensivo, pero conviene borrarlo del webhook en OpenWA: mientras siga ahi, el secreto se
+ * escribe en los registros de OpenWA cada vez que entrega un mensaje.
+ */
+async function activarFirmaDelWebhook(): Promise<Response> {
+  const responde = (cuerpo: Record<string, unknown>, status = 200) =>
+    new Response(JSON.stringify(cuerpo),
+      { status, headers: { ...CORS, "Content-Type": "application/json" } });
+
+  if (!OPENWA_BASE || !OPENWA_KEY || !OPENWA_SESSION) {
+    return responde({ error: "falta configurar OPENWA_BASE_URL, OPENWA_API_KEY u OPENWA_SESSION_ID" }, 503);
+  }
+  if (WEBHOOK_SECRET.length === 0) {
+    return responde({ error: "falta OPENWA_WEBHOOK_SECRET: sin secreto no hay nada que registrar" }, 503);
+  }
+
+  const base = `${OPENWA_BASE}/api/sessions/${OPENWA_SESSION}/webhooks`;
+  const cabeceras = { "X-API-Key": OPENWA_KEY, "Content-Type": "application/json" };
+
+  const lista = await fetch(base, { headers: { "X-API-Key": OPENWA_KEY } });
+  const crudoLista = await lista.text();
+  if (!lista.ok) {
+    console.error(`OpenWA no listo los webhooks: ${lista.status} ${crudoLista.slice(0, 200)}`);
+    return responde({
+      error: `OpenWA respondio ${lista.status} al listar los webhooks. `
+        + `Si es 401 o 403, la llave necesita rol OPERATOR o superior.`,
+    }, 502);
+  }
+
+  // La forma de la respuesta puede venir como arreglo suelto o envuelta en `data`/`webhooks`.
+  let crudoJson: unknown;
+  try { crudoJson = JSON.parse(crudoLista); } catch { crudoJson = null; }
+  const comoArreglo = (v: unknown): Array<Record<string, unknown>> => {
+    if (Array.isArray(v)) return v as Array<Record<string, unknown>>;
+    if (v && typeof v === "object") {
+      for (const k of ["data", "webhooks", "items", "results"]) {
+        const dentro = (v as Record<string, unknown>)[k];
+        if (Array.isArray(dentro)) return dentro as Array<Record<string, unknown>>;
+      }
+    }
+    return [];
+  };
+  const webhooks = comoArreglo(crudoJson);
+
+  // El que apunta a ESTA funcion. Se compara por el nombre de la funcion y no por la URL completa,
+  // porque la registrada lleva el `?k=` pegado y puede llevar mas parametros.
+  const mios = webhooks.filter((w) => String(w.url ?? "").includes("/whatsapp-openwa"));
+  if (mios.length === 0) {
+    return responde({
+      error: "OpenWA no tiene ningun webhook apuntando a whatsapp-openwa. "
+        + `Hay ${webhooks.length} registrados en la sesion.`,
+    }, 409);
+  }
+  if (mios.length > 1) {
+    // No se elige por su cuenta: dos webhooks a la misma URL ya es un problema -entrega doble- y
+    // arreglarlo es borrar uno, que es una decision de quien administra.
+    return responde({
+      error: `Hay ${mios.length} webhooks apuntando a whatsapp-openwa. Eso ya duplica cada mensaje. `
+        + `Borra los que sobren en OpenWA antes de activar la firma.`,
+    }, 409);
+  }
+
+  const w = mios[0];
+  const id = String(w.id ?? w._id ?? w.webhookId ?? "");
+  if (!id) return responde({ error: "el webhook no trae id; no se puede actualizar" }, 502);
+
+  const eventos = Array.isArray(w.events) ? w.events : ["message.received"];
+  const put = await fetch(`${base}/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    headers: cabeceras,
+    body: JSON.stringify({
+      url: String(w.url ?? ""),
+      events: eventos,
+      secret: WEBHOOK_SECRET,
+      ...(typeof w.active === "boolean" ? { active: w.active } : {}),
+    }),
+  });
+  const crudoPut = await put.text();
+  if (!put.ok) {
+    console.error(`OpenWA no actualizo el webhook: ${put.status} ${crudoPut.slice(0, 200)}`);
+    return responde({ error: `OpenWA respondio ${put.status} al actualizar el webhook.` }, 502);
+  }
+
+  console.log(`firma activada en el webhook ${id}, eventos: ${eventos.join(",")}`);
+  return responde({
+    ok: true,
+    // El secreto NO se devuelve. OpenWA tampoco lo devuelve: es un campo de solo escritura.
+    mensaje: "Listo. OpenWA firmara sus entregas con el secreto que ya estaba configurado. "
+      + "Manda un mensaje al bot para comprobarlo. Si la URL del webhook lleva un ?k=, ya se puede "
+      + "borrar: esta funcion no lo mira.",
+    webhook_id: id,
+    eventos,
+  });
+}
+
+/// Cabeceras para que el navegador acepte la respuesta.
+///
+/// Esta funcion nacio como receptor de webhooks: la llamaba un servidor, que no aplica CORS, asi que
+/// nunca las necesito. Al añadir la accion de administrador empezo a llamarla la APLICACION, y ahi el
+/// navegador manda primero un `OPTIONS` de sondeo. Ese sondeo caia en el 405 de abajo y el error que
+/// se veia era «Failed to fetch», que no dice nada de la causa.
+///
+/// No abre nada: CORS lo aplica el navegador y no sustituye a ninguna comprobacion. Quien llame a esta
+/// funcion sigue necesitando la firma del webhook, o la sesion de un administrador.
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
 Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
+    return new Response("Method not allowed", { status: 405, headers: CORS });
   }
 
   const svc = createClient(SUPABASE_URL, SERVICE_KEY);
   const crudo = await req.text();
+
+  // ── Accion de administrador: activar la firma del webhook ──────────────────
+  //
+  // Se atiende ANTES de la puerta de la firma, porque esta peticion viene de la aplicacion y no del
+  // servidor de WhatsApp: no trae firma ni `?k=`, trae la sesion de un administrador.
+  //
+  // ─── Por que lo hace la funcion y no una persona a mano ─────────────────────
+  //
+  // El caso que la hizo falta: al webhook le faltaba el campo `secret`, asi que OpenWA no mandaba
+  // `X-OpenWA-Signature` y la unica credencial que llegaba era un `?k=` en la URL, que acaba escrito
+  // en los registros de quien la llama. Sirve tambien para rotar el secreto: se cambia
+  // `OPENWA_WEBHOOK_SECRET` en Supabase y se vuelve a pulsar.
+  //
+  // Registrarlo a mano exigiria que alguien leyera `OPENWA_API_KEY` y `OPENWA_WEBHOOK_SECRET` y los
+  // pegara en una terminal. Haciendolo aqui, los dos secretos no salen nunca de Supabase: la funcion
+  // ya tiene los dos, porque con la llave manda las respuestas y con el secreto verifica.
+  if (req.headers.get("Authorization")) {
+    let accion = "";
+    try {
+      accion = String((JSON.parse(crudo) as Record<string, unknown>).accion ?? "");
+    } catch { /* cuerpo no-JSON: cae al 400 de abajo */ }
+    if (accion !== "activar_firma") {
+      return new Response(JSON.stringify({ error: "accion desconocida" }),
+        { status: 400, headers: { ...CORS, "Content-Type": "application/json" } });
+    }
+
+    const { data: { user } } = await svc.auth.getUser(
+      (req.headers.get("Authorization") ?? "").replace("Bearer ", ""));
+    if (!user) {
+      return new Response(JSON.stringify({ error: "sesion invalida" }),
+        { status: 401, headers: { ...CORS, "Content-Type": "application/json" } });
+    }
+    const { data: perfil } = await svc.from("profiles").select("role").eq("id", user.id).single();
+    if (perfil?.role !== "admin") {
+      return new Response(JSON.stringify({ error: "solo administradores" }),
+        { status: 403, headers: { ...CORS, "Content-Type": "application/json" } });
+    }
+    return await activarFirmaDelWebhook();
+  }
 
   // ── Puerta 1: la firma ─────────────────────────────────────────────────────
   //
@@ -241,27 +440,41 @@ Deno.serve(async (req: Request) => {
     // Un secreto sin configurar cierra la puerta, no la abre.
     return new Response(JSON.stringify({ error: "sin secreto de webhook" }), { status: 503 });
   }
-  // Dos formas de acreditarse, y basta con una:
+  // Solo la firma HMAC del cuerpo. Ata la credencial AL CONTENIDO, asi que ni siquiera sirve
+  // reenviar una peticion valida con el cuerpo cambiado.
   //
-  //   a) La firma HMAC del cuerpo, que es la buena: ata la credencial AL CONTENIDO, asi que ni
-  //      siquiera sirve reenviar una peticion valida con el cuerpo cambiado.
-  //   b) El mismo secreto en la cadena de consulta: `?k=<secreto>`.
+  // ─── Aqui hubo un `?k=<secreto>` y por que ya no ─────────────────────────────
   //
-  // La (b) existe porque el panel de OpenWA NO expone el campo `secret` del webhook —comprobado en
-  // los formularios de alta y de edicion— y sin llave de API no se puede registrar por API. La URL
-  // si es editable, asi que es la unica via que queda con las herramientas disponibles.
+  // Se aceptaba el secreto en la cadena de consulta porque el panel de OpenWA no expone el campo
+  // `secret` del webhook, asi que no habia forma de que OpenWA firmara. Era mas debil por dos motivos:
+  // no va atada al cuerpo, y una URL con secreto acaba escrita en los registros de quien la llama.
   //
-  // Es mas debil que la firma y conviene saber por que: no va atada al cuerpo, y una URL con secreto
-  // acaba en los registros de quien la llama. Aqui eso es el propio servidor de OpenWA, y el trafico
-  // va por TLS, asi que el riesgo real es acotado. En cuanto haya una llave de API conviene
-  // registrar el `secret` de verdad y quitar el `?k=`.
+  // Se cerro el 12/08/2026 registrando el `secret` por la API -`PUT /api/sessions/:id/webhooks/:id`,
+  // ver `activarFirmaDelWebhook`- y no a ciegas: primero se dejo la firma evaluandose SIEMPRE, aunque
+  // el `?k=` ya hubiera servido, hasta que los registros dijeron «?k= valido, y la FIRMA tambien
+  // habria bastado». Quitarlo antes de esa confirmacion habria dejado a WhatsApp mudo y SIN error
+  // visible: OpenWA recibe un 401, nadie mira sus registros, y desde aqui todo parece bien.
+  //
+  // Si el `?k=` sigue en la URL registrada, ahora se ignora.
   const cabeceraFirma = req.headers.get("X-OpenWA-Signature");
-  const claveUrl = new URL(req.url).searchParams.get("k") ?? "";
-  const porUrl = claveUrl.length > 0 && igualesEnTiempoConstante(claveUrl, WEBHOOK_SECRET);
-
   const recibida = (cabeceraFirma ?? "").replace(/^sha256=/i, "");
   const esperada = await hmacSha256Hex(WEBHOOK_SECRET, crudo);
-  if (!porUrl && !igualesEnTiempoConstante(recibida.toLowerCase(), esperada)) {
+  const porFirma = igualesEnTiempoConstante(recibida.toLowerCase(), esperada);
+
+  // Que cabeceras manda de verdad el servidor, cuando la firma no cuadra.
+  //
+  // Se dejan puestas porque son lo que resolvio este caso: deduje por la forma de las rutas
+  // -`/api/sessions/{id}/messages/send-text`, cabecera `X-API-Key`- que detras habia WAHA, que firma
+  // con `X-Webhook-Hmac` y SHA-512, y me equivoque. Las cabeceras reales -`x-openwa-event`,
+  // `x-openwa-delivery-id`- lo zanjaron en un renglon.
+  //
+  // Van los NOMBRES y no los valores a proposito: un valor puede ser la propia firma, y los registros
+  // de Supabase los lee cualquiera con acceso al proyecto.
+  if (!porFirma) {
+    console.log(`cabeceras recibidas: ${[...req.headers.keys()].sort().join(", ")}`);
+  }
+
+  if (!porFirma) {
     // Se distinguen los dos casos, porque se arreglan de formas distintas y el rechazo NO deja
     // rastro en la bitacora: sin telefono no hay a quien atribuirle el renglon, y registrar todo lo
     // que llame a la funcion la convertiria en un buzon de basura para cualquiera.
@@ -270,9 +483,9 @@ Deno.serve(async (req: Request) => {
     // Con cabecera  -> el secreto de los dos lados no es el mismo.
     console.log(cabeceraFirma
       ? "firma invalida: llego X-OpenWA-Signature pero no coincide. El `secret` del webhook en " +
-        "OpenWA y OPENWA_WEBHOOK_SECRET no son iguales."
-      : "sin credencial: ni cabecera X-OpenWA-Signature ni ?k= valido. Al webhook de OpenWA le " +
-        "falta el `secret`, o la URL no lleva el ?k= correcto.");
+        "OpenWA y OPENWA_WEBHOOK_SECRET no son iguales; se arregla con el boton «Activar firma»."
+      : "sin firma: no llego X-OpenWA-Signature. Al webhook de OpenWA le falta el `secret`; se " +
+        "pone con el boton «Activar firma» del panel de WhatsApp.");
     return new Response(JSON.stringify({ error: "firma inválida" }), { status: 401 });
   }
 

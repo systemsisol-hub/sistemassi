@@ -33,11 +33,48 @@ class _WhatsappPageState extends State<WhatsappPage> {
   List<Map<String, dynamic>> _autorizados = [];
   List<Map<String, dynamic>> _bitacora = [];
   int _pestana = 0;
+  bool _activandoFirma = false;
 
   @override
   void initState() {
     super.initState();
     _cargar();
+  }
+
+  /// Le pide a la función que registre el secreto de firma en el webhook de OpenWA.
+  ///
+  /// Se hace por la función y no desde aquí porque los dos secretos que hacen falta —la llave de la
+  /// API de OpenWA y el secreto de firma— viven en Supabase, y no tienen por qué salir. La función ya
+  /// usa los dos: con la llave manda las respuestas y con el secreto verifica lo que entra.
+  ///
+  /// Es idempotente: actualiza el webhook que ya existe en lugar de crear otro. Crear uno segundo
+  /// haría llegar cada mensaje dos veces, que es un fallo que ya se arregló una vez.
+  Future<void> _activarFirma() async {
+    setState(() => _activandoFirma = true);
+    try {
+      final r = await _supabase.functions.invoke(
+        'whatsapp-openwa',
+        body: {'accion': 'activar_firma'},
+      );
+      final datos = (r.data as Map?)?.cast<String, dynamic>() ?? {};
+      if (!mounted) return;
+      final ok = datos['ok'] == true;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        backgroundColor: ok ? null : Theme.of(context).colorScheme.error,
+        duration: Duration(seconds: ok ? 10 : 8),
+        content: Text(ok
+            ? '${datos['mensaje']}'
+            : 'No se pudo: ${datos['error'] ?? 'error desconocido'}'),
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        backgroundColor: Theme.of(context).colorScheme.error,
+        content: Text('No se pudo activar la firma: $e'),
+      ));
+    } finally {
+      if (mounted) setState(() => _activandoFirma = false);
+    }
   }
 
   Future<void> _cargar() async {
@@ -181,6 +218,25 @@ class _WhatsappPageState extends State<WhatsappPage> {
           const SizedBox(width: SiSpace.x2),
           _chip(c, 1, 'Bitácora', _bitacora.length),
           const Spacer(),
+          // Activar la firma del webhook.
+          //
+          // Comprobado en los registros: al webhook le falta el campo `secret`, así que OpenWA no
+          // firma sus entregas y la única credencial que llega es el `?k=` de la URL — que acaba
+          // escrito en los registros de quien la llama. Esto se lo pide a la función, que ya tiene la
+          // llave de OpenWA y el secreto: así ninguno de los dos sale de Supabase ni pasa por unas
+          // manos. El panel de OpenWA no expone ese campo, de modo que por ahí no hay forma.
+          Tooltip(
+            message: 'Le pone el secreto de firma al webhook, para dejar de depender del ?k=',
+            child: OutlinedButton.icon(
+              onPressed: _activandoFirma ? null : _activarFirma,
+              icon: _activandoFirma
+                  ? const SizedBox(
+                      width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.lock_outline, size: 16),
+              label: const Text('Activar firma'),
+            ),
+          ),
+          const SizedBox(width: SiSpace.x2),
           if (_pestana == 0)
             FilledButton.icon(
               onPressed: _abrirAlta,

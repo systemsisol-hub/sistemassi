@@ -8,13 +8,17 @@
 // El caso que dio origen a esto: preguntar por "las vacaciones de Enrique Ortega Gomez" devolvia
 // cero registros, porque el nombre entero se buscaba en la columna `nombre`, que guarda solo el
 // nombre de pila.
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// Se leen LOS OCHO modulos, no `index.ts` solo: al partir el archivo estas funciones se fueron a
+// nombres.ts y respuestas.ts. Leer el directorio completo evita volver aqui cada vez que algo se
+// mueva de sitio.
 const aqui = dirname(fileURLToPath(import.meta.url));
-const src = readFileSync(join(aqui, 'index.ts'), 'utf8');
+const src = readdirSync(aqui).filter((f) => f.endsWith('.ts')).sort()
+  .map((f) => readFileSync(join(aqui, f), 'utf8')).join('\n');
 
 function extraer(nombre) {
   const i = src.indexOf(`function ${nombre}(`);
@@ -171,6 +175,17 @@ ok('los vigentes van primero',
 // por cuenta propia: a veces se pregunta justo por alguien que ya salio.
 ok('ORDENA, no filtra: la baja sigue en la lista',
    m.vigentesPrimero([baja, vivo]).length === 2);
+
+// Y NO se desempata por vigencia. Decidido por el usuario el 12/08/2026, revirtiendo lo que yo habia
+// puesto: cuando de dos «montoya» solo uno seguia en la empresa, se elegia ese sin preguntar. El
+// motivo de revertirlo es que los datos de una baja tambien se necesitan -equipo por devolver,
+// vacaciones por liquidar, expediente-, y elegir por el usuario le quitaba la unica via a ese
+// registro. Esta prueba existe para que no vuelva a colarse el atajo.
+ok('dos que empatan siguen siendo dos, aunque solo uno sea vigente',
+   m.vigentesPrimero([baja, vivo]).length === 2
+   && m.vigentesPrimero([vivo, baja]).length === 2);
+ok('y el vigente queda arriba, que es lo que hace util la lista sin esconder nada',
+   m.vigentesPrimero([baja, vivo])[0].nombre === 'MARCO');
 
 console.log('\nconAlgunaPalabra: la diferencia entre «no existe» y «¿es alguno de estos?»');
 // Medido: «garcia hernandez» no empata con ningun vigente exigiendo las dos palabras, y con
