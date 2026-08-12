@@ -27,9 +27,11 @@ function extraer(nombre) {
   throw new Error(`llaves sin cerrar en ${nombre}`);
 }
 
-const modulo = ['sinAcentos', 'tokensDeNombre', 'tokenGuia', 'empataNombre']
+const modulo = ['sinAcentos', 'tokensDeNombre', 'tokenGuia', 'empataNombre',
+  'distancia', 'tolerancia', 'empataNombreAproximado', 'filtroPrefijos', 'jefeAlQueSeRefiere']
   .map(extraer).join('\n\n') + `
-export { sinAcentos, tokensDeNombre, tokenGuia, empataNombre };
+export { sinAcentos, tokensDeNombre, tokenGuia, empataNombre,
+  distancia, tolerancia, empataNombreAproximado, filtroPrefijos, jefeAlQueSeRefiere };
 `;
 
 const tmp = join(tmpdir(), 'ai-assistant-nombres.ts');
@@ -37,7 +39,10 @@ writeFileSync(tmp, modulo, 'utf8');
 const m = await import('file://' + tmp.replace(/\\/g, '/'));
 
 let fallos = 0;
-function ok(desc, real, esperado) {
+// `esperado` por omision es `true`, para poder escribir `ok(desc, condicion)` en las comprobaciones
+// que ya son booleanas. Sin ese valor por omision, omitirlo comparaba contra `undefined` y TODAS
+// fallaban con `real=true esperado=undefined`, que parece un fallo del codigo y es del ayudante.
+function ok(desc, real, esperado = true) {
   const a = JSON.stringify(real), b = JSON.stringify(esperado);
   if (a !== b) { console.log(`  FALLA  ${desc}\n           real=${a}  esperado=${b}`); fallos++; }
   else console.log(`  ok     ${desc}`);
@@ -73,6 +78,65 @@ ok('falta una palabra -> no empata', m.empataNombre(enrique, ['Enrique','Ortega'
 ok('apellido materno nulo no revienta', m.empataNombre(roberto, ['Roberto','Garcia']), true);
 ok('materno nulo no empata de a gratis', m.empataNombre(roberto, ['Roberto','Gomez']), false);
 ok('sin tokens empata con todo (no se usa asi)', m.empataNombre(enrique, []), true);
+
+console.log('\nempataNombreAproximado: dedazos SI, personas distintas NO');
+// Reportado al probar: "hector figeroa" no encontraba a nadie, y HECTOR FIGUEROA existe.
+const hector = { nombre: 'HECTOR', paterno: 'FIGUEROA', materno: 'RAMIREZ' };
+const ortega = { nombre: 'ENRIQUE', paterno: 'ORTEGA', materno: 'GOMEZ' };
+ok('el caso reportado: "hector figeroa"',
+   m.empataNombreAproximado(hector, ['hector', 'figeroa']));
+ok('una letra cambiada: "gomes" por GOMEZ',
+   m.empataNombreAproximado(ortega, ['enrique', 'gomes']));
+ok('una letra de mas: "enrrique"',
+   m.empataNombreAproximado(ortega, ['enrrique', 'ortega']));
+ok('acento y dedazo a la vez: "Goméz"',
+   m.empataNombreAproximado(ortega, ['Goméz']));
+ok('compara palabra por palabra, no el campo entero',
+   m.empataNombreAproximado(
+     { nombre: 'JOSE LUIS', paterno: 'GARCIA HERNANDEZ', materno: null }, ['garcia']));
+ok('otra persona NO empata', !m.empataNombreAproximado(hector, ['hector', 'martinez']));
+ok('tres letras exigen exactitud: ANA no es ANO',
+   !m.empataNombreAproximado({ nombre: 'ANA', paterno: 'LOPEZ', materno: null }, ['ano']));
+ok('dos letras cambiadas en palabra corta NO empatan',
+   !m.empataNombreAproximado(hector, ['hictar']));
+ok('materno nulo no revienta', m.empataNombreAproximado(
+   { nombre: 'ROBERTO', paterno: 'GARCIA', materno: null }, ['roberto', 'garcia']));
+
+console.log('\ndistancia y tolerancia');
+ok('figeroa -> figueroa es 1', m.distancia('FIGEROA', 'FIGUEROA') === 1);
+ok('iguales es 0', m.distancia('GOMEZ', 'GOMEZ') === 0);
+ok('menos de 4 letras no admite fallos', m.tolerancia('ANA') === 0);
+ok('de 4 a 7 admite una', m.tolerancia('HECTOR') === 1);
+ok('de 8 en adelante admite dos', m.tolerancia('FIGUEROA') === 2);
+
+console.log('\nfiltroPrefijos: el prefiltro de la pasada tolerante');
+const f3 = m.filtroPrefijos(['hector', 'figeroa']);
+console.log(`  -> ${f3}`);
+ok('lleva las tres primeras letras de cada palabra',
+   f3.includes('nombre.ilike.hec%') && f3.includes('paterno.ilike.fig%'));
+ok('cubre los tres campos por palabra', (f3.match(/ilike/g) || []).length === 6);
+ok('una palabra de menos de tres letras se ignora',
+   !m.filtroPrefijos(['de']).includes('ilike'));
+
+console.log('\njefeAlQueSeRefiere: sale del perfil, no se le pregunta a la persona');
+const perfil = {
+  jefe_inmediato: 'MARCO ANTONIO MONTOYA LOPEZ',
+  director: 'ALGUIEN MAS',
+  gerente_regional: '',
+};
+ok('«las vacaciones de mi jefe»',
+   m.jefeAlQueSeRefiere('cuales son las vacaciones de mi jefe', perfil)
+     === 'MARCO ANTONIO MONTOYA LOPEZ');
+ok('«vacaciones de mi director»',
+   m.jefeAlQueSeRefiere('vacaciones de mi director', perfil) === 'ALGUIEN MAS');
+ok('un campo vacio en el perfil devuelve null',
+   m.jefeAlQueSeRefiere('vacaciones de mi gerente', perfil) === null);
+ok('sin campo en el perfil devuelve null',
+   m.jefeAlQueSeRefiere('vacaciones de mi jefe', {}) === null);
+ok('«quien es mi jefe» NO es de vacaciones: lo contesta el modelo',
+   m.jefeAlQueSeRefiere('quien es mi jefe', perfil) === null);
+ok('«mis vacaciones» no es del jefe',
+   m.jefeAlQueSeRefiere('cuales son mis vacaciones', perfil) === null);
 
 console.log(fallos === 0 ? '\nTODO BIEN' : `\n${fallos} FALLAS`);
 process.exit(fallos === 0 ? 0 : 1);

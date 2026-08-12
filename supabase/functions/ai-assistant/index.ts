@@ -636,6 +636,151 @@ function empataNombre(fila: Record<string, unknown>, tokens: string[]): boolean 
   });
 }
 
+/** Cuantos candidatos se traen en la pasada tolerante. Mas alta que la exacta porque el prefiltro es
+ * mas ancho: medido, el peor caso realista -MAR|ANT|MON|LOP- trae 547 de los 2488 perfiles. */
+const CANDIDATOS_APROXIMADO = 1500;
+
+/** Distancia de edicion (Levenshtein) entre dos palabras.
+ *
+ * Se escribe a mano porque `pg_trgm` no esta instalada en la base y activarla es una migracion. Con
+ * la extension esto se haria en SQL con `similarity()`, que es mejor: aqui hay que traer candidatos y
+ * filtrarlos en codigo. Si algun dia se instala, este camino se puede simplificar.
+ */
+function distancia(a: string, b: string): number {
+  if (a === b) return 0;
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+  let previa = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const fila = [i];
+    for (let j = 1; j <= b.length; j++) {
+      fila[j] = Math.min(
+        previa[j] + 1,
+        fila[j - 1] + 1,
+        previa[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+    }
+    previa = fila;
+  }
+  return previa[b.length];
+}
+
+/** Cuantas letras puede fallar una palabra segun su largo.
+ *
+ * Escalonado a proposito: en una palabra corta, una letra distinta cambia el nombre -"ANA" y "ANO"-
+ * mientras que en una larga es claramente un dedazo. Menos de cuatro letras exige exactitud.
+ */
+function tolerancia(palabra: string): number {
+  if (palabra.length <= 3) return 0;
+  if (palabra.length <= 7) return 1;
+  return 2;
+}
+
+/** Si un perfil empata con TODAS las palabras, admitiendo dedazos.
+ *
+ * ─── Por que hace falta ──────────────────────────────────────────────────────
+ *
+ * Reportado al probar: "hector figeroa" no encontraba a nadie, y HECTOR FIGUEROA existe. El empate
+ * exacto exige que cada palabra aparezca tal cual, asi que una letra de mas o de menos deja a la
+ * persona fuera y Soli contesta que no existe. Omitir el segundo nombre si funcionaba -"Claudia
+ * Bravo" encuentra a Claudia Andrea Bravo- porque eso no cambia las palabras que si se escribieron.
+ *
+ * Se compara palabra por palabra y no el campo completo: "figeroa" contra "FIGUEROA" son una letra;
+ * contra "FIGUEROA MARTINEZ" entero serian nueve.
+ */
+function empataNombreAproximado(fila: Record<string, unknown>, tokens: string[]): boolean {
+  const palabras = [fila.nombre, fila.paterno, fila.materno]
+    .flatMap((v) => (typeof v === "string" ? sinAcentos(v).toUpperCase().split(/\s+/) : []))
+    .filter((w) => w.length > 0);
+
+  return tokens.every((t) => {
+    const T = sinAcentos(t).toUpperCase();
+    const margen = tolerancia(T);
+    return palabras.some((w) =>
+      w.includes(T) || (margen > 0 && distancia(T, w) <= margen));
+  });
+}
+
+/** El filtro con el que se piden candidatos en la pasada tolerante.
+ *
+ * Prefijo de tres letras de CADA palabra, unidas con OR: basta que una acierte para que la persona
+ * entre en el conjunto. Los dedazos casi nunca caen en las tres primeras letras, y si caen -"ector"
+ * por "hector"- esto no la encuentra. Es una limitacion conocida, no un descuido.
+ */
+function filtroPrefijos(tokens: string[]): string {
+  const partes: string[] = [];
+  for (const t of tokens) {
+    const pre = sinAcentos(t).slice(0, 3);
+    if (pre.length < 3) continue;
+    partes.push(`nombre.ilike.${pre}%`, `paterno.ilike.${pre}%`, `materno.ilike.${pre}%`);
+  }
+  return partes.join(",");
+}
+
+/** Resuelve un nombre a UNA persona, primero exacto y luego con tolerancia a dedazos.
+ *
+ * Devuelve la fila, o `null` con los candidatos cuando hay varias o ninguna, para que quien llame
+ * pueda explicarlo en lugar de elegir al azar.
+ */
+async function resolverPorNombre(
+  db: ReturnType<typeof createClient>,
+  texto: string,
+  campos: string,
+): Promise<{ fila: Record<string, unknown> | null; candidatos: Record<string, unknown>[]; aproximado: boolean }> {
+  const tokens = tokensDeNombre(texto);
+  if (tokens.length === 0) return { fila: null, candidatos: [], aproximado: false };
+
+  // Pasada exacta: la de siempre, con el prefiltro por la palabra mas larga.
+  const guia = tokenGuia(tokens);
+  const { data: exactos } = await db.from("profiles").select(campos)
+    .or(`nombre.ilike.%${guia}%,paterno.ilike.%${guia}%,materno.ilike.%${guia}%`)
+    .limit(CANDIDATOS_NOMBRE);
+  let empatan = ((exactos || []) as unknown as Record<string, unknown>[])
+    .filter((f) => empataNombre(f, tokens));
+
+  // Sólo si la exacta no encuentra nada se paga la tolerante, que es mas ancha.
+  let aproximado = false;
+  if (empatan.length === 0) {
+    const filtro = filtroPrefijos(tokens);
+    if (filtro.length > 0) {
+      const { data: cands } = await db.from("profiles").select(campos)
+        .or(filtro).limit(CANDIDATOS_APROXIMADO);
+      empatan = ((cands || []) as unknown as Record<string, unknown>[])
+        .filter((f) => empataNombreAproximado(f, tokens));
+      aproximado = empatan.length > 0;
+    }
+  }
+
+  return {
+    fila: empatan.length === 1 ? empatan[0] : null,
+    candidatos: empatan,
+    aproximado,
+  };
+}
+
+/** A quien se refiere cuando dice "mi jefe", "mi gerente" o "mi director".
+ *
+ * Devuelve el NOMBRE que trae el perfil de quien pregunta, o `null` si no es ese caso. En la base
+ * estos campos guardan el nombre completo en texto -el de Angel es "MARCO ANTONIO MONTOYA LOPEZ"-,
+ * asi que se resuelve con la misma busqueda por nombre que todo lo demas.
+ *
+ * `lider` no se contempla: solo 14 perfiles de 2488 lo tienen, asi que preguntar por el lider casi
+ * siempre acabaria en un "no lo tengo registrado" y el modelo lo explica mejor.
+ */
+function jefeAlQueSeRefiere(texto: string, prof: Record<string, unknown>): string | null {
+  const t = sinAcentos(texto).toLowerCase();
+  if (!/vacacion|dias disponibles|saldo/.test(t)) return null;
+
+  const campo = /\bmi\s+jefe|\bde\s+mi\s+jefe/.test(t) ? "jefe_inmediato"
+    : /\bmi\s+gerente/.test(t) ? "gerente_regional"
+    : /\bmi\s+director/.test(t) ? "director"
+    : null;
+  if (!campo) return null;
+
+  const v = prof[campo];
+  return typeof v === "string" && v.trim().length > 0 ? v.trim() : null;
+}
+
 function numeroEmpleadoVariants(raw: string): string[] {
   const trimmed = raw.trim();
   const numInt  = parseInt(trimmed, 10);
@@ -768,6 +913,31 @@ async function runTool(
           aviso: "Había demasiados candidatos; el resultado puede estar incompleto. Acota la búsqueda.",
         };
       }
+
+      // Nada exacto: se reintenta admitiendo dedazos. Ver `empataNombreAproximado`.
+      //
+      // Sólo cuando la exacta falla, porque la tolerante trae muchos más candidatos. Y sólo mira el
+      // nombre: si además venían `area` o `puesto`, esos filtros no se reaplican aquí, así que el
+      // resultado puede incluir a alguien que no los cumpla. Se acepta porque combinar nombre con
+      // otros filtros es raro, y devolver a la persona con un aviso es mejor que decir que no existe.
+      if (filas.length === 0) {
+        const filtro = filtroPrefijos(tokens);
+        if (filtro.length > 0) {
+          const { data: cands } = await db.from("profiles").select(fields)
+            .or(filtro).limit(CANDIDATOS_APROXIMADO);
+          const aprox = ((cands || []) as unknown as Record<string, unknown>[])
+            .filter((f) => empataNombreAproximado(f, tokens))
+            .slice(0, limiteUsuario);
+          if (aprox.length > 0) {
+            return {
+              results: aprox,
+              count: aprox.length,
+              aviso: `No hay nadie escrito exactamente así. Esto es lo más parecido a `
+                + `"${input.nombre_completo}"; confírmalo con el usuario antes de darlo por bueno.`,
+            };
+          }
+        }
+      }
     }
     return { results: filas, count: filas.length };
   }
@@ -799,7 +969,22 @@ async function runTool(
     // se valida la forma del uuid ANTES de consultar, para que un error de identificación se
     // distinga de un saldo de cero: el fallo que dio origen a esto fue que Soli contestó «0 días
     // disponibles, sin periodos registrados» de una persona que tenía 102 días y 13 periodos.
+    // Un usuario NO administrador que pasa el identificador de otra persona recibe un error, no los
+    // datos de si mismo.
+    //
+    // Antes esos parametros se ignoraban en silencio -`isAdmin && input.x`- y el calculo salia con la
+    // identidad de quien preguntaba. No filtraba nada de nadie, pero contestaba a «vacaciones de mi
+    // jefe» con los dias del propio empleado y su nombre, que es de las cosas que peor se leen.
+    if (!isAdmin && (input.nombre_completo || input.numero_empleado || input.usuario_id)) {
+      return {
+        error: "Solo un administrador puede consultar las vacaciones de otra persona. "
+          + "Si son tus propios dias, vuelve a preguntar sin nombre ni numero.",
+      };
+    }
+
     let targetId = userId;
+    /// Si el nombre se resolvio con tolerancia. Se devuelve para poder avisar de que es aproximado.
+    let aproximadoDe: string | null = null;
     if (isAdmin && input.nombre_completo) {
       // Se identifica a la persona AQUÍ, en la misma llamada.
       //
@@ -808,17 +993,13 @@ async function runTool(
       // sola llamada, mientras que preguntar por otra persona devolvía cifras inventadas. Medido
       // sobre cuatro consultas reales: 4 de 4 mal, incluyendo un número de empleado y una fecha de
       // vencimiento que no existen. Quitar el encadenamiento quita la ocasión de inventar.
-      const tokens = tokensDeNombre(String(input.nombre_completo));
-      if (tokens.length === 0) {
-        return { error: "El nombre venía vacío o sin letras." };
+      const { fila, candidatos: empatan, aproximado } = await resolverPorNombre(
+        db, String(input.nombre_completo),
+        "id,nombre,paterno,materno,numero_empleado,status_rh",
+      );
+      if (aproximado && fila) {
+        console.log(`nombre resuelto con tolerancia a dedazos: "${input.nombre_completo}" -> ${fila.numero_empleado}`);
       }
-      const guia = tokenGuia(tokens);
-      const { data: cands } = await db.from("profiles")
-        .select("id,nombre,paterno,materno,numero_empleado,status_rh")
-        .or(`nombre.ilike.%${guia}%,paterno.ilike.%${guia}%,materno.ilike.%${guia}%`)
-        .limit(CANDIDATOS_NOMBRE);
-      const empatan = ((cands || []) as unknown as Record<string, unknown>[])
-        .filter((f) => empataNombre(f, tokens));
       if (empatan.length === 0) {
         return { error: `No existe ningún colaborador llamado "${input.nombre_completo}". Esto es un fallo de identificación, NO un saldo de cero días.` };
       }
@@ -833,7 +1014,8 @@ async function runTool(
           })),
         };
       }
-      targetId = String(empatan[0].id);
+      targetId = String(fila!.id);
+      if (aproximado) aproximadoDe = String(input.nombre_completo);
     } else if (isAdmin && input.numero_empleado) {
       const variants = numeroEmpleadoVariants(String(input.numero_empleado));
       const { data: encontrado } = await db.from("profiles").select("id")
@@ -932,6 +1114,9 @@ async function runTool(
       usa_fecha_reingreso: !!fechaReingreso,
       periodos,
       total_disponible: totalDisponible,
+      ...(aproximadoDe
+        ? { aviso: `"${aproximadoDe}" no esta escrito asi en el sistema; esto es lo mas parecido. Confirmalo.` }
+        : {}),
     };
   }
 
@@ -1101,7 +1286,8 @@ Deno.serve(async (req: Request) => {
     }
 
     const { data: prof } = await svc.from("profiles")
-      .select("role, permissions, nombre, paterno, materno, full_name, puesto, area, numero_empleado")
+      .select("role, permissions, nombre, paterno, materno, full_name, puesto, area, numero_empleado, " +
+        "jefe_inmediato, gerente_regional, director")
       .eq("id", actorId).single();
     if (!prof) return new Response(JSON.stringify({ error: "Perfil no encontrado" }), { status: 404, headers: CORS });
 
@@ -1181,6 +1367,31 @@ Deno.serve(async (req: Request) => {
       // Si falla se deja seguir al modelo, que al menos puede explicarlo. El guardia de abajo evita
       // que convierta el fallo en un cero.
       console.log(`via directa fallo, sigue el modelo: ${propio.error}`);
+    }
+
+    // «las vacaciones de mi jefe»: el perfil ya dice quien es.
+    //
+    // Antes preguntaba «¿cómo se llama tu jefe?», que es correcto pero innecesario: `jefe_inmediato`
+    // trae el nombre completo y lo tienen 1738 de los 2488 perfiles. Solo para administradores,
+    // porque son datos de otra persona; a un usuario normal la herramienta le dara el error de
+    // permiso y el modelo lo explicara.
+    const jefe = jefeAlQueSeRefiere(ultimoUsuario, prof as Record<string, unknown>);
+    if (jefe && isAdmin && puedeUsarHerramienta("calcular_vacaciones", isAdmin, permisos)) {
+      const deJefe = await runTool(
+        "calcular_vacaciones", { nombre_completo: jefe }, svc, isAdmin, actorId, userFullName, permisos,
+      ) as Record<string, unknown>;
+      if (!deJefe.error) {
+        console.log(`via directa: vacaciones de "${jefe}", total ${deJefe.total_disponible}`);
+        return new Response(
+          JSON.stringify({
+            text: `${deJefe.colaborador} tiene ${deJefe.total_disponible} dias de vacaciones `
+              + `disponibles. Lo tomo de tu perfil, donde figura como tu jefe.`,
+            structured: { type: "vacaciones", data: deJefe },
+          }),
+          { headers: { ...CORS, "Content-Type": "application/json" } },
+        );
+      }
+      console.log(`via directa de jefe fallo, sigue el modelo: ${deJefe.error}`);
     }
 
     let structuredData: unknown = null;
