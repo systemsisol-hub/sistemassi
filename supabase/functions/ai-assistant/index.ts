@@ -469,6 +469,55 @@ const ALL_TOOLS = [
 
 type ToolInput = Record<string, unknown>;
 
+/** Si la respuesta afirma un dato de la base que ninguna herramienta respaldo en este turno.
+ *
+ * ─── El fallo ────────────────────────────────────────────────────────────────
+ *
+ * El modelo contesta sin llamar a la herramienta y se inventa los datos, con aplomo y con formato de
+ * tabla. Casos reales, todos comprobados contra la base:
+ *
+ *   - «ENRIQUE ORTEGA GOMEZ: 0 dias disponibles» — tiene 102.
+ *   - «Ana Maria Lopez Vigil, 1250» — es la 0162.
+ *   - «CLAUDIA PATRICIA BRAVO LOMELI — empleado 2277» — no existe; el 2277 es otra persona.
+ *   - «JESUS BRAVO LOMELI (empleado 4011)» — no existe, y el numero mas alto de la base es 2487.
+ *
+ * Los dos ultimos salieron en la APLICACION, no por WhatsApp. Al principio parecia cosa del puente
+ * -la pagina acertaba porque pinta una tarjeta con los datos crudos y la vista va a la tarjeta- pero
+ * la prosa de la pagina tiene el mismo problema, solo que tapado. Por eso esto vive aqui, en lo unico
+ * que comparten los dos canales, y no en el puente.
+ *
+ * ─── Que se considera un dato que no se puede inventar ───────────────────────
+ *
+ * Dos cosas, las dos reconocidas en el TEXTO y no en la pregunta:
+ *
+ *   - un numero de empleado, que es un hecho de la base y sin herramienta no tiene de donde salir;
+ *   - un SALDO: «N dias disponibles», «Disponibles: N», «Total disponible».
+ *
+ * Mirar la pregunta fue mi primer intento y tenia un agujero por cada lado. Exigir que la pregunta
+ * mencionara vacaciones dejaba pasar los seguimientos —«y las de bravo lomeli», que es justo el caso
+ * real del 12/08— y a la vez bloqueaba el conocimiento general, porque «con 5 anos la ley da 20 dias»
+ * viene de una pregunta sobre vacaciones y es correcto.
+ *
+ * Es la palabra «disponible» la que convierte una cifra en la afirmacion del saldo de alguien. Sin
+ * ella, hablar de dias es hablar de la ley, y eso el modelo lo puede contestar solo.
+ */
+function afirmaDatoSinRespaldo(texto: string, conDatos: Set<string>): boolean {
+  const t = sinAcentos(texto).toLowerCase();
+
+  // Un numero de empleado solo puede venir de la base.
+  if (/empleado\s*#?\s*:?\s*\d{3,5}/.test(t)
+      && !conDatos.has("buscar_colaborador")
+      && !conDatos.has("calcular_vacaciones")) {
+    return true;
+  }
+
+  // Un saldo solo puede venir de calcular_vacaciones.
+  const saldo = /\d+\s*dias?\s*disponibles?|disponibles?\s*:?\s*\**\s*\d|total\s+disponible/;
+  if (saldo.test(t) && !conDatos.has("calcular_vacaciones")) return true;
+
+  return false;
+}
+
 /** Si una cadena tiene forma de uuid.
  *
  * Hace falta porque el modelo confunde el uuid con el número de empleado. Sin esto, un
@@ -1050,6 +1099,10 @@ Deno.serve(async (req: Request) => {
     let structuredData: unknown = null;
     let iterations = 0;
 
+    /// Herramientas que devolvieron datos en este turno, sin error. Es lo que permite distinguir un
+    /// dato consultado de uno inventado; ver `afirmaDatoSinRespaldo`.
+    const conDatos = new Set<string>();
+
     while (iterations++ < 15) {
       const apiRes = await fetch(`${OLLAMA_BASE}/chat`, {
         method: "POST",
@@ -1062,8 +1115,26 @@ Deno.serve(async (req: Request) => {
 
       const msg = ollama.message;
       if (!msg.tool_calls || msg.tool_calls.length === 0) {
+        let texto = (msg.content || "").trim();
+
+        // Un dato de la base que ninguna herramienta respaldo NO sale de aqui.
+        //
+        // Se sustituye el texto en lugar de dejarlo pasar con una advertencia: una tabla de periodos
+        // con cifras inventadas es mas creible que cualquier aviso que se le ponga al lado, y quien
+        // la lea no va a dudar de ella.
+        if (afirmaDatoSinRespaldo(texto, conDatos)) {
+          console.log(
+            `respuesta BLOQUEADA, afirmaba datos sin herramienta ` +
+            `(herramientas con datos: ${[...conDatos].join(",") || "ninguna"}): ` +
+            texto.slice(0, 300),
+          );
+          texto = "No pude confirmar ese dato con el sistema, así que prefiero no dártelo. "
+            + "Dime el nombre con apellidos o el número de empleado y lo consulto de nuevo.";
+          structuredData = null;
+        }
+
         return new Response(
-          JSON.stringify({ text: (msg.content || "").trim(), structured: structuredData }),
+          JSON.stringify({ text: texto, structured: structuredData }),
           { headers: { ...CORS, "Content-Type": "application/json" } }
         );
       }
@@ -1082,6 +1153,7 @@ Deno.serve(async (req: Request) => {
           // primera herramienta que pidiera WhatsApp habría reventado con `user is not defined`.
           await runTool(name, args, svc, isAdmin, actorId, userFullName, permisos);
         const r = result as Record<string, unknown>;
+        if (!r.error) conDatos.add(name);
         console.log(
           `resultado ${name}: ` +
           (r.error ? `ERROR ${r.error}` :
