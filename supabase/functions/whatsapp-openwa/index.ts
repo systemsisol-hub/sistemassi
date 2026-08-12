@@ -427,13 +427,13 @@ async function atender(
     // Se sustituye la prosa por completo en lugar de anadirla: si el modelo dijo "0 dias" y el dato
     // dice 102, dos cifras contradictorias en el mismo mensaje son peores que una sola correcta.
     const ficha = textoDeVacaciones(datos.structured);
-    let respuesta = (ficha?.texto ?? datos.text ?? "").trim();
+    const respuesta = (ficha?.texto ?? datos.text ?? "").trim();
 
     // Una ficha sin datos detras es una falsificacion, y no se manda.
     //
     // Si el texto lleva la firma pero no vino `structured`, el modelo escribio las cifras de su
     // cosecha. Es el unico caso en el que se corrige lo que dijo en lugar de reenviarlo: dejarlo
-     // pasar seria entregar un numero inventado con la apariencia de un dato del sistema.
+    // pasar seria entregar un numero inventado con la apariencia de un dato del sistema.
     if (!ficha && respuesta.includes(FIRMA_FICHA)) {
       await registrar(svc, telefono, profileId, "ERROR", m.texto, respuesta,
         "el modelo imito el formato de la ficha sin que la herramienta devolviera datos");
