@@ -299,7 +299,46 @@ Deno.serve(async (req: Request) => {
 
   const recibida = (cabeceraFirma ?? "").replace(/^sha256=/i, "");
   const esperada = await hmacSha256Hex(WEBHOOK_SECRET, crudo);
-  if (!porUrl && !igualesEnTiempoConstante(recibida.toLowerCase(), esperada)) {
+  const porFirma = igualesEnTiempoConstante(recibida.toLowerCase(), esperada);
+
+  // Con QUE credencial entro cada peticion aceptada.
+  //
+  // ─── Por que hace falta antes de quitar el `?k=` ─────────────────────────────
+  //
+  // El objetivo es dejar SOLO la firma, porque el `?k=` lleva el secreto en la URL y acaba en los
+  // registros de quien la llama. Pero quitarlo a ciegas deja a WhatsApp mudo si la firma no estaba
+  // llegando, y mudo sin error: OpenWA recibe un 401, nadie mira sus registros, y desde aqui todo
+  // parece bien.
+  //
+  // Hasta ahora no habia forma de saberlo, porque el `?k=` cortocircuitaba la comprobacion. Ahora la
+  // firma se evalua SIEMPRE, aunque el `?k=` ya haya servido, y se dice si habria bastado. Cuando en
+  // los registros aparezca «firma OK» de forma sostenida, quitar el `?k=` deja de ser una apuesta.
+  if (porFirma || porUrl) {
+    console.log(porFirma && porUrl
+      ? "credencial: ?k= valido, y la FIRMA tambien habria bastado -> ya se puede quitar el ?k="
+      : porFirma
+        ? "credencial: firma OK (el ?k= no hizo falta)"
+        : "credencial: SOLO ?k=; la firma no llego o no coincide -> NO quitar el ?k= todavia");
+  }
+
+  // Que cabeceras manda de verdad el servidor, cuando la firma no cuadra.
+  //
+  // ─── Por que se registran, y por que solo los NOMBRES ───────────────────────
+  //
+  // Esta funcion verifica `X-OpenWA-Signature` con HMAC-SHA256. Pero las rutas que usa el puente
+  // -`/api/sessions/{id}/messages/send-text`, `X-API-Key`- no son de open-wa, y si el servidor de
+  // detras es WAHA entonces firma con `X-Webhook-Hmac` y **SHA-512**: otra cabecera y otro algoritmo,
+  // asi que la comprobacion no podria coincidir NUNCA. Eso convertiria al `?k=` en lo unico que
+  // funciona, en vez del apaño temporal que dice mi comentario de mas arriba.
+  //
+  // No se adivina: se listan los nombres de las cabeceras que llegan y el servidor lo dice solo. Van
+  // los NOMBRES y no los valores a proposito: un valor puede ser la propia firma o una credencial, y
+  // los registros de Supabase los lee cualquiera con acceso al proyecto.
+  if (!porFirma) {
+    console.log(`cabeceras recibidas: ${[...req.headers.keys()].sort().join(", ")}`);
+  }
+
+  if (!porUrl && !porFirma) {
     // Se distinguen los dos casos, porque se arreglan de formas distintas y el rechazo NO deja
     // rastro en la bitacora: sin telefono no hay a quien atribuirle el renglon, y registrar todo lo
     // que llame a la funcion la convertiria en un buzon de basura para cualquiera.
