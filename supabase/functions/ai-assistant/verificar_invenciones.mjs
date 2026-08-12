@@ -32,13 +32,40 @@ function extraerFuncion(nombre) {
   throw new Error(`llaves sin cerrar en ${nombre}`);
 }
 
+/// Extrae una constante que abre con `[` o `{`, contando delimitadores.
+///
+/// Sin expresiones regulares a proposito: mi primer intento las armaba con `new RegExp` desde una
+/// cadena, y `[\\s\\S]` acabo significando «barra, s o S» en vez de «cualquier caracter». Contar
+/// delimitadores no tiene ese problema.
+function extraerConst(nombre) {
+  const i = src.indexOf(`const ${nombre}`);
+  if (i < 0) throw new Error(`no se encontro ${nombre}`);
+  let k = src.indexOf('=', i);
+  while (src[k] !== '[' && src[k] !== '{') k++;
+  let prof = 0;
+  for (; k < src.length; k++) {
+    if (src[k] === '[' || src[k] === '{') prof++;
+    else if (src[k] === ']' || src[k] === '}') {
+      prof--;
+      if (prof === 0) return src.slice(i, src.indexOf(';', k) + 1);
+    }
+  }
+  throw new Error(`delimitadores sin cerrar en ${nombre}`);
+}
+
 const tmp = join(tmpdir(), 'ai-assistant-invenciones.ts');
-writeFileSync(tmp, `${extraerFuncion('sinAcentos')}\n\n`
+writeFileSync(tmp, `${extraerConst('MESES')}\n\n`
+  + `${extraerConst('NOMBRE_MES')}\n\n`
+  + `${extraerFuncion('sinAcentos')}\n\n`
   + `${extraerFuncion('afirmaDatoSinRespaldo')}\n\n`
   + `${extraerFuncion('preguntaSusVacaciones')}\n\n`
-  + `${extraerFuncion('textoVacacionesPropias')}\n`
-  + 'export { afirmaDatoSinRespaldo, preguntaSusVacaciones, textoVacacionesPropias };\n', 'utf8');
-const { afirmaDatoSinRespaldo, preguntaSusVacaciones, textoVacacionesPropias } =
+  + `${extraerFuncion('textoVacacionesPropias')}\n\n`
+  + `${extraerFuncion('preguntaCumpleanos')}\n\n`
+  + `${extraerFuncion('textoCumpleanos')}\n`
+  + 'export { afirmaDatoSinRespaldo, preguntaSusVacaciones, textoVacacionesPropias,\n'
+  + '  preguntaCumpleanos, textoCumpleanos };\n', 'utf8');
+const { afirmaDatoSinRespaldo, preguntaSusVacaciones, textoVacacionesPropias,
+  preguntaCumpleanos, textoCumpleanos } =
   await import('file://' + tmp.replace(/\\/g, '/'));
 
 let fallos = 0;
@@ -156,6 +183,42 @@ ok('un solo dia va en singular',
    textoVacacionesPropias({ total_disponible: 1, periodos: [] }));
 ok('sin periodo actual no deja la frase a medias',
    !textoVacacionesPropias({ total_disponible: 0, periodos: [] }).includes('periodo actual'));
+
+console.log('\nLa via directa de cumpleaños lee el mes de la pregunta');
+// «cumpleaños de septiembre» acabo en el guardia porque el modelo no llamo a la herramienta, aunque
+// septiembre tiene nueve cumpleaños. Callar es mejor que inventar, pero es la respuesta equivocada
+// cuando el dato esta a mano.
+for (const [q, mes, semana] of [
+  ['cumpleaños de septiembre', 9, false],
+  ['cumpleaños de este mes', null, false],
+  ['quién cumple esta semana', null, true],
+  ['quienes cumplen años en diciembre', 12, false],
+  ['cumpleaños de setiembre', 9, false],
+  ['cumpleaños de la semana', null, true],
+]) {
+  const r = preguntaCumpleanos(q);
+  ok(`"${q}" -> mes ${mes}, semana ${semana}`,
+     r !== null && r.mes === mes && r.soloEstaSemana === semana, JSON.stringify(r));
+}
+ok('«cumple 5 años en la empresa» NO es un cumpleaños: es antiguedad',
+   preguntaCumpleanos('cuando cumple 5 años en la empresa') === null);
+ok('una pregunta de vacaciones no se la queda',
+   preguntaCumpleanos('cuales son mis vacaciones') === null);
+
+console.log('\nEl texto de cumpleaños sale de los datos');
+const sept = { mes: 9, rango: null, count: 2, results: [
+  { dia: 8, nombre: 'MARIA NATIVIDAD CHACON', puesto: null },
+  { dia: 13, nombre: 'YOLANDA ITZEL MARQUEZ', puesto: 'ANALISTA' },
+] };
+const txtSept = textoCumpleanos(sept);
+console.log(`  -> ${txtSept.replace(/\n/g, ' | ')}`);
+ok('dice el mes por su nombre', txtSept.includes('septiembre'));
+ok('lista a las dos personas con su dia',
+   txtSept.includes('8 — MARIA NATIVIDAD CHACON') && txtSept.includes('13 — YOLANDA'));
+ok('sin nadie lo dice, no deja la lista vacia',
+   textoCumpleanos({ mes: 8, rango: '10 al 16', count: 0, results: [] })
+     .startsWith('No hay cumpleaños esta semana'),
+   textoCumpleanos({ mes: 8, rango: '10 al 16', count: 0, results: [] }));
 
 console.log(fallos === 0 ? '\nTODO BIEN' : `\n${fallos} FALLAS`);
 process.exit(fallos === 0 ? 0 : 1);

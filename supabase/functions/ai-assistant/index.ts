@@ -535,6 +535,59 @@ function textoVacacionesPropias(datos: Record<string, unknown>): string {
   return `Tienes ${total} ${total === 1 ? "dia" : "dias"} de vacaciones disponibles en total.${cola}`;
 }
 
+const MESES: Record<string, number> = {
+  enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6,
+  julio: 7, agosto: 8, septiembre: 9, setiembre: 9, octubre: 10,
+  noviembre: 11, diciembre: 12,
+};
+
+/** Si la persona pregunta por cumpleaños, y de que mes o rango.
+ *
+ * ─── Por que esto tampoco pasa por el modelo ─────────────────────────────────
+ *
+ * Con la herramienta ya puesta, «cumpleaños de este mes» y «quien cumple esta semana» salieron
+ * perfectos, y «cumpleaños de septiembre» acabo en el guardia: el modelo no llamo a la herramienta y
+ * el guardia bloqueo la respuesta para que no inventara los nueve nombres de ese mes.
+ *
+ * Callar es mejor que inventar, pero es la respuesta equivocada cuando el dato esta a mano. Es el
+ * mismo caso que las vacaciones propias y las del jefe: no hay nada que el modelo tenga que decidir
+ * —el mes se lee de la pregunta y la consulta es determinista— asi que se resuelve aqui.
+ *
+ * Se exige que hable de cumpleaños de verdad: «cumple 5 años en la empresa» habla de antiguedad y
+ * tiene que seguir su camino.
+ */
+function preguntaCumpleanos(texto: string): { mes: number | null; soloEstaSemana: boolean } | null {
+  const t = sinAcentos(texto).toLowerCase();
+  if (!/cumplea|cumplen?\s+anos|quien(es)?\s+cumple/.test(t)) return null;
+
+  const soloEstaSemana = /esta semana|de la semana|semana actual/.test(t);
+  for (const [nombre, num] of Object.entries(MESES)) {
+    if (t.includes(nombre)) return { mes: num, soloEstaSemana };
+  }
+  return { mes: null, soloEstaSemana };
+}
+
+/// Los meses para escribirlos. Aparte de `MESES`, que sirve para LEERLOS y por eso acepta dos formas
+/// de septiembre; aquí hace falta una sola por mes.
+const NOMBRE_MES = ["", "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+
+/** El texto de una respuesta de cumpleaños, armado con los datos de la herramienta. */
+function textoCumpleanos(datos: Record<string, unknown>): string {
+  const gente = (datos.results ?? []) as Array<Record<string, unknown>>;
+  const mes = typeof datos.mes === "number" ? datos.mes : 0;
+  const nombreMes = NOMBRE_MES[mes] ?? "";
+  const donde = datos.rango
+    ? `esta semana (${datos.rango} de ${nombreMes})`
+    : `en ${nombreMes}`;
+
+  if (gente.length === 0) return `No hay cumpleaños ${donde}.`;
+
+  const lineas = gente.map((g) => `• ${g.dia} — ${g.nombre}`
+    + (g.puesto ? `, ${g.puesto}` : ""));
+  return `Cumpleaños ${donde} (${gente.length}):\n${lineas.join("\n")}`;
+}
+
 /** Si la respuesta afirma un dato de la base que ninguna herramienta respaldo en este turno.
  *
  * ─── El fallo ────────────────────────────────────────────────────────────────
@@ -1492,6 +1545,24 @@ Deno.serve(async (req: Request) => {
       console.log(`via directa de jefe fallo, sigue el modelo: ${deJefe.error}`);
     }
 
+    // Cumpleaños: el mes se lee de la pregunta y la consulta es determinista.
+    const cumples = preguntaCumpleanos(ultimoUsuario);
+    if (cumples) {
+      const datos = await runTool(
+        "buscar_cumpleanos",
+        { ...(cumples.mes ? { mes: cumples.mes } : {}), solo_esta_semana: cumples.soloEstaSemana },
+        svc, isAdmin, actorId, userFullName, permisos,
+      ) as Record<string, unknown>;
+      if (!datos.error) {
+        console.log(`via directa: cumpleaños mes ${datos.mes}, ${datos.count} personas`);
+        return new Response(
+          JSON.stringify({ text: textoCumpleanos(datos), structured: null }),
+          { headers: { ...CORS, "Content-Type": "application/json" } },
+        );
+      }
+      console.log(`via directa de cumpleaños fallo, sigue el modelo: ${datos.error}`);
+    }
+
     let structuredData: unknown = null;
     let iterations = 0;
 
@@ -1524,8 +1595,10 @@ Deno.serve(async (req: Request) => {
             `(herramientas con datos: ${[...conDatos].join(",") || "ninguna"}): ` +
             texto.slice(0, 300),
           );
+          // El mensaje no menciona nombres ni números de empleado: se disparaba también con
+          // cumpleaños, y ahí pedir «el nombre con apellidos» no tenía ningún sentido.
           texto = "No pude confirmar ese dato con el sistema, así que prefiero no dártelo. "
-            + "Dime el nombre con apellidos o el número de empleado y lo consulto de nuevo.";
+            + "Vuelve a preguntármelo y lo consulto de nuevo.";
           structuredData = null;
         }
 
