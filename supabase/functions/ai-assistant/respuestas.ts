@@ -129,6 +129,107 @@ export function preguntaSuEquipo(texto: string): boolean {
   return /\bmis\b|\bmi\b|\btengo\b|me\s+asignaron|tengo\s+asignad|me\s+toca/.test(t);
 }
 
+/** Si la persona pide LAS INCIDENCIAS de alguien, y de quien.
+ *
+ * ─── El fallo que la hizo necesaria ──────────────────────────────────────────
+ *
+ * Es la pregunta donde Soli se invento mas: el 12/08/2026 a las 13:00, pedido el historial de Marco,
+ * devolvio una incidencia entera que no existe -«#200, periodo 2026, 1 dia, del 31/08/2026 al
+ * 31/08/2026, regreso 01/09/2026, PENDIENTE»- y al reclamarselo contesto «No invento». De las 1167
+ * incidencias de la base, cero coinciden con eso en NINGUN campo.
+ *
+ * Los guardias no pueden cubrirlo: una herramienta si trajo datos, y una tabla de un solo renglon
+ * queda por debajo del umbral estructural. La unica forma de que no se invente una fecha es que no la
+ * escriba el modelo.
+ *
+ * Devuelve `{propio}` cuando habla de si misma, o `{quien}` con el nombre o el numero que dijo, para
+ * que quien llame lo resuelva. Si no se resuelve a UNA persona, se deja al modelo, que sabe mostrar
+ * los candidatos y preguntar.
+ */
+export function preguntaIncidenciasDe(
+  texto: string,
+): { propio: true } | { quien: string } | null {
+  const t = sinAcentos(texto).toLowerCase().trim();
+
+  // Solo «incidencia». «Vacaciones» a secas ya la atiende `calcular_vacaciones`, que devuelve la
+  // tabla de periodos Y la ultima salida; colarla aqui daria una respuesta peor.
+  if (!/incidencia/.test(t)) return null;
+
+  // Lo propio se mira ANTES que nada.
+  //
+  // Iba despues del descarte de «pendientes» y por eso «mis incidencias pendientes?» se escapaba al
+  // modelo: la palabra que indica un conjunto tapaba al posesivo que indica de quien.
+  if (/\bmis\b|\bmias\b|\bmi\b|\btengo\b|me\s+quedan/.test(t)) return { propio: true };
+
+  // Del conjunto, no de una persona: eso lo contesta el modelo con la herramienta.
+  if (/cuantas|todas las|en total|de la empresa|pendientes\b|aprobadas\b|por autorizar/.test(t)) {
+    return null;
+  }
+
+  // «de X» o «tiene X». Se toma hasta el final: los nombres traen espacios y a veces cuatro palabras.
+  const m = /\b(?:de|del|tiene|tuvo|lleva)\s+(.+)$/.exec(t);
+  if (!m) return null;
+
+  let quien = m[1].trim().replace(/[?!.,;:]+$/, "");
+  // Los articulos y tratamientos del principio no son parte del nombre, y pueden venir VARIOS: «de la
+  // sra lopez vigil» dejaba «sra lopez vigil» cuando solo se quitaba uno.
+  let antes;
+  do {
+    antes = quien;
+    quien = quien.replace(/^(el|la|los|las|sr|sra|srta|senor|senora|don|dona|ing|lic|c)\s+/, "").trim();
+  } while (quien !== antes);
+
+  // Lo que va detras de «de» no siempre es una persona.
+  if (quien.length < 3) return null;
+  // Un año se descarta; un numero de empleado NO.
+  //
+  // Escribi `\d{4}$` y con eso «las incidencias del 0186» se iba al modelo, que es justo el caso que
+  // esto viene a cubrir. Solo parece un año lo que empieza por 19 o 20. Queda una ambiguedad real —el
+  // empleado 2026 existiria y se leeria como año— y se acepta: es un caso contra el resto.
+  if (/^(19|20)\d{2}$/.test(quien)) return null;
+  if (/^(vacacion|este|esta|ese|esa|hoy|ayer|manana|mes|ano|semana|periodo|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)/
+      .test(quien)) {
+    return null;
+  }
+  return { quien };
+}
+
+/** Las incidencias de alguien, escritas desde los renglones de la base.
+ *
+ * Las fechas van en dia/mes/año porque es como se leen aqui, y el REGRESO aparte porque es el dato
+ * que de verdad usa un jefe para saber cuando vuelve la persona.
+ */
+export function textoIncidencias(
+  datos: Record<string, unknown>,
+  deQuien: string,
+): string {
+  const filas = ((datos.results ?? []) as Array<Record<string, unknown>>)
+    .slice()
+    // Por fecha de salida, la mas reciente primero. La herramienta las ordena por fecha de captura,
+    // que no es lo mismo: un registro capturado ayer puede ser de una salida de 2019.
+    .sort((a, b) => String(b.fecha_inicio ?? "").localeCompare(String(a.fecha_inicio ?? "")));
+
+  if (filas.length === 0) return `${deQuien} no tiene incidencias registradas.`;
+
+  const dia = (v: unknown) => {
+    const p = String(v ?? "").slice(0, 10).split("-");
+    return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : String(v ?? "—");
+  };
+  const TOPE = 12;
+  const lineas = filas.slice(0, TOPE).map((f) => {
+    const d = typeof f.dias === "number" ? f.dias : null;
+    return `• ${dia(f.fecha_inicio)} al ${dia(f.fecha_fin)}`
+      + (d !== null ? ` — ${d} ${d === 1 ? "dia" : "dias"}` : "")
+      + `, ${f.status}, periodo ${f.periodo}`
+      + (f.fecha_regreso ? ` (regreso ${dia(f.fecha_regreso)})` : "");
+  });
+  const cola = filas.length > TOPE
+    ? `\n(y ${filas.length - TOPE} mas, de las mas antiguas)`
+    : "";
+  return `${deQuien} ${filas.length === 1 ? "tiene 1 incidencia" : `tiene ${filas.length} incidencias`} `
+    + `registradas:\n${lineas.join("\n")}${cola}`;
+}
+
 /** El texto del equipo propio, armado con los renglones de la herramienta.
  *
  * Lleva la serie porque es lo que se necesita para levantar un ticket o comprobar una etiqueta, y el

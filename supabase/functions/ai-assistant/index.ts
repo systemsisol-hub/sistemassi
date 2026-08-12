@@ -17,7 +17,7 @@ import { ALL_TOOLS, ToolInput } from "./herramientas.ts";
 import { CORS, igualesEnTiempoConstante, INTERNAL_SECRET, OLLAMA_BASE, OLLAMA_KEY, OLLAMA_MODEL, SERVICE_KEY, SUPABASE_URL } from "./config.ts";
 import { ADMIN_ONLY_TOOLS, Identidad, PERMISO_POR_HERRAMIENTA, Permisos, puedeUsarHerramienta, QUE_HACE, VIAS_DIRECTAS } from "./permisos.ts";
 import { construirPrompt } from "./prompt.ts";
-import { afirmaDatoSinRespaldo, preguntaCumpleanos, preguntaSuEquipo, preguntaSusVacaciones, soloUnIdentificador, textoCumpleanos, textoEquipoPropio, textoUltimaSolicitud, textoVacacionesPropias } from "./respuestas.ts";
+import { afirmaDatoSinRespaldo, preguntaCumpleanos, preguntaIncidenciasDe, preguntaSuEquipo, preguntaSusVacaciones, soloUnIdentificador, textoCumpleanos, textoIncidencias, textoEquipoPropio, textoUltimaSolicitud, textoVacacionesPropias } from "./respuestas.ts";
 import { runTool } from "./ejecutar.ts";
 import { jefeAlQueSeRefiere } from "./nombres.ts";
 
@@ -191,6 +191,61 @@ Deno.serve(async (req: Request) => {
       // Si falla se deja seguir al modelo, que al menos puede explicarlo. El guardia de abajo evita
       // que convierta el fallo en un cero.
       console.log(`via directa fallo, sigue el modelo: ${propio.error}`);
+    }
+
+    // ── Via directa: las incidencias de alguien ────────────────────────────
+    //
+    // La pregunta donde mas se invento; ver `preguntaIncidenciasDe`. La persona se resuelve AQUI, en
+    // codigo, con dos llamadas: buscar_colaborador y luego buscar_incidencias. El encadenamiento no
+    // es el problema —lo era que lo hiciera el MODELO— y hacerlo aqui evita tocar la resolucion de
+    // nombres de `calcular_vacaciones`, que no tiene pruebas y es el camino mas usado de todos.
+    //
+    // Si no se resuelve a UNA persona no se contesta: se deja al modelo, que sabe mostrar los
+    // candidatos con su estatus y preguntar a cual se refiere.
+    const incid = preguntaIncidenciasDe(ultimoUsuario);
+    if (incid && puedeUsarHerramienta("buscar_incidencias", isAdmin, permisos)) {
+      let objetivo: string | null = null;
+      let deQuien = "Tienes";
+
+      if ("propio" in incid) {
+        objetivo = actorId;
+      } else if (isAdmin) {
+        // Un usuario normal preguntando por otra persona cae al modelo, que le explica el permiso.
+        const busca = await runTool(
+          "buscar_colaborador",
+          /^\d{1,4}$/.test(incid.quien)
+            ? { numero_empleado: incid.quien }
+            : { nombre_completo: incid.quien },
+          svc, isAdmin, actorId, userFullName, permisos,
+        ) as Record<string, unknown>;
+        const filas = (busca.results ?? []) as Array<Record<string, unknown>>;
+        if (filas.length === 1) {
+          objetivo = String(filas[0].id);
+          // El nombre se arma con el MISMO renglon del que salio el id, que es lo que impide repetir
+          // el «0170 = MARCO ANTONIO MONTOYA LOPEZ» del historial: el 0170 es Enrique.
+          const partes = [filas[0].nombre, filas[0].paterno, filas[0].materno]
+            .filter((p) => typeof p === "string" && p.length > 0).join(" ");
+          deQuien = `${partes} (empleado ${filas[0].numero_empleado})`;
+        } else {
+          console.log(`via directa de incidencias: "${incid.quien}" dio `
+            + `${filas.length} coincidencias, la resuelve el modelo`);
+        }
+      }
+
+      if (objetivo) {
+        const res = await runTool(
+          "buscar_incidencias", { usuario_id: objetivo, limit: 50 },
+          svc, isAdmin, actorId, userFullName, permisos,
+        ) as Record<string, unknown>;
+        if (!res.error) {
+          console.log(`via directa: incidencias de ${objetivo}, ${res.count} registros`);
+          return new Response(
+            JSON.stringify({ text: textoIncidencias(res, deQuien), structured: null }),
+            { headers: { ...CORS, "Content-Type": "application/json" } },
+          );
+        }
+        console.log(`via directa de incidencias fallo, sigue el modelo: ${res.error}`);
+      }
     }
 
     // ── Via directa: el mensaje es SOLO un identificador ───────────────────

@@ -67,6 +67,8 @@ writeFileSync(tmp, `${extraerConst('MESES')}\n\n`
   + `${extraerFuncion('textoUltimaSolicitud')}\n\n`
   + `${extraerFuncion('textoVacacionesPropias')}\n\n`
   + `${extraerFuncion('soloUnIdentificador')}\n\n`
+  + `${extraerFuncion('preguntaIncidenciasDe')}\n\n`
+  + `${extraerFuncion('textoIncidencias')}\n\n`
   + `${extraerFuncion('preguntaSuEquipo')}\n\n`
   + `${extraerFuncion('textoEquipoPropio')}\n\n`
   + `${extraerFuncion('alcanceDeLaConsulta')}\n\n`
@@ -74,10 +76,12 @@ writeFileSync(tmp, `${extraerConst('MESES')}\n\n`
   + `${extraerFuncion('textoCumpleanos')}\n`
   + 'export { afirmaDatoSinRespaldo, preguntaSusVacaciones, textoVacacionesPropias,\n'
   + '  preguntaCumpleanos, textoCumpleanos, textoUltimaSolicitud,\n'
-  + '  preguntaSuEquipo, textoEquipoPropio, alcanceDeLaConsulta, soloUnIdentificador };\n', 'utf8');
+  + '  preguntaSuEquipo, textoEquipoPropio, alcanceDeLaConsulta, soloUnIdentificador,\n'
+  + '  preguntaIncidenciasDe, textoIncidencias };\n', 'utf8');
 const { afirmaDatoSinRespaldo, preguntaSusVacaciones, textoVacacionesPropias,
   preguntaCumpleanos, textoCumpleanos, textoUltimaSolicitud,
-  preguntaSuEquipo, textoEquipoPropio, alcanceDeLaConsulta, soloUnIdentificador } =
+  preguntaSuEquipo, textoEquipoPropio, alcanceDeLaConsulta, soloUnIdentificador,
+  preguntaIncidenciasDe, textoIncidencias } =
   await import('file://' + tmp.replace(/\\/g, '/'));
 
 let fallos = 0;
@@ -262,6 +266,66 @@ ok('sin solicitudes lo dice, no deja la frase colgando',
 ok('un solo dia va en singular',
    textoUltimaSolicitud({ solicitudes: [{ ...conSalida.solicitudes[1] }] }, 'Su')
      .includes('1 día'));
+
+console.log('\nLas incidencias de alguien: la pregunta donde mas se invento');
+// El caso real: pedido el historial de Marco, se invento una incidencia entera y la defendio con
+// «No invento». De las 1167 incidencias de la base, cero coinciden en ningun campo.
+for (const [q, esperado] of [
+  ['incidencias de marco montoya', 'marco montoya'],
+  ['las incidencias de hector figueroa vallejo', 'hector figueroa vallejo'],
+  ['que incidencias tiene bravo lomeli', 'bravo lomeli'],
+  ['dame las incidencias del 0186', '0186'],
+  ['incidencias de la sra lopez vigil', 'lopez vigil'],
+]) {
+  const r = preguntaIncidenciasDe(q);
+  ok(`"${q}" -> "${esperado}"`, r?.quien === esperado, JSON.stringify(r));
+}
+for (const q of ['mis incidencias', 'que incidencias tengo', 'mis incidencias pendientes?']) {
+  const r = preguntaIncidenciasDe(q);
+  ok(`"${q}" es propia`, r?.propio === true, JSON.stringify(r));
+}
+for (const q of [
+  // Del conjunto, no de una persona: eso lo contesta el modelo con la herramienta.
+  'cuantas incidencias hay',
+  'todas las incidencias de la empresa',
+  'incidencias pendientes',
+  // Lo que va detras de «de» no siempre es una persona.
+  'incidencias de agosto',
+  'incidencias de este mes',
+  'incidencias de vacaciones',
+  'incidencias de 2026',
+  // Y «vacaciones» a secas la atiende calcular_vacaciones, que ya da la tabla y la ultima salida.
+  'vacaciones de marco montoya',
+  'cuantas vacaciones tengo',
+  'hola',
+]) {
+  ok(`no se la queda: "${q}"`, preguntaIncidenciasDe(q) === null);
+}
+
+// El texto sale de los renglones, con las fechas REALES de Marco.
+const incMarco = { count: 3, results: [
+  { periodo: '2020 - 2021', dias: 1, status: 'APROBADA', fecha_inicio: '2026-04-06',
+    fecha_fin: '2026-04-06', fecha_regreso: '2026-04-07' },
+  { periodo: '2016 - 2017', dias: 6, status: 'APROBADA', fecha_inicio: '2026-08-21',
+    fecha_fin: '2026-08-28', fecha_regreso: '2026-08-31' },
+  { periodo: '2020 - 2021', dias: 6, status: 'APROBADA', fecha_inicio: '2026-01-02',
+    fecha_fin: '2026-01-09', fecha_regreso: '2026-01-12' },
+] };
+const txtInc = textoIncidencias(incMarco, 'MARCO ANTONIO MONTOYA LOPEZ (empleado 0186)');
+console.log(`  -> ${txtInc.replace(/\n/g, ' | ')}`);
+ok('dice cuantas son', txtInc.includes('3 incidencias'));
+ok('la mas reciente va primero, por fecha de SALIDA y no de captura',
+   txtInc.indexOf('21/08/2026') < txtInc.indexOf('06/04/2026'));
+ok('trae el regreso, que es lo que usa un jefe', txtInc.includes('regreso 31/08/2026'));
+ok('las fechas van en dia/mes/año', txtInc.includes('21/08/2026 al 28/08/2026'));
+// Lo que importa: que NO aparezca la incidencia inventada.
+ok('NO aparece la incidencia inventada del 31/08 al 31/08',
+   !txtInc.includes('31/08/2026 al 31/08/2026'));
+ok('ni un periodo «2026» que no existe en la base', !/periodo 2026\b/.test(txtInc));
+ok('sin incidencias lo dice, no deja la lista vacia',
+   textoIncidencias({ count: 0, results: [] }, 'Enrique').includes('no tiene incidencias'));
+ok('una sola va en singular',
+   textoIncidencias({ count: 1, results: [incMarco.results[0]] }, 'X').includes('tiene 1 incidencia'));
 
 console.log('\nUn mensaje que es SOLO un identificador no pasa por el modelo');
 // Los tres casos reales del historial de WhatsApp del 12/08/2026. «0170» acabo con el nombre de otra
