@@ -865,6 +865,40 @@ function filtroPrefijos(tokens: string[]): string {
   return partes.join(",");
 }
 
+/** Si el perfil corresponde a alguien que sigue en la empresa.
+ *
+ * Mismo criterio que la pagina de Social: cualquier status distinto de BAJA. Importa mucho mas de lo
+ * que parece, porque casi toda la base son bajas: medido, «lopez» empata con 106 perfiles y solo 10
+ * son vigentes, y «maria» con 180 de los cuales 6. Sin preferir vigentes, buscar por un apellido comun
+ * devuelve una lista inservible de gente que ya no esta.
+ */
+function esVigente(fila: Record<string, unknown>): boolean {
+  return fila.status_rh !== "BAJA";
+}
+
+/** Reordena poniendo primero a los vigentes, sin quitar a nadie.
+ *
+ * Se ORDENA en lugar de FILTRAR a proposito: el prompt dice explicitamente que no se añada un filtro
+ * de status por cuenta propia, porque a veces se pregunta justamente por alguien que ya salio. Asi lo
+ * util queda arriba y no se esconde nada.
+ */
+function vigentesPrimero(filas: Record<string, unknown>[]): Record<string, unknown>[] {
+  return [...filas].sort((a, b) => Number(esVigente(b)) - Number(esVigente(a)));
+}
+
+/** Candidatos con ALGUNA de las palabras, para cuando con todas no sale nadie.
+ *
+ * Es la diferencia entre «no existe» y «¿te refieres a alguno de estos?». Medido: «garcia hernandez»
+ * no empata con ningun vigente exigiendo las dos palabras, y con cualquiera de las dos hay 17.
+ */
+function conAlgunaPalabra(
+  filas: Record<string, unknown>[],
+  tokens: string[],
+): Record<string, unknown>[] {
+  const sueltos = filas.filter((f) => tokens.some((t) => empataNombreAproximado(f, [t])));
+  return vigentesPrimero(sueltos);
+}
+
 /** Resuelve un nombre a UNA persona, primero exacto y luego con tolerancia a dedazos.
  *
  * Devuelve la fila, o `null` con los candidatos cuando hay varias o ninguna, para que quien llame
@@ -874,7 +908,12 @@ async function resolverPorNombre(
   db: ReturnType<typeof createClient>,
   texto: string,
   campos: string,
-): Promise<{ fila: Record<string, unknown> | null; candidatos: Record<string, unknown>[]; aproximado: boolean }> {
+): Promise<{
+  fila: Record<string, unknown> | null;
+  candidatos: Record<string, unknown>[];
+  aproximado: boolean;
+  relajado?: boolean;
+}> {
   const tokens = tokensDeNombre(texto);
   if (tokens.length === 0) return { fila: null, candidatos: [], aproximado: false };
 
@@ -899,10 +938,41 @@ async function resolverPorNombre(
     }
   }
 
+  // Con varios que empatan, se intenta desempatar por vigencia antes de rendirse.
+  //
+  // Es lo que resuelve el caso reportado: «montoya» empata con dos perfiles y solo UNO sigue en la
+  // empresa. Preguntar «¿a cual de los dos?» cuando uno es una baja de hace años es hacer trabajar al
+  // usuario de balde.
+  let desempatadoPorVigencia = false;
+  if (empatan.length > 1) {
+    const vivos = empatan.filter(esVigente);
+    if (vivos.length === 1) {
+      empatan = vivos;
+      desempatadoPorVigencia = true;
+    }
+  }
+
+  // Si con TODAS las palabras no sale nadie, se relaja a ALGUNA para poder ofrecer candidatos en lugar
+  // de contestar que no existe.
+  let relajado = false;
+  if (empatan.length === 0 && tokens.length > 1) {
+    const filtro = filtroPrefijos(tokens);
+    if (filtro.length > 0) {
+      const { data: sueltos } = await db.from("profiles").select(campos)
+        .or(filtro).limit(CANDIDATOS_APROXIMADO);
+      const cerca = conAlgunaPalabra(
+        (sueltos || []) as unknown as Record<string, unknown>[], tokens);
+      if (cerca.length > 0) {
+        return { fila: null, candidatos: cerca.slice(0, 8), aproximado: true, relajado: true };
+      }
+    }
+  }
+
   return {
     fila: empatan.length === 1 ? empatan[0] : null,
-    candidatos: empatan,
-    aproximado,
+    candidatos: vigentesPrimero(empatan),
+    aproximado: aproximado || desempatadoPorVigencia,
+    relajado,
   };
 }
 
@@ -1094,8 +1164,9 @@ async function runTool(
         if (filtro.length > 0) {
           const { data: cands } = await db.from("profiles").select(fields)
             .or(filtro).limit(CANDIDATOS_APROXIMADO);
-          const aprox = ((cands || []) as unknown as Record<string, unknown>[])
-            .filter((f) => empataNombreAproximado(f, tokens))
+          const todos = (cands || []) as unknown as Record<string, unknown>[];
+
+          const aprox = vigentesPrimero(todos.filter((f) => empataNombreAproximado(f, tokens)))
             .slice(0, limiteUsuario);
           if (aprox.length > 0) {
             return {
@@ -1105,10 +1176,22 @@ async function runTool(
                 + `"${input.nombre_completo}"; confírmalo con el usuario antes de darlo por bueno.`,
             };
           }
+
+          // Ultimo recurso antes de decir que no hay nadie: con ALGUNA de las palabras.
+          const cerca = conAlgunaPalabra(todos, tokens).slice(0, limiteUsuario);
+          if (cerca.length > 0) {
+            return {
+              results: cerca,
+              count: cerca.length,
+              aviso: `Nadie coincide con todo "${input.nombre_completo}". Estos coinciden en parte: `
+                + `MUESTRALOS y pregunta si es alguno, o pide un apellido más, el correo o el número.`,
+            };
+          }
         }
       }
     }
-    return { results: filas, count: filas.length };
+    // Los vigentes arriba: con un apellido comun, la lista es en su mayoria gente que ya no esta.
+    return { results: vigentesPrimero(filas), count: filas.length };
   }
 
   if (name === "crear_colaborador") {
@@ -1162,25 +1245,37 @@ async function runTool(
       // sola llamada, mientras que preguntar por otra persona devolvía cifras inventadas. Medido
       // sobre cuatro consultas reales: 4 de 4 mal, incluyendo un número de empleado y una fecha de
       // vencimiento que no existen. Quitar el encadenamiento quita la ocasión de inventar.
-      const { fila, candidatos: empatan, aproximado } = await resolverPorNombre(
+      const { fila, candidatos: empatan, aproximado, relajado } = await resolverPorNombre(
         db, String(input.nombre_completo),
-        "id,nombre,paterno,materno,numero_empleado,status_rh",
+        "id,nombre,paterno,materno,numero_empleado,status_rh,puesto,area",
       );
       if (aproximado && fila) {
         console.log(`nombre resuelto con tolerancia a dedazos: "${input.nombre_completo}" -> ${fila.numero_empleado}`);
       }
+      // Ni «no existe» ni un «¿a cual?» sin datos: siempre se devuelve con quien se parece, para que
+      // la respuesta sea «¿te refieres a alguno de estos?» y no una puerta cerrada.
+      const comoLista = (fs: Record<string, unknown>[]) => fs.map((f) => ({
+        numero_empleado: f.numero_empleado,
+        nombre: [f.nombre, f.paterno, f.materno].filter(Boolean).join(" "),
+        puesto: f.puesto ?? null,
+        area: f.area ?? null,
+        vigente: esVigente(f),
+      }));
+
       if (empatan.length === 0) {
-        return { error: `No existe ningún colaborador llamado "${input.nombre_completo}". Esto es un fallo de identificación, NO un saldo de cero días.` };
-      }
-      if (empatan.length > 1) {
-        // Se devuelven los candidatos para que pueda preguntar, en lugar de elegir uno al azar.
         return {
-          error: `"${input.nombre_completo}" corresponde a ${empatan.length} personas. Pregúntale al usuario a cuál se refiere y vuelve a llamar con numero_empleado.`,
-          candidatos: empatan.map((f) => ({
-            numero_empleado: f.numero_empleado,
-            nombre: [f.nombre, f.paterno, f.materno].filter(Boolean).join(" "),
-            status_rh: f.status_rh,
-          })),
+          error: `No hay nadie que se llame exactamente "${input.nombre_completo}". `
+            + `MUESTRALE los candidatos de abajo y preguntale a cual se refiere; si ninguno encaja, `
+            + `dile que puede darte un apellido, el correo o el número de empleado.`,
+          candidatos: [],
+        };
+      }
+      if (empatan.length > 1 || relajado) {
+        return {
+          error: relajado
+            ? `Nadie se llama exactamente "${input.nombre_completo}", pero estos se parecen. MUESTRASELOS y pregunta a cuál se refiere.`
+            : `"${input.nombre_completo}" corresponde a ${empatan.length} personas. MUESTRASELAS con su número de empleado y puesto, y pregunta a cuál se refiere.`,
+          candidatos: comoLista(empatan.slice(0, 8)),
         };
       }
       targetId = String(fila!.id);

@@ -31,10 +31,12 @@ const vacias = src.match(/^const PALABRAS_VACIAS = new Set\(\[[\s\S]*?\]\);$/m);
 if (!vacias) throw new Error('no se encontro PALABRAS_VACIAS');
 
 const modulo = vacias[0] + '\n\n' + ['sinAcentos', 'tokensDeNombre', 'tokenGuia', 'empataNombre',
-  'distancia', 'tolerancia', 'empataNombreAproximado', 'filtroPrefijos', 'jefeAlQueSeRefiere']
+  'distancia', 'tolerancia', 'empataNombreAproximado', 'filtroPrefijos', 'jefeAlQueSeRefiere',
+  'esVigente', 'vigentesPrimero', 'conAlgunaPalabra']
   .map(extraer).join('\n\n') + `
 export { sinAcentos, tokensDeNombre, tokenGuia, empataNombre,
-  distancia, tolerancia, empataNombreAproximado, filtroPrefijos, jefeAlQueSeRefiere };
+  distancia, tolerancia, empataNombreAproximado, filtroPrefijos, jefeAlQueSeRefiere,
+  esVigente, vigentesPrimero, conAlgunaPalabra };
 `;
 
 const tmp = join(tmpdir(), 'ai-assistant-nombres.ts');
@@ -45,6 +47,9 @@ let fallos = 0;
 // `esperado` por omision es `true`, para poder escribir `ok(desc, condicion)` en las comprobaciones
 // que ya son booleanas. Sin ese valor por omision, omitirlo comparaba contra `undefined` y TODAS
 // fallaban con `real=true esperado=undefined`, que parece un fallo del codigo y es del ayudante.
+// OJO: el tercer argumento es el valor ESPERADO, no informacion de depuracion. En
+// verificar_invenciones.mjs el tercero SI es depuracion, y confundirlos me ha costado tres veces hoy
+// una tanda de FALLAS con «real=true esperado="...texto..."». Si hace falta depurar, usar console.log.
 function ok(desc, real, esperado = true) {
   const a = JSON.stringify(real), b = JSON.stringify(esperado);
   if (a !== b) { console.log(`  FALLA  ${desc}\n           real=${a}  esperado=${b}`); fallos++; }
@@ -150,6 +155,38 @@ ok('«quien es mi jefe» NO es de vacaciones: lo contesta el modelo',
    m.jefeAlQueSeRefiere('quien es mi jefe', perfil) === null);
 ok('«mis vacaciones» no es del jefe',
    m.jefeAlQueSeRefiere('cuales son mis vacaciones', perfil) === null);
+
+console.log('\nVigencia: casi toda la base son bajas, y eso decide si la lista sirve');
+// Medido sobre los 2488 perfiles: «lopez» empata con 106 y solo 10 son vigentes; «maria» con 180 y 6.
+// Sin poner los vigentes arriba, buscar por un apellido comun devuelve gente que ya no esta.
+const vivo = { nombre: 'MARCO', paterno: 'MONTOYA', status_rh: 'ACTIVO' };
+const baja = { nombre: 'MARIO', paterno: 'MONTOYA', status_rh: 'BAJA' };
+const cambio = { nombre: 'ANA', paterno: 'MONTOYA', status_rh: 'CAMBIO' };
+ok('ACTIVO es vigente', m.esVigente(vivo));
+ok('CAMBIO tambien: no es una baja', m.esVigente(cambio));
+ok('BAJA no', !m.esVigente(baja));
+ok('los vigentes van primero',
+   m.vigentesPrimero([baja, vivo]).map((f) => f.nombre), ['MARCO', 'MARIO']);
+// Se ORDENA y no se filtra porque el prompt dice explicitamente que no se añada un filtro de status
+// por cuenta propia: a veces se pregunta justo por alguien que ya salio.
+ok('ORDENA, no filtra: la baja sigue en la lista',
+   m.vigentesPrimero([baja, vivo]).length === 2);
+
+console.log('\nconAlgunaPalabra: la diferencia entre «no existe» y «¿es alguno de estos?»');
+// Medido: «garcia hernandez» no empata con ningun vigente exigiendo las dos palabras, y con
+// cualquiera de las dos hay 17.
+const gente = [
+  { nombre: 'JOSE', paterno: 'GARCIA', materno: 'LOPEZ', status_rh: 'ACTIVO' },
+  { nombre: 'ANA', paterno: 'HERNANDEZ', materno: 'DIAZ', status_rh: 'ACTIVO' },
+  { nombre: 'LUIS', paterno: 'PEREZ', materno: 'SOSA', status_rh: 'ACTIVO' },
+  { nombre: 'RAUL', paterno: 'GARCIA', materno: 'RUIZ', status_rh: 'BAJA' },
+];
+const cerca = m.conAlgunaPalabra(gente, ['garcia', 'hernandez']);
+ok('trae a los que coinciden en UNA palabra', cerca.length === 3);
+ok('deja fuera a quien no coincide en ninguna',
+   !cerca.some((f) => f.nombre === 'LUIS'));
+ok('y los vigentes primero: la baja al final',
+   cerca[cerca.length - 1].nombre === 'RAUL');
 
 console.log(fallos === 0 ? '\nTODO BIEN' : `\n${fallos} FALLAS`);
 process.exit(fallos === 0 ? 0 : 1);
