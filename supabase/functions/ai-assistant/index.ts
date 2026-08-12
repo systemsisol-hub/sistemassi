@@ -291,7 +291,7 @@ const ALL_TOOLS = [
     type: "function",
     function: {
       name: "calcular_vacaciones",
-      description: "Calcula los días de vacaciones disponibles de un colaborador según su antigüedad y las incidencias aprobadas/pendientes. Usa esta herramienta cuando el usuario pregunte cuántos días de vacaciones tiene, cuántos ha usado, cuál es su saldo o quiera ver el historial de periodos de vacaciones. Devuelve la lista de periodos y el total; si en cambio devuelve `error`, es un FALLO y no un saldo de cero.",
+      description: "Vacaciones de un colaborador: devuelve la TABLA de periodos, el total disponible Y sus ÚLTIMAS SOLICITUDES en una sola llamada, así que NO hace falta buscar las incidencias aparte. Calcula los días según su antigüedad y las incidencias aprobadas/pendientes. Usa esta herramienta cuando el usuario pregunte cuántos días de vacaciones tiene, cuántos ha usado, cuál es su saldo o quiera ver el historial de periodos de vacaciones. Devuelve la lista de periodos y el total; si en cambio devuelve `error`, es un FALLO y no un saldo de cero.",
       parameters: {
         type: "object",
         properties: {
@@ -534,7 +534,26 @@ function textoVacacionesPropias(datos: Record<string, unknown>): string {
   const cola = actual
     ? ` En el periodo actual (${actual.periodo}) te quedan ${actual.dias_disponibles}.`
     : "";
-  return `Tienes ${total} ${total === 1 ? "dia" : "dias"} de vacaciones disponibles en total.${cola}`;
+  return `Tienes ${total} ${total === 1 ? "dia" : "dias"} de vacaciones disponibles en total.${cola}`
+    + textoUltimaSolicitud(datos, "Tu");
+}
+
+/** La ultima solicitud, en una linea. Vacio si no hay ninguna.
+ *
+ * Pedido tal cual: al preguntar por las vacaciones de alguien se quiere la tabla Y el ultimo registro.
+ * Se distingue si esta POR VENIR porque es lo que de verdad se quiere saber: la ultima de Marco empieza
+ * el 21/08 y hoy es el 12.
+ */
+function textoUltimaSolicitud(datos: Record<string, unknown>, posesivo: string): string {
+  const lista = (datos.solicitudes ?? []) as Array<Record<string, unknown>>;
+  if (lista.length === 0) return " No tiene solicitudes registradas.";
+
+  const u = lista[0];
+  const cuando = u.por_venir === true ? "próxima salida" : "última salida";
+  const dias = u.dias;
+  return ` ${posesivo} ${cuando}: ${u.fecha_inicio} al ${u.fecha_fin}`
+    + ` (${dias} ${dias === 1 ? "día" : "días"}, ${u.status}, periodo ${u.periodo})`
+    + `, con regreso el ${u.fecha_regreso}.`;
 }
 
 const MESES: Record<string, number> = {
@@ -1371,6 +1390,33 @@ async function runTool(
     const totalDisponible = periodos.reduce((s, p) => s + Math.max(0, p.dias_disponibles), 0);
     const nombre = [prof.nombre, prof.paterno, prof.materno].filter(Boolean).join(" ");
 
+    // Las ultimas solicitudes, en la MISMA llamada.
+    //
+    // Pedido tal cual: «cuando pido vacaciones marco, la tabla de sus vacaciones Y su ultimo registro
+    // de vacaciones». Eran dos herramientas distintas y el modelo tenia que encadenarlas, que es
+    // exactamente donde se rompe. Una llamada, las dos cosas.
+    //
+    // Se ordena por fecha de inicio descendente, asi que una salida POR VENIR queda arriba: la ultima
+    // de Marco empieza el 21/08 y hoy es el 12, y eso es lo mas util que se puede decir de el.
+    const { data: ultimas } = await db
+      .from("incidencias")
+      .select("periodo,dias,status,fecha_inicio,fecha_fin,fecha_regreso")
+      .eq("usuario_id", targetId)
+      .order("fecha_inicio", { ascending: false })
+      .limit(6);
+
+    const hoyIso = new Date().toLocaleDateString("en-CA", { timeZone: "America/Mexico_City" });
+    const solicitudes = ((ultimas || []) as unknown as Record<string, unknown>[]).map((i) => ({
+      periodo: i.periodo,
+      dias: i.dias,
+      status: i.status,
+      fecha_inicio: i.fecha_inicio,
+      fecha_fin: i.fecha_fin,
+      fecha_regreso: i.fecha_regreso,
+      // Que se sepa si ya paso o esta por venir sin tener que comparar fechas de cabeza.
+      por_venir: typeof i.fecha_inicio === "string" && i.fecha_inicio > hoyIso,
+    }));
+
     return {
       colaborador: nombre,
       numero_empleado: prof.numero_empleado,
@@ -1378,6 +1424,8 @@ async function runTool(
       usa_fecha_reingreso: !!fechaReingreso,
       periodos,
       total_disponible: totalDisponible,
+      solicitudes,
+      total_solicitudes: solicitudes.length,
       ...(aproximadoDe
         ? { aviso: `"${aproximadoDe}" no esta escrito asi en el sistema; esto es lo mas parecido. Confirmalo.` }
         : {}),
@@ -1704,7 +1752,8 @@ Deno.serve(async (req: Request) => {
         return new Response(
           JSON.stringify({
             text: `${deJefe.colaborador} tiene ${deJefe.total_disponible} dias de vacaciones `
-              + `disponibles. Lo tomo de tu perfil, donde figura como tu jefe.`,
+              + `disponibles. Lo tomo de tu perfil, donde figura como tu jefe.`
+              + textoUltimaSolicitud(deJefe, "Su"),
             structured: { type: "vacaciones", data: deJefe },
           }),
           { headers: { ...CORS, "Content-Type": "application/json" } },

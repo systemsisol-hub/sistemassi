@@ -59,13 +59,14 @@ writeFileSync(tmp, `${extraerConst('MESES')}\n\n`
   + `${extraerFuncion('sinAcentos')}\n\n`
   + `${extraerFuncion('afirmaDatoSinRespaldo')}\n\n`
   + `${extraerFuncion('preguntaSusVacaciones')}\n\n`
+  + `${extraerFuncion('textoUltimaSolicitud')}\n\n`
   + `${extraerFuncion('textoVacacionesPropias')}\n\n`
   + `${extraerFuncion('preguntaCumpleanos')}\n\n`
   + `${extraerFuncion('textoCumpleanos')}\n`
   + 'export { afirmaDatoSinRespaldo, preguntaSusVacaciones, textoVacacionesPropias,\n'
-  + '  preguntaCumpleanos, textoCumpleanos };\n', 'utf8');
+  + '  preguntaCumpleanos, textoCumpleanos, textoUltimaSolicitud };\n', 'utf8');
 const { afirmaDatoSinRespaldo, preguntaSusVacaciones, textoVacacionesPropias,
-  preguntaCumpleanos, textoCumpleanos } =
+  preguntaCumpleanos, textoCumpleanos, textoUltimaSolicitud } =
   await import('file://' + tmp.replace(/\\/g, '/'));
 
 let fallos = 0;
@@ -205,6 +206,32 @@ ok('un solo dia va en singular',
    textoVacacionesPropias({ total_disponible: 1, periodos: [] }));
 ok('sin periodo actual no deja la frase a medias',
    !textoVacacionesPropias({ total_disponible: 0, periodos: [] }).includes('periodo actual'));
+
+console.log('\nLa ultima solicitud viene en la MISMA respuesta que la tabla');
+// Pedido tal cual: «cuando pido vacaciones marco, la tabla de sus vacaciones Y su ultimo registro».
+// Eran dos herramientas y el modelo tenia que encadenarlas, que es donde se rompe.
+// Datos reales del 0186: su ultima solicitud empieza el 21/08 y hoy es el 12, o sea que esta POR VENIR.
+const conSalida = { solicitudes: [
+  { periodo: '2016 - 2017', dias: 6, status: 'APROBADA', fecha_inicio: '2026-08-21',
+    fecha_fin: '2026-08-28', fecha_regreso: '2026-08-31', por_venir: true },
+  { periodo: '2020 - 2021', dias: 1, status: 'APROBADA', fecha_inicio: '2026-04-06',
+    fecha_fin: '2026-04-06', fecha_regreso: '2026-04-07', por_venir: false },
+] };
+const linea = textoUltimaSolicitud(conSalida, 'Su');
+console.log(`  -> ${linea.trim()}`);
+ok('dice que esta POR VENIR, no que ya paso', linea.includes('próxima salida'));
+ok('trae las fechas de inicio y fin', linea.includes('2026-08-21') && linea.includes('2026-08-28'));
+ok('trae los dias, el estatus y el periodo',
+   linea.includes('6 días') && linea.includes('APROBADA') && linea.includes('2016 - 2017'));
+ok('y la fecha de regreso, que es la que le sirve al jefe', linea.includes('2026-08-31'));
+ok('una que ya paso se llama ultima, no proxima',
+   textoUltimaSolicitud({ solicitudes: [{ ...conSalida.solicitudes[1] }] }, 'Su')
+     .includes('última salida'));
+ok('sin solicitudes lo dice, no deja la frase colgando',
+   textoUltimaSolicitud({ solicitudes: [] }, 'Su').includes('No tiene solicitudes'));
+ok('un solo dia va en singular',
+   textoUltimaSolicitud({ solicitudes: [{ ...conSalida.solicitudes[1] }] }, 'Su')
+     .includes('1 día'));
 
 console.log('\nLa via directa de cumpleaños lee el mes de la pregunta');
 // «cumpleaños de septiembre» acabo en el guardia porque el modelo no llamo a la herramienta, aunque
