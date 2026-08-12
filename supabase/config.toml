@@ -1,0 +1,60 @@
+# Configuración de las Edge Functions.
+#
+# ─── Por qué existe este archivo ─────────────────────────────────────────────
+#
+# `verify_jwt` decide si Supabase exige una sesión válida ANTES de ejecutar la función. Hasta ahora
+# no estaba declarado en ninguna parte: vivía sólo en la configuración del proyecto, y el valor
+# correcto había que recordarlo en cada despliegue pasando `--no-verify-jwt` a mano.
+#
+# El riesgo no es teórico. `supabase functions deploy` usa `true` por omisión, así que redesplegar
+# `ai-assistant` o `whatsapp-openwa` sin esa bandera las cierra, y el puente de WhatsApp deja de
+# contestar **sin ningún error visible**: OpenWA recibe 401, nadie mira sus registros, y desde el
+# código todo parece bien. Declararlo aquí hace que el repositorio sea la fuente de verdad.
+#
+# ─── Lo que este archivo NO cubre ────────────────────────────────────────────
+#
+# Sólo lo lee el CLI. Un despliegue por la API de gestión —o por el panel— manda `verify_jwt` como
+# parámetro y no consulta esto, así que ahí sigue habiendo que ponerlo bien a mano.
+#
+# Las cinco funciones se declaran, incluidas las tres que llevan el valor por omisión. Ser explícito
+# cuesta tres líneas y evita que alguien tenga que saberse el valor por omisión de memoria.
+
+project_id = "zkmbebybyyefmqcxjqrg"
+
+# ─── Públicas por diseño ─────────────────────────────────────────────────────
+#
+# Estas dos NO reciben una sesión de usuario, así que no pueden depender de la puerta de Supabase.
+# Cualquiera con la URL puede llamarlas, y lo único que las protege es la comprobación que llevan
+# dentro. Si alguna vez se cambia a `true`, hay que saber qué se rompe:
+
+# La llama el webhook de OpenWA, que no tiene sesión. Se acredita con la firma HMAC del cuerpo
+# —cabecera `X-OpenWA-Signature`— o, mientras el panel de OpenWA no exponga el campo `secret`, con
+# el mismo secreto en `?k=`. Sin `OPENWA_WEBHOOK_SECRET` configurado la función responde 503: un
+# secreto ausente cierra la puerta en lugar de abrirla.
+[functions.whatsapp-openwa]
+verify_jwt = false
+
+# Dos caminos de entrada. Con `Authorization` la identidad sale del JWT, que es lo que usa la
+# aplicación. Sin `Authorization` acepta una llamada de servidor a servidor con la cabecera
+# `X-Interno` —el secreto `SOLI_INTERNAL_SECRET`— y un `actuar_como`, que es la vía del puente de
+# WhatsApp. Los permisos se leen de `profiles` en los dos casos; el camino interno no reimplementa
+# ninguno. Con `verify_jwt = true` el puente dejaría de funcionar.
+[functions.ai-assistant]
+verify_jwt = false
+
+# ─── Cerradas por Supabase ───────────────────────────────────────────────────
+#
+# Las llama la aplicación con la sesión del usuario, así que Supabase las cierra antes de ejecutar
+# nada. `true` es el valor por omisión; se escribe para que se vea la intención.
+
+[functions.bi-assistant]
+verify_jwt = true
+
+# La llama `bi-assistant`, no la aplicación, reenviando el JWT del usuario para que el permiso del
+# reporte se compruebe en un solo lugar. Por eso no aparece en el código Dart: buscarla sólo ahí
+# hace parecer que nadie la usa.
+[functions.pbi-query]
+verify_jwt = true
+
+[functions.checador-import]
+verify_jwt = true
