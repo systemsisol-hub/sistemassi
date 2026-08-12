@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'services/clave_almacenamiento.dart';
 import 'theme/si_theme.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1179,7 +1180,14 @@ class _ArticleFormSheetState extends State<_ArticleFormSheet> {
       if (_fileBytes != null && _fileName != null) {
         final ext  = _fileExt ?? '';
         final mime = _mimeFromExt(ext);
-        final path = '$articleId/${DateTime.now().millisecondsSinceEpoch}_$_fileName';
+        // La clave se sanea; el nombre bonito se guarda aparte en `file_name` y es el que se muestra.
+        //
+        // Subir «CÓDIGO DE ÉTICA SISOL.pdf» fallaba con `InvalidKey`: Storage rechaza los caracteres
+        // fuera de ASCII, y las tildes de «CÓDIGO» y «ÉTICA» invalidaban la ruta. Es la única subida
+        // del proyecto que usa el nombre original en la clave —las demás la arman con marca de tiempo
+        // o id más extensión— y por eso era la única que podía fallar así.
+        final path =
+            '$articleId/${DateTime.now().millisecondsSinceEpoch}_${claveDeArchivo(_fileName!)}';
 
         await db.storage
             .from('knowledge-files')
