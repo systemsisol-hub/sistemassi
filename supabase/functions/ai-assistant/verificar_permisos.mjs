@@ -215,5 +215,29 @@ const trasIdentidad = src.slice(src.indexOf('const { data: prof }'))
 check(!/\buser\.(id|email)\b/.test(trasIdentidad),
   'no queda ningun user.id ni user.email en CODIGO despues de la identidad');
 
+// ── 11. El prompt no lleva acentos graves sin escapar ────────────────────────
+//
+// El prompt se arma con una plantilla de texto delimitada por acentos graves. Un acento grave suelto
+// dentro CIERRA la plantilla a media frase, y el resto se interpreta como codigo.
+//
+// Esto ya paso: tres reglas que escribi con `nombre_completo` entre acentos graves rompieron el
+// despliegue desde el panel —«Expected ';', got 'nombre_completo'»— mientras que `node --check` las
+// daba por buenas, porque un identificador seguido de otra plantilla es sintaxis valida en
+// JavaScript (una tagged template). Parsea, pero significa otra cosa y reventaria al ejecutarse.
+//
+// Y algo peor: mis despliegues por la API SI las escapaban al meterlas en el JSON, asi que
+// produccion funcionaba y el repositorio quedaba distinto. La solucion es no usar acentos graves ahi
+// dentro: el prompt ya usa «» para citar nombres de campos.
+console.log('\n11. El prompt no lleva acentos graves sin escapar');
+const iniPrompt = src.indexOf('return `Te llamas Soli');
+const finPrompt = src.indexOf('`;', iniPrompt);
+check(iniPrompt > 0 && finPrompt > iniPrompt, 'se encuentra la plantilla del prompt');
+if (iniPrompt > 0 && finPrompt > iniPrompt) {
+  const cuerpo = src.slice(iniPrompt + 'return `'.length, finPrompt);
+  const sueltos = [...cuerpo].filter((c, i) => c === '`' && cuerpo[i - 1] !== '\\').length;
+  check(sueltos === 0,
+    `ningun acento grave sin escapar dentro del prompt (hay ${sueltos})`);
+}
+
 console.log(fallas === 0 ? '\nTODO BIEN' : `\n${fallas} FALLAS`);
 process.exit(fallas === 0 ? 0 : 1);
