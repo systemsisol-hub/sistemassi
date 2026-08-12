@@ -662,7 +662,11 @@ function textoCumpleanos(datos: Record<string, unknown>): string {
  * Es la palabra «disponible» la que convierte una cifra en la afirmacion del saldo de alguien. Sin
  * ella, hablar de dias es hablar de la ley, y eso el modelo lo puede contestar solo.
  */
-function afirmaDatoSinRespaldo(texto: string, conDatos: Set<string>): boolean {
+function afirmaDatoSinRespaldo(
+  texto: string,
+  conDatos: Set<string>,
+  huboLlamadas = conDatos.size > 0,
+): boolean {
   const t = sinAcentos(texto).toLowerCase();
 
   // Un numero de empleado solo puede venir de la base.
@@ -710,7 +714,10 @@ function afirmaDatoSinRespaldo(texto: string, conDatos: Set<string>): boolean {
   // Dos renglones que empiezan por vinieta o barra Y llevan un numero son una tabla de datos, y el
   // modelo no tiene de donde sacarla si no llamo a ninguna herramienta. Se exige el numero para no
   // bloquear una lista de lo que SI puede hacer, que no lleva cifras.
-  if (conDatos.size === 0) {
+  // Se mira si se LLAMO a alguna herramienta, no si alguna trajo datos. Una lista de candidatos es
+  // legitima aunque la consulta no haya encontrado a la persona: preguntar «¿es alguno de estos?» es
+  // justo lo que tiene que hacer.
+  if (!huboLlamadas) {
     const renglonesDeDatos = (texto.match(/^\s*[•\-*|]\s*\**\s*\d/gm) || []).length;
     if (renglonesDeDatos >= 2) return true;
   }
@@ -1273,28 +1280,39 @@ async function runTool(
       }
       // Ni «no existe» ni un «¿a cual?» sin datos: siempre se devuelve con quien se parece, para que
       // la respuesta sea «¿te refieres a alguno de estos?» y no una puerta cerrada.
-      const comoLista = (fs: Record<string, unknown>[]) => fs.map((f) => ({
-        numero_empleado: f.numero_empleado,
-        nombre: [f.nombre, f.paterno, f.materno].filter(Boolean).join(" "),
-        puesto: f.puesto ?? null,
-        area: f.area ?? null,
-        vigente: esVigente(f),
-      }));
-
+      // Un nombre ambiguo NO es un error: es una lista de candidatos.
+      //
+      // Aqui estuvo el fallo. Estos casos devolvian los candidatos dentro del campo `error`, y como el
+      // resultado llevaba `error` no contaba como «herramienta que devolvio datos». Con eso, el
+      // guardia estructural veia «ninguna herramienta consulto» mas una lista con numeros y BLOQUEABA
+      // la lista que yo mismo estaba pidiendo mostrar. Reportado: «vacaciones de lopez» acabo en «No
+      // pude confirmar ese dato», mientras que «busca a garcia hernandez» -que va por
+      // buscar_colaborador y devuelve `results` sin error- salio perfecto.
+      //
+      // Se devuelven las filas con las MISMAS claves que buscar_colaborador, para que la aplicacion
+      // pueda pintar sus tarjetas de colaborador igual que en una busqueda normal.
       if (empatan.length === 0) {
         return {
-          error: `No hay nadie que se llame exactamente "${input.nombre_completo}". `
-            + `MUESTRALE los candidatos de abajo y preguntale a cual se refiere; si ninguno encaja, `
-            + `dile que puede darte un apellido, el correo o el número de empleado.`,
+          necesita_confirmacion: true,
           candidatos: [],
+          buscado: input.nombre_completo,
+          instruccion: `No hay nadie que se llame "${input.nombre_completo}". Dile que puede darte `
+            + `un apellido, el correo o el número de empleado, y que tú lo buscas.`,
         };
       }
       if (empatan.length > 1 || relajado) {
+        const vivos = empatan.filter(esVigente).length;
         return {
-          error: relajado
-            ? `Nadie se llama exactamente "${input.nombre_completo}", pero estos se parecen. MUESTRASELOS y pregunta a cuál se refiere.`
-            : `"${input.nombre_completo}" corresponde a ${empatan.length} personas. MUESTRASELAS con su número de empleado y puesto, y pregunta a cuál se refiere.`,
-          candidatos: comoLista(empatan.slice(0, 8)),
+          necesita_confirmacion: true,
+          buscado: input.nombre_completo,
+          total_coincidencias: empatan.length,
+          vigentes: vivos,
+          candidatos: empatan.slice(0, 8),
+          instruccion: relajado
+            ? `Nadie se llama exactamente así, pero estos se parecen. MUÉSTRALOS en una tabla con `
+              + `número de empleado, nombre y puesto, y pregunta a cuál se refiere.`
+            : `Hay ${empatan.length} coincidencias (${vivos} siguen en la empresa). MUÉSTRALAS en una `
+              + `tabla con número de empleado, nombre y puesto, y pregunta a cuál se refiere.`,
         };
       }
       targetId = String(fila!.id);
@@ -1791,6 +1809,9 @@ Deno.serve(async (req: Request) => {
     /// dato consultado de uno inventado; ver `afirmaDatoSinRespaldo`.
     const conDatos = new Set<string>();
 
+    /// Cuantas herramientas se llamaron, con o sin exito. Ver `afirmaDatoSinRespaldo`.
+    let llamadas = 0;
+
     while (iterations++ < 15) {
       const apiRes = await fetch(`${OLLAMA_BASE}/chat`, {
         method: "POST",
@@ -1810,7 +1831,7 @@ Deno.serve(async (req: Request) => {
         // Se sustituye el texto en lugar de dejarlo pasar con una advertencia: una tabla de periodos
         // con cifras inventadas es mas creible que cualquier aviso que se le ponga al lado, y quien
         // la lea no va a dudar de ella.
-        if (afirmaDatoSinRespaldo(texto, conDatos)) {
+        if (afirmaDatoSinRespaldo(texto, conDatos, llamadas > 0)) {
           console.log(
             `respuesta BLOQUEADA, afirmaba datos sin herramienta ` +
             `(herramientas con datos: ${[...conDatos].join(",") || "ninguna"}): ` +
@@ -1843,7 +1864,13 @@ Deno.serve(async (req: Request) => {
           // primera herramienta que pidiera WhatsApp habría reventado con `user is not defined`.
           await runTool(name, args, svc, isAdmin, actorId, userFullName, permisos);
         const r = result as Record<string, unknown>;
-        if (!r.error) conDatos.add(name);
+        llamadas++;
+        // «Trajo datos» NO es lo mismo que «no fallo». Un resultado con `necesita_confirmacion` trae
+        // candidatos, que sirven para mostrar una lista pero NO para afirmar el saldo de nadie. Si
+        // contara como datos, el modelo podria colar una cifra inventada en ese mismo turno.
+        const trajoDatos = !r.error
+          && (Array.isArray(r.results) || Array.isArray(r.periodos) || r.success === true);
+        if (trajoDatos) conDatos.add(name);
         console.log(
           `resultado ${name}: ` +
           (r.error ? `ERROR ${r.error}` :
@@ -1857,8 +1884,14 @@ Deno.serve(async (req: Request) => {
           structuredData = { type: "collaborators", data: r.results };
         } else if (["buscar_incidencias","buscar_inventario","buscar_contactos"].includes(name) && r.results) {
           structuredData = { type: name.replace("buscar_","").replace("ver_",""), data: r.results };
-        } else if (name === "calcular_vacaciones" && !r.error) {
+        } else if (name === "calcular_vacaciones" && Array.isArray(r.periodos)) {
           structuredData = { type: "vacaciones", data: result };
+        } else if (name === "calcular_vacaciones" && Array.isArray(r.candidatos)
+                   && (r.candidatos as unknown[]).length > 0) {
+          // Un nombre ambiguo pinta las tarjetas de colaborador, no una ficha de vacaciones a medias.
+          // Es lo que hace que la persona VEA a los candidatos con su foto, número y puesto, en lugar
+          // de leer «dime a cuál te refieres» sin más.
+          structuredData = { type: "collaborators", data: r.candidatos };
         } else if (r.success) {
           structuredData = { type: "success", tool: name, data: result };
         }

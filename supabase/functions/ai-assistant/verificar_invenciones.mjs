@@ -142,6 +142,18 @@ ok('una lista de lo que SI puede hacer no se bloquea: no lleva cifras',
 ok('un solo renglon con cifra no es una tabla',
    !afirmaDatoSinRespaldo('Te lo resumo:\n• 1 solicitud pendiente', nada));
 
+// Reportado: «vacaciones de lopez» acabo en «No pude confirmar ese dato». La herramienta SI devolvia
+// candidatos, pero dentro del campo `error`, asi que no contaba como consulta y el guardia bloqueaba
+// la lista que yo mismo pedia mostrar. Una lista de candidatos es legitima aunque no se haya
+// encontrado a la persona: preguntar «¿es alguno de estos?» es justo lo que debe hacer.
+const tablaDeCandidatos = 'Hay 4 personas con esos apellidos:\n'
+  + '| 1 | 0592 | JUDITH ANAHI HERNANDEZ GARCIA | RECEPCIONISTA |\n'
+  + '| 2 | 0187 | MARIA DE JESUS GARCIA HERNANDEZ | RECEPCIONISTA |';
+ok('una tabla de candidatos pasa si SE LLAMO a una herramienta, aunque no trajera datos',
+   !afirmaDatoSinRespaldo(tablaDeCandidatos, nada, true));
+ok('y sigue bloqueada si no se llamo a ninguna',
+   afirmaDatoSinRespaldo(tablaDeCandidatos, nada, false));
+
 console.log('\nY NO se bloquea lo que el modelo si puede contestar solo');
 ok('conocimiento general de la ley, sin hablar de nadie',
    !afirmaDatoSinRespaldo('Con 5 años cumplidos la Ley Federal del Trabajo da 20 días.', nada),
