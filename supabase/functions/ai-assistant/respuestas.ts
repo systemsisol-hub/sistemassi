@@ -43,6 +43,81 @@ export function preguntaSusVacaciones(texto: string): boolean {
   return /\bmis\b|\bmi\b|\btengo\b|me\s+quedan|me\s+toca|me\s+corresponden/.test(t);
 }
 
+/** Si la persona pregunta por EL EQUIPO QUE TIENE ASIGNADO.
+ *
+ * ─── El fallo que la hizo necesaria ──────────────────────────────────────────
+ *
+ * Reportado el 12/08/2026. Un administrador pregunto «¿que equipo de computo tengo asignado?» y Soli
+ * le contesto con un LAP-TOP LENOVO IdeaPad 3, serie PF4ZDWD0. Ese equipo es de otra persona
+ * -ABRAHAM GUADALUPE ACUÑA AGUILAR, en MISIONES STA ESPERANZA- y encima la respuesta traia la
+ * ubicacion cambiada a la de quien preguntaba.
+ *
+ * No fue una invencion: `buscar_inventario` filtra por `usuario_id` SOLO a los usuarios normales. A un
+ * administrador que no pase `usuario_id` le devuelve el inventario de TODA la empresa, y el modelo
+ * cogio un renglon de los veinte. El guardia no podia atraparlo, porque una herramienta si habia
+ * traido datos: el problema no era que faltara el dato, era que sobraban 19 que no le tocaban.
+ *
+ * Esta via lo resuelve donde no hay nada que decidir: quien pregunta ya esta identificado, asi que se
+ * consulta por su `usuario_id` y se contesta. El modelo no participa, asi que no puede equivocarse
+ * de renglon.
+ *
+ * Se exige que hable de SI MISMA, igual que en las vacaciones: «el equipo de Hector» se deja pasar al
+ * modelo, que sabe resolver un nombre.
+ */
+export function preguntaSuEquipo(texto: string): boolean {
+  const t = sinAcentos(texto).toLowerCase();
+
+  // Que hable de un equipo. «asignado» a secas no basta: tambien se asignan incidencias y permisos.
+  if (!/equipo|laptop|lap-top|computadora|compu\b|celular|telefono|monitor|impresora|inventario/
+      .test(t)) {
+    return false;
+  }
+
+  // Una pregunta por el inventario de la empresa NO es una pregunta por lo propio, aunque lleve un
+  // «tengo» dentro: «cuantas laptops tengo en Vidamar» habla de una ubicacion.
+  if (/sin asignar|sin usuario|cuantos hay|cuantas hay|todo el inventario|inventario completo|en total/
+      .test(t)) {
+    return false;
+  }
+  if (/\ben\s+(vidamar|constituyentes|tulum|guerrero|selva|bonanza|zenesis|ensenada|misiones)/
+      .test(t)) {
+    return false;
+  }
+
+  // «de <alguien>» es otra persona. Mismo criterio y misma lista de excepciones que en vacaciones:
+  // «que equipo de computo tengo» lleva un `de` que no introduce a nadie.
+  if (/\bde\s+(?!computo|computadora|trabajo|oficina|la\s|los\s|las\s|el\s|mi\s|mis\s)[a-z]{2,}/
+      .test(t)) {
+    return false;
+  }
+
+  return /\bmis\b|\bmi\b|\btengo\b|me\s+asignaron|tengo\s+asignad|me\s+toca/.test(t);
+}
+
+/** El texto del equipo propio, armado con los renglones de la herramienta.
+ *
+ * Lleva la serie porque es lo que se necesita para levantar un ticket o comprobar una etiqueta, y el
+ * nombre de quien lo tiene NO, porque por definicion es quien pregunta.
+ */
+export function textoEquipoPropio(datos: Record<string, unknown>): string {
+  const filas = (datos.results ?? []) as Array<Record<string, unknown>>;
+  if (filas.length === 0) {
+    return "No tienes ningun equipo asignado en el inventario. Si deberias tenerlo, avisa a Sistemas "
+      + "para que lo registren a tu nombre.";
+  }
+  const lineas = filas.map((f) => {
+    const partes = [f.tipo, f.marca, f.modelo].filter(Boolean).join(" ");
+    const serie = f.n_s ? ` — serie ${f.n_s}` : "";
+    const cond = f.condicion ? `, ${f.condicion}` : "";
+    const donde = f.ubicacion ? `, en ${f.ubicacion}` : "";
+    return `• ${partes}${serie}${cond}${donde}`;
+  });
+  const cabeza = filas.length === 1
+    ? "Tienes 1 equipo asignado:"
+    : `Tienes ${filas.length} equipos asignados:`;
+  return `${cabeza}\n${lineas.join("\n")}`;
+}
+
 /** El texto de una respuesta de vacaciones, armado con los datos de la herramienta.
  *
  * Corto a proposito: la aplicacion pinta la tarjeta con el detalle y el puente de WhatsApp arma su

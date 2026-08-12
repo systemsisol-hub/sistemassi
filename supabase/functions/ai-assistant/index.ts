@@ -17,7 +17,7 @@ import { ALL_TOOLS, ToolInput } from "./herramientas.ts";
 import { CORS, igualesEnTiempoConstante, INTERNAL_SECRET, OLLAMA_BASE, OLLAMA_KEY, OLLAMA_MODEL, SERVICE_KEY, SUPABASE_URL } from "./config.ts";
 import { ADMIN_ONLY_TOOLS, Identidad, PERMISO_POR_HERRAMIENTA, Permisos, puedeUsarHerramienta, QUE_HACE, VIAS_DIRECTAS } from "./permisos.ts";
 import { construirPrompt } from "./prompt.ts";
-import { afirmaDatoSinRespaldo, preguntaCumpleanos, preguntaSusVacaciones, textoCumpleanos, textoUltimaSolicitud, textoVacacionesPropias } from "./respuestas.ts";
+import { afirmaDatoSinRespaldo, preguntaCumpleanos, preguntaSuEquipo, preguntaSusVacaciones, textoCumpleanos, textoEquipoPropio, textoUltimaSolicitud, textoVacacionesPropias } from "./respuestas.ts";
 import { runTool } from "./ejecutar.ts";
 import { jefeAlQueSeRefiere } from "./nombres.ts";
 
@@ -191,6 +191,29 @@ Deno.serve(async (req: Request) => {
       // Si falla se deja seguir al modelo, que al menos puede explicarlo. El guardia de abajo evita
       // que convierta el fallo en un cero.
       console.log(`via directa fallo, sigue el modelo: ${propio.error}`);
+    }
+
+    // ── Via directa: el equipo que tiene asignado ──────────────────────────
+    //
+    // Se pasa `usuario_id` explicitamente, y ahi esta el arreglo: a un administrador que no lo pase,
+    // `buscar_inventario` le devuelve el inventario de TODA la empresa, y de ahi salio contestarle a
+    // Angel con el LAP-TOP de Abraham. Ver `preguntaSuEquipo`.
+    if (preguntaSuEquipo(ultimoUsuario)
+        && puedeUsarHerramienta("buscar_inventario", isAdmin, permisos)) {
+      const mio = await runTool(
+        "buscar_inventario", { usuario_id: actorId }, svc, isAdmin, actorId, userFullName, permisos,
+      ) as Record<string, unknown>;
+      if (!mio.error) {
+        console.log(`via directa: equipo propio de ${actorId}, ${mio.count} equipos`);
+        return new Response(
+          JSON.stringify({
+            text: textoEquipoPropio(mio),
+            structured: null,
+          }),
+          { headers: { ...CORS, "Content-Type": "application/json" } },
+        );
+      }
+      console.log(`via directa de equipo fallo, sigue el modelo: ${mio.error}`);
     }
 
     // «las vacaciones de mi jefe»: el perfil ya dice quien es.

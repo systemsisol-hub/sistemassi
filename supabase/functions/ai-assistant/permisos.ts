@@ -90,6 +90,7 @@ export const VIAS_DIRECTAS = [
   { pregunta: "«cuántas vacaciones tengo»", resuelve: "Tus días, con la tabla de periodos y tu última solicitud" },
   { pregunta: "«las vacaciones de mi jefe»", resuelve: "Toma el nombre de `jefe_inmediato` de tu perfil. Solo administradores" },
   { pregunta: "«cumpleaños de este mes» / «quién cumple esta semana»", resuelve: "La lista, con el mismo filtro que la página de Social" },
+  { pregunta: "«qué equipo tengo asignado»", resuelve: "Los equipos que están a tu nombre en el inventario, con su serie" },
 ];
 
 export type Permisos = Record<string, unknown>;

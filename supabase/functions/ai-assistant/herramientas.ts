@@ -60,7 +60,9 @@ export const ALL_TOOLS = [
     type: "function",
     function: {
       name: "buscar_incidencias",
-      description: "Busca incidencias. Usuarios no-admin solo ven las propias.",
+      description: "Busca incidencias. Usuarios no-admin solo ven las propias. "
+        + "SI ERES ADMIN Y NO PASAS usuario_id, DEVUELVE LAS DE TODA LA EMPRESA: "
+        + "no son de quien pregunta. La respuesta trae un campo `alcance` que dice de quién son.",
       parameters: {
         type: "object",
         properties: {
@@ -75,13 +77,20 @@ export const ALL_TOOLS = [
     type: "function",
     function: {
       name: "buscar_inventario",
-      description: "Busca equipos. Usuarios no-admin solo ven el equipo asignado a sí mismos.",
+      description: "Busca equipos. Usuarios no-admin solo ven el equipo asignado a sí mismos. "
+        + "SI ERES ADMIN Y NO PASAS usuario_id, DEVUELVE EL INVENTARIO DE TODA LA EMPRESA: "
+        + "esos equipos NO son de quien pregunta. Para el equipo de alguien —incluido quien "
+        + "pregunta— hay que pasar su usuario_id. La respuesta trae un campo `alcance` que dice "
+        + "de quién son los renglones; léelo antes de atribuirlos a nadie.",
       parameters: {
         type: "object",
         properties: {
           tipo: { type: "string" }, ubicacion: { type: "string" }, marca: { type: "string" },
           condicion: { type: "string", enum: ["NUEVO","USADO","DAÑADO"] },
-          usuario_id: { type: "string", description: "[Solo admin]" },
+          usuario_id: {
+            type: "string",
+            description: "[Solo admin] Obligatorio para saber qué equipo tiene UNA persona.",
+          },
           sin_asignar: { type: "boolean", description: "[Solo admin]" },
           limit: { type: "number" },
         },

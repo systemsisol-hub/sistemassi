@@ -8,6 +8,28 @@ import { ADMIN_COLABORADOR_FIELDS, ADMIN_ONLY_TOOLS, PERMISO_POR_HERRAMIENTA, Pe
 import { calcYears, CANDIDATOS_APROXIMADO, CANDIDATOS_NOMBRE, conAlgunaPalabra, empataNombre, empataNombreAproximado, esUuid, esVigente, filtroPrefijos, getDaysByYear, numeroEmpleadoVariants, parseLocalDate, resolverPorNombre, sinAcentos, tokenGuia, tokensDeNombre, vigentesPrimero } from "./nombres.ts";
 import type { Db } from "./config.ts";
 
+/** De quien son los renglones que acaba de devolver una consulta, dicho para que lo lea el modelo.
+ *
+ * ─── El fallo que la hizo necesaria ──────────────────────────────────────────
+ *
+ * `buscar_inventario` y `buscar_incidencias` filtran por `usuario_id` SOLO a los usuarios normales. A
+ * un administrador que no pase `usuario_id` le devuelven la tabla de TODA la empresa, y hasta ahora la
+ * respuesta no decia en ninguna parte que fuera de todos. El 12/08/2026 un administrador pregunto que
+ * equipo tenia asignado y recibio el LAP-TOP de otra persona: el modelo tenia veinte renglones ajenos
+ * y ninguna señal de que no fueran suyos.
+ *
+ * El guardia de invenciones no puede cubrir esto -una herramienta SI trajo datos- asi que la señal
+ * tiene que venir en los datos mismos. Va como texto y no como bandera porque el modelo lee texto.
+ */
+export function alcanceDeLaConsulta(deQuien: string, cosa: string): string {
+  if (deQuien === "propio")        return `Solo los ${cosa} de quien pregunta.`;
+  if (deQuien === "de un usuario") return `Solo los ${cosa} del usuario que se pidio.`;
+  if (deQuien === "sin asignar")   return `Solo los ${cosa} que no tienen usuario asignado.`;
+  return `ATENCION: estos son ${cosa} de TODA la empresa, NO de quien pregunta. `
+    + "Cada renglon dice a quien pertenece; no atribuyas ninguno a quien pregunta sin comprobarlo. "
+    + "Para los suyos hay que repetir la consulta pasando su usuario_id.";
+}
+
 export async function runTool(
   name: string,
   input: ToolInput,
@@ -446,17 +468,20 @@ export async function runTool(
   // ── INCIDENCIAS ────────────────────────────────────────────────────
   if (name === "buscar_incidencias") {
     let q = db.from("incidencias").select("*");
+    let deQuien = "";
     if (!isAdmin) {
       q = (q as any).eq("usuario_id", userId);
-    } else {
-      if (input.usuario_id) q = (q as any).eq("usuario_id", input.usuario_id);
+      deQuien = "propio";
+    } else if (input.usuario_id) {
+      q = (q as any).eq("usuario_id", input.usuario_id);
+      deQuien = input.usuario_id === userId ? "propio" : "de un usuario";
     }
     if (input.status)  q = (q as any).eq("status", input.status);
     if (input.periodo) q = (q as any).ilike("periodo", `%${input.periodo}%`);
     q = (q as any).limit((input.limit as number) || 20).order("created_at", { ascending: false });
     const { data, error } = await q;
     if (error) return { error: error.message };
-    return { results: data, count: data?.length || 0 };
+    return { results: data, count: data?.length || 0, alcance: alcanceDeLaConsulta(deQuien, "incidencias") };
   }
 
   if (name === "crear_incidencia") {
@@ -487,11 +512,17 @@ export async function runTool(
     let q = db.from("issi_inventory").select(
       "id,tipo,marca,modelo,n_s,condicion,ubicacion,usuario_id,usuario_nombre,observaciones,valor,cpu,ram,ssd"
     );
+    // De quien son los renglones que se devuelven. Va en la respuesta, no solo aqui: ver `alcance`.
+    let deQuien = "";
     if (!isAdmin) {
       q = (q as any).eq("usuario_id", userId);
+      deQuien = "propio";
     } else {
-      if (input.usuario_id)           q = (q as any).eq("usuario_id", input.usuario_id);
-      if (input.sin_asignar === true) q = (q as any).is("usuario_id", null);
+      if (input.usuario_id) {
+        q = (q as any).eq("usuario_id", input.usuario_id);
+        deQuien = input.usuario_id === userId ? "propio" : "de un usuario";
+      }
+      if (input.sin_asignar === true) { q = (q as any).is("usuario_id", null); deQuien = "sin asignar"; }
     }
     if (input.tipo)      q = (q as any).eq("tipo", (input.tipo as string).toUpperCase());
     if (input.ubicacion) q = (q as any).ilike("ubicacion", `%${input.ubicacion}%`);
@@ -500,7 +531,7 @@ export async function runTool(
     q = (q as any).limit((input.limit as number) || 20).order("tipo");
     const { data, error } = await q;
     if (error) return { error: error.message };
-    return { results: data, count: data?.length || 0 };
+    return { results: data, count: data?.length || 0, alcance: alcanceDeLaConsulta(deQuien, "equipos") };
   }
 
   if (name === "actualizar_inventario") {

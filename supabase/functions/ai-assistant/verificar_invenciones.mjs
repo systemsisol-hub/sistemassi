@@ -66,12 +66,17 @@ writeFileSync(tmp, `${extraerConst('MESES')}\n\n`
   + `${extraerFuncion('preguntaSusVacaciones')}\n\n`
   + `${extraerFuncion('textoUltimaSolicitud')}\n\n`
   + `${extraerFuncion('textoVacacionesPropias')}\n\n`
+  + `${extraerFuncion('preguntaSuEquipo')}\n\n`
+  + `${extraerFuncion('textoEquipoPropio')}\n\n`
+  + `${extraerFuncion('alcanceDeLaConsulta')}\n\n`
   + `${extraerFuncion('preguntaCumpleanos')}\n\n`
   + `${extraerFuncion('textoCumpleanos')}\n`
   + 'export { afirmaDatoSinRespaldo, preguntaSusVacaciones, textoVacacionesPropias,\n'
-  + '  preguntaCumpleanos, textoCumpleanos, textoUltimaSolicitud };\n', 'utf8');
+  + '  preguntaCumpleanos, textoCumpleanos, textoUltimaSolicitud,\n'
+  + '  preguntaSuEquipo, textoEquipoPropio, alcanceDeLaConsulta };\n', 'utf8');
 const { afirmaDatoSinRespaldo, preguntaSusVacaciones, textoVacacionesPropias,
-  preguntaCumpleanos, textoCumpleanos, textoUltimaSolicitud } =
+  preguntaCumpleanos, textoCumpleanos, textoUltimaSolicitud,
+  preguntaSuEquipo, textoEquipoPropio, alcanceDeLaConsulta } =
   await import('file://' + tmp.replace(/\\/g, '/'));
 
 let fallos = 0;
@@ -256,6 +261,70 @@ ok('sin solicitudes lo dice, no deja la frase colgando',
 ok('un solo dia va en singular',
    textoUltimaSolicitud({ solicitudes: [{ ...conSalida.solicitudes[1] }] }, 'Su')
      .includes('1 día'));
+
+console.log('\nLa via directa del equipo propio, y lo que NO se queda');
+// El caso real del 12/08/2026: un administrador pregunto esto y recibio el LAP-TOP de otra persona,
+// porque `buscar_inventario` le devuelve TODO el inventario si no se le pasa usuario_id.
+for (const q of [
+  'hola me puedes decir que equipo de computo tengo asignado?',
+  'que equipo tengo asignado',
+  'cual es mi equipo',
+  'que laptop tengo',
+  'mi celular de la empresa',
+  'que tengo asignado del inventario',
+  'que equipos me asignaron',
+  'mi computadora',
+]) {
+  ok(`la atiende: "${q}"`, preguntaSuEquipo(q));
+}
+for (const q of [
+  // De otra persona: lo resuelve el modelo, que sabe buscar el nombre.
+  'que equipo tiene abraham acuña',
+  'el equipo de hector figueroa',
+  'que laptop trae marco montoya',
+  // Del inventario entero, no de nadie en particular.
+  'cuantas laptops hay',
+  'equipos sin asignar',
+  'que equipos hay en vidamar',
+  'dame todo el inventario',
+  'cuantos equipos hay en total',
+  // No son preguntas de inventario.
+  'cuantas vacaciones tengo',
+  'mis incidencias',
+  'Soli?',
+]) {
+  ok(`la deja pasar: "${q}"`, !preguntaSuEquipo(q));
+}
+
+const equipoReal = { count: 2, results: [
+  { tipo: 'TEL. CELULAR', marca: 'XIAOMI', modelo: 'A10', n_s: '38905/62TB05473',
+    condicion: 'NUEVO', ubicacion: 'CONSTITUYENTES' },
+  { tipo: 'LAPTOP', marca: 'DELL', modelo: 'X15', n_s: 'DERTY5676',
+    condicion: 'USADO', ubicacion: 'CONSTITUYENTES' },
+] };
+const txtEquipo = textoEquipoPropio(equipoReal);
+console.log(`  -> ${txtEquipo.replace(/\n/g, ' | ')}`);
+ok('dice cuantos son', txtEquipo.includes('2 equipos'));
+ok('trae la serie, que es lo que sirve para un ticket', txtEquipo.includes('DERTY5676'));
+ok('trae marca y modelo', txtEquipo.includes('DELL') && txtEquipo.includes('X15'));
+// Lo que de verdad importa: que NO aparezca el equipo de Abraham, que es lo que se contesto.
+ok('NO aparece el equipo de otra persona', !txtEquipo.includes('PF4ZDWD'));
+ok('sin equipos lo dice, no deja la lista vacia',
+   textoEquipoPropio({ count: 0, results: [] }).startsWith('No tienes ningun equipo'));
+ok('un solo equipo va en singular',
+   textoEquipoPropio({ count: 1, results: [equipoReal.results[1]] }).includes('1 equipo asignado'));
+
+console.log('\nCada consulta dice DE QUIEN son los renglones que devuelve');
+ok('sin usuario_id avisa de que son de toda la empresa',
+   alcanceDeLaConsulta('', 'equipos').includes('TODA la empresa'));
+ok('y avisa de que no hay que atribuirlos a quien pregunta',
+   alcanceDeLaConsulta('', 'equipos').includes('no atribuyas ninguno a quien pregunta'));
+ok('con el usuario_id propio lo dice claro',
+   alcanceDeLaConsulta('propio', 'equipos') === 'Solo los equipos de quien pregunta.');
+ok('con el de otro, tambien',
+   alcanceDeLaConsulta('de un usuario', 'incidencias').includes('del usuario que se pidio'));
+ok('los que no tienen dueño se distinguen',
+   alcanceDeLaConsulta('sin asignar', 'equipos').includes('no tienen usuario asignado'));
 
 console.log('\nLa via directa de cumpleaños lee el mes de la pregunta');
 // «cumpleaños de septiembre» acabo en el guardia porque el modelo no llamo a la herramienta, aunque
