@@ -79,6 +79,56 @@ function igualesEnTiempoConstante(a: string, b: string): boolean {
   return dif === 0;
 }
 
+/// Arma el texto de una respuesta de vacaciones con los datos de la herramienta.
+///
+/// Devuelve `null` si los datos no tienen la forma esperada, para caer al texto del modelo.
+///
+/// ─── Por que existe ──────────────────────────────────────────────────────────
+///
+/// La aplicacion nunca confio en la prosa del modelo para esto: pinta una tarjeta con los datos
+/// crudos de `calcular_vacaciones` -ver `_VacationCard` en ai_page.dart, que lee `colaborador`,
+/// `numero_empleado`, `total_disponible` y `periodos`-. El puente, en cambio, mandaba solo la prosa
+/// y tiraba los datos, con un comentario mio que decia que por WhatsApp "solo cabe texto". Cierto,
+/// pero la conclusion estaba mal: que solo quepa texto es una restriccion de FORMATO, no una razon
+/// para tirar las cifras buenas.
+///
+/// El precio de esa decision, medido sobre cuatro consultas reales: 4 de 4 con cifras equivocadas,
+/// una de ellas con numero de empleado y fecha de vencimiento inventados. Ninguna habria pasado con
+/// esto puesto, porque aqui el modelo no escribe ni un numero.
+function textoDeVacaciones(structured: unknown): string | null {
+  const s = structured as { type?: string; data?: Record<string, unknown> } | null;
+  if (!s || s.type !== "vacaciones" || !s.data) return null;
+
+  const d = s.data;
+  const quien = typeof d.colaborador === "string" ? d.colaborador : null;
+  const total = typeof d.total_disponible === "number" ? d.total_disponible : null;
+  const periodos = Array.isArray(d.periodos)
+    ? d.periodos as Array<Record<string, unknown>>
+    : null;
+  if (!quien || total === null || !periodos) return null;
+
+  const numero = typeof d.numero_empleado === "string" ? d.numero_empleado : null;
+  const lineas = [
+    `*${quien}*${numero ? ` — empleado ${numero}` : ""}`,
+    `Dias disponibles: *${total}*`,
+  ];
+
+  const conSaldo = periodos.filter((pe) => (pe.dias_disponibles as number) > 0);
+  if (conSaldo.length > 0) {
+    lineas.push("", "Por periodo:");
+    for (const pe of conSaldo) {
+      lineas.push(`• ${pe.periodo}: ${pe.dias_disponibles} de ${pe.dias_proporcionales}`);
+    }
+  }
+  // Los periodos agotados se cuentan pero no se listan: por WhatsApp una lista de trece renglones
+  // en ceros esconde lo que si importa.
+  const agotados = periodos.length - conSaldo.length;
+  if (agotados > 0) {
+    lineas.push("", `(${agotados} periodo${agotados === 1 ? "" : "s"} anterior${agotados === 1 ? "" : "es"} ya consumido${agotados === 1 ? "" : "s"})`);
+  }
+  return lineas.join("\n");
+}
+
 /// Saca remitente y texto del evento.
 ///
 /// El sobre del webhook se lee de varias formas posibles a propósito. La documentación muestra el
@@ -340,10 +390,15 @@ async function atender(
 
     // `text` es la clave real: `ai-assistant` responde `{ text, structured }`. Se comprobo leyendo
     // su codigo, no suponiendo; mi primera version buscaba `reply`/`message` y no habria encontrado
-    // nada nunca. `structured` se ignora a proposito: son datos para pintar tarjetas en la
-    // aplicacion, y por WhatsApp solo cabe texto.
+    // nada nunca.
     const datos = await r.json() as { text?: string; structured?: unknown };
-    const respuesta = (datos.text ?? "").trim();
+
+    // Para vacaciones manda el dato, no la narracion.
+    //
+    // Se sustituye la prosa por completo en lugar de anadirla: si el modelo dijo "0 dias" y el dato
+    // dice 102, dos cifras contradictorias en el mismo mensaje son peores que una sola correcta.
+    const deVacaciones = textoDeVacaciones(datos.structured);
+    const respuesta = (deVacaciones ?? datos.text ?? "").trim();
     if (!respuesta) {
       await registrar(svc, telefono, profileId, "ERROR", m.texto, null,
         `Soli respondio sin texto; claves recibidas: ${Object.keys(datos).join(",")}`);
