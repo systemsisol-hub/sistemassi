@@ -275,8 +275,9 @@ function extraerMensaje(cuerpo: Record<string, unknown>): {
  * `url` y `events` son obligatorios en el PUT, asi que se reenvian TAL CUAL vienen del GET. Inventar
  * la lista de eventos aqui seria apagar en silencio los que estuvieran activos.
  *
- * La URL se deja con su `?k=` puesto, a proposito: mientras no se confirme en los registros que la
- * firma llega, quitarlo dejaria a WhatsApp mudo y sin error visible.
+ * La URL se reenvia TAL CUAL, con el `?k=` que pueda llevar pegado. Esta funcion ya no lo mira, asi
+ * que es inofensivo, pero conviene borrarlo del webhook en OpenWA: mientras siga ahi, el secreto se
+ * escribe en los registros de OpenWA cada vez que entrega un mensaje.
  */
 async function activarFirmaDelWebhook(): Promise<Response> {
   const responde = (cuerpo: Record<string, unknown>, status = 200) =>
@@ -361,8 +362,9 @@ async function activarFirmaDelWebhook(): Promise<Response> {
   return responde({
     ok: true,
     // El secreto NO se devuelve. OpenWA tampoco lo devuelve: es un campo de solo escritura.
-    mensaje: "Listo. OpenWA empezara a firmar sus entregas. Manda un mensaje al bot y revisa los "
-      + "registros: si dicen «la FIRMA tambien habria bastado», ya se puede quitar el ?k= de la URL.",
+    mensaje: "Listo. OpenWA firmara sus entregas con el secreto que ya estaba configurado. "
+      + "Manda un mensaje al bot para comprobarlo. Si la URL del webhook lleva un ?k=, ya se puede "
+      + "borrar: esta funcion no lo mira.",
     webhook_id: id,
     eventos,
   });
@@ -398,9 +400,10 @@ Deno.serve(async (req: Request) => {
   //
   // ─── Por que lo hace la funcion y no una persona a mano ─────────────────────
   //
-  // Comprobado en los registros el 12/08/2026: al webhook le falta el campo `secret`, asi que OpenWA
-  // NO manda `X-OpenWA-Signature` y el `?k=` es la unica credencial que llega. Y el `?k=` lleva el
-  // secreto en la URL, que acaba escrito en los registros de quien la llama.
+  // El caso que la hizo falta: al webhook le faltaba el campo `secret`, asi que OpenWA no mandaba
+  // `X-OpenWA-Signature` y la unica credencial que llegaba era un `?k=` en la URL, que acaba escrito
+  // en los registros de quien la llama. Sirve tambien para rotar el secreto: se cambia
+  // `OPENWA_WEBHOOK_SECRET` en Supabase y se vuelve a pulsar.
   //
   // Registrarlo a mano exigiria que alguien leyera `OPENWA_API_KEY` y `OPENWA_WEBHOOK_SECRET` y los
   // pegara en una terminal. Haciendolo aqui, los dos secretos no salen nunca de Supabase: la funcion
@@ -437,66 +440,41 @@ Deno.serve(async (req: Request) => {
     // Un secreto sin configurar cierra la puerta, no la abre.
     return new Response(JSON.stringify({ error: "sin secreto de webhook" }), { status: 503 });
   }
-  // Dos formas de acreditarse, y basta con una:
+  // Solo la firma HMAC del cuerpo. Ata la credencial AL CONTENIDO, asi que ni siquiera sirve
+  // reenviar una peticion valida con el cuerpo cambiado.
   //
-  //   a) La firma HMAC del cuerpo, que es la buena: ata la credencial AL CONTENIDO, asi que ni
-  //      siquiera sirve reenviar una peticion valida con el cuerpo cambiado.
-  //   b) El mismo secreto en la cadena de consulta: `?k=<secreto>`.
+  // ─── Aqui hubo un `?k=<secreto>` y por que ya no ─────────────────────────────
   //
-  // La (b) existe porque el panel de OpenWA NO expone el campo `secret` del webhook —comprobado en
-  // los formularios de alta y de edicion— y sin llave de API no se puede registrar por API. La URL
-  // si es editable, asi que es la unica via que queda con las herramientas disponibles.
+  // Se aceptaba el secreto en la cadena de consulta porque el panel de OpenWA no expone el campo
+  // `secret` del webhook, asi que no habia forma de que OpenWA firmara. Era mas debil por dos motivos:
+  // no va atada al cuerpo, y una URL con secreto acaba escrita en los registros de quien la llama.
   //
-  // Es mas debil que la firma y conviene saber por que: no va atada al cuerpo, y una URL con secreto
-  // acaba en los registros de quien la llama. Aqui eso es el propio servidor de OpenWA, y el trafico
-  // va por TLS, asi que el riesgo real es acotado. En cuanto haya una llave de API conviene
-  // registrar el `secret` de verdad y quitar el `?k=`.
+  // Se cerro el 12/08/2026 registrando el `secret` por la API -`PUT /api/sessions/:id/webhooks/:id`,
+  // ver `activarFirmaDelWebhook`- y no a ciegas: primero se dejo la firma evaluandose SIEMPRE, aunque
+  // el `?k=` ya hubiera servido, hasta que los registros dijeron «?k= valido, y la FIRMA tambien
+  // habria bastado». Quitarlo antes de esa confirmacion habria dejado a WhatsApp mudo y SIN error
+  // visible: OpenWA recibe un 401, nadie mira sus registros, y desde aqui todo parece bien.
+  //
+  // Si el `?k=` sigue en la URL registrada, ahora se ignora.
   const cabeceraFirma = req.headers.get("X-OpenWA-Signature");
-  const claveUrl = new URL(req.url).searchParams.get("k") ?? "";
-  const porUrl = claveUrl.length > 0 && igualesEnTiempoConstante(claveUrl, WEBHOOK_SECRET);
-
   const recibida = (cabeceraFirma ?? "").replace(/^sha256=/i, "");
   const esperada = await hmacSha256Hex(WEBHOOK_SECRET, crudo);
   const porFirma = igualesEnTiempoConstante(recibida.toLowerCase(), esperada);
 
-  // Con QUE credencial entro cada peticion aceptada.
-  //
-  // ─── Por que hace falta antes de quitar el `?k=` ─────────────────────────────
-  //
-  // El objetivo es dejar SOLO la firma, porque el `?k=` lleva el secreto en la URL y acaba en los
-  // registros de quien la llama. Pero quitarlo a ciegas deja a WhatsApp mudo si la firma no estaba
-  // llegando, y mudo sin error: OpenWA recibe un 401, nadie mira sus registros, y desde aqui todo
-  // parece bien.
-  //
-  // Hasta ahora no habia forma de saberlo, porque el `?k=` cortocircuitaba la comprobacion. Ahora la
-  // firma se evalua SIEMPRE, aunque el `?k=` ya haya servido, y se dice si habria bastado. Cuando en
-  // los registros aparezca «firma OK» de forma sostenida, quitar el `?k=` deja de ser una apuesta.
-  if (porFirma || porUrl) {
-    console.log(porFirma && porUrl
-      ? "credencial: ?k= valido, y la FIRMA tambien habria bastado -> ya se puede quitar el ?k="
-      : porFirma
-        ? "credencial: firma OK (el ?k= no hizo falta)"
-        : "credencial: SOLO ?k=; la firma no llego o no coincide -> NO quitar el ?k= todavia");
-  }
-
   // Que cabeceras manda de verdad el servidor, cuando la firma no cuadra.
   //
-  // ─── Por que se registran, y por que solo los NOMBRES ───────────────────────
+  // Se dejan puestas porque son lo que resolvio este caso: deduje por la forma de las rutas
+  // -`/api/sessions/{id}/messages/send-text`, cabecera `X-API-Key`- que detras habia WAHA, que firma
+  // con `X-Webhook-Hmac` y SHA-512, y me equivoque. Las cabeceras reales -`x-openwa-event`,
+  // `x-openwa-delivery-id`- lo zanjaron en un renglon.
   //
-  // Esta funcion verifica `X-OpenWA-Signature` con HMAC-SHA256. Pero las rutas que usa el puente
-  // -`/api/sessions/{id}/messages/send-text`, `X-API-Key`- no son de open-wa, y si el servidor de
-  // detras es WAHA entonces firma con `X-Webhook-Hmac` y **SHA-512**: otra cabecera y otro algoritmo,
-  // asi que la comprobacion no podria coincidir NUNCA. Eso convertiria al `?k=` en lo unico que
-  // funciona, en vez del apaño temporal que dice mi comentario de mas arriba.
-  //
-  // No se adivina: se listan los nombres de las cabeceras que llegan y el servidor lo dice solo. Van
-  // los NOMBRES y no los valores a proposito: un valor puede ser la propia firma o una credencial, y
-  // los registros de Supabase los lee cualquiera con acceso al proyecto.
+  // Van los NOMBRES y no los valores a proposito: un valor puede ser la propia firma, y los registros
+  // de Supabase los lee cualquiera con acceso al proyecto.
   if (!porFirma) {
     console.log(`cabeceras recibidas: ${[...req.headers.keys()].sort().join(", ")}`);
   }
 
-  if (!porUrl && !porFirma) {
+  if (!porFirma) {
     // Se distinguen los dos casos, porque se arreglan de formas distintas y el rechazo NO deja
     // rastro en la bitacora: sin telefono no hay a quien atribuirle el renglon, y registrar todo lo
     // que llame a la funcion la convertiria en un buzon de basura para cualquiera.
@@ -505,9 +483,9 @@ Deno.serve(async (req: Request) => {
     // Con cabecera  -> el secreto de los dos lados no es el mismo.
     console.log(cabeceraFirma
       ? "firma invalida: llego X-OpenWA-Signature pero no coincide. El `secret` del webhook en " +
-        "OpenWA y OPENWA_WEBHOOK_SECRET no son iguales."
-      : "sin credencial: ni cabecera X-OpenWA-Signature ni ?k= valido. Al webhook de OpenWA le " +
-        "falta el `secret`, o la URL no lleva el ?k= correcto.");
+        "OpenWA y OPENWA_WEBHOOK_SECRET no son iguales; se arregla con el boton «Activar firma»."
+      : "sin firma: no llego X-OpenWA-Signature. Al webhook de OpenWA le falta el `secret`; se " +
+        "pone con el boton «Activar firma» del panel de WhatsApp.");
     return new Response(JSON.stringify({ error: "firma inválida" }), { status: 401 });
   }
 
