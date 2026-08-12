@@ -27,7 +27,10 @@ function extraer(nombre) {
   throw new Error(`llaves sin cerrar en ${nombre}`);
 }
 
-const modulo = ['sinAcentos', 'tokensDeNombre', 'tokenGuia', 'empataNombre',
+const vacias = src.match(/^const PALABRAS_VACIAS = new Set\(\[[\s\S]*?\]\);$/m);
+if (!vacias) throw new Error('no se encontro PALABRAS_VACIAS');
+
+const modulo = vacias[0] + '\n\n' + ['sinAcentos', 'tokensDeNombre', 'tokenGuia', 'empataNombre',
   'distancia', 'tolerancia', 'empataNombreAproximado', 'filtroPrefijos', 'jefeAlQueSeRefiere']
   .map(extraer).join('\n\n') + `
 export { sinAcentos, tokensDeNombre, tokenGuia, empataNombre,
@@ -62,6 +65,16 @@ ok('la coma se cae: rompe el filtro or=()', m.tokensDeNombre('Ortega, Enrique'),
 ok('parentesis y puntos se caen', m.tokensDeNombre('Enrique (a.k.a) Ortega'), ['Enrique','aka','Ortega']);
 ok('solo basura no deja tokens', m.tokensDeNombre('...,,,'), []);
 ok('cadena vacia', m.tokensDeNombre(''), []);
+
+// El modelo no siempre manda el nombre limpio. Reportado: "vacaciones de enrique ortega gomez"
+// devolvia que la persona no existe, porque exigia que "vacaciones" y "de" estuvieran en el nombre.
+ok('la frase entera se limpia',
+   m.tokensDeNombre('vacaciones de enrique ortega gomez'), ['enrique','ortega','gomez']);
+ok('"el de hector figeroa"', m.tokensDeNombre('el de hector figeroa'), ['hector','figeroa']);
+ok('"los dias de mi jefe"', m.tokensDeNombre('los dias de mi jefe'), ['jefe']);
+ok('un apellido real con DE LA sigue teniendo palabras utiles',
+   m.tokensDeNombre('Nieto de la Garza'), ['Nieto','Garza']);
+ok('solo palabras vacias no deja nada', m.tokensDeNombre('de la vacaciones'), []);
 
 console.log('\ntokenGuia: la palabra mas larga');
 ok('de tres', m.tokenGuia(['ENRIQUE','ORTEGA','GOMEZ']), 'ENRIQUE');

@@ -598,16 +598,34 @@ function sinAcentos(s: string): string {
   return s.replace(/[áéíóúüÁÉÍÓÚÜ]/g, (c) => mapa[c] ?? c);
 }
 
+/** Palabras que nunca son parte de un nombre.
+ *
+ * El modelo no siempre manda el nombre limpio: puede pasar la frase entera —«vacaciones de enrique
+ * ortega gomez», «el de hector figeroa»—. Sin quitarlas, el cruce exige que «vacaciones» y «de»
+ * aparezcan tambien en el nombre de la persona, y devuelve que no existe.
+ *
+ * Quitarlas solo puede AFLOJAR el cruce, nunca endurecerlo, asi que no puede provocar un fallo de
+ * busqueda. Importa para «DE LA GARZA», que es un apellido real: al quitar «de» y «la» queda
+ * «GARZA», que sigue empatando.
+ */
+const PALABRAS_VACIAS = new Set([
+  "vacaciones", "vacacion", "dias", "dia", "saldo", "antiguedad",
+  "de", "del", "la", "el", "los", "las", "lo",
+  "mi", "mis", "su", "sus", "y", "e", "para", "con", "que",
+  "empleado", "numero", "colaborador", "señor", "sr", "sra", "don", "doña",
+]);
+
 /** Parte un nombre completo en palabras aptas para un filtro.
  *
  * Se descarta todo lo que no sea letra: dentro de un `or=(...)` una coma, un punto o un paréntesis
- * cambian el significado del filtro, así que sanear no es cosmético.
+ * cambian el significado del filtro, así que sanear no es cosmético. Y se quitan las palabras que
+ * nunca son parte de un nombre; ver `PALABRAS_VACIAS`.
  */
 function tokensDeNombre(raw: string): string[] {
   return sinAcentos(raw)
     .split(/\s+/)
     .map((t) => t.replace(/[^A-Za-zÑñ]/g, ""))
-    .filter((t) => t.length > 0);
+    .filter((t) => t.length > 0 && !PALABRAS_VACIAS.has(t.toLowerCase()));
 }
 
 /** La palabra con la que conviene pedirle candidatos a la base.
