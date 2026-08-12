@@ -170,19 +170,62 @@ export function textoCumpleanos(datos: Record<string, unknown>): string {
  *
  * ─── Que se considera un dato que no se puede inventar ───────────────────────
  *
- * Dos cosas, las dos reconocidas en el TEXTO y no en la pregunta:
- *
- *   - un numero de empleado, que es un hecho de la base y sin herramienta no tiene de donde salir;
- *   - un SALDO: «N dias disponibles», «Disponibles: N», «Total disponible».
+ * Lo dice la tabla de aqui abajo, y siempre mirando el TEXTO y no la pregunta.
  *
  * Mirar la pregunta fue mi primer intento y tenia un agujero por cada lado. Exigir que la pregunta
  * mencionara vacaciones dejaba pasar los seguimientos —«y las de bravo lomeli», que es justo el caso
  * real del 12/08— y a la vez bloqueaba el conocimiento general, porque «con 5 anos la ley da 20 dias»
  * viene de una pregunta sobre vacaciones y es correcto.
- *
- * Es la palabra «disponible» la que convierte una cifra en la afirmacion del saldo de alguien. Sin
- * ella, hablar de dias es hablar de la ley, y eso el modelo lo puede contestar solo.
  */
+const DATOS_QUE_NO_SE_INVENTAN: Array<{
+  /// Como se llama, para poder decir en la bitacora QUE regla salto.
+  que: string;
+  /// Tienen que coincidir TODAS. Van separadas a proposito, no pegadas en una sola expresion:
+  /// mi primera version pedia «dias disponibles» juntas y se le escapo «105 dias de vacaciones
+  /// disponibles» —son 40—, porque dos palabras en medio bastaron para colar una cifra inventada.
+  exige: RegExp[];
+  /// Cualquiera de estas herramientas basta para que el dato tenga de donde venir.
+  respaldan: string[];
+  /// Y si esto coincide, la regla no aplica.
+  salvo?: RegExp;
+}> = [
+  {
+    // Un hecho de la base: sin herramienta no tiene de donde salir.
+    que: "un numero de empleado",
+    exige: [/empleado\s*#?\s*:?\s*\d{3,5}/],
+    respaldan: ["buscar_colaborador", "calcular_vacaciones"],
+  },
+  {
+    // Es la palabra «disponible» la que convierte una cifra en el saldo de alguien. Sin ella, hablar
+    // de dias es hablar de la ley, y eso el modelo lo puede contestar solo. Y se exige que la cifra
+    // sea de DIAS: «hay 3 laptops disponibles» habla de inventario y no debe bloquearse.
+    que: "un saldo de dias, con la cifra delante",
+    exige: [/\d+\s*dias?\b/, /disponibl/],
+    respaldan: ["calcular_vacaciones"],
+  },
+  {
+    // «Dias disponibles: 8» no lleva la cifra delante de «dias», asi que la regla anterior no lo ve.
+    que: "un saldo de dias, con la cifra detras",
+    exige: [/disponibles?\s*:?\s*\**\s*\d/],
+    respaldan: ["calcular_vacaciones"],
+  },
+  {
+    // Se pide que haya un digito: «no tengo acceso a los cumpleaños» es una respuesta legitima y no
+    // afirma la fecha de nadie. Reportado: preguntado por los cumpleaños de la semana, invento a una
+    // persona; la pantalla no muestra a NADIE entre el 10 y el 16 de agosto.
+    que: "un cumpleanos con fecha",
+    exige: [/cumplea|cumple\b/, /\d/],
+    respaldan: ["buscar_cumpleanos"],
+    // «cumple 5 años en la empresa» es antiguedad, no un cumpleaños, y el modelo la calcula con la
+    // fecha de ingreso que ya trae la ficha. Sin esta salvedad quedaba bloqueada una respuesta buena.
+    //
+    // Va `a[nñ]os` y no `anos`: `sinAcentos` conserva la Ñ a proposito -«Peñafiel» tiene que quedar
+    // igual para poder buscarlo en la base- asi que «años» llega aqui con su ñ puesta. Escribi
+    // `anos?` y esta salvedad no coincidio con nada.
+    salvo: /a[nñ]os? (cumplidos )?en (la |el )?(empresa|puesto|compa[nñ]ia)|antiguedad/,
+  },
+];
+
 export function afirmaDatoSinRespaldo(
   texto: string,
   conDatos: Set<string>,
@@ -190,37 +233,13 @@ export function afirmaDatoSinRespaldo(
 ): boolean {
   const t = sinAcentos(texto).toLowerCase();
 
-  // Un numero de empleado solo puede venir de la base.
-  if (/empleado\s*#?\s*:?\s*\d{3,5}/.test(t)
-      && !conDatos.has("buscar_colaborador")
-      && !conDatos.has("calcular_vacaciones")) {
-    return true;
-  }
-
-  // Un saldo solo puede venir de calcular_vacaciones.
-  //
-  // Se mira por separado que haya una CIFRA DE DIAS y que se hable de DISPONIBLES, sin exigir que
-  // vayan pegadas. Mi primera version pedia «dias disponibles» juntas y se le escapo esto:
-  //
-  //   «HECTOR FIGUEROA VALLEJO tiene 105 dias de vacaciones disponibles.»
-  //
-  // Son 40, no 105. Dos palabras en medio bastaron para colar una cifra inventada, que es
-  // exactamente el fallo que esto tenia que atrapar.
-  //
-  // Se exige que la cifra sea de DIAS: «hay 3 laptops disponibles» habla de inventario y no debe
-  // bloquearse por no haber corrido calcular_vacaciones.
-  const cifraDeDias = /\d+\s*dias?\b/.test(t);
-  const hablaDeSaldo = /disponibl/.test(t) || /total\s+disponible/.test(t);
-  if (cifraDeDias && hablaDeSaldo && !conDatos.has("calcular_vacaciones")) return true;
-  if (/disponibles?\s*:?\s*\**\s*\d/.test(t) && !conDatos.has("calcular_vacaciones")) return true;
-
-  // Un cumpleaños con fecha solo puede venir de buscar_cumpleanos.
-  //
-  // Se pide que haya un digito: «no tengo acceso a los cumpleaños» es una respuesta legitima y no
-  // afirma la fecha de nadie. Reportado: preguntado por los cumpleaños de la semana, invento a una
-  // persona; la pantalla no muestra a NADIE entre el 10 y el 16 de agosto.
-  if (/cumplea|cumple\b/.test(t) && /\d/.test(t)
-      && !conDatos.has("buscar_cumpleanos")) {
+  for (const dato of DATOS_QUE_NO_SE_INVENTAN) {
+    if (dato.salvo?.test(t)) continue;
+    if (!dato.exige.every((r) => r.test(t))) continue;
+    if (dato.respaldan.some((h) => conDatos.has(h))) continue;
+    // Se registra CUAL salto. Las tres veces que este guardia bloqueo una respuesta correcta no
+    // habia manera de saber que regla habia sido, y se fueron en adivinar.
+    console.log(`ai-assistant: bloqueado, el texto afirma ${dato.que} sin herramienta detras`);
     return true;
   }
 
@@ -240,7 +259,10 @@ export function afirmaDatoSinRespaldo(
   // justo lo que tiene que hacer.
   if (!huboLlamadas) {
     const renglonesDeDatos = (texto.match(/^\s*[•\-*|]\s*\**\s*\d/gm) || []).length;
-    if (renglonesDeDatos >= 2) return true;
+    if (renglonesDeDatos >= 2) {
+      console.log("ai-assistant: bloqueado, una tabla de datos sin haber consultado nada");
+      return true;
+    }
   }
 
   return false;

@@ -60,6 +60,7 @@ function extraerConst(nombre) {
 const tmp = join(tmpdir(), 'ai-assistant-invenciones.ts');
 writeFileSync(tmp, `${extraerConst('MESES')}\n\n`
   + `${extraerConst('NOMBRE_MES')}\n\n`
+  + `${extraerConst('DATOS_QUE_NO_SE_INVENTAN')}\n\n`
   + `${extraerFuncion('sinAcentos')}\n\n`
   + `${extraerFuncion('afirmaDatoSinRespaldo')}\n\n`
   + `${extraerFuncion('preguntaSusVacaciones')}\n\n`
@@ -127,6 +128,13 @@ ok('con buscar_cumpleanos detras SI pasa',
      new Set(['buscar_cumpleanos'])));
 ok('decir que no cumple nadie NO se bloquea: no lleva fecha',
    !afirmaDatoSinRespaldo('Esta semana no cumple años nadie.', nada));
+// El falso positivo que tenia esta regla: «cumple» mas un digito la disparaba, y la antiguedad no
+// es un cumpleaños. El modelo la calcula con la fecha de ingreso que ya trae la ficha, asi que no
+// necesita buscar_cumpleanos detras.
+ok('la antiguedad NO se confunde con un cumpleaños',
+   !afirmaDatoSinRespaldo('En marzo cumple 5 años en la empresa.', nada));
+ok('ni dicha al reves',
+   !afirmaDatoSinRespaldo('Lleva 12 años de antigüedad, así que le tocan 22 días de ley.', nada));
 
 console.log('\nSin haber consultado nada, no se entrega una lista de registros');
 // La regla que NO depende de ninguna palabra. El caso real: «umpleaños en septiembre (4):» con cuatro
