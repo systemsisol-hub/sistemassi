@@ -14,7 +14,7 @@
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { ALL_TOOLS, ToolInput } from "./herramientas.ts";
-import { CORS, igualesEnTiempoConstante, INTERNAL_SECRET, OLLAMA_BASE, OLLAMA_KEY, OLLAMA_MODEL, SERVICE_KEY, SUPABASE_URL } from "./config.ts";
+import { CORS, igualesEnTiempoConstante, INTERNAL_SECRET, OLLAMA_BASE, OLLAMA_KEY, OLLAMA_MODEL, OLLAMA_MODEL_RESPALDO, SERVICE_KEY, SUPABASE_URL } from "./config.ts";
 import { ADMIN_ONLY_TOOLS, Identidad, PERMISO_POR_HERRAMIENTA, Permisos, puedeUsarHerramienta, QUE_HACE, VIAS_DIRECTAS } from "./permisos.ts";
 import { construirPrompt } from "./prompt.ts";
 import { afirmaDatoSinRespaldo, preguntaCumpleanos, preguntaIncidenciasDe, preguntaSuEquipo, preguntaSusVacaciones, soloUnIdentificador, textoCumpleanos, textoIncidencias, textoEquipoPropio, textoUltimaSolicitud, textoVacacionesPropias } from "./respuestas.ts";
@@ -103,6 +103,8 @@ Deno.serve(async (req: Request) => {
       const permisosDelActor = (prof?.permissions ?? {}) as Permisos;
       return new Response(JSON.stringify({
         modelo: OLLAMA_MODEL,
+        // Cadena vacia si no hay ninguno, y la pagina lo dice: es un aviso, no un hueco.
+        modelo_respaldo: OLLAMA_MODEL_RESPALDO,
         proveedor: OLLAMA_BASE,
         herramientas: ALL_TOOLS.map((t) => {
           const n = t.function.name;
@@ -164,7 +166,8 @@ Deno.serve(async (req: Request) => {
     // la variable está configurada, y lo está—. Sin esto, diagnosticar por qué el modelo se salta las
     // herramientas es adivinar. El número de herramientas va aquí porque mandarle quince de golpe es
     // una de las causas candidatas.
-    console.log(`modelo ${OLLAMA_MODEL} en ${OLLAMA_BASE}, ${tools.length} herramientas`);
+    console.log(`modelo ${OLLAMA_MODEL} en ${OLLAMA_BASE}, ${tools.length} herramientas`
+      + (OLLAMA_MODEL_RESPALDO ? `, respaldo ${OLLAMA_MODEL_RESPALDO}` : ", SIN respaldo"));
 
     // ── Via directa: sus propias vacaciones ────────────────────────────────
     //
@@ -367,45 +370,96 @@ Deno.serve(async (req: Request) => {
     /// Cuantas herramientas se llamaron, con o sin exito. Ver `afirmaDatoSinRespaldo`.
     let llamadas = 0;
 
-    while (iterations++ < 15) {
-      const apiRes = await fetch(`${OLLAMA_BASE}/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${OLLAMA_KEY}` },
-        body: JSON.stringify({ model: OLLAMA_MODEL, messages: msgs, tools, stream: false }),
-      });
+    /// El modelo con el que se esta trabajando en ESTE turno.
+    ///
+    /// Si se cambia al respaldo, se queda cambiado para el resto del turno: en medio de una vuelta de
+    /// herramientas, alternar de modelo entre una llamada y la siguiente es pedirle a uno que continue
+    /// una conversacion que empezo otro.
+    let modeloEnUso = OLLAMA_MODEL;
 
-      // Un fallo DEL PROVEEDOR se dice que es del proveedor.
-      //
-      // Antes se reenviaba su mensaje tal cual y en pantalla salia «Internal Server Error (ref: ...)»,
-      // que parece un fallo del sistema. Costo veinte minutos de buscar el error en nuestro codigo:
-      // ese «ref:» con un uuid es de Ollama, no de Supabase, y lo delataba el tiempo -432 ms, muy poco
-      // para que el modelo hubiera contestado- y que fallara incluso con un «hola».
-      //
-      // Se registra ademas el estado, que es lo que distingue una cuota agotada (429) de una caida
-      // (5xx) sin tener que adivinar.
-      let ollama: OllamaResponse;
-      try {
-        ollama = await apiRes.json() as OllamaResponse;
-      } catch {
-        const crudo = await apiRes.text().catch(() => "");
-        console.error(`Ollama respondio ${apiRes.status} con un cuerpo no-JSON: ${crudo.slice(0, 200)}`);
-        return new Response(JSON.stringify({
-          error: `El servicio del modelo (${OLLAMA_MODEL}) respondió ${apiRes.status} y no se pudo leer. `
-            + `No es un problema de tus datos; vuelve a intentarlo en un momento.`,
-        }), { status: 502, headers: CORS });
+    /// Pide una respuesta al modelo, con respaldo si el PROVEEDOR falla.
+    ///
+    /// Devuelve la respuesta de Ollama, o la respuesta HTTP ya armada para el usuario cuando no hay
+    /// nada que hacer.
+    ///
+    /// Se reintenta con el respaldo SOLO ante un fallo del proveedor: 5xx, 429, o un cuerpo que no es
+    /// JSON. Un 400 es nuestro —herramientas mal formadas, por ejemplo— y cambiar de modelo no lo
+    /// arregla; reintentarlo solo gasta tiempo y esconde el error.
+    const pedirAlModelo = async (): Promise<
+      { ok: true; ollama: OllamaResponse } | { ok: false; respuesta: Response }
+    > => {
+      const intentos = [modeloEnUso];
+      if (OLLAMA_MODEL_RESPALDO && OLLAMA_MODEL_RESPALDO !== modeloEnUso) {
+        intentos.push(OLLAMA_MODEL_RESPALDO);
       }
-      if (!apiRes.ok) {
-        const detalle = ollama.error || JSON.stringify(ollama).slice(0, 300);
-        console.error(`Ollama respondio ${apiRes.status}: ${detalle}`);
-        const porCuota = apiRes.status === 429 || /quota|rate|limit/i.test(detalle);
-        return new Response(JSON.stringify({
+
+      let ultimoEstado = 0;
+      let ultimoDetalle = "";
+      let ultimoModelo = modeloEnUso;
+
+      for (const modelo of intentos) {
+        const apiRes = await fetch(`${OLLAMA_BASE}/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${OLLAMA_KEY}` },
+          body: JSON.stringify({ model: modelo, messages: msgs, tools, stream: false }),
+        });
+
+        // Un fallo DEL PROVEEDOR se dice que es del proveedor.
+        //
+        // Antes se reenviaba su mensaje tal cual y en pantalla salia «Internal Server Error
+        // (ref: ...)», que parece un fallo del sistema. Costo veinte minutos de buscar el error en
+        // nuestro codigo: ese «ref:» con un uuid es de Ollama, no de Supabase, y lo delataba el tiempo
+        // -432 ms, muy poco para que el modelo hubiera contestado- y que fallara incluso con un «hola».
+        let ollama: OllamaResponse | null = null;
+        try {
+          ollama = await apiRes.json() as OllamaResponse;
+        } catch {
+          ultimoDetalle = (await apiRes.text().catch(() => "")).slice(0, 200)
+            || "cuerpo no-JSON, vacio";
+        }
+
+        if (ollama && apiRes.ok) {
+          if (modelo !== modeloEnUso) {
+            console.log(`RESPALDO: ${modeloEnUso} fallo (${ultimoEstado}), contesto ${modelo}`);
+            modeloEnUso = modelo;
+          }
+          return { ok: true, ollama };
+        }
+
+        ultimoEstado = apiRes.status;
+        ultimoModelo = modelo;
+        if (ollama) ultimoDetalle = ollama.error || JSON.stringify(ollama).slice(0, 300);
+        console.error(`Ollama respondio ${apiRes.status} con ${modelo}: ${ultimoDetalle}`);
+
+        // Un fallo que no es del proveedor no se reintenta con otro modelo.
+        const delProveedor = apiRes.status >= 500 || apiRes.status === 429 || !ollama;
+        if (!delProveedor) break;
+      }
+
+      // El estado se registra porque es lo que distingue una cuota agotada (429) de una caida (5xx)
+      // sin tener que adivinar.
+      const porCuota = ultimoEstado === 429 || /quota|rate|limit/i.test(ultimoDetalle);
+      const conRespaldo = intentos.length > 1
+        ? ` Tambien se intento con el respaldo (${OLLAMA_MODEL_RESPALDO}).`
+        : ` No hay modelo de respaldo configurado.`;
+      return {
+        ok: false,
+        respuesta: new Response(JSON.stringify({
           error: porCuota
             ? `El servicio del modelo alcanzó su límite de uso. No es un problema de tus datos: `
-              + `hay que revisar la cuota de la cuenta. (${apiRes.status}: ${detalle})`
-            : `El servicio del modelo (${OLLAMA_MODEL}) falló con ${apiRes.status}. `
-              + `No es un problema de tus datos ni del sistema. Detalle: ${detalle}`,
-        }), { status: 502, headers: CORS });
-      }
+              + `hay que revisar la cuota de la cuenta. (${ultimoEstado}: ${ultimoDetalle})`
+              + conRespaldo
+            : `El servicio del modelo (${ultimoModelo}) falló con ${ultimoEstado}. `
+              + `No es un problema de tus datos ni del sistema.${conRespaldo} `
+              + `Detalle: ${ultimoDetalle}`,
+        }), { status: 502, headers: CORS }),
+      };
+    };
+
+    while (iterations++ < 15) {
+      const intento = await pedirAlModelo();
+      if (!intento.ok) return intento.respuesta;
+      const ollama = intento.ollama;
 
       const msg = ollama.message;
       if (!msg.tool_calls || msg.tool_calls.length === 0) {

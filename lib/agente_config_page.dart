@@ -199,6 +199,16 @@ class _Encabezado extends StatelessWidget {
             runSpacing: 12,
             children: [
               _Dato(etiqueta: 'Modelo', valor: '${cfg['modelo']}', c: c),
+              // Sin respaldo NO se calla: una caída del proveedor apaga a Soli entera, y ya pasó una
+              // vez. Se marca en rojo porque es algo que hay que ir a configurar, no un dato neutro.
+              _Dato(
+                etiqueta: 'Si el modelo falla',
+                valor: (cfg['modelo_respaldo'] as String?)?.isNotEmpty == true
+                    ? '${cfg['modelo_respaldo']}'
+                    : 'sin respaldo',
+                c: c,
+                alerta: (cfg['modelo_respaldo'] as String?)?.isNotEmpty != true,
+              ),
               _Dato(etiqueta: 'Proveedor', valor: '${cfg['proveedor']}', c: c),
               _Dato(etiqueta: 'Herramientas', valor: '$total', c: c),
             ],
@@ -216,7 +226,15 @@ class _Dato extends StatelessWidget {
   final String etiqueta;
   final String valor;
   final SiColors c;
-  const _Dato({required this.etiqueta, required this.valor, required this.c});
+
+  /// Marca el valor como algo que hay que atender, no como un dato más.
+  final bool alerta;
+  const _Dato({
+    required this.etiqueta,
+    required this.valor,
+    required this.c,
+    this.alerta = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -230,9 +248,19 @@ class _Dato extends StatelessWidget {
                 fontWeight: FontWeight.w700,
                 color: c.ink3)),
         const SizedBox(height: 2),
-        Text(valor,
-            style: TextStyle(
-                fontSize: 14, fontWeight: FontWeight.w600, color: c.ink)),
+        Row(
+          children: [
+            if (alerta) ...[
+              Icon(Icons.warning_amber_rounded, size: 15, color: c.warn),
+              const SizedBox(width: 4),
+            ],
+            Text(valor,
+                style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: alerta ? c.warn : c.ink)),
+          ],
+        ),
       ],
     );
   }

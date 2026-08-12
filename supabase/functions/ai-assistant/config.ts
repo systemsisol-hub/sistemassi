@@ -8,6 +8,22 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 export const OLLAMA_KEY   = Deno.env.get("OLLAMA_API_KEY") ?? "";
 export const OLLAMA_BASE  = Deno.env.get("OLLAMA_BASE_URL") ?? "https://ollama.com/api";
 export const OLLAMA_MODEL = Deno.env.get("OLLAMA_MODEL") ?? "llama3.2";
+
+/// El modelo al que se cambia si el proveedor falla con el principal.
+///
+/// ─── Por que hace falta ─────────────────────────────────────────────────────
+///
+/// El 12/08/2026 `minimax-m3:cloud` empezo a devolver 500 a TODA peticion —reproducible desde la
+/// aplicacion de escritorio de Ollama con un «hola», y con cuota disponible— y se llevo por delante
+/// todo lo conversacional. Se arreglo cambiando esta variable a mano, lo que significa que hasta que
+/// alguien se diera cuenta y entrara al panel, Soli estaba muerta.
+///
+/// Vacio por omision, y eso deja el comportamiento exactamente como antes: sin respaldo. Un respaldo
+/// mal elegido es peor que ninguno, asi que se configura a proposito y no por descuido.
+///
+/// Conviene que sea de OTRA familia que el principal: si los dos son del mismo proveedor y del mismo
+/// modelo base, la caida que tumbe a uno tumbara al otro.
+export const OLLAMA_MODEL_RESPALDO = Deno.env.get("OLLAMA_MODEL_RESPALDO") ?? "";
 export const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 export const SERVICE_KEY  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
