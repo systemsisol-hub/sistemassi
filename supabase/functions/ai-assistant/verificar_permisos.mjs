@@ -243,5 +243,16 @@ if (iniPrompt > 0 && finPrompt > iniPrompt) {
     `ningun acento grave sin escapar dentro del prompt (hay ${sueltos})`);
 }
 
+// ── 12. Toda herramienta se explica en la pagina de configuracion ────────────
+//
+// `QUE_HACE` alimenta la pagina que ven los administradores. Si alguien agrega una herramienta y se
+// olvida de la descripcion, la pagina la mostraria con la celda vacia: una capacidad del agente
+// visible pero sin explicar, que es peor que no tener la pagina.
+console.log('\n12. Toda herramienta tiene descripcion para la pagina');
+const queHace = src.slice(src.indexOf('const QUE_HACE'), src.indexOf('const VIAS_DIRECTAS'));
+for (const h of Object.keys(HERRAMIENTAS)) {
+  check(new RegExp(`(^|\\s)${h}:`, 'm').test(queHace), `${h} se explica en QUE_HACE`);
+}
+
 console.log(fallas === 0 ? '\nTODO BIEN' : `\n${fallas} FALLAS`);
 process.exit(fallas === 0 ? 0 : 1);

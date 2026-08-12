@@ -85,6 +85,37 @@ const PERMISO_POR_HERRAMIENTA: Record<string, string> = {
   gestionar_contacto:     "show_external_contacts",
 };
 
+/// Qué hace cada herramienta, en una frase y en español.
+///
+/// Sirve para la página de configuración: la descripción que lleva cada herramienta en `ALL_TOOLS`
+/// está escrita PARA EL MODELO —con mayúsculas, advertencias y detalles de parámetros— y no se lee
+/// bien en pantalla. Estas son para una persona.
+const QUE_HACE: Record<string, string> = {
+  buscar_colaborador:     "Buscar personas por nombre, número de empleado, correo o UUID",
+  calcular_vacaciones:    "Días de vacaciones disponibles, la tabla de periodos y las últimas solicitudes",
+  buscar_cumpleanos:      "Cumpleaños del mes o de la semana",
+  buscar_incidencias:     "Consultar solicitudes de vacaciones e incidencias",
+  buscar_inventario:      "Consultar equipo del inventario",
+  buscar_contactos:       "Consultar contactos externos",
+  crear_incidencia:       "Crear una solicitud de vacaciones",
+  enviar_notificacion:    "Enviar una notificación a un usuario",
+  crear_colaborador:      "Dar de alta un colaborador",
+  actualizar_colaborador: "Modificar los datos de un colaborador",
+  actualizar_incidencia:  "Cambiar el estatus u otros datos de una incidencia",
+  actualizar_inventario:  "Asignar o liberar un equipo",
+  gestionar_contacto:     "Crear o modificar un contacto externo",
+};
+
+/// Las preguntas que se resuelven SIN pasar por el modelo, para mostrarlas en la página.
+///
+/// Importan porque explican por qué algunas respuestas son instantáneas y por qué siguen funcionando
+/// cuando el proveedor del modelo está caído.
+const VIAS_DIRECTAS = [
+  { pregunta: "«cuántas vacaciones tengo»", resuelve: "Tus días, con la tabla de periodos y tu última solicitud" },
+  { pregunta: "«las vacaciones de mi jefe»", resuelve: "Toma el nombre de `jefe_inmediato` de tu perfil. Solo administradores" },
+  { pregunta: "«cumpleaños de este mes» / «quién cumple esta semana»", resuelve: "La lista, con el mismo filtro que la página de Social" },
+];
+
 type Permisos = Record<string, unknown>;
 
 /// Quién está usando el asistente. Se inyecta en el prompt para que pueda tratarlo por su nombre y
@@ -1632,6 +1663,8 @@ Deno.serve(async (req: Request) => {
     const cuerpo = await req.json() as {
       messages: Array<{ role: string; content: string }>;
       actuar_como?: string;
+      // Pide la configuracion del agente en lugar de una conversacion; ver mas abajo.
+      configuracion?: boolean;
     };
 
     // ── Quién habla ────────────────────────────────────────────────────────────
@@ -1680,6 +1713,40 @@ Deno.serve(async (req: Request) => {
     const hasAiPerm  = (prof?.permissions as Record<string, unknown>)?.show_ai === true;
     if (!isAdmin && !hasAiPerm) {
       return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403, headers: CORS });
+    }
+
+    // ── ¿Qué puede hacer el agente? ────────────────────────────────────────
+    //
+    // La página de configuración pregunta AQUÍ en lugar de tener una copia de la lista en Dart. Es la
+    // diferencia entre una pantalla que dice la verdad y una que se queda vieja en cuanto alguien toque
+    // esta función: la única fuente es el código que de verdad corre.
+    //
+    // Solo administradores: no expone datos de nadie, pero sí el mapa completo de accesos del sistema,
+    // y eso es información de configuración.
+    if (cuerpo.configuracion === true) {
+      if (prof?.role !== "admin") {
+        return new Response(JSON.stringify({ error: "Solo para administradores." }),
+          { status: 403, headers: CORS });
+      }
+      const permisosDelActor = (prof?.permissions ?? {}) as Permisos;
+      return new Response(JSON.stringify({
+        modelo: OLLAMA_MODEL,
+        proveedor: OLLAMA_BASE,
+        herramientas: ALL_TOOLS.map((t) => {
+          const n = t.function.name;
+          return {
+            nombre: n,
+            que_hace: QUE_HACE[n] ?? "",
+            permiso: PERMISO_POR_HERRAMIENTA[n] ?? null,
+            solo_admin: ADMIN_ONLY_TOOLS.has(n),
+            // Si TU la alcanzas o no, con los permisos que tienes puestos ahora mismo.
+            disponible_para_ti: puedeUsarHerramienta(n, prof?.role === "admin", permisosDelActor),
+          };
+        }),
+        vias_directas: VIAS_DIRECTAS,
+        ambito: "Solo asuntos de Sisol: colaboradores, incidencias y vacaciones, inventario, "
+          + "contactos, asistencia y horarios. Cualquier otra cosa la rechaza.",
+      }), { headers: { ...CORS, "Content-Type": "application/json" } });
     }
 
     const nameParts  = [prof?.nombre || "", prof?.paterno || "", prof?.materno || ""]

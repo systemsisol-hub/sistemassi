@@ -26,6 +26,7 @@ import 'bi_page.dart';
 import 'signature_generator_page.dart';
 import 'tablas_page.dart';
 import 'passwords_page.dart';
+import 'agente_config_page.dart';
 import 'ai_page.dart';
 import 'knowledge_page.dart';
 import 'trash_page.dart';
@@ -40,7 +41,7 @@ final _navGroups = <(String, List<String>)>[
   ('GENERAL',        ['Mi Perfil', 'Social', 'Avisos', 'Directorio', 'Conocimientos', 'Contraseñas', 'Contactos Ext.', 'Firmas', 'Convertidor', 'Calendario']),
   ('OPERACIÓN',      ['Incidencias', 'Inventario', 'Colaborador', 'Asistencia']),
   ('ANÁLISIS',       ['BI', 'Logs', 'Tablas']),
-  ('ADMINISTRACIÓN', ['Usuarios', 'IA', 'WhatsApp', 'Papelera']),
+  ('ADMINISTRACIÓN', ['Usuarios', 'IA', 'Config. IA', 'WhatsApp', 'Papelera']),
 ];
 
 class MainNavigation extends StatefulWidget {
@@ -266,6 +267,18 @@ class _MainNavigationState extends State<MainNavigation> {
         'icon': Icons.smart_toy_outlined,
         'activeIcon': Icons.smart_toy,
         'widget': AiPage(role: widget.role, permissions: widget.permissions),
+      });
+    }
+    // Solo administradores, y sin permiso propio: no expone datos de nadie, pero si el mapa completo
+    // de accesos del sistema. La funcion vuelve a comprobar el rol por su cuenta.
+    if (widget.role == 'admin') {
+      pages.add({
+        'title': 'Config. IA',
+        // Mismo glifo en los dos estados, como en WhatsApp y el Convertidor: un icono nuevo saldria en
+        // blanco para quien tenga la fuente anterior en cache.
+        'icon': Icons.tune,
+        'activeIcon': Icons.tune,
+        'widget': const AgenteConfigPage(),
       });
     }
     if (widget.permissions['show_trash'] == true) {
