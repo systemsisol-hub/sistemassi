@@ -66,6 +66,7 @@ writeFileSync(tmp, `${extraerConst('MESES')}\n\n`
   + `${extraerFuncion('preguntaSusVacaciones')}\n\n`
   + `${extraerFuncion('textoUltimaSolicitud')}\n\n`
   + `${extraerFuncion('textoVacacionesPropias')}\n\n`
+  + `${extraerFuncion('soloUnIdentificador')}\n\n`
   + `${extraerFuncion('preguntaSuEquipo')}\n\n`
   + `${extraerFuncion('textoEquipoPropio')}\n\n`
   + `${extraerFuncion('alcanceDeLaConsulta')}\n\n`
@@ -73,10 +74,10 @@ writeFileSync(tmp, `${extraerConst('MESES')}\n\n`
   + `${extraerFuncion('textoCumpleanos')}\n`
   + 'export { afirmaDatoSinRespaldo, preguntaSusVacaciones, textoVacacionesPropias,\n'
   + '  preguntaCumpleanos, textoCumpleanos, textoUltimaSolicitud,\n'
-  + '  preguntaSuEquipo, textoEquipoPropio, alcanceDeLaConsulta };\n', 'utf8');
+  + '  preguntaSuEquipo, textoEquipoPropio, alcanceDeLaConsulta, soloUnIdentificador };\n', 'utf8');
 const { afirmaDatoSinRespaldo, preguntaSusVacaciones, textoVacacionesPropias,
   preguntaCumpleanos, textoCumpleanos, textoUltimaSolicitud,
-  preguntaSuEquipo, textoEquipoPropio, alcanceDeLaConsulta } =
+  preguntaSuEquipo, textoEquipoPropio, alcanceDeLaConsulta, soloUnIdentificador } =
   await import('file://' + tmp.replace(/\\/g, '/'));
 
 let fallos = 0;
@@ -261,6 +262,36 @@ ok('sin solicitudes lo dice, no deja la frase colgando',
 ok('un solo dia va en singular',
    textoUltimaSolicitud({ solicitudes: [{ ...conSalida.solicitudes[1] }] }, 'Su')
      .includes('1 día'));
+
+console.log('\nUn mensaje que es SOLO un identificador no pasa por el modelo');
+// Los tres casos reales del historial de WhatsApp del 12/08/2026. «0170» acabo con el nombre de otra
+// persona pegado al numero, y los dos uuid en «no tengo acceso por UUID», que es falso.
+ok('«0170» es un numero de empleado',
+   soloUnIdentificador('0170')?.numero_empleado === '0170');
+ok('con espacios alrededor tambien',
+   soloUnIdentificador('  0170 ')?.numero_empleado === '0170');
+ok('un uuid pegado es un usuario_id',
+   soloUnIdentificador('a1d4a9fb-9173-4690-aba8-da604eade495')?.usuario_id
+     === 'a1d4a9fb-9173-4690-aba8-da604eade495');
+ok('el otro uuid del historial, tambien',
+   soloUnIdentificador('9cf3eb50-a410-4f89-8752-182c8b918583')?.usuario_id !== undefined);
+ok('un uuid en mayusculas', soloUnIdentificador('9CF3EB50-A410-4F89-8752-182C8B918583') !== null);
+for (const q of [
+  // Con una intencion pegada, la resuelve el modelo: puede no ser una ficha lo que se pide.
+  'vacaciones de 0170',
+  'incidencias del 0170',
+  'busca a 0170',
+  // Un numero corto puede ser la respuesta a otra pregunta -«¿cuantos dias?» «5»-.
+  '5',
+  '26',
+  // Y lo que no es un identificador.
+  'hola',
+  '',
+  'a1d4a9fb-9173-4690',
+  '2026-08-31',
+]) {
+  ok(`no se la queda: "${q}"`, soloUnIdentificador(q) === null);
+}
 
 console.log('\nLa via directa del equipo propio, y lo que NO se queda');
 // El caso real del 12/08/2026: un administrador pregunto esto y recibio el LAP-TOP de otra persona,

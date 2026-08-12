@@ -170,6 +170,44 @@ function textoDeVacaciones(structured: unknown): string | null {
   if (agotados > 0) {
     lineas.push("", `(${agotados} periodo${agotados === 1 ? "" : "s"} anterior${agotados === 1 ? "" : "es"} ya consumido${agotados === 1 ? "" : "s"})`);
   }
+
+  // La salida por venir o la ultima, que es el dato que de verdad se pide.
+  //
+  // ─── Por que se agrega ──────────────────────────────────────────────────────
+  //
+  // La aplicacion ya la mostraba y el puente no, y esa ausencia costo caro. El 12/08/2026 a las 13:00
+  // alguien pregunto por las incidencias de Marco y el modelo se INVENTO una entera: «#200, periodo
+  // 2026, 1 dia, del 31/08/2026 al 31/08/2026, regreso 01/09/2026, PENDIENTE». Comprobado en SQL: de
+  // las 1167 incidencias de la base, CERO empiezan el 31/08/2026, cero regresan el 01/09/2026, cero
+  // tienen periodo «2026» y cero estan en PENDIENTE. Y al reclamarselo contesto «No invento».
+  //
+  // El 31/08/2026 no salio de la nada: es la fecha de REGRESO real de Marco. Su salida verdadera es
+  // del 21 al 28 de agosto, y el modelo la reconstruyo mal porque no la tenia delante. Poniendola
+  // aqui, escrita desde los datos, deja de haber nada que reconstruir.
+  //
+  // `por_venir` lo decide la funcion, no esto: aqui solo se da formato.
+  const solicitudes = Array.isArray(d.solicitudes)
+    ? d.solicitudes as Array<Record<string, unknown>>
+    : [];
+  if (solicitudes.length > 0) {
+    const s0 = solicitudes[0];
+    const dia = (v: unknown) => {
+      const t = String(v ?? "");
+      const p = t.slice(0, 10).split("-");
+      return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : t;
+    };
+    const dias = typeof s0.dias === "number" ? s0.dias : null;
+    lineas.push(
+      "",
+      s0.por_venir === true ? "*Proxima salida:*" : "*Ultima salida:*",
+      `${dia(s0.fecha_inicio)} al ${dia(s0.fecha_fin)}`
+        + (dias !== null ? ` (${dias} dia${dias === 1 ? "" : "s"})` : ""),
+      `Regreso: ${dia(s0.fecha_regreso)}`,
+      `Periodo ${s0.periodo}, ${s0.status}`,
+    );
+  } else {
+    lineas.push("", "No tiene solicitudes registradas.");
+  }
   return lineas.join("\n");
 }
 

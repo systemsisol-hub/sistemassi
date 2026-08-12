@@ -43,6 +43,41 @@ export function preguntaSusVacaciones(texto: string): boolean {
   return /\bmis\b|\bmi\b|\btengo\b|me\s+quedan|me\s+toca|me\s+corresponden/.test(t);
 }
 
+/** Si el mensaje es SOLO un identificador: un uuid, o un numero de empleado.
+ *
+ * ─── El fallo que la hizo necesaria ──────────────────────────────────────────
+ *
+ * Del historial real de WhatsApp del 12/08/2026, tres mensajes seguidos:
+ *
+ *   - «0170» -> «Incidencias — MARCO ANTONIO MONTOYA LOPEZ (0170)». El 0170 es ENRIQUE ORTEGA GOMEZ;
+ *     Marco es el 0186. Junto el numero que le dieron con el nombre de otro.
+ *   - «a1d4a9fb-...» -> «No tengo acceso a incidencias por UUID».
+ *   - «9cf3eb50-...» -> «No me deja entrar por UUID».
+ *
+ * Las dos negativas son falsas: `calcular_vacaciones` acepta `usuario_id` y `numero_empleado` para
+ * administradores. Se nego pudiendo hacerlo, y en el otro caso acerto la consulta y erro el nombre.
+ *
+ * Un mensaje que es SOLO un identificador no tiene ninguna ambiguedad que el modelo tenga que
+ * resolver, asi que no pasa por el. Se contesta con la ficha de esa persona, con su nombre y su
+ * numero tomados del mismo renglon de la base, que es lo que impide volver a cruzarlos mal.
+ *
+ * Se exige que el mensaje sea SOLO eso. «vacaciones de 0170» lleva una intencion que puede no ser
+ * esta, y se deja al modelo.
+ */
+export function soloUnIdentificador(
+  texto: string,
+): { usuario_id: string } | { numero_empleado: string } | null {
+  // Se quitan signos de puntuacion y adornos de los extremos, no de dentro: un uuid lleva guiones.
+  const t = texto.trim().replace(/^[¿¡"'*(.\s]+|[?!"'*).,\s]+$/g, "");
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(t)) {
+    return { usuario_id: t };
+  }
+  // Los numeros de empleado de la base van de 1 a 4 cifras, con ceros por delante -«0170»-. Se pide
+  // un minimo de tres para no quedarse con un «5» que puede ser la respuesta a otra pregunta.
+  if (/^\d{3,4}$/.test(t)) return { numero_empleado: t };
+  return null;
+}
+
 /** Si la persona pregunta por EL EQUIPO QUE TIENE ASIGNADO.
  *
  * ─── El fallo que la hizo necesaria ──────────────────────────────────────────

@@ -17,7 +17,7 @@ import { ALL_TOOLS, ToolInput } from "./herramientas.ts";
 import { CORS, igualesEnTiempoConstante, INTERNAL_SECRET, OLLAMA_BASE, OLLAMA_KEY, OLLAMA_MODEL, SERVICE_KEY, SUPABASE_URL } from "./config.ts";
 import { ADMIN_ONLY_TOOLS, Identidad, PERMISO_POR_HERRAMIENTA, Permisos, puedeUsarHerramienta, QUE_HACE, VIAS_DIRECTAS } from "./permisos.ts";
 import { construirPrompt } from "./prompt.ts";
-import { afirmaDatoSinRespaldo, preguntaCumpleanos, preguntaSuEquipo, preguntaSusVacaciones, textoCumpleanos, textoEquipoPropio, textoUltimaSolicitud, textoVacacionesPropias } from "./respuestas.ts";
+import { afirmaDatoSinRespaldo, preguntaCumpleanos, preguntaSuEquipo, preguntaSusVacaciones, soloUnIdentificador, textoCumpleanos, textoEquipoPropio, textoUltimaSolicitud, textoVacacionesPropias } from "./respuestas.ts";
 import { runTool } from "./ejecutar.ts";
 import { jefeAlQueSeRefiere } from "./nombres.ts";
 
@@ -191,6 +191,33 @@ Deno.serve(async (req: Request) => {
       // Si falla se deja seguir al modelo, que al menos puede explicarlo. El guardia de abajo evita
       // que convierta el fallo en un cero.
       console.log(`via directa fallo, sigue el modelo: ${propio.error}`);
+    }
+
+    // ── Via directa: el mensaje es SOLO un identificador ───────────────────
+    //
+    // «0170», o un uuid pegado. Ver `soloUnIdentificador` para los tres casos reales que lo motivan.
+    // Solo administradores: es la ficha de otra persona.
+    const ident = soloUnIdentificador(ultimoUsuario);
+    if (ident && isAdmin && puedeUsarHerramienta("calcular_vacaciones", isAdmin, permisos)) {
+      const ficha = await runTool(
+        "calcular_vacaciones", ident, svc, isAdmin, actorId, userFullName, permisos,
+      ) as Record<string, unknown>;
+      if (!ficha.error && ficha.necesita_confirmacion !== true) {
+        console.log(`via directa: ficha por identificador ${JSON.stringify(ident)} `
+          + `-> ${ficha.colaborador}, total ${ficha.total_disponible}`);
+        return new Response(
+          JSON.stringify({
+            // El nombre y el numero salen del MISMO renglon de la base, que es lo que impide volver
+            // a juntar «0170» con el nombre de otra persona.
+            text: `${ficha.colaborador} (empleado ${ficha.numero_empleado}) tiene `
+              + `${ficha.total_disponible} dias de vacaciones disponibles.`
+              + textoUltimaSolicitud(ficha, "Su"),
+            structured: { type: "vacaciones", data: ficha },
+          }),
+          { headers: { ...CORS, "Content-Type": "application/json" } },
+        );
+      }
+      console.log(`via directa por identificador no resolvio, sigue el modelo: ${ficha.error ?? "ambiguo"}`);
     }
 
     // ── Via directa: el equipo que tiene asignado ──────────────────────────
