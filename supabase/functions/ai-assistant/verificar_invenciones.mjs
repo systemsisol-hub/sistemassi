@@ -33,9 +33,13 @@ function extraerFuncion(nombre) {
 }
 
 const tmp = join(tmpdir(), 'ai-assistant-invenciones.ts');
-writeFileSync(tmp, `${extraerFuncion('sinAcentos')}\n\n${extraerFuncion('afirmaDatoSinRespaldo')}\n`
-  + 'export { afirmaDatoSinRespaldo };\n', 'utf8');
-const { afirmaDatoSinRespaldo } = await import('file://' + tmp.replace(/\\/g, '/'));
+writeFileSync(tmp, `${extraerFuncion('sinAcentos')}\n\n`
+  + `${extraerFuncion('afirmaDatoSinRespaldo')}\n\n`
+  + `${extraerFuncion('preguntaSusVacaciones')}\n\n`
+  + `${extraerFuncion('textoVacacionesPropias')}\n`
+  + 'export { afirmaDatoSinRespaldo, preguntaSusVacaciones, textoVacacionesPropias };\n', 'utf8');
+const { afirmaDatoSinRespaldo, preguntaSusVacaciones, textoVacacionesPropias } =
+  await import('file://' + tmp.replace(/\\/g, '/'));
 
 let fallos = 0;
 function ok(desc, cond, extra = '') {
@@ -88,6 +92,55 @@ ok('hablar de vacaciones sin dar cifras',
    !afirmaDatoSinRespaldo('Lo autoriza tu jefe directo. Puedes crear la solicitud y queda pendiente.', nada));
 ok('una pregunta que no es de vacaciones, con numeros que no son de empleado',
    !afirmaDatoSinRespaldo('Hay 14 equipos registrados en esa ubicación.', new Set(['buscar_inventario'])));
+
+console.log('\nLa via directa reconoce «mis vacaciones» y NO se la queda cuando es de otro');
+// El caso que rompi: «cuales son mis vacaciones?» quedaba bloqueado por el guardia, y a la segunda
+// el modelo repetia mi propio texto de rechazo sin consultar nada. Esta via no pasa por el modelo.
+for (const q of [
+  'cuales son mis vacaciones?',
+  'Cuantas vacaciones tengo',
+  'cuantos dias de vacaciones tengo?',
+  'cuantas vacaciones me quedan',
+  'cuantos dias me corresponden de vacaciones',
+  'mis dias disponibles',
+  'cual es mi saldo de dias',
+  'vacaciones que tengo',
+]) {
+  ok(`la atiende: "${q}"`, preguntaSusVacaciones(q));
+}
+for (const q of [
+  // De otra persona: las resuelve el modelo, que sabe buscar el nombre y pedir aclaraciones.
+  'vacaciones de enrique ortega gomez',
+  'las de claudia andrea',
+  'y las de bravo lomeli',
+  'el de hector figeroa',
+  // «de mi jefe» habla de OTRA persona. Colarlo aqui devolveria el saldo de quien pregunta.
+  'cuales son las vacaciones de mi jefe',
+  'las vacaciones de mi compañero',
+  // No son preguntas de saldo.
+  'quiero crear una solicitud de vacaciones',
+  'puedo pedir vacaciones en diciembre?',
+  'cuantas laptops tengo asignadas',
+  'cual es mi numero de empleado',
+  'Soli?',
+]) {
+  ok(`la deja pasar: "${q}"`, !preguntaSusVacaciones(q));
+}
+
+console.log('\nEl texto de la via directa sale de los datos, no del modelo');
+const propias = { total_disponible: 74, periodos: [
+  { periodo: '2023 - 2024', dias_disponibles: 20, es_periodo_actual: false },
+  { periodo: '2026 - 2027', dias_disponibles: 6,  es_periodo_actual: true  },
+] };
+const txt = textoVacacionesPropias(propias);
+console.log(`  -> "${txt}"`);
+ok('dice el total', txt.includes('74'));
+ok('dice el periodo actual y su saldo', txt.includes('2026 - 2027') && txt.includes('6'));
+ok('un solo dia va en singular',
+   textoVacacionesPropias({ total_disponible: 1, periodos: [] }).includes('1 dia de'),
+   textoVacacionesPropias({ total_disponible: 1, periodos: [] }));
+ok('sin periodo actual no deja la frase a medias',
+   !textoVacacionesPropias({ total_disponible: 0, periodos: [] }).includes('periodo actual'));
 
 console.log(fallos === 0 ? '\nTODO BIEN' : `\n${fallos} FALLAS`);
 process.exit(fallos === 0 ? 0 : 1);

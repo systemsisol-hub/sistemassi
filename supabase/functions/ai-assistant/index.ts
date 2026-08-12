@@ -469,6 +469,57 @@ const ALL_TOOLS = [
 
 type ToolInput = Record<string, unknown>;
 
+/** Si la persona pregunta por SUS PROPIAS vacaciones.
+ *
+ * ─── Por que esto no pasa por el modelo ──────────────────────────────────────
+ *
+ * Es la pregunta mas frecuente y la que mas importa, y depender del modelo para ella no funciono:
+ *
+ *   - unas veces no llamaba a la herramienta y se inventaba el saldo;
+ *   - otras el guardia lo bloqueaba con razon, y la persona se quedaba sin respuesta;
+ *   - y al bloquearlo, mi propio texto de rechazo quedaba en la memoria del hilo y el modelo lo
+ *     repetia palabra por palabra en la pregunta siguiente, sin consultar nada. Dos respuestas
+ *     identicas seguidas, las dos negandose, con los datos ahi al alcance.
+ *
+ * Aqui no hay nada que el modelo tenga que decidir: quien pregunta ya esta identificado, el permiso
+ * ya esta comprobado y el calculo es determinista. Se consulta y se contesta. Sale mas rapido, no
+ * cuesta una llamada al modelo, y no puede inventar porque el modelo no participa.
+ *
+ * Se exige que hable de SI MISMA. Si menciona a alguien —«las de Hector»— se deja pasar al modelo,
+ * que es quien sabe resolver un nombre y pedir aclaraciones.
+ */
+function preguntaSusVacaciones(texto: string): boolean {
+  const t = sinAcentos(texto).toLowerCase();
+  if (!/vacacion|dias disponibles|dias que me quedan|saldo de dias/.test(t)) return false;
+
+  // «de <alguien>» quiere decir que pregunta por otra persona. `de` sola no basta: «cuantos dias de
+  // vacaciones tengo» lleva un `de` que no introduce a nadie, y hay que dejarlo pasar.
+  //
+  // `mi` y `mis` NO se excluyen, a proposito: «las vacaciones de mi jefe» habla de otra persona, y
+  // colarlo por esta via devolveria el saldo de quien pregunta como si fuera el de su jefe. A cambio,
+  // «cuantos dias de mis vacaciones quedan» se va al modelo, que es un coste mucho menor que contestar
+  // con los datos de alguien equivocado.
+  if (/\bde\s+(?!vacacion|dias|antiguedad|la\s|los\s|las\s|el\s)[a-z]{2,}/.test(t)) {
+    return false;
+  }
+  return /\bmis\b|\bmi\b|\btengo\b|me\s+quedan|me\s+toca|me\s+corresponden/.test(t);
+}
+
+/** El texto de una respuesta de vacaciones, armado con los datos de la herramienta.
+ *
+ * Corto a proposito: la aplicacion pinta la tarjeta con el detalle y el puente de WhatsApp arma su
+ * propia ficha a partir de `structured`. Esto es lo que se lee en la burbuja.
+ */
+function textoVacacionesPropias(datos: Record<string, unknown>): string {
+  const total = datos.total_disponible as number;
+  const periodos = (datos.periodos ?? []) as Array<Record<string, unknown>>;
+  const actual = periodos.find((pe) => pe.es_periodo_actual === true);
+  const cola = actual
+    ? ` En el periodo actual (${actual.periodo}) te quedan ${actual.dias_disponibles}.`
+    : "";
+  return `Tienes ${total} ${total === 1 ? "dia" : "dias"} de vacaciones disponibles en total.${cola}`;
+}
+
 /** Si la respuesta afirma un dato de la base que ninguna herramienta respaldo en este turno.
  *
  * ─── El fallo ────────────────────────────────────────────────────────────────
@@ -1095,6 +1146,33 @@ Deno.serve(async (req: Request) => {
       { role: "system", content: systemPrompt },
       ...messages.map(m => ({ role: m.role, content: m.content })),
     ];
+
+    // ── Via directa: sus propias vacaciones ────────────────────────────────
+    //
+    // Se resuelve sin pasar por el modelo; ver `preguntaSusVacaciones`. El permiso se comprueba con
+    // la misma funcion que usa todo lo demas, asi que esta via no abre nada.
+    const ultimoUsuario = [...messages].reverse()
+      .find((mm) => mm.role === "user")?.content ?? "";
+
+    if (preguntaSusVacaciones(ultimoUsuario)
+        && puedeUsarHerramienta("calcular_vacaciones", isAdmin, permisos)) {
+      const propio = await runTool(
+        "calcular_vacaciones", {}, svc, isAdmin, actorId, userFullName, permisos,
+      ) as Record<string, unknown>;
+      if (!propio.error) {
+        console.log(`via directa: vacaciones propias de ${actorId}, total ${propio.total_disponible}`);
+        return new Response(
+          JSON.stringify({
+            text: textoVacacionesPropias(propio),
+            structured: { type: "vacaciones", data: propio },
+          }),
+          { headers: { ...CORS, "Content-Type": "application/json" } },
+        );
+      }
+      // Si falla se deja seguir al modelo, que al menos puede explicarlo. El guardia de abajo evita
+      // que convierta el fallo en un cero.
+      console.log(`via directa fallo, sigue el modelo: ${propio.error}`);
+    }
 
     let structuredData: unknown = null;
     let iterations = 0;
