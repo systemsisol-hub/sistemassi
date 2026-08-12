@@ -1819,8 +1819,38 @@ Deno.serve(async (req: Request) => {
         body: JSON.stringify({ model: OLLAMA_MODEL, messages: msgs, tools, stream: false }),
       });
 
-      const ollama: OllamaResponse = await apiRes.json();
-      if (!apiRes.ok) return new Response(JSON.stringify({ error: ollama.error || JSON.stringify(ollama) }), { status: 500, headers: CORS });
+      // Un fallo DEL PROVEEDOR se dice que es del proveedor.
+      //
+      // Antes se reenviaba su mensaje tal cual y en pantalla salia «Internal Server Error (ref: ...)»,
+      // que parece un fallo del sistema. Costo veinte minutos de buscar el error en nuestro codigo:
+      // ese «ref:» con un uuid es de Ollama, no de Supabase, y lo delataba el tiempo -432 ms, muy poco
+      // para que el modelo hubiera contestado- y que fallara incluso con un «hola».
+      //
+      // Se registra ademas el estado, que es lo que distingue una cuota agotada (429) de una caida
+      // (5xx) sin tener que adivinar.
+      let ollama: OllamaResponse;
+      try {
+        ollama = await apiRes.json() as OllamaResponse;
+      } catch {
+        const crudo = await apiRes.text().catch(() => "");
+        console.error(`Ollama respondio ${apiRes.status} con un cuerpo no-JSON: ${crudo.slice(0, 200)}`);
+        return new Response(JSON.stringify({
+          error: `El servicio del modelo (${OLLAMA_MODEL}) respondió ${apiRes.status} y no se pudo leer. `
+            + `No es un problema de tus datos; vuelve a intentarlo en un momento.`,
+        }), { status: 502, headers: CORS });
+      }
+      if (!apiRes.ok) {
+        const detalle = ollama.error || JSON.stringify(ollama).slice(0, 300);
+        console.error(`Ollama respondio ${apiRes.status}: ${detalle}`);
+        const porCuota = apiRes.status === 429 || /quota|rate|limit/i.test(detalle);
+        return new Response(JSON.stringify({
+          error: porCuota
+            ? `El servicio del modelo alcanzó su límite de uso. No es un problema de tus datos: `
+              + `hay que revisar la cuota de la cuenta. (${apiRes.status}: ${detalle})`
+            : `El servicio del modelo (${OLLAMA_MODEL}) falló con ${apiRes.status}. `
+              + `No es un problema de tus datos ni del sistema. Detalle: ${detalle}`,
+        }), { status: 502, headers: CORS });
+      }
 
       const msg = ollama.message;
       if (!msg.tool_calls || msg.tool_calls.length === 0) {
