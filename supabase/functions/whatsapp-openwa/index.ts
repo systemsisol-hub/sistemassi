@@ -280,7 +280,8 @@ function extraerMensaje(cuerpo: Record<string, unknown>): {
  */
 async function activarFirmaDelWebhook(): Promise<Response> {
   const responde = (cuerpo: Record<string, unknown>, status = 200) =>
-    new Response(JSON.stringify(cuerpo), { status, headers: { "Content-Type": "application/json" } });
+    new Response(JSON.stringify(cuerpo),
+      { status, headers: { ...CORS, "Content-Type": "application/json" } });
 
   if (!OPENWA_BASE || !OPENWA_KEY || !OPENWA_SESSION) {
     return responde({ error: "falta configurar OPENWA_BASE_URL, OPENWA_API_KEY u OPENWA_SESSION_ID" }, 503);
@@ -367,9 +368,24 @@ async function activarFirmaDelWebhook(): Promise<Response> {
   });
 }
 
+/// Cabeceras para que el navegador acepte la respuesta.
+///
+/// Esta funcion nacio como receptor de webhooks: la llamaba un servidor, que no aplica CORS, asi que
+/// nunca las necesito. Al añadir la accion de administrador empezo a llamarla la APLICACION, y ahi el
+/// navegador manda primero un `OPTIONS` de sondeo. Ese sondeo caia en el 405 de abajo y el error que
+/// se veia era «Failed to fetch», que no dice nada de la causa.
+///
+/// No abre nada: CORS lo aplica el navegador y no sustituye a ninguna comprobacion. Quien llame a esta
+/// funcion sigue necesitando la firma del webhook, o la sesion de un administrador.
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
+
 Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
+    return new Response("Method not allowed", { status: 405, headers: CORS });
   }
 
   const svc = createClient(SUPABASE_URL, SERVICE_KEY);
@@ -396,17 +412,19 @@ Deno.serve(async (req: Request) => {
     } catch { /* cuerpo no-JSON: cae al 400 de abajo */ }
     if (accion !== "activar_firma") {
       return new Response(JSON.stringify({ error: "accion desconocida" }),
-        { status: 400, headers: { "Content-Type": "application/json" } });
+        { status: 400, headers: { ...CORS, "Content-Type": "application/json" } });
     }
 
     const { data: { user } } = await svc.auth.getUser(
       (req.headers.get("Authorization") ?? "").replace("Bearer ", ""));
     if (!user) {
-      return new Response(JSON.stringify({ error: "sesion invalida" }), { status: 401 });
+      return new Response(JSON.stringify({ error: "sesion invalida" }),
+        { status: 401, headers: { ...CORS, "Content-Type": "application/json" } });
     }
     const { data: perfil } = await svc.from("profiles").select("role").eq("id", user.id).single();
     if (perfil?.role !== "admin") {
-      return new Response(JSON.stringify({ error: "solo administradores" }), { status: 403 });
+      return new Response(JSON.stringify({ error: "solo administradores" }),
+        { status: 403, headers: { ...CORS, "Content-Type": "application/json" } });
     }
     return await activarFirmaDelWebhook();
   }
