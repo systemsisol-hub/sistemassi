@@ -631,8 +631,21 @@ function afirmaDatoSinRespaldo(texto: string, conDatos: Set<string>): boolean {
   }
 
   // Un saldo solo puede venir de calcular_vacaciones.
-  const saldo = /\d+\s*dias?\s*disponibles?|disponibles?\s*:?\s*\**\s*\d|total\s+disponible/;
-  if (saldo.test(t) && !conDatos.has("calcular_vacaciones")) return true;
+  //
+  // Se mira por separado que haya una CIFRA DE DIAS y que se hable de DISPONIBLES, sin exigir que
+  // vayan pegadas. Mi primera version pedia «dias disponibles» juntas y se le escapo esto:
+  //
+  //   «HECTOR FIGUEROA VALLEJO tiene 105 dias de vacaciones disponibles.»
+  //
+  // Son 40, no 105. Dos palabras en medio bastaron para colar una cifra inventada, que es
+  // exactamente el fallo que esto tenia que atrapar.
+  //
+  // Se exige que la cifra sea de DIAS: «hay 3 laptops disponibles» habla de inventario y no debe
+  // bloquearse por no haber corrido calcular_vacaciones.
+  const cifraDeDias = /\d+\s*dias?\b/.test(t);
+  const hablaDeSaldo = /disponibl/.test(t) || /total\s+disponible/.test(t);
+  if (cifraDeDias && hablaDeSaldo && !conDatos.has("calcular_vacaciones")) return true;
+  if (/disponibles?\s*:?\s*\**\s*\d/.test(t) && !conDatos.has("calcular_vacaciones")) return true;
 
   // Un cumpleaños con fecha solo puede venir de buscar_cumpleanos.
   //

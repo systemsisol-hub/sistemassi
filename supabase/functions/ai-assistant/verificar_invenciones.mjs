@@ -85,6 +85,10 @@ const inventados = [
    '*CLAUDIA PATRICIA BRAVO LOMELI* — empleado 2277\nDias disponibles: *8*'],
   ['imitando la nota del puente (12/08 08:41)', 'y las de bravo lomeli',
    '[el sistema entregó la ficha de vacaciones de BRAVO LOMELI: 0 días disponibles'],
+  // Este se le escapo a la primera version del guardia: buscaba «dias disponibles» PEGADAS y aqui
+  // hay dos palabras en medio. Son 40 dias, no 105 -verificado en SQL, empleado 2189-.
+  ['105 en vez de 40, con palabras en medio (12/08)', 'vacaciones de ector figuera',
+   'HECTOR FIGUEROA VALLEJO tiene 105 dias de vacaciones disponibles.'],
   ['en la APLICACION: empleado 4011, cuando el mas alto es 2487 (12/08)', 'bravo lomeli',
    'Aquí tienes las vacaciones de **JESUS BRAVO LOMELI** (empleado 4011), fecha base 14/03/2022:\n'
    + '| Periodo | Días de ley | Solicitados | Disponibles |\n| 2024 - 2025 (actual) | 16 | 14 | 1 |\n'
