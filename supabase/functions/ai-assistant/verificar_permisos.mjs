@@ -72,7 +72,11 @@ console.log('1. Toda herramienta tiene permiso, o esta exenta a proposito');
 // enviar_notificacion: no corresponde a ninguna pagina.
 // buscar_colaborador: consulta de directorio, menor privilegio que ver la pagina de Colaboradores.
 //   Los campos siguen recortados por rol, asi que lo privado no se expone.
-const EXENTAS = new Set(['enviar_notificacion', 'buscar_colaborador']);
+// buscar_cumpleanos: la pagina de Social ya los muestra a TODO el mundo, y con el mismo filtro
+//   (`social_page.dart:39`). Pedir un permiso aqui daria una respuesta distinta a la de la pantalla
+//   para la misma pregunta, que es peor que no tenerlo. Devuelve dia, nombre, puesto y ubicacion; ni
+//   el año de nacimiento ni la edad, que es lo unico sensible de esa fecha.
+const EXENTAS = new Set(['enviar_notificacion', 'buscar_colaborador', 'buscar_cumpleanos']);
 for (const h of Object.keys(HERRAMIENTAS)) {
   check(h in PERMISO || EXENTAS.has(h),
     `${h} ${h in PERMISO ? '-> ' + PERMISO[h] : '(exenta)'}`);

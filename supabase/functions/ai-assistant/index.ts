@@ -208,6 +208,7 @@ function construirPrompt(
   if (puede("buscar_contactos")) {
     accesos.push('- Contactos externos: puedes consultarlos.');
   }
+  accesos.push('- Cumpleaños: puedes consultarlos con buscar_cumpleanos. Es la ÚNICA forma; no los sabes de memoria.');
   accesos.push('- Puedes enviar notificaciones.');
 
   const escrituras = ["crear_colaborador", "actualizar_colaborador", "actualizar_incidencia",
@@ -295,6 +296,20 @@ const ALL_TOOLS = [
           nombre_completo: { type: "string", description: "[Solo admin] Nombre y apellidos de la persona: \"Enrique Ortega Gomez\". ÚSALO ASÍ, en UNA sola llamada. No busques antes a la persona con buscar_colaborador: esta herramienta la identifica sola." },
           numero_empleado: { type: "string", description: "[Solo admin] Número de empleado, si lo tienes." },
           usuario_id: { type: "string", description: "[Solo admin] UUID del colaborador. Si se omite y no pasas nombre ni número, calcula para el usuario actual." },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "buscar_cumpleanos",
+      description: "Cumpleaños de los colaboradores. Si no se pasa mes, usa el mes actual. ÚSALA SIEMPRE que se pregunte por cumpleaños: no tienes esos datos por otra vía y no puedes deducirlos.",
+      parameters: {
+        type: "object",
+        properties: {
+          mes: { type: "number", description: "Mes del 1 al 12. Si se omite, el mes en curso." },
+          solo_esta_semana: { type: "boolean", description: "true para acotar a los 7 dias que empiezan el lunes de esta semana." },
         },
       },
     },
@@ -565,6 +580,16 @@ function afirmaDatoSinRespaldo(texto: string, conDatos: Set<string>): boolean {
   // Un saldo solo puede venir de calcular_vacaciones.
   const saldo = /\d+\s*dias?\s*disponibles?|disponibles?\s*:?\s*\**\s*\d|total\s+disponible/;
   if (saldo.test(t) && !conDatos.has("calcular_vacaciones")) return true;
+
+  // Un cumpleaños con fecha solo puede venir de buscar_cumpleanos.
+  //
+  // Se pide que haya un digito: «no tengo acceso a los cumpleaños» es una respuesta legitima y no
+  // afirma la fecha de nadie. Reportado: preguntado por los cumpleaños de la semana, invento a una
+  // persona; la pantalla no muestra a NADIE entre el 10 y el 16 de agosto.
+  if (/cumplea|cumple\b/.test(t) && /\d/.test(t)
+      && !conDatos.has("buscar_cumpleanos")) {
+    return true;
+  }
 
   return false;
 }
@@ -1135,6 +1160,61 @@ async function runTool(
       ...(aproximadoDe
         ? { aviso: `"${aproximadoDe}" no esta escrito asi en el sistema; esto es lo mas parecido. Confirmalo.` }
         : {}),
+    };
+  }
+
+  // ── CUMPLEAÑOS ────────────────────────────────────────────────────
+  //
+  // Se usa el MISMO filtro que la pagina de Social -`social_page.dart:39`: status_rh distinto de BAJA
+  // y status_sys ACTIVO- para que el asistente y la pantalla digan lo mismo. Dos criterios distintos
+  // para la misma pregunta es la forma mas segura de que alguien acabe desconfiando de los dos.
+  //
+  // Ese filtro deja fuera, de paso, las razones sociales que viven en `profiles`: ECO DREAM SA DE CV
+  // y otras traen `fecha_nacimiento` -que no es un cumpleaños- y `status_sys = 'NO APLICA'`.
+  if (name === "buscar_cumpleanos") {
+    // El mes se toma en hora de Mexico, no en UTC: el 1 de mes a medianoche son dos meses distintos.
+    const hoyMx = new Date().toLocaleDateString("en-CA", { timeZone: "America/Mexico_City" });
+    const [anioMx, mesMx, diaMx] = hoyMx.split("-").map((n) => parseInt(n, 10));
+
+    const mes = typeof input.mes === "number" && input.mes >= 1 && input.mes <= 12
+      ? input.mes
+      : mesMx;
+
+    const { data, error } = await db.from("profiles")
+      .select("nombre,paterno,materno,fecha_nacimiento,ubicacion,puesto")
+      .not("fecha_nacimiento", "is", null)
+      .neq("status_rh", "BAJA")
+      .eq("status_sys", "ACTIVO");
+    if (error) return { error: error.message };
+
+    let gente = ((data || []) as unknown as Record<string, unknown>[])
+      .map((f) => {
+        const fn = parseLocalDate(f.fecha_nacimiento as string);
+        return { f, mes: fn ? fn.getMonth() + 1 : 0, dia: fn ? fn.getDate() : 0 };
+      })
+      .filter((x) => x.mes === mes);
+
+    // «Esta semana» se cuenta de lunes a domingo, que es como la gente lo dice.
+    let rango: string | null = null;
+    if (input.solo_esta_semana === true) {
+      const diaSemana = new Date(anioMx, mesMx - 1, diaMx).getDay(); // 0 = domingo
+      const lunes = diaMx - ((diaSemana + 6) % 7);
+      const domingo = lunes + 6;
+      gente = gente.filter((x) => x.dia >= lunes && x.dia <= domingo);
+      rango = `del ${lunes} al ${domingo}`;
+    }
+
+    gente.sort((a, b) => a.dia - b.dia);
+    return {
+      mes,
+      rango,
+      count: gente.length,
+      results: gente.map((x) => ({
+        dia: x.dia,
+        nombre: [x.f.nombre, x.f.paterno, x.f.materno].filter(Boolean).join(" "),
+        puesto: x.f.puesto ?? null,
+        ubicacion: x.f.ubicacion ?? null,
+      })),
     };
   }
 

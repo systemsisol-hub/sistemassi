@@ -77,6 +77,21 @@ ok('un numero de empleado, con buscar_colaborador detras',
 ok('un numero de empleado que salio de calcular_vacaciones',
    !afirmaDatoSinRespaldo('CLAUDIA ANDREA BRAVO GARCIA — empleado 2306, 15 días disponibles', conVacaciones));
 
+console.log('\nUn cumpleaños con fecha tampoco se inventa');
+// Reportado: preguntado por los cumpleaños de la semana, invento a una persona. La pantalla no
+// muestra a NADIE entre el 10 y el 16 de agosto -comprobado con el filtro de social_page.dart- y el
+// asistente no tenia acceso a `fecha_nacimiento` por ninguna via: la columna no aparecia ni una vez
+// en la funcion.
+ok('se bloquea una fecha de cumpleaños sin herramienta',
+   afirmaDatoSinRespaldo('Esta semana cumple Paloma, el 14 de agosto.', nada));
+ok('se bloquea una lista de cumpleaños',
+   afirmaDatoSinRespaldo('Cumpleaños de agosto:\n- 3 Juan\n- 12 Ana', nada));
+ok('con buscar_cumpleanos detras SI pasa',
+   !afirmaDatoSinRespaldo('Cumpleaños de agosto: dia 1 Rogelio, dia 8 Jesus.',
+     new Set(['buscar_cumpleanos'])));
+ok('decir que no cumple nadie NO se bloquea: no lleva fecha',
+   !afirmaDatoSinRespaldo('Esta semana no cumple años nadie.', nada));
+
 console.log('\nY NO se bloquea lo que el modelo si puede contestar solo');
 ok('conocimiento general de la ley, sin hablar de nadie',
    !afirmaDatoSinRespaldo('Con 5 años cumplidos la Ley Federal del Trabajo da 20 días.', nada),
