@@ -5,12 +5,18 @@
 // separada del esquema, un campo peligroso colado.
 //
 // Correr con:  node supabase/functions/ai-assistant/verificar_permisos.mjs
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-const RUTA = join(dirname(fileURLToPath(import.meta.url)), 'index.ts');
-const src = readFileSync(RUTA, 'utf8');
+// Se leen LOS OCHO modulos, no `index.ts` solo.
+//
+// Antes todo vivia en un archivo. Al partirlo, el prompt quedo en prompt.ts, el catalogo en
+// herramientas.ts y los permisos en permisos.ts, y este arnes cruza los tres. Leer el directorio
+// completo tambien evita tener que volver aqui la proxima vez que algo se mueva de sitio.
+const aqui = dirname(fileURLToPath(import.meta.url));
+const src = readdirSync(aqui).filter((f) => f.endsWith('.ts')).sort()
+  .map((f) => readFileSync(join(aqui, f), 'utf8')).join('\n');
 
 const bloque = (nombre) => {
   const i = src.indexOf(nombre);

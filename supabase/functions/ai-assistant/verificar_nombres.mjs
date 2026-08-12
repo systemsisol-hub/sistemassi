@@ -8,13 +8,17 @@
 // El caso que dio origen a esto: preguntar por "las vacaciones de Enrique Ortega Gomez" devolvia
 // cero registros, porque el nombre entero se buscaba en la columna `nombre`, que guarda solo el
 // nombre de pila.
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// Se leen LOS OCHO modulos, no `index.ts` solo: al partir el archivo estas funciones se fueron a
+// nombres.ts y respuestas.ts. Leer el directorio completo evita volver aqui cada vez que algo se
+// mueva de sitio.
 const aqui = dirname(fileURLToPath(import.meta.url));
-const src = readFileSync(join(aqui, 'index.ts'), 'utf8');
+const src = readdirSync(aqui).filter((f) => f.endsWith('.ts')).sort()
+  .map((f) => readFileSync(join(aqui, f), 'utf8')).join('\n');
 
 function extraer(nombre) {
   const i = src.indexOf(`function ${nombre}(`);

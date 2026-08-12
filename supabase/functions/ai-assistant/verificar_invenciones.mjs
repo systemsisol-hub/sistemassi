@@ -9,13 +9,17 @@
 // comparan estan verificadas en SQL. Dos de ellos salieron en la aplicacion, no por WhatsApp: la
 // pagina parecia acertar porque pinta una tarjeta con los datos crudos y la vista va a la tarjeta,
 // pero su prosa tiene el mismo problema. De ahi que el guardia viva en la funcion y no en el puente.
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// Se leen LOS OCHO modulos, no `index.ts` solo: al partir el archivo estas funciones se fueron a
+// nombres.ts y respuestas.ts. Leer el directorio completo evita volver aqui cada vez que algo se
+// mueva de sitio.
 const aqui = dirname(fileURLToPath(import.meta.url));
-const src = readFileSync(join(aqui, 'index.ts'), 'utf8');
+const src = readdirSync(aqui).filter((f) => f.endsWith('.ts')).sort()
+  .map((f) => readFileSync(join(aqui, f), 'utf8')).join('\n');
 
 function extraerFuncion(nombre) {
   const i = src.indexOf(`function ${nombre}(`);
