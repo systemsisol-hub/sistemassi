@@ -123,6 +123,24 @@ ok('con buscar_cumpleanos detras SI pasa',
 ok('decir que no cumple nadie NO se bloquea: no lleva fecha',
    !afirmaDatoSinRespaldo('Esta semana no cumple años nadie.', nada));
 
+console.log('\nSin haber consultado nada, no se entrega una lista de registros');
+// La regla que NO depende de ninguna palabra. El caso real: «umpleaños en septiembre (4):» con cuatro
+// viñetas. Una letra de menos basto para que /cumplea/ no coincidiera y pasaran cuatro nombres falsos.
+const listaFalsa = 'umpleaños en septiembre (4):\n'
+  + '• 6 — CLAUDIA IVETH RIVERA CRUZ, SUBDIRECTORA\n'
+  + '• 11 — EDGAR ENRIQUE GONZALEZ RODRIGUEZ, AUXILIAR\n'
+  + '• 23 — JOSE GUADALUPE CAZARES BACA, ANALISTA';
+ok('se bloquea la lista inventada, aunque la palabra venga mal escrita',
+   afirmaDatoSinRespaldo(listaFalsa, nada));
+ok('una tabla con barras tambien',
+   afirmaDatoSinRespaldo('| 1 | ROGELIO |\n| 8 | JESUS |', nada));
+ok('con herramienta detras, la MISMA lista pasa',
+   !afirmaDatoSinRespaldo(listaFalsa, new Set(['buscar_cumpleanos'])));
+ok('una lista de lo que SI puede hacer no se bloquea: no lleva cifras',
+   !afirmaDatoSinRespaldo('Puedo ayudarte con:\n• tus vacaciones\n• tu inventario', nada));
+ok('un solo renglon con cifra no es una tabla',
+   !afirmaDatoSinRespaldo('Te lo resumo:\n• 1 solicitud pendiente', nada));
+
 console.log('\nY NO se bloquea lo que el modelo si puede contestar solo');
 ok('conocimiento general de la ley, sin hablar de nadie',
    !afirmaDatoSinRespaldo('Con 5 años cumplidos la Ley Federal del Trabajo da 20 días.', nada),
@@ -200,14 +218,30 @@ for (const [q, mes, semana] of [
   ['cumpleaños de setiembre', 9, false],
   ['cumpleaños de la semana', null, true],
 ]) {
-  const r = preguntaCumpleanos(q);
+  const r = preguntaCumpleanos(q, '');
   ok(`"${q}" -> mes ${mes}, semana ${semana}`,
      r !== null && r.mes === mes && r.soloEstaSemana === semana, JSON.stringify(r));
 }
 ok('«cumple 5 años en la empresa» NO es un cumpleaños: es antiguedad',
-   preguntaCumpleanos('cuando cumple 5 años en la empresa') === null);
+   preguntaCumpleanos('cuando cumple 5 años en la empresa', '') === null);
 ok('una pregunta de vacaciones no se la queda',
-   preguntaCumpleanos('cuales son mis vacaciones') === null);
+   preguntaCumpleanos('cuales son mis vacaciones', '') === null);
+
+console.log('\nUn seguimiento como «y de septiembre?» tambien se atiende');
+// Reportado: tras «cumpleaños de este mes», la pregunta «y de septiembre?» no llevaba la palabra, la
+// via directa no se activo, y el modelo invento CUATRO personas. Septiembre tiene nueve, y se ven en
+// la pantalla. Empezo con «umpleaños en septiembre (4):», imitando el formato de la respuesta buena.
+const previa = 'cumpleaños de este mes?';
+ok('«y de septiembre?» despues de una de cumpleaños',
+   preguntaCumpleanos('y de septiembre?', previa)?.mes === 9);
+ok('«y de octubre?»', preguntaCumpleanos('y de octubre?', previa)?.mes === 10);
+ok('«y esta semana?»', preguntaCumpleanos('y esta semana?', previa)?.soloEstaSemana === true);
+ok('«y de septiembre?» SIN una pregunta previa de cumpleaños no se la queda',
+   preguntaCumpleanos('y de septiembre?', 'vacaciones de enrique') === null);
+ok('«y las vacaciones de septiembre?» no se la queda, aunque venga despues',
+   preguntaCumpleanos('y las vacaciones de septiembre?', previa) === null);
+ok('un seguimiento que no nombra fecha se deja al modelo',
+   preguntaCumpleanos('y del otro?', previa) === null);
 
 console.log('\nEl texto de cumpleaños sale de los datos');
 const sept = { mes: 9, rango: null, count: 2, results: [

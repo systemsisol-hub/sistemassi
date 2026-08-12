@@ -556,14 +556,35 @@ const MESES: Record<string, number> = {
  * Se exige que hable de cumpleaños de verdad: «cumple 5 años en la empresa» habla de antiguedad y
  * tiene que seguir su camino.
  */
-function preguntaCumpleanos(texto: string): { mes: number | null; soloEstaSemana: boolean } | null {
+function preguntaCumpleanos(
+  texto: string,
+  anterior: string,
+): { mes: number | null; soloEstaSemana: boolean } | null {
   const t = sinAcentos(texto).toLowerCase();
-  if (!/cumplea|cumplen?\s+anos|quien(es)?\s+cumple/.test(t)) return null;
+  const esDeCumples = (x: string) => /cumplea|cumplen?\s+anos|quien(es)?\s+cumple/.test(x);
+
+  // Una pregunta de seguimiento no repite el tema: «y de septiembre?» viene despues de «cumpleaños
+  // de este mes» y no lleva la palabra. Reportado: por eso la via directa no se activo y el modelo
+  // contesto de memoria, inventando cuatro personas.
+  //
+  // Se exige que sea CORTA y que solo aporte un mes o un rango: asi «y las vacaciones de septiembre?»
+  // -que es otra cosa- no se cuela por aqui.
+  const palabras = t.split(/\s+/).filter((w) => w.length > 0);
+  const soloAportaFecha = palabras.length <= 5
+    && !/vacacion|incidencia|inventario|empleado|telefono/.test(t);
+
+  const seguimiento = !esDeCumples(t)
+    && esDeCumples(sinAcentos(anterior).toLowerCase())
+    && soloAportaFecha;
+
+  if (!esDeCumples(t) && !seguimiento) return null;
 
   const soloEstaSemana = /esta semana|de la semana|semana actual/.test(t);
   for (const [nombre, num] of Object.entries(MESES)) {
     if (t.includes(nombre)) return { mes: num, soloEstaSemana };
   }
+  // Un seguimiento que no nombra mes ni semana no aporta nada: mejor que lo lleve el modelo.
+  if (seguimiento && !soloEstaSemana) return null;
   return { mes: null, soloEstaSemana };
 }
 
@@ -655,6 +676,22 @@ function afirmaDatoSinRespaldo(texto: string, conDatos: Set<string>): boolean {
   if (/cumplea|cumple\b/.test(t) && /\d/.test(t)
       && !conDatos.has("buscar_cumpleanos")) {
     return true;
+  }
+
+  // Y la regla que NO depende de ninguna palabra: sin haber consultado NADA, no se entrega una lista
+  // de registros.
+  //
+  // Las reglas de arriba buscan palabras, y eso falla por los dos lados. El caso que lo demuestra:
+  // preguntado «y de septiembre?» invento cuatro personas y empezo la respuesta con «umpleaños en
+  // septiembre (4):» —sin la C inicial— asi que /cumplea/ no coincidio y paso. Una letra de menos
+  // basto para colar cuatro nombres falsos.
+  //
+  // Dos renglones que empiezan por vinieta o barra Y llevan un numero son una tabla de datos, y el
+  // modelo no tiene de donde sacarla si no llamo a ninguna herramienta. Se exige el numero para no
+  // bloquear una lista de lo que SI puede hacer, que no lleva cifras.
+  if (conDatos.size === 0) {
+    const renglonesDeDatos = (texto.match(/^\s*[•\-*|]\s*\**\s*\d/gm) || []).length;
+    if (renglonesDeDatos >= 2) return true;
   }
 
   return false;
@@ -1559,7 +1596,11 @@ Deno.serve(async (req: Request) => {
     }
 
     // Cumpleaños: el mes se lee de la pregunta y la consulta es determinista.
-    const cumples = preguntaCumpleanos(ultimoUsuario);
+    // La penultima pregunta de la persona, para entender un seguimiento como «y de septiembre?».
+    const preguntasUsuario = messages.filter((mm) => mm.role === "user").map((mm) => mm.content);
+    const anteriorUsuario = preguntasUsuario[preguntasUsuario.length - 2] ?? "";
+
+    const cumples = preguntaCumpleanos(ultimoUsuario, anteriorUsuario);
     if (cumples) {
       const datos = await runTool(
         "buscar_cumpleanos",
