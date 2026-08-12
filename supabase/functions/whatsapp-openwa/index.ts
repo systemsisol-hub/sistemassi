@@ -79,6 +79,26 @@ function igualesEnTiempoConstante(a: string, b: string): boolean {
   return dif === 0;
 }
 
+/// El encabezado de cifras de una ficha de vacaciones.
+///
+/// Existe como constante porque cumple DOS papeles: se escribe al armar la ficha, y se busca en el
+/// texto del modelo para detectar una falsificacion.
+///
+/// ─── El fallo que lo obliga ──────────────────────────────────────────────────
+///
+/// Con la ficha determinista puesta, dos consultas salieron correctas -Enrique 102 dias, Claudia
+/// Andrea 15- y la tercera devolvio "CLAUDIA PATRICIA BRAVO LOMELI — empleado 2277, 8 dias" con este
+/// mismo formato. No existe nadie con ese nombre y el 2277 es otra persona.
+///
+/// Los tiempos lo delatan: las dos correctas tardaron 8051 y 8316 ms -una llamada con herramienta- y
+/// la falsa 2391 ms, lo que tarda un saludo. El modelo NO llamo a la herramienta: copio el formato.
+///
+/// Y lo copio porque yo se lo enseñe. La respuesta enviada se guardaba en el hilo como mensaje del
+/// asistente, asi que despues de dos fichas correctas el modelo tenia dos ejemplos propios que
+/// imitar. Eso convirtio el arreglo en algo PEOR que el fallo original: antes una respuesta falsa
+/// parecia prosa; con la plantilla aprendida parece una ficha verificada.
+const FIRMA_FICHA = "Dias disponibles: ";
+
 /// Arma el texto de una respuesta de vacaciones con los datos de la herramienta.
 ///
 /// Devuelve `null` si los datos no tienen la forma esperada, para caer al texto del modelo.
@@ -95,7 +115,10 @@ function igualesEnTiempoConstante(a: string, b: string): boolean {
 /// El precio de esa decision, medido sobre cuatro consultas reales: 4 de 4 con cifras equivocadas,
 /// una de ellas con numero de empleado y fecha de vencimiento inventados. Ninguna habria pasado con
 /// esto puesto, porque aqui el modelo no escribe ni un numero.
-function textoDeVacaciones(structured: unknown): string | null {
+///
+/// Devuelve tambien `nota`: lo que se guarda en la memoria del hilo, que NO es el bloque. Ver
+/// `FIRMA_FICHA` para el por que.
+function textoDeVacaciones(structured: unknown): { texto: string; nota: string } | null {
   const s = structured as { type?: string; data?: Record<string, unknown> } | null;
   if (!s || s.type !== "vacaciones" || !s.data) return null;
 
@@ -110,7 +133,7 @@ function textoDeVacaciones(structured: unknown): string | null {
   const numero = typeof d.numero_empleado === "string" ? d.numero_empleado : null;
   const lineas = [
     `*${quien}*${numero ? ` — empleado ${numero}` : ""}`,
-    `Dias disponibles: *${total}*`,
+    `${FIRMA_FICHA}*${total}*`,
   ];
 
   const conSaldo = periodos.filter((pe) => (pe.dias_disponibles as number) > 0);
@@ -126,7 +149,13 @@ function textoDeVacaciones(structured: unknown): string | null {
   if (agotados > 0) {
     lineas.push("", `(${agotados} periodo${agotados === 1 ? "" : "s"} anterior${agotados === 1 ? "" : "es"} ya consumido${agotados === 1 ? "" : "s"})`);
   }
-  return lineas.join("\n");
+  return {
+    texto: lineas.join("\n"),
+    // En la memoria va una NOTA, no el bloque. Conserva el contexto para una pregunta de seguimiento
+    // -"y de Zabdiel?"- sin dejarle al modelo una plantilla que imitar.
+    nota: `[el sistema entregó la ficha de vacaciones de ${quien}${numero ? ` (${numero})` : ""}: `
+      + `${total} días disponibles]`,
+  };
 }
 
 /// Saca remitente y texto del evento.
@@ -397,8 +426,23 @@ async function atender(
     //
     // Se sustituye la prosa por completo en lugar de anadirla: si el modelo dijo "0 dias" y el dato
     // dice 102, dos cifras contradictorias en el mismo mensaje son peores que una sola correcta.
-    const deVacaciones = textoDeVacaciones(datos.structured);
-    const respuesta = (deVacaciones ?? datos.text ?? "").trim();
+    const ficha = textoDeVacaciones(datos.structured);
+    let respuesta = (ficha?.texto ?? datos.text ?? "").trim();
+
+    // Una ficha sin datos detras es una falsificacion, y no se manda.
+    //
+    // Si el texto lleva la firma pero no vino `structured`, el modelo escribio las cifras de su
+    // cosecha. Es el unico caso en el que se corrige lo que dijo en lugar de reenviarlo: dejarlo
+     // pasar seria entregar un numero inventado con la apariencia de un dato del sistema.
+    if (!ficha && respuesta.includes(FIRMA_FICHA)) {
+      await registrar(svc, telefono, profileId, "ERROR", m.texto, respuesta,
+        "el modelo imito el formato de la ficha sin que la herramienta devolviera datos");
+      await enviar(destino,
+        "No pude confirmar ese dato con el sistema, así que prefiero no dártelo. " +
+        "Vuelve a preguntarme con el nombre completo o el número de empleado.");
+      return;
+    }
+
     if (!respuesta) {
       await registrar(svc, telefono, profileId, "ERROR", m.texto, null,
         `Soli respondio sin texto; claves recibidas: ${Object.keys(datos).join(",")}`);
@@ -411,7 +455,9 @@ async function atender(
     // como si se hubiera contestado.
     await svc.from("whatsapp_conversaciones").upsert({
       telefono,
-      mensajes: [...mensajes, { role: "assistant", content: respuesta }].slice(-TURNOS_MEMORIA * 2),
+      // Va la nota, NO la ficha: ver FIRMA_FICHA. Guardar el bloque le enseñaba el formato.
+      mensajes: [...mensajes, { role: "assistant", content: ficha?.nota ?? respuesta }]
+        .slice(-TURNOS_MEMORIA * 2),
       actualizado_en: new Date().toISOString(),
     }, { onConflict: "telefono" });
 

@@ -1,13 +1,17 @@
-// Ejercita el formateador de vacaciones del puente.
+// Ejercita el formateador de vacaciones del puente y la deteccion de fichas falsificadas.
 //
 // Se EXTRAE del index.ts real en lugar de copiarlo, para que la prueba no pueda quedar verificando
 // una version vieja. Node 22+ hace falta, por --experimental-strip-types:
 //
 //   node --experimental-strip-types supabase/functions/whatsapp-openwa/verificar_vacaciones.mjs
 //
-// El caso que dio origen a esto: por WhatsApp, "las vacaciones de Enrique Ortega Gomez" contesto
-// "0 dias disponibles" cuando tiene 102. La aplicacion acertaba porque pinta una tarjeta con los
-// datos crudos de la herramienta; el puente mandaba la prosa del modelo y tiraba los datos.
+// Dos fallos reales dieron origen a esto, en este orden:
+//
+//   1. Por WhatsApp, "las vacaciones de Enrique Ortega Gomez" contesto "0 dias disponibles" cuando
+//      tiene 102. La aplicacion acertaba porque pinta una tarjeta con los datos crudos de la
+//      herramienta; el puente mandaba la prosa del modelo y tiraba los datos.
+//   2. Con la ficha ya puesta, el modelo IMITO el formato sin llamar a la herramienta y devolvio una
+//      persona que no existe. Habia aprendido la plantilla de sus propias respuestas guardadas.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -16,16 +20,29 @@ import { fileURLToPath } from 'node:url';
 const aqui = dirname(fileURLToPath(import.meta.url));
 const src = readFileSync(join(aqui, 'index.ts'), 'utf8');
 
-const i = src.indexOf('function textoDeVacaciones(');
-if (i < 0) throw new Error('no se encontro textoDeVacaciones');
-let prof = 0, fin = -1;
-for (let k = src.indexOf('{', i); k < src.length; k++) {
-  if (src[k] === '{') prof++;
-  else if (src[k] === '}') { prof--; if (prof === 0) { fin = k + 1; break; } }
+function extraerFuncion(nombre) {
+  const i = src.indexOf(`function ${nombre}(`);
+  if (i < 0) throw new Error(`no se encontro ${nombre}`);
+  // Se busca la llave que abre el CUERPO, que es la que cierra su linea. Contar desde la primera
+  // llave que aparezca es lo que hacia esta prueba antes, y se rompio en cuanto la funcion declaro un
+  // tipo de retorno con llaves —`: { texto: string; nota: string } | null`—: extraia el tipo.
+  const abre = src.indexOf('{\n', i);
+  if (abre < 0) throw new Error(`no se encontro el cuerpo de ${nombre}`);
+  let prof = 0;
+  for (let k = abre; k < src.length; k++) {
+    if (src[k] === '{') prof++;
+    else if (src[k] === '}') { prof--; if (prof === 0) return src.slice(i, k + 1); }
+  }
+  throw new Error(`llaves sin cerrar en ${nombre}`);
 }
+
+const lineaFirma = src.match(/^const FIRMA_FICHA = .*$/m);
+if (!lineaFirma) throw new Error('no se encontro FIRMA_FICHA');
+
 const tmp = join(tmpdir(), 'puente-vacaciones.ts');
-writeFileSync(tmp, src.slice(i, fin) + '\nexport { textoDeVacaciones };\n', 'utf8');
-const { textoDeVacaciones } = await import('file://' + tmp.replace(/\\/g, '/'));
+writeFileSync(tmp, `${lineaFirma[0]}\n\n${extraerFuncion('textoDeVacaciones')}\n`
+  + 'export { textoDeVacaciones, FIRMA_FICHA };\n', 'utf8');
+const { textoDeVacaciones, FIRMA_FICHA } = await import('file://' + tmp.replace(/\\/g, '/'));
 
 let fallos = 0;
 function ok(desc, cond, extra = '') {
@@ -59,20 +76,39 @@ const enrique = {
   },
 };
 
-console.log('El caso reportado, con los datos reales del 0170');
-const t = textoDeVacaciones(enrique);
-console.log('\n--- lo que llegaria al telefono ---\n' + t + '\n-----------------------------------\n');
-ok('dice 102, que es la cifra verificada en SQL', t.includes('*102*'), t);
-ok('NO dice 0 dias disponibles', !/disponibles: \*0\*/.test(t));
-ok('trae el nombre', t.includes('ENRIQUE ORTEGA GOMEZ'));
-ok('trae el numero de empleado real', t.includes('0170'));
-ok('lista los seis periodos con saldo', (t.match(/^• /gm) || []).length === 6, t);
-ok('no lista los agotados, los cuenta', t.includes('7 periodos anteriores ya consumidos'), t);
-ok('no aparece ningun periodo en cero', !/• .*: 0 de/.test(t));
+console.log('La ficha, con los datos reales del 0170');
+const f = textoDeVacaciones(enrique);
+console.log('\n--- lo que llega al telefono ---\n' + f.texto + '\n--------------------------------');
+console.log('--- lo que se guarda en la memoria ---\n' + f.nota + '\n--------------------------------\n');
+ok('dice 102, que es la cifra verificada en SQL', f.texto.includes('*102*'), f.texto);
+ok('NO dice 0 dias disponibles', !new RegExp(FIRMA_FICHA + '\\*0\\*').test(f.texto));
+ok('trae el nombre', f.texto.includes('ENRIQUE ORTEGA GOMEZ'));
+ok('trae el numero de empleado real', f.texto.includes('0170'));
+ok('lista los seis periodos con saldo', (f.texto.match(/^• /gm) || []).length === 6, f.texto);
+ok('no lista los agotados, los cuenta', f.texto.includes('7 periodos anteriores ya consumidos'));
+ok('no aparece ningun periodo en cero', !/• .*: 0 de/.test(f.texto));
+
+console.log('La nota de memoria NO le enseña la plantilla al modelo');
+ok('la nota NO lleva la firma de la ficha', !f.nota.includes(FIRMA_FICHA), f.nota);
+ok('la nota no lleva bullets ni asteriscos de formato',
+   !f.nota.includes('•') && !f.nota.includes('*'), f.nota);
+ok('pero SI conserva el dato para una pregunta de seguimiento',
+   f.nota.includes('102') && f.nota.includes('ENRIQUE ORTEGA GOMEZ'), f.nota);
+
+console.log('\nLa firma sirve para detectar una ficha falsificada');
+// El texto real que devolvio el modelo el 11/08/2026 a las 19:58, sin haber llamado a la
+// herramienta: 2391 ms frente a los ~8000 de una consulta con herramienta. No existe nadie con ese
+// nombre y el 2277 es otra persona.
+const falsificada = '*CLAUDIA PATRICIA BRAVO LOMELI* — empleado 2277\n'
+  + 'Dias disponibles: *8*\n\nPor periodo:\n• 2024 - 2025: 8 de 8\n\n'
+  + '(4 periodos anteriores ya consumidos)';
+ok('la falsificacion real se detecta por la firma', falsificada.includes(FIRMA_FICHA));
+ok('sin structured no se produce ficha', textoDeVacaciones(null) === null);
+ok('una respuesta normal del modelo NO se confunde con una ficha',
+   !'El número de empleado de Marco Antonio es 0186.'.includes(FIRMA_FICHA));
 
 console.log('\nCuando NO hay datos de vacaciones, se cae al texto del modelo');
 ok('otro tipo de structured', textoDeVacaciones({ type: 'collaborators', data: [] }) === null);
-ok('structured nulo', textoDeVacaciones(null) === null);
 ok('sin data', textoDeVacaciones({ type: 'vacaciones' }) === null);
 ok('total ausente -> null, no cero inventado',
    textoDeVacaciones({ type: 'vacaciones', data: { colaborador: 'X', periodos: [] } }) === null);
@@ -83,14 +119,15 @@ console.log('\nCasos de borde');
 const sinSaldo = textoDeVacaciones({ type: 'vacaciones', data: {
   colaborador: 'ALGUIEN', numero_empleado: '9999', total_disponible: 0,
   periodos: [{ periodo: '2025 - 2026', dias_proporcionales: 12, dias_disponibles: 0 }] } });
-ok('un cero REAL si se dice', sinSaldo.includes('Dias disponibles: *0*'), sinSaldo);
+ok('un cero REAL si se dice', sinSaldo.texto.includes(FIRMA_FICHA + '*0*'), sinSaldo.texto);
 ok('un solo periodo agotado va en singular',
-   sinSaldo.includes('1 periodo anterior ya consumido'), sinSaldo);
+   sinSaldo.texto.includes('1 periodo anterior ya consumido'), sinSaldo.texto);
 const sinNumero = textoDeVacaciones({ type: 'vacaciones', data: {
   colaborador: 'SIN NUMERO', total_disponible: 3,
   periodos: [{ periodo: '2025 - 2026', dias_proporcionales: 12, dias_disponibles: 3 }] } });
 ok('sin numero de empleado no deja un guion suelto',
-   !sinNumero.includes('—') && sinNumero.includes('*SIN NUMERO*'), sinNumero);
+   !sinNumero.texto.includes('—') && sinNumero.texto.includes('*SIN NUMERO*'), sinNumero.texto);
+ok('la nota tambien aguanta sin numero', !sinNumero.nota.includes('()'), sinNumero.nota);
 
 console.log(fallos === 0 ? '\nTODO BIEN' : `\n${fallos} FALLAS`);
 process.exit(fallos === 0 ? 0 : 1);
