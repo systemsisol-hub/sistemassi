@@ -268,12 +268,14 @@ const ALL_TOOLS = [
     type: "function",
     function: {
       name: "buscar_colaborador",
-      description: "Busca colaboradores. Si tienes el nombre de una persona con apellidos, usa SIEMPRE nombre_completo: los apellidos viven en campos aparte, así que el nombre entero en `nombre` no encuentra nada. Por defecto NO filtra por status_rh — devuelve todos los registros (activos y bajas). Solo aplica status_rh si el usuario lo pide explícitamente. Admin ve datos completos; usuarios solo ven datos básicos.",
+      description: "Busca colaboradores por CUALQUIER dato que te den: nombre, número de empleado, correo o UUID. Si sólo conocen un apellido o el nombre a medias, búscalo igual y ofrece los candidatos que salgan. Si tienes el nombre de una persona con apellidos, usa SIEMPRE nombre_completo: los apellidos viven en campos aparte, así que el nombre entero en `nombre` no encuentra nada. Por defecto NO filtra por status_rh — devuelve todos los registros (activos y bajas). Solo aplica status_rh si el usuario lo pide explícitamente. Admin ve datos completos; usuarios solo ven datos básicos.",
       parameters: {
         type: "object",
         properties: {
           numero_empleado: { type: "string", description: "Número de empleado. Se prueban variantes con y sin ceros iniciales." },
           nombre_completo: { type: "string", description: "Nombre y apellidos juntos, en cualquier orden: \"Enrique Ortega Gomez\". Cada palabra se busca en el nombre y en los dos apellidos. Es la forma preferida de buscar a una persona." },
+          correo: { type: "string", description: "Correo, completo o un trozo. Busca en el de trabajo y en el personal." },
+          id: { type: "string", description: "UUID del colaborador, si el usuario te lo dio tal cual." },
           nombre: { type: "string", description: "SOLO el nombre de pila, sin apellidos." },
           paterno: { type: "string", description: "SOLO el apellido paterno." },
           materno: { type: "string", description: "SOLO el apellido materno." },
@@ -1022,6 +1024,27 @@ async function runTool(
       const guia = tokenGuia(tokens);
       q = (q as any).or(
         `nombre.ilike.%${guia}%,paterno.ilike.%${guia}%,materno.ilike.%${guia}%`,
+      );
+    }
+
+    // El UUID y el correo eran los dos huecos mas tontos: alguien te da un dato perfectamente valido
+    // y no habia por donde entrarle. Reportado tal cual: «le di el uuid y no lo pudo buscar».
+    if (input.id) {
+      const dado = String(input.id).trim();
+      if (!esUuid(dado)) {
+        return { error: `"${dado}" no tiene forma de UUID. Si es un número de empleado usa numero_empleado.` };
+      }
+      q = (q as any).eq("id", dado);
+    }
+
+    // Se busca en los TRES campos de correo. `correo_personal` incluido a proposito: tiene mas
+    // cobertura que el de trabajo -1430 perfiles contra 1145- y buscar POR un correo que la persona ya
+    // conoce no revela nada que no tuviera, igual que buscar por numero de empleado. Lo que NO cambia
+    // es que ese campo sigue fuera de lo que se DEVUELVE a un usuario normal.
+    if (input.correo) {
+      const c = String(input.correo).trim().replace(/[,()]/g, "");
+      q = (q as any).or(
+        `mail_user.ilike.%${c}%,email.ilike.%${c}%,correo_personal.ilike.%${c}%`,
       );
     }
 
