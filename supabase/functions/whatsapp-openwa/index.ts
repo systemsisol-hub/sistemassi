@@ -137,10 +137,9 @@ function afirmaDiasSinRespaldo(pregunta: string, texto: string): boolean {
 /// una de ellas con numero de empleado y fecha de vencimiento inventados. Ninguna habria pasado con
 /// esto puesto, porque aqui el modelo no escribe ni un numero.
 ///
-/// Devuelve tambien `nota`: lo que se guarda en la memoria del hilo, que NO es el bloque. Da igual
-/// cual de los dos se guarde —el modelo imita los dos— asi que quien impide una cifra inventada es
-/// `afirmaDiasSinRespaldo`, no la eleccion de texto. La nota se queda porque es mas corta.
-function textoDeVacaciones(structured: unknown): { texto: string; nota: string } | null {
+/// Esto cambia SOLO lo que se manda al telefono. Lo que se guarda en la memoria del hilo es el texto
+/// del modelo, igual que en la aplicacion; ver el upsert de `whatsapp_conversaciones`.
+function textoDeVacaciones(structured: unknown): string | null {
   const s = structured as { type?: string; data?: Record<string, unknown> } | null;
   if (!s || s.type !== "vacaciones" || !s.data) return null;
 
@@ -171,13 +170,7 @@ function textoDeVacaciones(structured: unknown): { texto: string; nota: string }
   if (agotados > 0) {
     lineas.push("", `(${agotados} periodo${agotados === 1 ? "" : "s"} anterior${agotados === 1 ? "" : "es"} ya consumido${agotados === 1 ? "" : "s"})`);
   }
-  return {
-    texto: lineas.join("\n"),
-    // En la memoria va una NOTA, no el bloque. Conserva el contexto para una pregunta de seguimiento
-    // -"y de Zabdiel?"- sin dejarle al modelo una plantilla que imitar.
-    nota: `[el sistema entregó la ficha de vacaciones de ${quien}${numero ? ` (${numero})` : ""}: `
-      + `${total} días disponibles]`,
-  };
+  return lineas.join("\n");
 }
 
 /// Saca remitente y texto del evento.
@@ -449,7 +442,7 @@ async function atender(
     // Se sustituye la prosa por completo en lugar de anadirla: si el modelo dijo "0 dias" y el dato
     // dice 102, dos cifras contradictorias en el mismo mensaje son peores que una sola correcta.
     const ficha = textoDeVacaciones(datos.structured);
-    const respuesta = (ficha?.texto ?? datos.text ?? "").trim();
+    const respuesta = (ficha ?? datos.text ?? "").trim();
 
     // Una cifra de dias sin dato detras no se manda. Ver `afirmaDiasSinRespaldo`.
     //
@@ -475,10 +468,21 @@ async function atender(
 
     // El hilo se guarda DESPUÉS de enviar: si el envío falla, la pregunta no queda en la memoria
     // como si se hubiera contestado.
+    // En la memoria va lo que ESCRIBIO EL MODELO, no lo que se mando al telefono.
+    //
+    // Es la diferencia que hacia que la aplicacion acertara y WhatsApp no. `AsistenteStore` guarda
+    // `cuerpo['text']` -la prosa del modelo- y desde ahi el modelo ve un historial coherente con como
+    // lo produjo: llamo a la herramienta y luego redacto. Aqui yo guardaba texto MIO, que el modelo
+    // nunca escribio y que no parece venir de ninguna herramienta, asi que el patron que aprendia era
+    // "escribo el renglon y ya" y dejaba de consultar. Lo intente con la ficha formateada y con una
+    // nota, y copio las dos.
+    //
+    // Lo que se manda al telefono sigue siendo la ficha con los datos de la herramienta: se separa
+    // lo que se ENTREGA de lo que se RECUERDA, que son dos cosas distintas.
+    const paraMemoria = (datos.text ?? "").trim() || respuesta;
     await svc.from("whatsapp_conversaciones").upsert({
       telefono,
-      // Va la nota, NO la ficha: ver FIRMA_FICHA. Guardar el bloque le enseñaba el formato.
-      mensajes: [...mensajes, { role: "assistant", content: ficha?.nota ?? respuesta }]
+      mensajes: [...mensajes, { role: "assistant", content: paraMemoria }]
         .slice(-TURNOS_MEMORIA * 2),
       actualizado_en: new Date().toISOString(),
     }, { onConflict: "telefono" });

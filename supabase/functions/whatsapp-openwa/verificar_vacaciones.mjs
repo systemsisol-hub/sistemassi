@@ -5,13 +5,16 @@
 //
 //   node --experimental-strip-types supabase/functions/whatsapp-openwa/verificar_vacaciones.mjs
 //
-// Dos fallos reales dieron origen a esto, en este orden:
+// Tres fallos reales dieron origen a esto, en este orden:
 //
 //   1. Por WhatsApp, "las vacaciones de Enrique Ortega Gomez" contesto "0 dias disponibles" cuando
 //      tiene 102. La aplicacion acertaba porque pinta una tarjeta con los datos crudos de la
 //      herramienta; el puente mandaba la prosa del modelo y tiraba los datos.
 //   2. Con la ficha ya puesta, el modelo IMITO el formato sin llamar a la herramienta y devolvio una
 //      persona que no existe. Habia aprendido la plantilla de sus propias respuestas guardadas.
+//   3. Guarde una nota en vez de la ficha, y copio la nota. La causa de fondo era que en la memoria
+//      del hilo iba texto MIO y no el del modelo, al contrario que en la aplicacion: ver el upsert de
+//      `whatsapp_conversaciones`. Lo que queda aqui es la red de seguridad, no el arreglo.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -82,22 +85,14 @@ const enrique = {
 
 console.log('La ficha, con los datos reales del 0170');
 const f = textoDeVacaciones(enrique);
-console.log('\n--- lo que llega al telefono ---\n' + f.texto + '\n--------------------------------');
-console.log('--- lo que se guarda en la memoria ---\n' + f.nota + '\n--------------------------------\n');
-ok('dice 102, que es la cifra verificada en SQL', f.texto.includes('*102*'), f.texto);
-ok('NO dice 0 dias disponibles', !new RegExp(FIRMA_FICHA + '\\*0\\*').test(f.texto));
-ok('trae el nombre', f.texto.includes('ENRIQUE ORTEGA GOMEZ'));
-ok('trae el numero de empleado real', f.texto.includes('0170'));
-ok('lista los seis periodos con saldo', (f.texto.match(/^• /gm) || []).length === 6, f.texto);
-ok('no lista los agotados, los cuenta', f.texto.includes('7 periodos anteriores ya consumidos'));
-ok('no aparece ningun periodo en cero', !/• .*: 0 de/.test(f.texto));
-
-console.log('La nota de memoria NO le enseña la plantilla al modelo');
-ok('la nota NO lleva la firma de la ficha', !f.nota.includes(FIRMA_FICHA), f.nota);
-ok('la nota no lleva bullets ni asteriscos de formato',
-   !f.nota.includes('•') && !f.nota.includes('*'), f.nota);
-ok('pero SI conserva el dato para una pregunta de seguimiento',
-   f.nota.includes('102') && f.nota.includes('ENRIQUE ORTEGA GOMEZ'), f.nota);
+console.log('\n--- lo que llega al telefono ---\n' + f + '\n--------------------------------\n');
+ok('dice 102, que es la cifra verificada en SQL', f.includes('*102*'), f);
+ok('NO dice 0 dias disponibles', !new RegExp(FIRMA_FICHA + '\\*0\\*').test(f));
+ok('trae el nombre', f.includes('ENRIQUE ORTEGA GOMEZ'));
+ok('trae el numero de empleado real', f.includes('0170'));
+ok('lista los seis periodos con saldo', (f.match(/^• /gm) || []).length === 6, f);
+ok('no lista los agotados, los cuenta', f.includes('7 periodos anteriores ya consumidos'));
+ok('no aparece ningun periodo en cero', !/• .*: 0 de/.test(f));
 
 console.log('\nSe detecta una cifra de dias que la herramienta no respalda');
 // Los TRES textos falsos reales, en el orden en que el modelo los produjo. Cada uno imita la
@@ -143,15 +138,14 @@ console.log('\nCasos de borde');
 const sinSaldo = textoDeVacaciones({ type: 'vacaciones', data: {
   colaborador: 'ALGUIEN', numero_empleado: '9999', total_disponible: 0,
   periodos: [{ periodo: '2025 - 2026', dias_proporcionales: 12, dias_disponibles: 0 }] } });
-ok('un cero REAL si se dice', sinSaldo.texto.includes(FIRMA_FICHA + '*0*'), sinSaldo.texto);
+ok('un cero REAL si se dice', sinSaldo.includes(FIRMA_FICHA + '*0*'), sinSaldo);
 ok('un solo periodo agotado va en singular',
-   sinSaldo.texto.includes('1 periodo anterior ya consumido'), sinSaldo.texto);
+   sinSaldo.includes('1 periodo anterior ya consumido'), sinSaldo);
 const sinNumero = textoDeVacaciones({ type: 'vacaciones', data: {
   colaborador: 'SIN NUMERO', total_disponible: 3,
   periodos: [{ periodo: '2025 - 2026', dias_proporcionales: 12, dias_disponibles: 3 }] } });
 ok('sin numero de empleado no deja un guion suelto',
-   !sinNumero.texto.includes('—') && sinNumero.texto.includes('*SIN NUMERO*'), sinNumero.texto);
-ok('la nota tambien aguanta sin numero', !sinNumero.nota.includes('()'), sinNumero.nota);
+   !sinNumero.includes('—') && sinNumero.includes('*SIN NUMERO*'), sinNumero);
 
 console.log(fallos === 0 ? '\nTODO BIEN' : `\n${fallos} FALLAS`);
 process.exit(fallos === 0 ? 0 : 1);
