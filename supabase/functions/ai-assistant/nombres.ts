@@ -245,19 +245,19 @@ export async function resolverPorNombre(
     }
   }
 
-  // Con varios que empatan, se intenta desempatar por vigencia antes de rendirse.
+  // NO se desempata por vigencia: con varios que empatan se muestran TODOS, bajas incluidas.
   //
-  // Es lo que resuelve el caso reportado: «montoya» empata con dos perfiles y solo UNO sigue en la
-  // empresa. Preguntar «¿a cual de los dos?» cuando uno es una baja de hace años es hacer trabajar al
-  // usuario de balde.
-  let desempatadoPorVigencia = false;
-  if (empatan.length > 1) {
-    const vivos = empatan.filter(esVigente);
-    if (vivos.length === 1) {
-      empatan = vivos;
-      desempatadoPorVigencia = true;
-    }
-  }
+  // Antes, cuando solo uno de los que empataban seguia en la empresa, se elegia ese sin preguntar.
+  // Lo puse por el caso de «montoya» -dos perfiles, uno es una baja de hace años- razonando que
+  // preguntar «¿a cual de los dos?» era hacer trabajar al usuario de balde.
+  //
+  // El usuario decidio lo contrario el 12/08/2026, y con un motivo que yo no habia considerado: los
+  // datos de una baja tambien se necesitan. Alguien que ya no esta sigue teniendo equipo por
+  // devolver, vacaciones por liquidar y expediente que consultar, asi que esconderlo no es
+  // ahorrarle trabajo: es quitarle la unica forma de llegar a ese registro.
+  //
+  // `vigentesPrimero` mantiene a los vigentes arriba de la lista, asi que el caso comun sigue siendo
+  // el primer renglon; lo que cambia es que ya no se decide por el.
 
   // Si con TODAS las palabras no sale nadie, se relaja a ALGUNA para poder ofrecer candidatos en lugar
   // de contestar que no existe.
@@ -278,7 +278,7 @@ export async function resolverPorNombre(
   return {
     fila: empatan.length === 1 ? empatan[0] : null,
     candidatos: vigentesPrimero(empatan),
-    aproximado: aproximado || desempatadoPorVigencia,
+    aproximado,
     relajado,
   };
 }

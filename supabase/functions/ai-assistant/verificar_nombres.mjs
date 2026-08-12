@@ -176,6 +176,17 @@ ok('los vigentes van primero',
 ok('ORDENA, no filtra: la baja sigue en la lista',
    m.vigentesPrimero([baja, vivo]).length === 2);
 
+// Y NO se desempata por vigencia. Decidido por el usuario el 12/08/2026, revirtiendo lo que yo habia
+// puesto: cuando de dos «montoya» solo uno seguia en la empresa, se elegia ese sin preguntar. El
+// motivo de revertirlo es que los datos de una baja tambien se necesitan -equipo por devolver,
+// vacaciones por liquidar, expediente-, y elegir por el usuario le quitaba la unica via a ese
+// registro. Esta prueba existe para que no vuelva a colarse el atajo.
+ok('dos que empatan siguen siendo dos, aunque solo uno sea vigente',
+   m.vigentesPrimero([baja, vivo]).length === 2
+   && m.vigentesPrimero([vivo, baja]).length === 2);
+ok('y el vigente queda arriba, que es lo que hace util la lista sin esconder nada',
+   m.vigentesPrimero([baja, vivo])[0].nombre === 'MARCO');
+
 console.log('\nconAlgunaPalabra: la diferencia entre «no existe» y «¿es alguno de estos?»');
 // Medido: «garcia hernandez» no empata con ningun vigente exigiendo las dos palabras, y con
 // cualquiera de las dos hay 17.

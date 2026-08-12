@@ -227,7 +227,17 @@ Deno.serve(async (req: Request) => {
       const deJefe = await runTool(
         "calcular_vacaciones", { nombre_completo: jefe }, svc, isAdmin, actorId, userFullName, permisos,
       ) as Record<string, unknown>;
-      if (!deJefe.error) {
+      // `necesita_confirmacion` no es un error, y por eso no basta con mirar `error`.
+      //
+      // Si el nombre del jefe empata con varias personas, la herramienta devuelve la lista de
+      // candidatos SIN campo `error`. Esta via daba entonces «undefined tiene undefined dias»: un
+      // fallo que ya existia y que se volvio probable al dejar de descartar a las bajas, porque
+      // ahora un nombre que empata con una baja y un vigente pide confirmacion en lugar de elegir.
+      // Se deja seguir al modelo, que es quien sabe presentar la tabla y preguntar a cual se refiere.
+      if (deJefe.necesita_confirmacion === true) {
+        console.log(`via directa de jefe: "${jefe}" empata con `
+          + `${deJefe.total_coincidencias ?? 0}, la resuelve el modelo`);
+      } else if (!deJefe.error) {
         console.log(`via directa: vacaciones de "${jefe}", total ${deJefe.total_disponible}`);
         return new Response(
           JSON.stringify({
@@ -238,8 +248,9 @@ Deno.serve(async (req: Request) => {
           }),
           { headers: { ...CORS, "Content-Type": "application/json" } },
         );
+      } else {
+        console.log(`via directa de jefe fallo, sigue el modelo: ${deJefe.error}`);
       }
-      console.log(`via directa de jefe fallo, sigue el modelo: ${deJefe.error}`);
     }
 
     // Cumpleaños: el mes se lee de la pregunta y la consulta es determinista.

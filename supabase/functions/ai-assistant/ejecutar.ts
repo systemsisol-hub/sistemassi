@@ -267,12 +267,23 @@ export async function runTool(
           buscado: input.nombre_completo,
           total_coincidencias: empatan.length,
           vigentes: vivos,
-          candidatos: empatan.slice(0, 8),
-          instruccion: relajado
-            ? `Nadie se llama exactamente así, pero estos se parecen. MUÉSTRALOS en una tabla con `
-              + `número de empleado, nombre y puesto, y pregunta a cuál se refiere.`
-            : `Hay ${empatan.length} coincidencias (${vivos} siguen en la empresa). MUÉSTRALAS en una `
-              + `tabla con número de empleado, nombre y puesto, y pregunta a cuál se refiere.`,
+          // Se dice si cada uno sigue en la empresa, en una palabra y ya interpretada.
+          //
+          // Sin esto la lista no sirve para elegir: los candidatos traen `status_rh`, pero dejar que
+          // el modelo lo traduzca es dejarle decidir qué cuenta como baja. Se manda resuelto con el
+          // mismo criterio que usa la página de Social —cualquier status distinto de BAJA— para que
+          // la tabla y la pantalla no puedan discrepar.
+          candidatos: empatan.slice(0, 8).map((f) => ({
+            ...f,
+            estatus: esVigente(f) ? "VIGENTE" : "BAJA",
+          })),
+          instruccion: (relajado
+            ? `Nadie se llama exactamente así, pero estos se parecen. `
+            : `Hay ${empatan.length} coincidencias (${vivos} siguen en la empresa). `)
+            + `MUÉSTRALOS TODOS en una tabla con número de empleado, nombre, puesto y la columna `
+            + `«estatus» (VIGENTE o BAJA), y pregunta a cuál se refiere. NO descartes a los de BAJA `
+            + `ni los omitas de la tabla: de una baja también se consultan su equipo por devolver, `
+            + `sus vacaciones y su expediente.`,
         };
       }
       targetId = String(fila!.id);
