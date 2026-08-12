@@ -80,24 +80,45 @@ function igualesEnTiempoConstante(a: string, b: string): boolean {
 }
 
 /// El encabezado de cifras de una ficha de vacaciones.
-///
-/// Existe como constante porque cumple DOS papeles: se escribe al armar la ficha, y se busca en el
-/// texto del modelo para detectar una falsificacion.
-///
-/// ─── El fallo que lo obliga ──────────────────────────────────────────────────
-///
-/// Con la ficha determinista puesta, dos consultas salieron correctas -Enrique 102 dias, Claudia
-/// Andrea 15- y la tercera devolvio "CLAUDIA PATRICIA BRAVO LOMELI — empleado 2277, 8 dias" con este
-/// mismo formato. No existe nadie con ese nombre y el 2277 es otra persona.
-///
-/// Los tiempos lo delatan: las dos correctas tardaron 8051 y 8316 ms -una llamada con herramienta- y
-/// la falsa 2391 ms, lo que tarda un saludo. El modelo NO llamo a la herramienta: copio el formato.
-///
-/// Y lo copio porque yo se lo enseñe. La respuesta enviada se guardaba en el hilo como mensaje del
-/// asistente, asi que despues de dos fichas correctas el modelo tenia dos ejemplos propios que
-/// imitar. Eso convirtio el arreglo en algo PEOR que el fallo original: antes una respuesta falsa
-/// parecia prosa; con la plantilla aprendida parece una ficha verificada.
 const FIRMA_FICHA = "Dias disponibles: ";
+
+/// Quita acentos para comparar texto. Aqui no hace falta respetar la enie.
+function sinAcentos(s: string): string {
+  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+/// Si el modelo afirma una cifra de dias de vacaciones que la herramienta NO respalda.
+///
+/// ─── Tres intentos, y por que este va en otro sitio ──────────────────────────
+///
+/// El modelo contesta preguntas de vacaciones SIN llamar a la herramienta y se inventa las cifras.
+/// Los tiempos lo demuestran: las respuestas correctas tardan ~8000 ms -una llamada con
+/// herramienta- y las inventadas ~2400 ms, lo que tarda un saludo.
+///
+/// Lo intente dos veces mirando el FORMATO, y las dos veces el modelo aprendio la plantilla nueva:
+///
+///   1. Guarde en la memoria del hilo la ficha ya formateada. Copio la ficha:
+///      "CLAUDIA PATRICIA BRAVO LOMELI — empleado 2277 / Dias disponibles: *8*". Nadie con ese
+///      nombre existe y el 2277 es otra persona.
+///   2. Guarde entonces una nota en vez de la ficha. Copio la nota:
+///      "[el sistema entrego la ficha de vacaciones de BRAVO LOMELI: 0 dias disponibles".
+///
+/// La leccion es que va a imitar CUALQUIER plantilla que quede en la memoria, asi que elegir otro
+/// texto que guardar no arregla nada. El formato es el sintoma; la enfermedad es contestar sin
+/// consultar. Por eso el guardia mira las DOS cosas a la vez —de que iba la pregunta y si hay dato
+/// detras— y no como venia escrita la respuesta.
+///
+/// Deliberadamente NO bloquea hablar de vacaciones sin cifras: "pide tus vacaciones con tu jefe" es
+/// una respuesta legitima que no afirma ningun saldo.
+function afirmaDiasSinRespaldo(pregunta: string, texto: string): boolean {
+  const p = sinAcentos(pregunta).toLowerCase();
+  if (!/vacacion|dias disponibles|antiguedad|saldo/.test(p)) return false;
+
+  const t = sinAcentos(texto).toLowerCase();
+  return /\d+\s*dias/.test(t)          // "8 dias", "0 dias"
+    || /dias\s*(disponibles)?\s*:?\s*\*?\d/.test(t)  // "Dias disponibles: *8*"
+    || /disponibles?\s*:?\s*\*?\d/.test(t);           // "disponibles: 15"
+}
 
 /// Arma el texto de una respuesta de vacaciones con los datos de la herramienta.
 ///
@@ -116,8 +137,9 @@ const FIRMA_FICHA = "Dias disponibles: ";
 /// una de ellas con numero de empleado y fecha de vencimiento inventados. Ninguna habria pasado con
 /// esto puesto, porque aqui el modelo no escribe ni un numero.
 ///
-/// Devuelve tambien `nota`: lo que se guarda en la memoria del hilo, que NO es el bloque. Ver
-/// `FIRMA_FICHA` para el por que.
+/// Devuelve tambien `nota`: lo que se guarda en la memoria del hilo, que NO es el bloque. Da igual
+/// cual de los dos se guarde —el modelo imita los dos— asi que quien impide una cifra inventada es
+/// `afirmaDiasSinRespaldo`, no la eleccion de texto. La nota se queda porque es mas corta.
 function textoDeVacaciones(structured: unknown): { texto: string; nota: string } | null {
   const s = structured as { type?: string; data?: Record<string, unknown> } | null;
   if (!s || s.type !== "vacaciones" || !s.data) return null;
@@ -429,17 +451,17 @@ async function atender(
     const ficha = textoDeVacaciones(datos.structured);
     const respuesta = (ficha?.texto ?? datos.text ?? "").trim();
 
-    // Una ficha sin datos detras es una falsificacion, y no se manda.
+    // Una cifra de dias sin dato detras no se manda. Ver `afirmaDiasSinRespaldo`.
     //
-    // Si el texto lleva la firma pero no vino `structured`, el modelo escribio las cifras de su
-    // cosecha. Es el unico caso en el que se corrige lo que dijo en lugar de reenviarlo: dejarlo
-    // pasar seria entregar un numero inventado con la apariencia de un dato del sistema.
-    if (!ficha && respuesta.includes(FIRMA_FICHA)) {
+    // Es el unico caso en el que el puente corrige lo que dijo Soli en lugar de reenviarlo: dejarlo
+    // pasar seria entregar un numero inventado con la apariencia de un dato del sistema, y eso es
+    // peor que no contestar.
+    if (!ficha && afirmaDiasSinRespaldo(m.texto, respuesta)) {
       await registrar(svc, telefono, profileId, "ERROR", m.texto, respuesta,
-        "el modelo imito el formato de la ficha sin que la herramienta devolviera datos");
+        "el modelo afirmo dias de vacaciones sin que la herramienta devolviera datos");
       await enviar(destino,
         "No pude confirmar ese dato con el sistema, así que prefiero no dártelo. " +
-        "Vuelve a preguntarme con el nombre completo o el número de empleado.");
+        "Vuelve a preguntarme con el nombre y los apellidos, o con el número de empleado.");
       return;
     }
 

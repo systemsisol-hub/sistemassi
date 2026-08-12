@@ -40,9 +40,13 @@ const lineaFirma = src.match(/^const FIRMA_FICHA = .*$/m);
 if (!lineaFirma) throw new Error('no se encontro FIRMA_FICHA');
 
 const tmp = join(tmpdir(), 'puente-vacaciones.ts');
-writeFileSync(tmp, `${lineaFirma[0]}\n\n${extraerFuncion('textoDeVacaciones')}\n`
-  + 'export { textoDeVacaciones, FIRMA_FICHA };\n', 'utf8');
-const { textoDeVacaciones, FIRMA_FICHA } = await import('file://' + tmp.replace(/\\/g, '/'));
+writeFileSync(tmp, `${lineaFirma[0]}\n\n`
+  + `${extraerFuncion('sinAcentos')}\n\n`
+  + `${extraerFuncion('afirmaDiasSinRespaldo')}\n\n`
+  + `${extraerFuncion('textoDeVacaciones')}\n`
+  + 'export { textoDeVacaciones, afirmaDiasSinRespaldo, FIRMA_FICHA };\n', 'utf8');
+const { textoDeVacaciones, afirmaDiasSinRespaldo, FIRMA_FICHA } =
+  await import('file://' + tmp.replace(/\\/g, '/'));
 
 let fallos = 0;
 function ok(desc, cond, extra = '') {
@@ -95,17 +99,37 @@ ok('la nota no lleva bullets ni asteriscos de formato',
 ok('pero SI conserva el dato para una pregunta de seguimiento',
    f.nota.includes('102') && f.nota.includes('ENRIQUE ORTEGA GOMEZ'), f.nota);
 
-console.log('\nLa firma sirve para detectar una ficha falsificada');
-// El texto real que devolvio el modelo el 11/08/2026 a las 19:58, sin haber llamado a la
-// herramienta: 2391 ms frente a los ~8000 de una consulta con herramienta. No existe nadie con ese
-// nombre y el 2277 es otra persona.
-const falsificada = '*CLAUDIA PATRICIA BRAVO LOMELI* — empleado 2277\n'
-  + 'Dias disponibles: *8*\n\nPor periodo:\n• 2024 - 2025: 8 de 8\n\n'
-  + '(4 periodos anteriores ya consumidos)';
-ok('la falsificacion real se detecta por la firma', falsificada.includes(FIRMA_FICHA));
+console.log('\nSe detecta una cifra de dias que la herramienta no respalda');
+// Los TRES textos falsos reales, en el orden en que el modelo los produjo. Cada uno imita la
+// plantilla que le deje en la memoria en el intento anterior, y por eso el guardia ya no mira el
+// formato: mira de que iba la pregunta y si hay dato detras.
+const inventados = [
+  ['prosa, 11/08 18:20',
+   'Consultando al sistema... El cálculo arroja **0 días disponibles**. No veo periodos registrados.'],
+  ['imitando la ficha, 11/08 19:58',
+   '*CLAUDIA PATRICIA BRAVO LOMELI* — empleado 2277\nDias disponibles: *8*\n\nPor periodo:\n'
+   + '• 2024 - 2025: 8 de 8\n\n(4 periodos anteriores ya consumidos)'],
+  ['imitando la nota, 12/08 08:41',
+   '[el sistema entregó la ficha de vacaciones de BRAVO LOMELI: 0 días disponibles'],
+  ['la cifra inventada de Ana Maria, 11/08 18:32',
+   'Ana María López Vigil, 1250:\n- Disponibles: **16 días**\n- Asignados: 20'],
+];
+for (const [comoEra, texto] of inventados) {
+  ok(`se bloquea: ${comoEra}`, afirmaDiasSinRespaldo('vacaciones de claudia bravo', texto), texto);
+}
 ok('sin structured no se produce ficha', textoDeVacaciones(null) === null);
-ok('una respuesta normal del modelo NO se confunde con una ficha',
-   !'El número de empleado de Marco Antonio es 0186.'.includes(FIRMA_FICHA));
+
+console.log('\nY NO se bloquea lo legitimo');
+ok('hablar de vacaciones sin dar cifras',
+   !afirmaDiasSinRespaldo('puedo pedir vacaciones en diciembre?',
+     'Eso lo autoriza tu jefe directo. Puedes crear la solicitud y queda pendiente de aprobación.'));
+ok('decir que no encontro a la persona',
+   !afirmaDiasSinRespaldo('vacaciones de claudia bravo lomeli',
+     'No existe ningún colaborador con ese nombre. ¿Lo busco por número de empleado?'));
+ok('una pregunta que no es de vacaciones, aunque lleve numeros',
+   !afirmaDiasSinRespaldo('numero de empleado de marco antonio',
+     'Es el 0186, y lleva 8 años en la empresa.'));
+ok('un saludo', !afirmaDiasSinRespaldo('Soli?', '¡Hola! ¿En qué te ayudo?'));
 
 console.log('\nCuando NO hay datos de vacaciones, se cae al texto del modelo');
 ok('otro tipo de structured', textoDeVacaciones({ type: 'collaborators', data: [] }) === null);
