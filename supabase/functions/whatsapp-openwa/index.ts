@@ -103,10 +103,10 @@ function sinAcentos(s: string): string {
 ///   2. Guarde entonces una nota en vez de la ficha. Copio la nota:
 ///      "[el sistema entrego la ficha de vacaciones de BRAVO LOMELI: 0 dias disponibles".
 ///
-/// La leccion es que va a imitar CUALQUIER plantilla que quede en la memoria, asi que elegir otro
-/// texto que guardar no arregla nada. El formato es el sintoma; la enfermedad es contestar sin
-/// consultar. Por eso el guardia mira las DOS cosas a la vez —de que iba la pregunta y si hay dato
-/// detras— y no como venia escrita la respuesta.
+/// La causa de fondo estaba en QUE se guardaba en la memoria, y se arreglo ahi: ver el upsert de
+/// `whatsapp_conversaciones`. Esto se queda como red de seguridad, no como el arreglo. El formato es
+/// el sintoma; la enfermedad es contestar sin consultar, y por eso mira las DOS cosas a la vez —de
+/// que iba la pregunta y si hay dato detras— y no como venia escrita la respuesta.
 ///
 /// Deliberadamente NO bloquea hablar de vacaciones sin cifras: "pide tus vacaciones con tu jefe" es
 /// una respuesta legitima que no afirma ningun saldo.
