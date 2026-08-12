@@ -254,6 +254,7 @@ Reglas importantes:
 - Si te piden algo fuera de tu acceso, dilo con claridad y no lo intentes. NO afirmes que puedes hacer algo que no está en la lista de arriba.
 - Para operaciones de escritura SIEMPRE muestra un resumen y pide confirmación antes de ejecutar.
 - Para buscar a una persona por su nombre usa `nombre_completo`, NUNCA `nombre`: los apellidos están en campos aparte y el nombre entero en `nombre` no encuentra nada.
+- Si te preguntan las vacaciones de OTRA persona, llama a `calcular_vacaciones` con `nombre_completo` en UNA sola llamada. NO busques antes a la persona: la herramienta la identifica sola. Los días, los periodos, el nombre y el número de empleado se toman TAL CUAL de su respuesta; no calcules ni completes nada por tu cuenta.
 - Al buscar colaboradores: NO añadas el parámetro status_rh automáticamente. Devuelve todos los registros que coincidan independientemente de su status, a menos que se pida EXPLÍCITAMENTE.
 - Si una búsqueda devuelve 0 resultados, infórmalo claramente. NUNCA inventes ni asumas información que no esté en la respuesta de la herramienta.
 - Si una herramienta devuelve un campo `error`, eso es un FALLO, no un dato. Dilo como fallo y NO lo traduzcas a un cero, a «no tiene» ni a «no hay registros». Un saldo de cero días sólo se afirma si la herramienta devolvió periodos y un total.
@@ -291,8 +292,9 @@ const ALL_TOOLS = [
       parameters: {
         type: "object",
         properties: {
-          usuario_id: { type: "string", description: "[Solo admin] UUID del colaborador, tal como lo devuelve buscar_colaborador en el campo `id`. Si se omite, calcula para el usuario actual." },
-          numero_empleado: { type: "string", description: "[Solo admin] Número de empleado, por si no tienes el UUID. No hace falta pasar los dos." },
+          nombre_completo: { type: "string", description: "[Solo admin] Nombre y apellidos de la persona: \"Enrique Ortega Gomez\". ÚSALO ASÍ, en UNA sola llamada. No busques antes a la persona con buscar_colaborador: esta herramienta la identifica sola." },
+          numero_empleado: { type: "string", description: "[Solo admin] Número de empleado, si lo tienes." },
+          usuario_id: { type: "string", description: "[Solo admin] UUID del colaborador. Si se omite y no pasas nombre ni número, calcula para el usuario actual." },
         },
       },
     },
@@ -698,7 +700,41 @@ async function runTool(
     // distinga de un saldo de cero: el fallo que dio origen a esto fue que Soli contestó «0 días
     // disponibles, sin periodos registrados» de una persona que tenía 102 días y 13 periodos.
     let targetId = userId;
-    if (isAdmin && input.numero_empleado) {
+    if (isAdmin && input.nombre_completo) {
+      // Se identifica a la persona AQUÍ, en la misma llamada.
+      //
+      // Antes hacían falta dos llamadas encadenadas —buscar_colaborador para sacar el uuid y luego
+      // ésta— y ahí se rompía todo: preguntar por las vacaciones PROPIAS funcionaba, porque es una
+      // sola llamada, mientras que preguntar por otra persona devolvía cifras inventadas. Medido
+      // sobre cuatro consultas reales: 4 de 4 mal, incluyendo un número de empleado y una fecha de
+      // vencimiento que no existen. Quitar el encadenamiento quita la ocasión de inventar.
+      const tokens = tokensDeNombre(String(input.nombre_completo));
+      if (tokens.length === 0) {
+        return { error: "El nombre venía vacío o sin letras." };
+      }
+      const guia = tokenGuia(tokens);
+      const { data: cands } = await db.from("profiles")
+        .select("id,nombre,paterno,materno,numero_empleado,status_rh")
+        .or(`nombre.ilike.%${guia}%,paterno.ilike.%${guia}%,materno.ilike.%${guia}%`)
+        .limit(CANDIDATOS_NOMBRE);
+      const empatan = ((cands || []) as unknown as Record<string, unknown>[])
+        .filter((f) => empataNombre(f, tokens));
+      if (empatan.length === 0) {
+        return { error: `No existe ningún colaborador llamado "${input.nombre_completo}". Esto es un fallo de identificación, NO un saldo de cero días.` };
+      }
+      if (empatan.length > 1) {
+        // Se devuelven los candidatos para que pueda preguntar, en lugar de elegir uno al azar.
+        return {
+          error: `"${input.nombre_completo}" corresponde a ${empatan.length} personas. Pregúntale al usuario a cuál se refiere y vuelve a llamar con numero_empleado.`,
+          candidatos: empatan.map((f) => ({
+            numero_empleado: f.numero_empleado,
+            nombre: [f.nombre, f.paterno, f.materno].filter(Boolean).join(" "),
+            status_rh: f.status_rh,
+          })),
+        };
+      }
+      targetId = String(empatan[0].id);
+    } else if (isAdmin && input.numero_empleado) {
       const variants = numeroEmpleadoVariants(String(input.numero_empleado));
       const { data: encontrado } = await db.from("profiles").select("id")
         .or(variants.map((v) => `numero_empleado.eq.${v}`).join(",")).limit(2);
