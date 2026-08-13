@@ -471,6 +471,10 @@ class _WhatsappPageState extends State<WhatsappPage> {
         'AMBIGUO' => (c.danger, 'Teléfono repetido'),
         'SIN_PERMISO' => (c.warn, 'Sin permiso IA'),
         'LIMITE' => (c.warn, 'Límite'),
+        // En gris y no en rojo: no es un fallo, es la decisión de no contestar en grupos. Sin este
+        // caso caía en el `_` y salía como «Error», que manda a buscar una avería que no existe.
+        // Se registra uno por grupo y por hora, así que un grupo activo no inunda esta lista.
+        'GRUPO' => (c.ink3, 'Grupo (no se contesta)'),
         _ => (c.danger, 'Error'),
       };
 }

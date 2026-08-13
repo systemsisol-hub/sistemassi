@@ -41,7 +41,10 @@ const TURNOS_MEMORIA = 12;
 
 type Resultado =
   | "ATENDIDO" | "NO_AUTORIZADO" | "SIN_REGISTRO" | "AMBIGUO"
-  | "SIN_PERMISO" | "LIMITE" | "ERROR";
+  | "SIN_PERMISO" | "LIMITE" | "ERROR"
+  /// Llego de un grupo. No se contesta -ver la puerta del manejador- y se registra uno por grupo
+  /// y por hora, para que en el panel se vea la causa en lugar de un silencio.
+  | "GRUPO";
 
 // ─── Utilidades ──────────────────────────────────────────────────────────────
 
@@ -498,9 +501,40 @@ Deno.serve(async (req: Request) => {
 
   const m = extraerMensaje(cuerpo);
 
+  // ── Los grupos se registran, sin contestar ────────────────────────────────
+  //
+  // Soli NO responde en grupos, y eso no cambia: la identidad se resuelve por el telefono de quien
+  // escribe, y una respuesta ahi -nombre, numero de empleado y saldo de vacaciones- queda a la vista
+  // de todo el grupo. Seria una fuga de datos de RH con apariencia de funcion util.
+  //
+  // Lo que cambia es que ANTES no dejaba rastro: si alguien metia el numero a un grupo y luego
+  // reportaba «Soli no contesta», en el panel no habia nada que mirar. Pedido por el usuario.
+  //
+  // Con TOPE DE UNO POR GRUPO Y POR HORA. Sin el, un grupo activo convierte la bitacora en un buzon
+  // de basura y esconde justo los rechazos que hay que atender. Un renglon por hora basta para
+  // contestar «¿por que no responde?», que es para lo que sirve.
+  //
+  // Se guardan las CLAVES del sobre en `detalle`. Ahi esta la respuesta a si se podria atender una
+  // mencion -«@sistemassi» en un grupo-: hace falta saber si OpenWA manda los mencionados y con que
+  // nombre de campo, y esto lo dira con el primer mensaje real en lugar de que yo lo adivine.
+  if (m.grupo && !m.deMi) {
+    const sobre = (cuerpo.payload ?? cuerpo) as Record<string, unknown>;
+    const datos = (sobre.data ?? sobre) as Record<string, unknown>;
+    const detalle = `grupo=${m.chatId ?? "?"}; claves=${Object.keys(datos).sort().join(",")}`;
+    const { data: reciente } = await svc.from("whatsapp_bitacora")
+      .select("id").eq("resultado", "GRUPO")
+      .ilike("detalle", `grupo=${m.chatId ?? "?"};%`)
+      .gte("creado_en", new Date(Date.now() - 3600_000).toISOString())
+      .limit(1);
+    if (!reciente || reciente.length === 0) {
+      await registrar(svc, m.telefono ?? "grupo", null, "GRUPO", m.texto, null, detalle, m.id);
+    }
+    return new Response(JSON.stringify({ ok: true, ignorado: "grupo" }), { status: 200 });
+  }
+
   // Se responde 200 a todo lo que no sea una pregunta atendible, para que OpenWA no reintente algo
   // que nunca va a cambiar: los reintentos son para caídas, no para mensajes que se ignoran.
-  if (m.deMi || m.grupo || !m.texto || !m.texto.trim()) {
+  if (m.deMi || !m.texto || !m.texto.trim()) {
     return new Response(JSON.stringify({ ok: true, ignorado: true }), { status: 200 });
   }
 
