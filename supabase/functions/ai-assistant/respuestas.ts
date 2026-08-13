@@ -43,6 +43,103 @@ export function preguntaSusVacaciones(texto: string): boolean {
   return /\bmis\b|\bmi\b|\btengo\b|me\s+quedan|me\s+toca|me\s+corresponden/.test(t);
 }
 
+/** Si la persona pide LAS FALTAS o la ASISTENCIA de alguien, y de quien.
+ *
+ * Misma forma que `preguntaIncidenciasDe`, y por el mismo motivo: las cifras de asistencia se
+ * comparan con la pantalla, y una cifra que el modelo transcriba mal se convierte en una discusion
+ * sobre el descuento de la nomina de alguien.
+ */
+export function preguntaFaltasDe(
+  texto: string,
+): { propio: true } | { quien: string } | null {
+  const t = sinAcentos(texto).toLowerCase().trim();
+
+  if (!/\bfaltas?\b|asistencia|retardos?\b|puntualidad|checad|checo\b/.test(t)) return null;
+
+  // «falta» tambien es un verbo: «me falta un dia de vacaciones» no es una pregunta de asistencia.
+  if (/falta\s+(un|una|el|la|mi|por)\b|hace\s+falta|me\s+falta/.test(t)) return null;
+
+  // Del conjunto: eso lo contesta el modelo con la herramienta, o la pagina.
+  if (/cuantas\s+faltas\s+hay|quien\s+(falto|tiene\s+mas)|toda\s+la\s+empresa|por\s+zona|el\s+equipo\b/
+      .test(t)) {
+    return null;
+  }
+
+  if (/\bmis\b|\bmi\b|\btengo\b|\btuve\b|me\s+pusieron/.test(t)) return { propio: true };
+
+  const m = /\b(?:de|del|tiene|tuvo|lleva)\s+(.+)$/.exec(t);
+  if (!m) return null;
+
+  let quien = m[1].trim().replace(/[?!.,;:]+$/, "");
+  let antes;
+  do {
+    antes = quien;
+    quien = quien.replace(/^(el|la|los|las|sr|sra|srta|senor|senora|don|dona|ing|lic|c)\s+/, "").trim();
+  } while (quien !== antes);
+
+  if (quien.length < 3) return null;
+  if (/^(19|20)\d{2}$/.test(quien)) return null;
+  if (/^(este|esta|ese|esa|hoy|ayer|manana|mes|ano|semana|quincena|periodo|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)/
+      .test(quien)) {
+    return null;
+  }
+  return { quien };
+}
+
+/** La asistencia de alguien, escrita desde las cifras de la herramienta.
+ *
+ * Las cifras son las MISMAS que la pagina de Asistencia porque salen de la misma consulta; ver
+ * `buscar_asistencia` en ejecutar.ts.
+ */
+export function textoAsistencia(
+  datos: Record<string, unknown>,
+  deQuien: string,
+): string {
+  const dia = (v: unknown) => {
+    const p = String(v ?? "").slice(0, 10).split("-");
+    return p.length === 3 ? `${p[2]}/${p[1]}` : String(v ?? "—");
+  };
+
+  // «No hay datos» y «no tiene faltas» son cosas distintas, y confundirlas es lo peor que puede
+  // hacer esto: una persona sin checador saldria con asistencia perfecta.
+  if (datos.sin_datos === true) {
+    return `No hay dias de checador cargados para ${deQuien} en ese rango, asi que no puedo decir `
+      + `cuantas faltas tiene: no es lo mismo que no tenerlas. Puede que no use checador, que su `
+      + `horario no este capturado, o que ese reporte no se haya importado.`;
+  }
+
+  const faltas = Number(datos.faltas_sin_justificar ?? 0);
+  const just = Number(datos.justificados ?? 0);
+  const ret = Number(datos.retardos ?? 0);
+  const pct = datos.puntualidad_pct;
+
+  const lineas = [
+    `${deQuien}, del ${dia(datos.desde)} al ${dia(datos.hasta)} `
+      + `(${datos.dias_esperados} dias de horario):`,
+    `• Faltas sin justificar: ${faltas}`,
+    `• Justificados: ${just}`,
+    `• Retardos: ${ret}`
+      + (ret > 0 ? `, ${datos.minutos_de_retardo} minutos en total` : ""),
+  ];
+  if (pct !== null && pct !== undefined) lineas.push(`• Puntualidad: ${pct}%`);
+  // El dato que de verdad se busca cuando se pregunta por faltas.
+  lineas.push(`• Dias a descontar: ${datos.dias_de_descuento}`
+    + ` (${ret} retardos entre ${datos.retardos_por_descuento}, mas las faltas)`);
+
+  const conIncidencia = (datos.dias_con_incidencia ?? []) as Array<Record<string, unknown>>;
+  if (conIncidencia.length > 0) {
+    lineas.push("", "Dias:");
+    for (const d of conIncidencia.slice(0, 15)) {
+      lineas.push(`• ${dia(d.fecha)} — ${d.estado}`
+        + (d.motivo ? `: ${d.motivo}` : ""));
+    }
+    if (conIncidencia.length > 15) {
+      lineas.push(`(y ${conIncidencia.length - 15} mas)`);
+    }
+  }
+  return lineas.join("\n");
+}
+
 /** Si el mensaje es SOLO un identificador: un uuid, o un numero de empleado.
  *
  * ─── El fallo que la hizo necesaria ──────────────────────────────────────────

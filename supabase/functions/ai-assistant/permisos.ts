@@ -59,6 +59,9 @@ export const PERMISO_POR_HERRAMIENTA: Record<string, string> = {
   actualizar_inventario:  "show_issi",
   buscar_contactos:       "show_external_contacts",
   gestionar_contacto:     "show_external_contacts",
+  // Mismo permiso que abre la pagina de Asistencia. Un usuario normal solo ve lo suyo; el filtro por
+  // `profile_id` lo pone la herramienta, no el modelo.
+  buscar_asistencia:      "show_asistencia",
 };
 
 /// Qué hace cada herramienta, en una frase y en español.
@@ -80,6 +83,7 @@ export const QUE_HACE: Record<string, string> = {
   actualizar_incidencia:  "Cambiar el estatus u otros datos de una incidencia",
   actualizar_inventario:  "Asignar o liberar un equipo",
   gestionar_contacto:     "Crear o modificar un contacto externo",
+  buscar_asistencia:      "Faltas, retardos y puntualidad, con las mismas cifras que la pagina de Asistencia",
 };
 
 /// Las preguntas que se resuelven SIN pasar por el modelo, para mostrarlas en la página.
@@ -93,6 +97,7 @@ export const VIAS_DIRECTAS = [
   { pregunta: "«qué equipo tengo asignado»", resuelve: "Los equipos que están a tu nombre en el inventario, con su serie" },
   { pregunta: "«incidencias de <persona>» / «mis incidencias»", resuelve: "El historial con sus fechas de salida, regreso, días y periodo" },
   { pregunta: "un número de empleado o un UUID a secas", resuelve: "La ficha de esa persona, con su nombre y su número del mismo registro" },
+  { pregunta: "«faltas de <persona>» / «mis faltas»", resuelve: "Faltas, justificados, retardos y días de descuento, con los días listados" },
 ];
 
 export type Permisos = Record<string, unknown>;

@@ -557,6 +557,162 @@ export async function runTool(
     return { success: true, updated: data };
   }
 
+  // ── ASISTENCIA ────────────────────────────────────────────────────
+  //
+  // Las cifras salen de las MISMAS dos vistas que pinta la pagina de Asistencia, y se agregan con las
+  // mismas reglas. No es un detalle de estilo: si aqui se contara distinto, habria dos verdades sobre
+  // las faltas de una persona y la discusion la ganaria quien tuviera la pantalla abierta.
+  //
+  // Copiado de `checador_panel.dart`, que es la fuente:
+  //
+  //   - Faltas y justificados salen de `checador_dias`, y SOLO de los dias con `esperado = true`. La
+  //     vista tambien trae los que alguien trabajo fuera de su horario -un sabado en una jornada L-V-
+  //     y esos no entran en ninguna metrica.
+  //   - Retardos y puntualidad salen de `checador_entradas`, que va por checada y no por dia. Se
+  //     cuentan solo las evaluadas, o sea las que traen `es_retardo` no nulo.
+  //   - Dias de descuento = retardos ÷ `retardos_por_descuento` + faltas sin justificar.
+  if (name === "buscar_asistencia") {
+    // A quien. Un usuario normal solo puede verse a si mismo, igual que en inventario e incidencias.
+    let objetivo = userId;
+    let deQuien = "propio";
+    if (!isAdmin && (input.nombre_completo || input.numero_empleado || input.usuario_id)) {
+      return {
+        error: "Solo un administrador puede consultar la asistencia de otra persona. "
+          + "Si es la tuya, vuelve a preguntar sin nombre ni numero.",
+      };
+    }
+    if (isAdmin && input.nombre_completo) {
+      const { fila, candidatos, relajado } = await resolverPorNombre(
+        db, String(input.nombre_completo),
+        "id,nombre,paterno,materno,numero_empleado,status_rh,puesto,area",
+      );
+      if (candidatos.length === 0) {
+        return {
+          necesita_confirmacion: true, candidatos: [], buscado: input.nombre_completo,
+          instruccion: `No hay nadie que se llame "${input.nombre_completo}". Pide un apellido, `
+            + `el correo o el numero de empleado.`,
+        };
+      }
+      if (candidatos.length > 1 || relajado || !fila) {
+        return {
+          necesita_confirmacion: true,
+          buscado: input.nombre_completo,
+          total_coincidencias: candidatos.length,
+          candidatos: candidatos.slice(0, 8).map((f) => ({
+            ...f, estatus: esVigente(f) ? "VIGENTE" : "BAJA",
+          })),
+          instruccion: "MUESTRALOS TODOS en una tabla con numero de empleado, nombre, puesto y la "
+            + "columna «estatus», y pregunta a cual se refiere. NO omitas a los de BAJA.",
+        };
+      }
+      objetivo = String(fila.id);
+      deQuien = "de un usuario";
+    } else if (isAdmin && input.numero_empleado) {
+      const variants = numeroEmpleadoVariants(String(input.numero_empleado));
+      const { data: enc } = await db.from("profiles").select("id")
+        .or(variants.map((v) => `numero_empleado.eq.${v}`).join(",")).limit(2);
+      if (!enc || enc.length === 0) {
+        return { error: `No existe ningun colaborador con el numero de empleado ${input.numero_empleado}. Esto es un fallo de identificacion, NO una asistencia perfecta.` };
+      }
+      objetivo = (enc[0] as { id: string }).id;
+      deQuien = "de un usuario";
+    } else if (isAdmin && input.usuario_id) {
+      const dado = String(input.usuario_id);
+      if (!esUuid(dado)) {
+        return { error: `"${dado}" no es un UUID. Si es un numero de empleado pasalo en numero_empleado.` };
+      }
+      objetivo = dado;
+      deQuien = objetivo === userId ? "propio" : "de un usuario";
+    }
+
+    const { data: quienEs } = await db.from("profiles")
+      .select("nombre,paterno,materno,numero_empleado,area,puesto")
+      .eq("id", objetivo).single();
+
+    let qDias = db.from("checador_dias")
+      .select("fecha,estado,esperado,checo,incompleta,justificado,justificacion_motivo," +
+        "justificacion_tipo,es_retardo,minutos_retardo,hora_entrada,entrada_esperada,horario_nombre")
+      .eq("profile_id", objetivo).eq("esperado", true);
+    let qEnt = db.from("checador_entradas")
+      .select("fecha,es_retardo,minutos_retardo").eq("profile_id", objetivo);
+    if (input.desde) {
+      qDias = (qDias as any).gte("fecha", input.desde);
+      qEnt  = (qEnt  as any).gte("fecha", input.desde);
+    }
+    if (input.hasta) {
+      qDias = (qDias as any).lte("fecha", input.hasta);
+      qEnt  = (qEnt  as any).lte("fecha", input.hasta);
+    }
+    const { data: dias, error: errDias } = await (qDias as any).order("fecha");
+    if (errDias) return { error: errDias.message };
+    const { data: entradas, error: errEnt } = await (qEnt as any).order("fecha");
+    if (errEnt) return { error: errEnt.message };
+
+    const filasDias = (dias || []) as Array<Record<string, unknown>>;
+    const filasEnt  = (entradas || []) as Array<Record<string, unknown>>;
+
+    // Sin un solo dia esperado no hay nada que medir, y decirlo es MUY distinto de decir cero faltas.
+    if (filasDias.length === 0) {
+      const { data: rango } = await db.from("checador_dias")
+        .select("fecha").order("fecha", { ascending: false }).limit(1);
+      const ultima = (rango || [])[0] as Record<string, unknown> | undefined;
+      return {
+        sin_datos: true,
+        colaborador: quienEs
+          ? [quienEs.nombre, quienEs.paterno, quienEs.materno].filter(Boolean).join(" ")
+          : null,
+        numero_empleado: quienEs?.numero_empleado ?? null,
+        instruccion: "No hay dias de checador cargados para esa persona en ese rango. Eso NO significa "
+          + "que no tenga faltas: significa que no hay datos. Puede que no use checador, que su horario "
+          + "no este capturado, o que el reporte de esas fechas no se haya importado."
+          + (ultima ? ` El ultimo dia con datos en el sistema es ${ultima.fecha}.` : ""),
+      };
+    }
+
+    const evaluadas = filasEnt.filter((e) => e.es_retardo !== null && e.es_retardo !== undefined);
+    const retardos  = evaluadas.filter((e) => e.es_retardo === true);
+    const faltas       = filasDias.filter((d) => d.estado === "FALTA");
+    const justificados = filasDias.filter((d) => d.estado === "JUSTIFICADO");
+
+    const { data: umb } = await db.from("checador_umbrales")
+      .select("retardos_por_descuento").limit(1);
+    const porDescuento = Number(((umb || [])[0] as Record<string, unknown>)?.retardos_por_descuento ?? 3);
+
+    return {
+      colaborador: quienEs
+        ? [quienEs.nombre, quienEs.paterno, quienEs.materno].filter(Boolean).join(" ")
+        : null,
+      numero_empleado: quienEs?.numero_empleado ?? null,
+      area: quienEs?.area ?? null,
+      desde: filasDias[0]?.fecha ?? null,
+      hasta: filasDias[filasDias.length - 1]?.fecha ?? null,
+      dias_esperados: filasDias.length,
+      asistio: filasDias.filter((d) => d.checo === true).length,
+      faltas_sin_justificar: faltas.length,
+      justificados: justificados.length,
+      checadas_incompletas: filasDias.filter((d) => d.incompleta === true).length,
+      checadas_evaluadas: evaluadas.length,
+      retardos: retardos.length,
+      minutos_de_retardo: retardos.reduce((a, e) => a + (Number(e.minutos_retardo) || 0), 0),
+      puntualidad_pct: evaluadas.length === 0
+        ? null
+        : Math.round(((evaluadas.length - retardos.length) / evaluadas.length) * 1000) / 10,
+      retardos_por_descuento: porDescuento,
+      dias_de_descuento: Math.floor(retardos.length / porDescuento) + faltas.length,
+      alcance: alcanceDeLaConsulta(deQuien, "dias de asistencia"),
+      // Los dias que importan, con su fecha. Los que se checaron bien no se listan: son la mayoria y
+      // por WhatsApp una lista de 20 renglones correctos esconde los 3 que no lo son.
+      dias_con_incidencia: [...faltas, ...justificados]
+        .sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)))
+        .map((d) => ({
+          fecha: d.fecha,
+          estado: d.estado,
+          motivo: d.justificacion_motivo ?? null,
+          tipo: d.justificacion_tipo ?? null,
+        })),
+    };
+  }
+
   // ── CONTACTOS ────────────────────────────────────────────────────
   if (name === "buscar_contactos") {
     let q = db.from("external_contacts").select("*");

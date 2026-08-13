@@ -12,13 +12,15 @@ import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { leer } from './verificar_permisos.mjs';
 
 // Se leen LOS OCHO modulos, no `index.ts` solo: al partir el archivo estas funciones se fueron a
 // nombres.ts y respuestas.ts. Leer el directorio completo evita volver aqui cada vez que algo se
 // mueva de sitio.
 const aqui = dirname(fileURLToPath(import.meta.url));
 const src = readdirSync(aqui).filter((f) => f.endsWith('.ts')).sort()
-  .map((f) => readFileSync(join(aqui, f), 'utf8')).join('\n');
+  // `leer` normaliza CRLF; ver el porque en verificar_permisos.mjs.
+  .map((f) => leer(join(aqui, f))).join('\n');
 
 function extraer(nombre) {
   const i = src.indexOf(`function ${nombre}(`);

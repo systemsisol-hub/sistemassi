@@ -17,7 +17,7 @@ import { ALL_TOOLS, ToolInput } from "./herramientas.ts";
 import { CORS, igualesEnTiempoConstante, INTERNAL_SECRET, OLLAMA_BASE, OLLAMA_KEY, OLLAMA_MODEL, OLLAMA_MODEL_RESPALDO, SERVICE_KEY, SUPABASE_URL } from "./config.ts";
 import { ADMIN_ONLY_TOOLS, Identidad, PERMISO_POR_HERRAMIENTA, Permisos, puedeUsarHerramienta, QUE_HACE, VIAS_DIRECTAS } from "./permisos.ts";
 import { construirPrompt } from "./prompt.ts";
-import { afirmaDatoSinRespaldo, preguntaCumpleanos, preguntaIncidenciasDe, preguntaSuEquipo, preguntaSusVacaciones, soloUnIdentificador, textoCumpleanos, textoIncidencias, textoEquipoPropio, textoUltimaSolicitud, textoVacacionesPropias } from "./respuestas.ts";
+import { afirmaDatoSinRespaldo, preguntaCumpleanos, preguntaFaltasDe, preguntaIncidenciasDe, preguntaSuEquipo, preguntaSusVacaciones, soloUnIdentificador, textoAsistencia, textoCumpleanos, textoIncidencias, textoEquipoPropio, textoUltimaSolicitud, textoVacacionesPropias } from "./respuestas.ts";
 import { runTool } from "./ejecutar.ts";
 import { jefeAlQueSeRefiere } from "./nombres.ts";
 
@@ -194,6 +194,37 @@ Deno.serve(async (req: Request) => {
       // Si falla se deja seguir al modelo, que al menos puede explicarlo. El guardia de abajo evita
       // que convierta el fallo en un cero.
       console.log(`via directa fallo, sigue el modelo: ${propio.error}`);
+    }
+
+    // ── Via directa: las faltas o la asistencia de alguien ─────────────────
+    //
+    // Aqui no hace falta encadenar: `buscar_asistencia` resuelve el nombre por su cuenta y devuelve
+    // `necesita_confirmacion` con los candidatos cuando empata con varios, igual que
+    // `calcular_vacaciones`. Se le pasa el nombre tal cual y se mira que contesto.
+    const faltas = preguntaFaltasDe(ultimoUsuario);
+    if (faltas && puedeUsarHerramienta("buscar_asistencia", isAdmin, permisos)) {
+      const entrada = "propio" in faltas
+        ? {}
+        : (isAdmin ? { nombre_completo: faltas.quien } : null);
+      // Un usuario normal preguntando por otra persona cae al modelo, que le explica el permiso.
+      if (entrada) {
+        const asis = await runTool(
+          "buscar_asistencia", entrada, svc, isAdmin, actorId, userFullName, permisos,
+        ) as Record<string, unknown>;
+        if (!asis.error && asis.necesita_confirmacion !== true) {
+          const deQuien = "propio" in faltas
+            ? "Tu"
+            : `${asis.colaborador} (empleado ${asis.numero_empleado})`;
+          console.log(`via directa: asistencia de ${asis.numero_empleado ?? actorId}, `
+            + `${asis.faltas_sin_justificar ?? "sin datos"} faltas`);
+          return new Response(
+            JSON.stringify({ text: textoAsistencia(asis, deQuien), structured: null }),
+            { headers: { ...CORS, "Content-Type": "application/json" } },
+          );
+        }
+        console.log(`via directa de asistencia no resolvio, sigue el modelo: `
+          + `${asis.error ?? "ambiguo"}`);
+      }
     }
 
     // ── Via directa: las incidencias de alguien ────────────────────────────
