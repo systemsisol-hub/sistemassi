@@ -633,8 +633,13 @@ export async function runTool(
       .select("fecha,estado,esperado,checo,incompleta,justificado,justificacion_motivo," +
         "justificacion_tipo,es_retardo,minutos_retardo,hora_entrada,entrada_esperada,horario_nombre")
       .eq("profile_id", objetivo).eq("esperado", true);
+    // `hora` es a la que LLEGO; `hora_entrada` la que pedia su horario ese dia, y `limite` la misma
+    // mas la tolerancia. Los minutos se cuentan desde el LIMITE, no desde la entrada: 08:29 contra un
+    // limite de 08:15 son 14 minutos, no 29. Se devuelven las tres para que la respuesta se pueda
+    // leer sin tener que fiarse de la resta.
     let qEnt = db.from("checador_entradas")
-      .select("fecha,es_retardo,minutos_retardo").eq("profile_id", objetivo);
+      .select("fecha,es_retardo,minutos_retardo,hora,hora_entrada,limite,horario_nombre")
+      .eq("profile_id", objetivo);
     if (input.desde) {
       qDias = (qDias as any).gte("fecha", input.desde);
       qEnt  = (qEnt  as any).gte("fecha", input.desde);
@@ -700,6 +705,26 @@ export async function runTool(
       retardos_por_descuento: porDescuento,
       dias_de_descuento: Math.floor(retardos.length / porDescuento) + faltas.length,
       alcance: alcanceDeLaConsulta(deQuien, "dias de asistencia"),
+      // QUE DIA llego tarde y A QUE HORA, no solo cuantas veces.
+      //
+      // Reportado el 13/08/2026: preguntado por «el horario de los 7 retardos» se contesto con el
+      // total de minutos, porque era lo unico que habia aqui. La consulta ya traia `hora_entrada` y
+      // no se devolvia: un descuido mio, no una limitacion.
+      //
+      // Sale de `checador_entradas`, la MISMA fuente con la que se cuentan los retardos, asi que la
+      // lista tiene por construccion tantos renglones como dice el contador. Sacarla de
+      // `checador_dias` habria sido mas facil y podria discrepar, porque esa va por dia y esta por
+      // checada.
+      dias_de_retardo: retardos
+        .slice()
+        .sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)))
+        .map((e) => ({
+          fecha: e.fecha,
+          llego: e.hora ?? null,
+          entrada_de_su_horario: e.hora_entrada ?? null,
+          limite_con_tolerancia: e.limite ?? null,
+          minutos_tarde: e.minutos_retardo ?? null,
+        })),
       // Los dias que importan, con su fecha. Los que se checaron bien no se listan: son la mayoria y
       // por WhatsApp una lista de 20 renglones correctos esconde los 3 que no lo son.
       dias_con_incidencia: [...faltas, ...justificados]

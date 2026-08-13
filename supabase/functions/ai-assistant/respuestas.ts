@@ -54,7 +54,14 @@ export function preguntaFaltasDe(
 ): { propio: true } | { quien: string } | null {
   const t = sinAcentos(texto).toLowerCase().trim();
 
-  if (!/\bfaltas?\b|asistencia|retardos?\b|puntualidad|checad|checo\b/.test(t)) return null;
+  // «llego tarde» va aqui aunque no diga «retardo».
+  //
+  // Reportado: «que dias llego tarde brenda mondragon» se fue al modelo, que ademas pidio un rango de
+  // fechas que no necesitaba. Es la forma NORMAL de preguntarlo; nadie dice «dame los retardos».
+  if (!/\bfaltas?\b|asistencia|retardos?\b|tardanz|puntualidad|checad|checo\b/.test(t)
+      && !/lleg(o|ue|aba|o\s+tarde)?\s*(tarde|a\s+destiempo)|a\s+que\s+hora\s+lleg/.test(t)) {
+    return null;
+  }
 
   // «falta» tambien es un verbo: «me falta un dia de vacaciones» no es una pregunta de asistencia.
   if (/falta\s+(un|una|el|la|mi|por)\b|hace\s+falta|me\s+falta/.test(t)) return null;
@@ -126,9 +133,28 @@ export function textoAsistencia(
   lineas.push(`• Dias a descontar: ${datos.dias_de_descuento}`
     + ` (${ret} retardos entre ${datos.retardos_por_descuento}, mas las faltas)`);
 
+  // QUE DIA llego tarde y A QUE HORA.
+  //
+  // Reportado: pedido «el horario de los 7 retardos», la respuesta fue el total de minutos. Es lo
+  // unico que se puede hacer con un total, y lo que se queria era la hora de cada dia.
+  //
+  // `hh:mm` y no `hh:mm:ss`: los segundos del checador no dicen nada y ocupan la mitad del renglon.
+  const hora = (v: unknown) => String(v ?? "").slice(0, 5) || "—";
+  const tarde = (datos.dias_de_retardo ?? []) as Array<Record<string, unknown>>;
+  if (tarde.length > 0) {
+    lineas.push("", "Los dias que llego tarde:");
+    for (const d of tarde.slice(0, 15)) {
+      lineas.push(`• ${dia(d.fecha)}: llego ${hora(d.llego)}`
+        + `, entraba ${hora(d.entrada_de_su_horario)}`
+        + ` (limite ${hora(d.limite_con_tolerancia)})`
+        + ` — ${d.minutos_tarde} min tarde`);
+    }
+    if (tarde.length > 15) lineas.push(`(y ${tarde.length - 15} mas)`);
+  }
+
   const conIncidencia = (datos.dias_con_incidencia ?? []) as Array<Record<string, unknown>>;
   if (conIncidencia.length > 0) {
-    lineas.push("", "Dias:");
+    lineas.push("", "Faltas y justificados:");
     for (const d of conIncidencia.slice(0, 15)) {
       lineas.push(`• ${dia(d.fecha)} — ${d.estado}`
         + (d.motivo ? `: ${d.motivo}` : ""));

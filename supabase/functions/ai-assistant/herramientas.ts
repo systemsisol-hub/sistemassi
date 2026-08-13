@@ -64,7 +64,12 @@ export const ALL_TOOLS = [
         + "pagina de Asistencia. Un usuario no-admin solo ve la suya. Para la de otra persona pasa "
         + "nombre_completo, numero_empleado o usuario_id; sin eso devuelve la de quien pregunta. "
         + "Si responde `sin_datos: true` NO digas que no tiene faltas: significa que no hay datos "
-        + "de checador cargados para esas fechas, que es distinto.",
+        + "de checador cargados para esas fechas, que es distinto. "
+        + "NO PIDAS UN RANGO DE FECHAS: sin `desde` ni `hasta` devuelve todo lo cargado, y la "
+        + "respuesta te dice el rango que cubre. Pon fechas solo si el usuario las nombró. "
+        + "`dias_de_retardo` trae CADA dia que llegó tarde con la hora a la que llegó, la que pedía "
+        + "su horario y el límite con tolerancia: úsalo cuando pregunten a qué hora llegó, en vez de "
+        + "dar el total de minutos.",
       parameters: {
         type: "object",
         properties: {

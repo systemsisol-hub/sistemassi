@@ -342,7 +342,18 @@ for (const [q, esperado] of [
   const r = preguntaFaltasDe(q);
   ok(`"${q}" -> "${esperado}"`, r?.quien === esperado, JSON.stringify(r));
 }
-for (const q of ['mis faltas', 'cuantos retardos tengo', 'mi asistencia de este mes', 'tuve faltas?']) {
+// Reportado: «que dias llego tarde brenda mondragon» se fue al modelo, que ademas pidio un rango de
+// fechas que no necesitaba. Es la forma NORMAL de preguntarlo; nadie dice «dame los retardos».
+for (const [q, esperado] of [
+  ['que dias llego tarde brenda mondragon', 'brenda mondragon'],
+  ['a que hora llego marco montoya', 'marco montoya'],
+  ['dias que llego tarde hector figueroa', 'hector figueroa'],
+]) {
+  const r = preguntaFaltasDe(q);
+  ok(`"${q}" -> "${esperado}"`, r?.quien === esperado, JSON.stringify(r));
+}
+for (const q of ['mis faltas', 'cuantos retardos tengo', 'mi asistencia de este mes', 'tuve faltas?',
+                 'que dias llegue tarde']) {
   ok(`"${q}" es propia`, preguntaFaltasDe(q)?.propio === true, JSON.stringify(preguntaFaltasDe(q)));
 }
 for (const q of [
@@ -375,6 +386,14 @@ const asisReal = {
     { fecha: '2026-07-23', estado: 'JUSTIFICADO', motivo: 'permiso medico' },
     { fecha: '2026-07-29', estado: 'FALTA', motivo: null },
   ],
+  // Datos REALES de Brenda Mondragon: los minutos se cuentan desde el LIMITE, no desde la entrada.
+  // 08:29 contra un limite de 08:15 son 14 minutos, no 29.
+  dias_de_retardo: [
+    { fecha: '2026-07-16', llego: '08:29:00', entrada_de_su_horario: '08:00:00',
+      limite_con_tolerancia: '08:15:00', minutos_tarde: 14 },
+    { fecha: '2026-07-24', llego: '09:30:00', entrada_de_su_horario: '09:00:00',
+      limite_con_tolerancia: '09:15:00', minutos_tarde: 15 },
+  ],
 };
 const txtAsis = textoAsistencia(asisReal, 'MARCO ANTONIO MONTOYA LOPEZ (empleado 0186)');
 console.log(`  -> ${txtAsis.replace(/\n/g, ' | ')}`);
@@ -384,6 +403,15 @@ ok('los retardos con sus minutos', txtAsis.includes('4') && txtAsis.includes('63
 ok('los dias a descontar, que es lo que se busca', txtAsis.includes('Dias a descontar: 3'));
 ok('lista los dias con su fecha', txtAsis.includes('20/07') && txtAsis.includes('29/07'));
 ok('el motivo del justificado', txtAsis.includes('permiso medico'));
+
+// Lo reportado: se pedia la HORA de cada retardo y se contestaba con el total de minutos.
+ok('dice a que hora llego cada dia', txtAsis.includes('llego 08:29'));
+ok('y a que hora entraba, que cambia segun el dia',
+   txtAsis.includes('entraba 08:00') && txtAsis.includes('entraba 09:00'));
+ok('con el limite de tolerancia, para que la resta se pueda seguir',
+   txtAsis.includes('limite 08:15'));
+ok('sin segundos: no dicen nada y ocupan media linea', !txtAsis.includes('08:29:00'));
+ok('los minutos van por dia, no solo el total', txtAsis.includes('14 min tarde'));
 
 // La distincion que mas importa de todo esto.
 const txtVacio = textoAsistencia({ sin_datos: true }, 'PALOMA ILYANA DE LA TOBA');
