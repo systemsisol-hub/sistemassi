@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../avisos_store.dart';
 import '../theme/si_theme.dart';
 import 'banner_avisos.dart' show colorDeNivel, etiquetaDeNivel;
+import 'texto_con_enlaces.dart';
 import 'imagen_aviso.dart';
 
 /// Los avisos vigentes para la tercera columna de Social, que hasta ahora decía «Próximamente».
@@ -132,7 +133,10 @@ class _Tarjeta extends StatelessWidget {
                   ImagenAviso(url: aviso.imagenUrl!, altoMaximo: 160),
                   const SizedBox(height: SiSpace.x2),
                 ],
-                Text(aviso.cuerpo,
+                // Seleccionable y con los enlaces pulsables; ver `texto_con_enlaces.dart`. Era un
+                // `Text` pelado, y es el sitio donde se reporto: un aviso con un enlace no se podia
+                // ni pulsar ni copiar.
+                TextoConEnlaces(aviso.cuerpo,
                     style:
                         TextStyle(fontSize: 12.5, height: 1.45, color: c.ink2)),
                 if (aviso.hasta != null) ...[
