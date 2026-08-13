@@ -59,6 +59,32 @@ export const ALL_TOOLS = [
   {
     type: "function",
     function: {
+      name: "buscar_asistencia",
+      description: "Faltas, retardos y puntualidad de una persona, con las MISMAS cifras que la "
+        + "pagina de Asistencia. Un usuario no-admin solo ve la suya. Para la de otra persona pasa "
+        + "nombre_completo, numero_empleado o usuario_id; sin eso devuelve la de quien pregunta. "
+        + "Si responde `sin_datos: true` NO digas que no tiene faltas: significa que no hay datos "
+        + "de checador cargados para esas fechas, que es distinto. "
+        + "NO PIDAS UN RANGO DE FECHAS: sin `desde` ni `hasta` devuelve todo lo cargado, y la "
+        + "respuesta te dice el rango que cubre. Pon fechas solo si el usuario las nombró. "
+        + "`dias_de_retardo` trae CADA dia que llegó tarde con la hora a la que llegó, la que pedía "
+        + "su horario y el límite con tolerancia: úsalo cuando pregunten a qué hora llegó, en vez de "
+        + "dar el total de minutos.",
+      parameters: {
+        type: "object",
+        properties: {
+          nombre_completo: { type: "string", description: "[Solo admin]" },
+          numero_empleado: { type: "string", description: "[Solo admin]" },
+          usuario_id:      { type: "string", description: "[Solo admin] UUID del colaborador" },
+          desde: { type: "string", description: "Fecha inicial, AAAA-MM-DD" },
+          hasta: { type: "string", description: "Fecha final, AAAA-MM-DD" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "buscar_incidencias",
       description: "Busca incidencias. Usuarios no-admin solo ven las propias. "
         + "SI ERES ADMIN Y NO PASAS usuario_id, DEVUELVE LAS DE TODA LA EMPRESA: "

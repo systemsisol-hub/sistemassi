@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'texto_con_enlaces.dart';
+
 import '../avisos_store.dart';
 import '../theme/si_theme.dart';
 
@@ -99,7 +101,9 @@ class _Franja extends StatelessWidget {
                         fontSize: 12.5,
                         fontWeight: FontWeight.w700,
                         color: c.ink)),
-                Text(aviso.cuerpo,
+                // El mismo widget que en Social y en la ventana emergente: el aviso es el mismo,
+                // asi que se comporta igual en los tres sitios.
+                TextoConEnlaces(aviso.cuerpo,
                     style: TextStyle(fontSize: 12.5, color: c.ink2)),
               ],
             ),

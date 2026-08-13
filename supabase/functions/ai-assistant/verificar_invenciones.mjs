@@ -13,13 +13,15 @@ import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { leer } from './verificar_permisos.mjs';
 
 // Se leen LOS OCHO modulos, no `index.ts` solo: al partir el archivo estas funciones se fueron a
 // nombres.ts y respuestas.ts. Leer el directorio completo evita volver aqui cada vez que algo se
 // mueva de sitio.
 const aqui = dirname(fileURLToPath(import.meta.url));
 const src = readdirSync(aqui).filter((f) => f.endsWith('.ts')).sort()
-  .map((f) => readFileSync(join(aqui, f), 'utf8')).join('\n');
+  // `leer` normaliza CRLF; ver el porque en verificar_permisos.mjs.
+  .map((f) => leer(join(aqui, f))).join('\n');
 
 function extraerFuncion(nombre) {
   const i = src.indexOf(`function ${nombre}(`);
@@ -67,6 +69,8 @@ writeFileSync(tmp, `${extraerConst('MESES')}\n\n`
   + `${extraerFuncion('textoUltimaSolicitud')}\n\n`
   + `${extraerFuncion('textoVacacionesPropias')}\n\n`
   + `${extraerFuncion('soloUnIdentificador')}\n\n`
+  + `${extraerFuncion('preguntaFaltasDe')}\n\n`
+  + `${extraerFuncion('textoAsistencia')}\n\n`
   + `${extraerFuncion('preguntaIncidenciasDe')}\n\n`
   + `${extraerFuncion('textoIncidencias')}\n\n`
   + `${extraerFuncion('preguntaSuEquipo')}\n\n`
@@ -77,11 +81,11 @@ writeFileSync(tmp, `${extraerConst('MESES')}\n\n`
   + 'export { afirmaDatoSinRespaldo, preguntaSusVacaciones, textoVacacionesPropias,\n'
   + '  preguntaCumpleanos, textoCumpleanos, textoUltimaSolicitud,\n'
   + '  preguntaSuEquipo, textoEquipoPropio, alcanceDeLaConsulta, soloUnIdentificador,\n'
-  + '  preguntaIncidenciasDe, textoIncidencias };\n', 'utf8');
+  + '  preguntaIncidenciasDe, textoIncidencias, preguntaFaltasDe, textoAsistencia };\n', 'utf8');
 const { afirmaDatoSinRespaldo, preguntaSusVacaciones, textoVacacionesPropias,
   preguntaCumpleanos, textoCumpleanos, textoUltimaSolicitud,
   preguntaSuEquipo, textoEquipoPropio, alcanceDeLaConsulta, soloUnIdentificador,
-  preguntaIncidenciasDe, textoIncidencias } =
+  preguntaIncidenciasDe, textoIncidencias, preguntaFaltasDe, textoAsistencia } =
   await import('file://' + tmp.replace(/\\/g, '/'));
 
 let fallos = 0;
@@ -326,6 +330,94 @@ ok('sin incidencias lo dice, no deja la lista vacia',
    textoIncidencias({ count: 0, results: [] }, 'Enrique').includes('no tiene incidencias'));
 ok('una sola va en singular',
    textoIncidencias({ count: 1, results: [incMarco.results[0]] }, 'X').includes('tiene 1 incidencia'));
+
+console.log('\nFaltas y asistencia: la via directa, y lo que NO se queda');
+for (const [q, esperado] of [
+  ['faltas de marco montoya', 'marco montoya'],
+  ['cuantas faltas tiene hector figueroa', 'hector figueroa'],
+  ['la asistencia de lopez vigil', 'lopez vigil'],
+  ['retardos del 0186', '0186'],
+  ['puntualidad de la sra bravo garcia', 'bravo garcia'],
+]) {
+  const r = preguntaFaltasDe(q);
+  ok(`"${q}" -> "${esperado}"`, r?.quien === esperado, JSON.stringify(r));
+}
+// Reportado: «que dias llego tarde brenda mondragon» se fue al modelo, que ademas pidio un rango de
+// fechas que no necesitaba. Es la forma NORMAL de preguntarlo; nadie dice «dame los retardos».
+for (const [q, esperado] of [
+  ['que dias llego tarde brenda mondragon', 'brenda mondragon'],
+  ['a que hora llego marco montoya', 'marco montoya'],
+  ['dias que llego tarde hector figueroa', 'hector figueroa'],
+]) {
+  const r = preguntaFaltasDe(q);
+  ok(`"${q}" -> "${esperado}"`, r?.quien === esperado, JSON.stringify(r));
+}
+for (const q of ['mis faltas', 'cuantos retardos tengo', 'mi asistencia de este mes', 'tuve faltas?',
+                 'que dias llegue tarde']) {
+  ok(`"${q}" es propia`, preguntaFaltasDe(q)?.propio === true, JSON.stringify(preguntaFaltasDe(q)));
+}
+for (const q of [
+  // «falta» tambien es verbo, y esto no es una pregunta de asistencia.
+  'me falta un dia de vacaciones',
+  'hace falta que autorice mi jefe',
+  'falta por aprobar mi solicitud',
+  // Del conjunto: lo contesta el modelo con la herramienta, o la pagina.
+  'cuantas faltas hay en total',
+  'quien falto esta semana',
+  'faltas por zona',
+  'las faltas de toda la empresa',
+  // Ni de asistencia.
+  'cuantas vacaciones tengo',
+  'incidencias de marco',
+  'faltas de agosto',
+  'hola',
+]) {
+  ok(`no se la queda: "${q}"`, preguntaFaltasDe(q) === null, JSON.stringify(preguntaFaltasDe(q)));
+}
+
+// El texto sale de las cifras. Datos con la forma real de la herramienta.
+const asisReal = {
+  colaborador: 'MARCO ANTONIO MONTOYA LOPEZ', numero_empleado: '0186',
+  desde: '2026-07-16', hasta: '2026-07-31', dias_esperados: 12, asistio: 9,
+  faltas_sin_justificar: 2, justificados: 1, checadas_evaluadas: 10, retardos: 4,
+  minutos_de_retardo: 63, puntualidad_pct: 60, retardos_por_descuento: 3, dias_de_descuento: 3,
+  dias_con_incidencia: [
+    { fecha: '2026-07-20', estado: 'FALTA', motivo: null },
+    { fecha: '2026-07-23', estado: 'JUSTIFICADO', motivo: 'permiso medico' },
+    { fecha: '2026-07-29', estado: 'FALTA', motivo: null },
+  ],
+  // Datos REALES de Brenda Mondragon: los minutos se cuentan desde el LIMITE, no desde la entrada.
+  // 08:29 contra un limite de 08:15 son 14 minutos, no 29.
+  dias_de_retardo: [
+    { fecha: '2026-07-16', llego: '08:29:00', entrada_de_su_horario: '08:00:00',
+      limite_con_tolerancia: '08:15:00', minutos_tarde: 14 },
+    { fecha: '2026-07-24', llego: '09:30:00', entrada_de_su_horario: '09:00:00',
+      limite_con_tolerancia: '09:15:00', minutos_tarde: 15 },
+  ],
+};
+const txtAsis = textoAsistencia(asisReal, 'MARCO ANTONIO MONTOYA LOPEZ (empleado 0186)');
+console.log(`  -> ${txtAsis.replace(/\n/g, ' | ')}`);
+ok('dice las faltas sin justificar', txtAsis.includes('Faltas sin justificar: 2'));
+ok('y los justificados aparte', txtAsis.includes('Justificados: 1'));
+ok('los retardos con sus minutos', txtAsis.includes('4') && txtAsis.includes('63 minutos'));
+ok('los dias a descontar, que es lo que se busca', txtAsis.includes('Dias a descontar: 3'));
+ok('lista los dias con su fecha', txtAsis.includes('20/07') && txtAsis.includes('29/07'));
+ok('el motivo del justificado', txtAsis.includes('permiso medico'));
+
+// Lo reportado: se pedia la HORA de cada retardo y se contestaba con el total de minutos.
+ok('dice a que hora llego cada dia', txtAsis.includes('llego 08:29'));
+ok('y a que hora entraba, que cambia segun el dia',
+   txtAsis.includes('entraba 08:00') && txtAsis.includes('entraba 09:00'));
+ok('con el limite de tolerancia, para que la resta se pueda seguir',
+   txtAsis.includes('limite 08:15'));
+ok('sin segundos: no dicen nada y ocupan media linea', !txtAsis.includes('08:29:00'));
+ok('los minutos van por dia, no solo el total', txtAsis.includes('14 min tarde'));
+
+// La distincion que mas importa de todo esto.
+const txtVacio = textoAsistencia({ sin_datos: true }, 'PALOMA ILYANA DE LA TOBA');
+ok('«sin datos» NO se dice como «cero faltas»',
+   txtVacio.includes('no es lo mismo que no tenerlas'));
+ok('y no afirma ninguna cifra', !/\b\d+\s*faltas/.test(txtVacio));
 
 console.log('\nUn mensaje que es SOLO un identificador no pasa por el modelo');
 // Los tres casos reales del historial de WhatsApp del 12/08/2026. «0170» acabo con el nombre de otra

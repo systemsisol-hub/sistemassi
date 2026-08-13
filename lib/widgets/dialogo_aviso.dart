@@ -4,6 +4,7 @@ import '../avisos_store.dart';
 import '../theme/si_theme.dart';
 import 'banner_avisos.dart' show colorDeNivel, etiquetaDeNivel;
 import 'imagen_aviso.dart';
+import 'texto_con_enlaces.dart';
 
 /// La ventana emergente de un aviso.
 ///
@@ -71,7 +72,10 @@ class DialogoAviso extends StatelessWidget {
                       ImagenAviso(url: aviso.imagenUrl!, altoMaximo: 260),
                       const SizedBox(height: SiSpace.x4),
                     ],
-                    SelectableText(aviso.cuerpo,
+                    // Era un `SelectableText`: se podia copiar pero el enlace no respondia, porque
+                    // `SelectableText` gestiona los gestos el mismo y los `recognizer` de sus spans no
+                    // se disparan. Ver `texto_con_enlaces.dart`.
+                    TextoConEnlaces(aviso.cuerpo,
                         style: TextStyle(
                             fontSize: 13.5, height: 1.5, color: c.ink2)),
                   ],

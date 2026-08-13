@@ -21,6 +21,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { leer } from './verificar_permisos.mjs';
 
 const aqui = dirname(fileURLToPath(import.meta.url));
 const archivos = readdirSync(aqui).filter((f) => f.endsWith('.ts')).sort();
@@ -49,7 +50,8 @@ const importa = {};   // archivo -> { de: [nombres] }
 const codigo = {};
 
 for (const f of archivos) {
-  const src = readFileSync(join(aqui, f), 'utf8');
+  // `leer` normaliza CRLF; ver el porque en verificar_permisos.mjs.
+  const src = leer(join(aqui, f));
   declara[f] = new Set();
   exporta[f] = new Set();
   for (const linea of src.split('\n')) {
