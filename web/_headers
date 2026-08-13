@@ -1,0 +1,37 @@
+# Que puede guardar el navegador y que no. Lo lee Cloudflare Pages desde la raiz del sitio.
+#
+# ─── Por que existe ──────────────────────────────────────────────────────────
+#
+# `flutter build web` produce dos clases de archivo:
+#
+#   - Los que llevan el hash del contenido en el NOMBRE. Cambian de nombre al cambiar, asi que se
+#     pueden guardar para siempre sin riesgo.
+#   - Un puñado con nombre FIJO y contenido que cambia en cada compilacion: `index.html`,
+#     `flutter_bootstrap.js`, `flutter_service_worker.js` y `version.json`. Si el navegador guarda
+#     estos, se queda con la version vieja de la aplicacion entera.
+#
+# Y eso es lo que pasaba. `index.html` cargaba `flutter_bootstrap.js?v=d023c6a`, un literal fijo desde
+# el 22/04/2026, asi que la URL nunca cambiaba aunque el archivo si: cada navegador seguia ejecutando
+# la compilacion del dia en que entro por primera vez, y cada despliegue acababa en «ya lo subiste
+# pero no lo veo». Se arreglo quitando ese `?v=` y declarando aqui lo que no se debe guardar.
+#
+# `no-cache` no significa «no guardes»: significa «guarda, pero pregunta si cambio antes de usarlo».
+# Es lo que se quiere: una peticion condicional barata que devuelve 304 cuando no hay nada nuevo.
+
+/index.html
+  Cache-Control: no-cache
+
+/flutter_bootstrap.js
+  Cache-Control: no-cache
+
+/flutter_service_worker.js
+  Cache-Control: no-cache
+
+/version.json
+  Cache-Control: no-cache
+
+# La fuente de iconos NO lleva hash en el nombre y `flutter build web` la recorta a los iconos que se
+# usan, asi que cambia cuando se añade uno nuevo. Con la anterior en cache, el icono nuevo sale en
+# BLANCO —paso con el del Convertidor, y volveria a pasar con cada icono nuevo—.
+/assets/fonts/MaterialIcons-Regular.otf
+  Cache-Control: no-cache

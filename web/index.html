@@ -35,7 +35,16 @@
         console.log("Carga de ventana completa.");
       });
     </script>
-    <script src="flutter_bootstrap.js?v=d023c6a" async></script>
+    <!-- Sin `?v=...`.
+         Aqui habia `flutter_bootstrap.js?v=d023c6a`, puesto en la «carga inicial» del 22/04/2026 y
+         nunca tocado despues. `d023c6a` no es ningun commit de este repositorio: era un literal fijo.
+         Y `flutter_bootstrap.js` lo GENERA `flutter build web` en cada compilacion, con el hash del
+         `main.dart.js` de ese despliegue dentro.
+         Una URL que no cambia con contenido que si cambia es una caja fuerte para la version vieja:
+         el navegador servia ese archivo de su cache y con el el bundle del dia en que la persona entro
+         por primera vez. De ahi los «ya lo subiste pero no lo veo» de cada despliegue.
+         Quien decide que se puede cachear es `_headers`, al lado de este archivo. -->
+    <script src="flutter_bootstrap.js" async></script>
 </body>
 
 </html>
