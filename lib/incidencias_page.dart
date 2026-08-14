@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/notification_service.dart';
 import '../services/incidencias_pdf_service.dart';
+import 'services/trash_service.dart';
 import 'theme/si_theme.dart';
 import 'widgets/calendario_incidencias.dart';
 import 'widgets/grafica_vacaciones_mes.dart';
@@ -864,6 +865,88 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
     );
   }
 
+  /// Si esta incidencia se puede eliminar.
+  ///
+  /// ─── Las dos condiciones, y por qué ──────────────────────────────────────
+  ///
+  /// **Sólo PENDIENTE o CANCELADA.** Una APROBADA es el registro de días que la persona YA tomó, y es
+  /// además lo que `calcular_vacaciones` descuenta del saldo: borrarla le devolvería días que sí
+  /// disfrutó. Una PENDIENTE también reserva días —decisión tomada—, pero ahí borrarla es justo lo que
+  /// se quiere: libera lo que nunca se usó.
+  ///
+  /// **Sólo administradores**, y no por comodidad: lo dice RLS. Las políticas de `incidencias` conceden
+  /// el borrado con `is_admin()`, y en `trash` sólo un administrador puede insertar. Un usuario normal
+  /// que quiera deshacerse de su solicitud tiene el camino correcto ya puesto: cancelarla, que su
+  /// política sí le permite mientras esté PENDIENTE.
+  bool _sePuedeEliminar(Map<String, dynamic> inc) =>
+      _userRole == 'admin' &&
+      (inc['status'] == 'PENDIENTE' || inc['status'] == 'CANCELADA');
+
+  /// Manda la incidencia a la papelera: se guarda entera y se puede restaurar.
+  ///
+  /// Mismo patrón que Colaboradores, Inventario y Contactos: `trash` conserva la fila completa en
+  /// `data` y `TrashService.restore` la reinserta en su tabla. No es un borrado con marca en la propia
+  /// tabla, así que la fila desaparece de `incidencias` y **el saldo de vacaciones se recalcula solo**
+  /// —`calcular_vacaciones` suma sobre lo que hay—, sin tener que tocar nada más.
+  Future<void> _eliminarIncidencia(Map<String, dynamic> inc) async {
+    if (!_sePuedeEliminar(inc)) return;
+
+    final quien = (inc['nombre_usuario'] ?? '').toString().trim();
+    final dias = inc['dias'];
+    final confirmado = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Enviar a la papelera'),
+        // Se dicen los días y el periodo: es lo que permite darse cuenta de que es la incidencia
+        // equivocada ANTES de borrarla, no después.
+        content: Text(
+          '¿Enviar a la papelera la incidencia de '
+          '${quien.isEmpty ? 'este colaborador' : quien}'
+          '${dias == null ? '' : ' de $dias día${dias == 1 ? '' : 's'}'}'
+          '${inc['periodo'] == null ? '' : ', periodo ${inc['periodo']}'}?\n\n'
+          'Se puede restaurar desde la Papelera. Los días vuelven a estar disponibles.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('CANCELAR')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('ENVIAR A LA PAPELERA'),
+          ),
+        ],
+      ),
+    );
+    if (confirmado != true) return;
+
+    try {
+      // Primero la copia, después el borrado. Al revés, un fallo al guardar en la papelera dejaría la
+      // incidencia perdida sin forma de recuperarla.
+      await TrashService.moveToTrash(
+        originTable: 'incidencias',
+        originId: inc['id'].toString(),
+        data: Map<String, dynamic>.from(inc),
+        label: 'Incidencia'
+            '${quien.isEmpty ? '' : ' de $quien'}'
+            '${inc['periodo'] == null ? '' : ' (${inc['periodo']})'}',
+      );
+      await Supabase.instance.client
+          .from('incidencias')
+          .delete()
+          .eq('id', inc['id']);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Incidencia enviada a la papelera')));
+      _fetchIncidencias();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('No se pudo eliminar: $e'),
+          backgroundColor: Colors.red));
+    }
+  }
+
   Future<void> _fetchIncidencias({bool showLoader = false}) async {
     if (showLoader) setState(() => _isLoading = true);
     try {
@@ -1287,6 +1370,8 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                       }
                     } else if (val == 'EDIT') {
                       _showIncidenciaForm(incidencia: inc);
+                    } else if (val == 'DELETE') {
+                      await _eliminarIncidencia(inc);
                     } else if (_userRole == 'admin') {
                       await Supabase.instance.client
                           .from('incidencias')
@@ -1322,6 +1407,17 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                           value: 'CANCELADA', child: Text('Cancelar')),
                       const PopupMenuItem(
                           value: 'PENDIENTE', child: Text('Pendiente')),
+                      if (_sePuedeEliminar(inc)) ...[
+                        const PopupMenuDivider(),
+                        const PopupMenuItem(
+                            value: 'DELETE',
+                            child: ListTile(
+                                leading: Icon(Icons.delete_outline,
+                                    color: Colors.red),
+                                title: Text('Eliminar',
+                                    style: TextStyle(color: Colors.red)),
+                                dense: true)),
+                      ],
                     ],
                   ],
                 ),
@@ -1614,6 +1710,8 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
               siColors: c,
               getStatusColor: _getStatusColor,
               onEdit: (inc) => _showIncidenciaForm(incidencia: inc),
+              onDelete: _eliminarIncidencia,
+              sePuedeEliminar: _sePuedeEliminar,
               onStatusChange: (inc, status) async {
                 if (status == 'PDF') {
                   if (_selectedUserProfile != null) {
@@ -1921,6 +2019,12 @@ class _IncidenciasDataSource extends DataTableSource {
   final Color Function(String) getStatusColor;
   final Function(Map<String, dynamic>) onEdit;
   final Function(Map<String, dynamic>, String) onStatusChange;
+  /// Manda la incidencia a la papelera. Va como callback y no resuelto aqui porque el dialogo de
+  /// confirmacion y el refresco son de la pagina, no de la tabla.
+  final Function(Map<String, dynamic>) onDelete;
+  /// Si esta fila se puede eliminar. Lo decide la pagina -`_sePuedeEliminar`- para que la regla viva
+  /// en UN sitio: la tabla no tiene por que saber que una APROBADA no se toca.
+  final bool Function(Map<String, dynamic>) sePuedeEliminar;
 
   _IncidenciasDataSource({
     required this.items,
@@ -1932,6 +2036,8 @@ class _IncidenciasDataSource extends DataTableSource {
     required this.getStatusColor,
     required this.onEdit,
     required this.onStatusChange,
+    required this.onDelete,
+    required this.sePuedeEliminar,
   });
 
   @override
@@ -2004,6 +2110,8 @@ class _IncidenciasDataSource extends DataTableSource {
               onSelected: (val) {
                 if (val == 'EDIT') {
                   onEdit(inc);
+                } else if (val == 'DELETE') {
+                  onDelete(inc);
                 } else {
                   onStatusChange(inc, val);
                 }
@@ -2056,6 +2164,24 @@ class _IncidenciasDataSource extends DataTableSource {
                     ],
                   ),
                 ),
+                // Separado del resto y detrás de una línea: «Cancelar» y «Eliminar» están a un pixel
+                // el uno del otro y hacen cosas muy distintas.
+                if (sePuedeEliminar(inc)) ...[
+                  const PopupMenuDivider(),
+                  PopupMenuItem(
+                    value: 'DELETE',
+                    child: Row(
+                      children: [
+                        Icon(Icons.delete_outline,
+                            size: 18, color: Colors.red[700]),
+                        const SizedBox(width: 12),
+                        Text('Enviar a la papelera',
+                            style: TextStyle(
+                                fontSize: 13, color: Colors.red[700])),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ],
           ),
