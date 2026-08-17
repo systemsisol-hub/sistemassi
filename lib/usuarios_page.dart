@@ -7,6 +7,42 @@ import 'theme/si_theme.dart';
 import 'services/trash_service.dart';
 import 'utils/webmail_utils.dart';
 
+/// Los estatus que existen, en UN solo sitio.
+///
+/// ─── Por qué esto está aquí y no escrito en cada pantalla ────────────────────
+///
+/// Estas listas vivían en CUATRO lugares —el formulario de alta, el filtro de la barra, los
+/// distintivos de la tabla y las tarjetas de resumen— y se desincronizaron, que es lo que se reportó:
+/// las tarjetas contaban ACTIVO, BAJA, CAMBIO y NO APLICA, y **ELIMINAR no aparecía en ninguna parte**,
+/// así que las personas con ese estatus no se veían ni se sumaban. En RH pasaba lo mismo con PENDIENTE,
+/// y además REINGRESO y CAMBIO iban sumados en un renglón, lo que impedía distinguirlos.
+///
+/// Con la lista en un sitio, añadir un estatus nuevo lo hace aparecer en los cuatro a la vez.
+///
+/// El orden es el de la vida de un registro —activo, en trámite, fuera— y no alfabético: es el orden
+/// en el que se lee un tablero.
+const estatusSistema = <String>[
+  'ACTIVO', 'CAMBIO', 'NO APLICA', 'BAJA', 'ELIMINAR',
+];
+
+const estatusRh = <String>[
+  'ACTIVO', 'REINGRESO', 'CAMBIO', 'PENDIENTE', 'BAJA',
+];
+
+/// El color de cada estatus, para que un mismo valor no salga verde en una pantalla y ámbar en otra.
+///
+/// Lo que NO está en el mapa cae en gris, a propósito: un valor inesperado en la base tiene que
+/// llamar la atención, no disfrazarse del color de otro.
+Color colorDeEstatus(String estatus, SiColors c) => switch (estatus) {
+      'ACTIVO' => c.success,
+      'BAJA' => c.danger,
+      // ELIMINAR es más grave que una baja: es un registro marcado para desaparecer.
+      'ELIMINAR' => c.danger,
+      'CAMBIO' || 'REINGRESO' || 'PENDIENTE' => c.warn,
+      'NO APLICA' => c.ink3,
+      _ => c.ink4,
+    };
+
 Future<T?> showFullWidthModal<T>({
   required BuildContext context,
   required Widget Function(BuildContext) builder,
@@ -418,6 +454,19 @@ class _AdminDashboardState extends State<AdminDashboard> {
       );
     }
 
+    /// Un renglón por estatus conocido, más los que aparezcan en la base y no estén en la lista.
+    ///
+    /// Los desconocidos van al final y en gris. Es la diferencia entre «no hay nadie con ese estatus»
+    /// y «hay gente que este tablero no está contando»: lo segundo tiene que verse.
+    List<Widget> renglonesDeEstatus(
+        List<String> conocidos, Map<String, int> cuentas, Widget Function(String, int, Color) fila) {
+      final extras = cuentas.keys.where((k) => !conocidos.contains(k)).toList()..sort();
+      return [
+        for (final e in conocidos) fila(e, cuentas[e] ?? 0, colorDeEstatus(e, c)),
+        for (final e in extras) fila('$e (sin clasificar)', cuentas[e] ?? 0, c.ink4),
+      ];
+    }
+
     Widget rowStat(String label, int value, Color color) {
       return Padding(
         padding: const EdgeInsets.only(bottom: 6),
@@ -446,17 +495,16 @@ class _AdminDashboardState extends State<AdminDashboard> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            statCard('ESTATUS DE SISTEMA', [
-              rowStat('ACTIVO',   _statusSysCounts['ACTIVO']   ?? 0, c.success),
-              rowStat('BAJA',     _statusSysCounts['BAJA']     ?? 0, c.danger),
-              rowStat('CAMBIO',   _statusSysCounts['CAMBIO']   ?? 0, c.warn),
-              rowStat('NO APLICA',_statusSysCounts['NO APLICA']?? 0, c.ink3),
-            ]),
-            statCard('ESTATUS DE RH', [
-              rowStat('ACTIVO', _statusRhCounts['ACTIVO'] ?? 0, c.success),
-              rowStat('BAJA', _statusRhCounts['BAJA'] ?? 0, c.danger),
-              rowStat('REINGRESO / CAMBIO', (_statusRhCounts['REINGRESO'] ?? 0) + (_statusRhCounts['CAMBIO'] ?? 0), c.warn),
-            ]),
+            // Todos los estatus, cada uno en su renglón. Antes faltaban ELIMINAR y PENDIENTE, y
+            // REINGRESO iba sumado con CAMBIO: la gente con esos estatus no se veía en ninguna parte.
+            //
+            // `_renglonesDeEstatus` añade además cualquier valor que esté en la base y no en la lista,
+            // para que un estatus nuevo o mal escrito salte a la vista en lugar de desaparecer del
+            // recuento.
+            statCard('ESTATUS DE SISTEMA',
+                renglonesDeEstatus(estatusSistema, _statusSysCounts, rowStat)),
+            statCard('ESTATUS DE RH',
+                renglonesDeEstatus(estatusRh, _statusRhCounts, rowStat)),
             statCard('AUTENTICACIÓN', [
               const SizedBox(height: 4),
               Row(
@@ -538,7 +586,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
             isActive: _filterStatusSys != null,
             items: [
               DropdownMenuItem(value: null, child: Text('Todos', style: TextStyle(color: c.ink3))),
-              ...['ACTIVO', 'BAJA', 'CAMBIO', 'ELIMINAR', 'NO APLICA']
+              // La misma lista que las tarjetas y el formulario; ver `estatusSistema`.
+              ...estatusSistema
                   .map((s) => DropdownMenuItem(value: s, child: Text(s))),
             ],
             onChanged: (val) {
@@ -1196,23 +1245,22 @@ class _StatusBadge extends StatelessWidget {
     final Color bg;
     final Color fg;
     final String label;
+    // El color sale de `colorDeEstatus`, el mismo que usan las tarjetas de resumen. Antes esto tenia
+    // su propia escala y ELIMINAR caia en el `else`: salia AMBAR en la tabla y rojo en la tarjeta, para
+    // el estatus mas grave que hay.
     if (isBlocked) {
-      bg = c.dangerTint;
       fg = c.danger;
       label = 'Bloqueado';
-    } else if (statusSys == 'ACTIVO') {
-      bg = c.successTint;
-      fg = c.success;
-      label = 'Activo';
-    } else if (statusSys == 'BAJA') {
-      bg = c.dangerTint;
-      fg = c.danger;
-      label = 'Baja';
     } else {
-      bg = c.warnTint;
-      fg = c.warn;
-      label = statusSys ?? '---';
+      fg = colorDeEstatus(statusSys ?? '', c);
+      label = switch (statusSys) {
+        'ACTIVO' => 'Activo',
+        'BAJA' => 'Baja',
+        null => '---',
+        _ => statusSys!,
+      };
     }
+    bg = fg.withOpacity(0.12);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(color: bg, borderRadius: SiRadius.rPill),
@@ -1238,20 +1286,9 @@ class _StatusRhBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color bg;
-    final Color fg;
-    switch (statusRh) {
-      case 'ACTIVO':
-        bg = c.successTint; fg = c.success;
-      case 'BAJA':
-        bg = c.dangerTint;  fg = c.danger;
-      case 'REINGRESO':
-      case 'CAMBIO':
-      case 'PENDIENTE':
-        bg = c.warnTint;    fg = c.warn;
-      default:
-        bg = c.hover;       fg = c.ink4;
-    }
+    // Mismo color que en las tarjetas de resumen; ver `colorDeEstatus`.
+    final Color fg = statusRh == null ? c.ink4 : colorDeEstatus(statusRh!, c);
+    final Color bg = fg.withOpacity(0.12);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(color: bg, borderRadius: SiRadius.rPill),
@@ -1812,7 +1849,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
           decoration: const InputDecoration(
               labelText: 'Status Sys',
               prefixIcon: Icon(Icons.settings_suggest_outlined)),
-          items: ['ACTIVO', 'BAJA', 'CAMBIO', 'ELIMINAR', 'NO APLICA']
+          items: estatusSistema
               .map((e) => DropdownMenuItem(value: e, child: Text(e)))
               .toList(),
           onChanged: (v) => setState(() => _statusSys = v),
@@ -1824,7 +1861,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
           decoration: const InputDecoration(
               labelText: 'Status RH',
               prefixIcon: Icon(Icons.person_outlined)),
-          items: ['ACTIVO', 'BAJA', 'REINGRESO', 'CAMBIO', 'PENDIENTE']
+          items: estatusRh
               .map((e) => DropdownMenuItem(value: e, child: Text(e)))
               .toList(),
           onChanged: (v) => setState(() => _statusRh = v),
