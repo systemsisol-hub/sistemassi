@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../services/quincena.dart';
 import 'theme/si_theme.dart';
 import 'widgets/ficha_asistencia.dart';
 
@@ -35,8 +36,9 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
   String? _error;
   bool _esAdmin = false;
 
-  List<Map<String, dynamic>> _entradas = [];
-  List<Map<String, dynamic>> _dias = [];
+  /// Todo lo cargado, sin filtrar. Las vistas usan `_entradas` y `_dias`, que aplican el periodo.
+  List<Map<String, dynamic>> _entradasTodas = [];
+  List<Map<String, dynamic>> _diasTodos = [];
   double _criticoMax = 70;
   double _atencionMax = 90;
   int _retardosPorDescuento = 3;
@@ -47,6 +49,19 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
   String _filtroEstatus = 'todos';
   String _filtroZona = 'todas';
   String _busqueda = '';
+
+  /// La quincena que se está mirando, o `null` para todo lo cargado.
+  ///
+  /// ─── Por qué el periodo filtra TODO el panel y no sólo la tabla ──────────────
+  ///
+  /// Se pidió para «Detalle por empleado», que mostraba el total histórico. Pero los KPIs de arriba
+  /// —faltas, retardos, puntualidad— salen de las MISMAS dos listas que la tabla. Filtrar sólo la tabla
+  /// dejaría el KPI «Faltas: 57» encima de una columna que suma 12, y quien lo viera tendría razón en
+  /// no creerse ninguno de los dos.
+  ///
+  /// Así que el periodo se aplica antes de agregar, en los getters `_dias` y `_entradas`, y con eso
+  /// todo el panel pasa a hablar de la misma quincena sin tocar ningún cálculo.
+  Quincena? _periodo;
 
   @override
   void initState() {
@@ -94,7 +109,7 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
               'horario_nombre, fecha, hora, limite, es_retardo, minutos_retardo, '
               'justificado, justificacion_tipo, justificacion_motivo, foto_url')
           .order('fecha');
-      _entradas = List<Map<String, dynamic>>.from(entradas);
+      _entradasTodas = List<Map<String, dynamic>>.from(entradas);
 
       final dias = await _supabase
           .from('checador_dias')
@@ -104,9 +119,15 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
               'salida_temprano, minutos_antes, justificado, justificacion_motivo, '
               'justificacion_tipo, horario_nombre')
           .order('fecha');
-      _dias = List<Map<String, dynamic>>.from(dias);
+      _diasTodos = List<Map<String, dynamic>>.from(dias);
 
-      final fechas = _entradas.map((e) => e['fecha'].toString()).toList()..sort();
+      // Se abre en la quincena MÁS RECIENTE, no en el histórico.
+      //
+      // Era justo la queja: la tabla mostraba el acumulado de todo lo importado, que para decidir algo
+      // no sirve. Lo normal al abrir el panel es querer ver la quincena en curso.
+      _periodo = _quincenas.isEmpty ? null : _quincenas.first;
+
+      final fechas = _entradasTodas.map((e) => e['fecha'].toString()).toList()..sort();
       if (fechas.isNotEmpty) {
         _desde = DateTime.parse(fechas.first);
         _hasta = DateTime.parse(fechas.last);
@@ -205,6 +226,37 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
       // buscador y los filtros de estatus.
       ..sort((a, b) =>
           a.nombre.toLowerCase().compareTo(b.nombre.toLowerCase()));
+    return lista;
+  }
+
+  // ── El periodo ─────────────────────────────────────────────────────────────
+
+  /// Las checadas del periodo elegido.
+  List<Map<String, dynamic>> get _entradas => _delPeriodo(_entradasTodas);
+
+  /// Los días del periodo elegido.
+  List<Map<String, dynamic>> get _dias => _delPeriodo(_diasTodos);
+
+  List<Map<String, dynamic>> _delPeriodo(List<Map<String, dynamic>> filas) {
+    final p = _periodo;
+    if (p == null) return filas;
+    return filas.where((f) => p.contiene(f['fecha'].toString())).toList();
+  }
+
+  /// Las quincenas que tienen datos, de la más reciente a la más antigua.
+  ///
+  /// Se derivan de lo cargado y no se generan por calendario: ofrecer «1 al 15 de marzo» cuando no hay
+  /// nada de marzo es hacer elegir un hueco. Del 16 en adelante el corte llega al último día del mes,
+  /// sea 28, 29, 30 o 31.
+  List<Quincena> get _quincenas {
+    final vistas = <String, Quincena>{};
+    for (final f in [..._diasTodos, ..._entradasTodas]) {
+      final q = Quincena.deIso(f['fecha']?.toString());
+      if (q == null) continue;
+      vistas[q.clave] = q;
+    }
+    final lista = vistas.values.toList()
+      ..sort((a, b) => b.clave.compareTo(a.clave));
     return lista;
   }
 
@@ -375,9 +427,16 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
 
   Widget _barraPeriodo(SiColors c) {
     final fmt = DateFormat('d MMM y', 'es_MX');
-    final rango = _desde == null
-        ? 'Sin periodo'
-        : '${fmt.format(_desde!)} – ${fmt.format(_hasta!)}';
+    // La pastilla dice el periodo QUE SE ESTÁ MIRANDO, no todo lo importado.
+    //
+    // Con el selector de quincena puesto, dejarla en el rango completo la convertía en una
+    // contradicción: arriba «16 jul – 31 ago» y en la tabla una sola quincena. La pastilla es lo que
+    // alguien lee para saber de qué habla lo que tiene delante.
+    final rango = _periodo != null
+        ? _periodo!.etiqueta
+        : _desde == null
+            ? 'Sin periodo'
+            : 'Histórico · ${fmt.format(_desde!)} – ${fmt.format(_hasta!)}';
     return Wrap(
       spacing: SiSpace.x2,
       runSpacing: SiSpace.x2,
@@ -849,6 +908,51 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
                   ],
                   onChanged: (v) =>
                       setState(() => _filtroZona = v ?? 'todas'),
+                ),
+              ),
+            ],
+            // El periodo, al lado del de zonas. Con una sola quincena cargada el desplegable no
+            // decide nada, así que no se pinta.
+            if (_quincenas.length > 1) ...[
+              const SizedBox(width: SiSpace.x3),
+              SizedBox(
+                width: 215,
+                child: DropdownButtonFormField<String>(
+                  value: _periodo?.clave ?? 'todo',
+                  isExpanded: true,
+                  isDense: true,
+                  style: TextStyle(fontSize: 13, color: c.ink),
+                  icon: Icon(Icons.expand_more, size: 18, color: c.ink3),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    contentPadding: _rellenoControl,
+                    prefixIcon: Icon(Icons.date_range_outlined,
+                        size: 15, color: c.ink3),
+                    prefixIconConstraints:
+                        const BoxConstraints(minWidth: 32, minHeight: 0),
+                    border: OutlineInputBorder(borderRadius: SiRadius.rMd),
+                  ),
+                  items: [
+                    for (final q in _quincenas)
+                      DropdownMenuItem(
+                        value: q.clave,
+                        child: Text(q.etiqueta,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 13, color: c.ink2)),
+                      ),
+                    // Sigue estando el histórico, al final: es de donde venimos y a veces se quiere
+                    // comparar. Va abajo para que no sea lo primero que se elige por inercia.
+                    DropdownMenuItem(
+                      value: 'todo',
+                      child: Text('Todo el histórico',
+                          style: TextStyle(fontSize: 13, color: c.ink3)),
+                    ),
+                  ],
+                  onChanged: (v) => setState(() {
+                    _periodo = v == null || v == 'todo'
+                        ? null
+                        : _quincenas.firstWhere((q) => q.clave == v);
+                  }),
                 ),
               ),
             ],
