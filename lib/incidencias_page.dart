@@ -1,7 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../services/notification_service.dart';
 import '../services/incidencias_pdf_service.dart';
 import 'services/trash_service.dart';
 import 'theme/si_theme.dart';
@@ -1380,12 +1379,13 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                       await Supabase.instance.client
                           .from('incidencias')
                           .update({'status': val}).eq('id', inc['id']);
-                      await NotificationService.send(
-                        title: 'Tu incidencia fue $val',
-                        message: 'El estado de tu petición ha cambiado a $val.',
-                        userId: inc['usuario_id'],
-                        type: 'incidencia_status',
-                      );
+                      // El aviso lo manda un disparador de la base -`notificar_cambio_de_estatus`- que avisa a
+                      // quien pidio las vacaciones y a Desarrollo Humano, por campana y por WhatsApp.
+                      //
+                      // Estaba escrito TRES veces, una por cada menu de esta pagina, y aun asi faltaba en el cuarto
+                      // camino: aprobar por WhatsApp pasa por `actualizar_incidencia` de Soli, que no notificaba. Es
+                      // justo lo que se reporto -Marco aprobo por WhatsApp y no le llego a nadie-. En la base esta
+                      // una vez y cubre los cuatro.
                       _fetchIncidencias();
                     }
                   },
@@ -1586,13 +1586,13 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                                   await Supabase.instance.client
                                       .from('incidencias')
                                       .update({'status': val}).eq('id', incId);
-                                  await NotificationService.send(
-                                    title: 'Tu incidencia fue $val',
-                                    message:
-                                        'El estado de tu petición ha cambiado a $val.',
-                                    userId: inc['usuario_id'],
-                                    type: 'incidencia_status',
-                                  );
+                                  // El aviso lo manda un disparador de la base -`notificar_cambio_de_estatus`- que avisa a
+                                  // quien pidio las vacaciones y a Desarrollo Humano, por campana y por WhatsApp.
+                                  //
+                                  // Estaba escrito TRES veces, una por cada menu de esta pagina, y aun asi faltaba en el cuarto
+                                  // camino: aprobar por WhatsApp pasa por `actualizar_incidencia` de Soli, que no notificaba. Es
+                                  // justo lo que se reporto -Marco aprobo por WhatsApp y no le llego a nadie-. En la base esta
+                                  // una vez y cubre los cuatro.
                                 } finally {
                                   // Siempre refrescar aunque NotificationService falle
                                   _fetchIncidencias();
@@ -1726,12 +1726,13 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                   await Supabase.instance.client
                       .from('incidencias')
                       .update({'status': status}).eq('id', inc['id']);
-                  await NotificationService.send(
-                    title: 'Tu incidencia fue $status',
-                    message: 'El estado de tu petición ha cambiado a $status.',
-                    userId: inc['usuario_id'],
-                    type: 'incidencia_status',
-                  );
+                  // El aviso lo manda un disparador de la base -`notificar_cambio_de_estatus`- que avisa a
+                  // quien pidio las vacaciones y a Desarrollo Humano, por campana y por WhatsApp.
+                  //
+                  // Estaba escrito TRES veces, una por cada menu de esta pagina, y aun asi faltaba en el cuarto
+                  // camino: aprobar por WhatsApp pasa por `actualizar_incidencia` de Soli, que no notificaba. Es
+                  // justo lo que se reporto -Marco aprobo por WhatsApp y no le llego a nadie-. En la base esta
+                  // una vez y cubre los cuatro.
                   _fetchIncidencias();
                 }
               },

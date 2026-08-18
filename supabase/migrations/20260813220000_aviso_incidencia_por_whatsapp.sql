@@ -1,0 +1,36 @@
+-- El aviso de incidencia nueva tambien sale por WhatsApp.
+--
+-- Aplicado en produccion como `aviso_incidencia_por_whatsapp`. Este archivo reproduce el estado final
+-- del disparador; el cuerpo completo esta en la funcion `notificar_incidencia_nueva`, que esta
+-- migracion redefine anadiendole el tercer bloque.
+--
+-- ─── Como sale de la base hacia fuera ────────────────────────────────────────
+--
+-- Con `pg_net`, que hace la peticion HTTP de forma ASINCRONA: encola y devuelve. Eso importa porque el
+-- disparador corre dentro de la transaccion que crea la incidencia, y una llamada sincrona a un
+-- servidor de WhatsApp la dejaria esperando -o la haria fallar si ese servidor no responde-. Con pg_net
+-- la solicitud se guarda igual aunque el mensaje no salga.
+--
+-- ─── A que numero, y por que NO a `profiles.celular` ─────────────────────────
+--
+-- El numero lo resuelve la funcion `whatsapp-openwa` desde `whatsapp_autorizados`, que es donde alguien
+-- puso a mano el `profile_id`. Medido: el celular de la coordinadora de Desarrollo Humano esta
+-- capturado en DOS perfiles y `0000000000` en cinco, asi que con `celular` no se puede afirmar de quien
+-- es un numero. Mandarle la solicitud de vacaciones de alguien a un desconocido es una fuga, no un
+-- fallo de formato.
+--
+-- Efecto secundario util: la lista de autorizados es el interruptor. Quien no este ahi recibe la
+-- campana y no el WhatsApp, y eso se ve y se cambia desde el panel de WhatsApp.
+--
+-- ─── Los dos secretos, y por que no estan aqui ───────────────────────────────
+--
+-- Hace falta el MISMO valor en dos sitios, y ninguno es este archivo:
+--
+--   1. Vault de la base:      select vault.create_secret('<valor>', 'aviso_whatsapp_secret');
+--   2. Secreto de la funcion: AVISO_WHATSAPP_SECRET
+--
+-- Si falta el de Vault, el WhatsApp no se manda y la campana sigue llegando: se degrada, no se rompe.
+-- Si falta el de la funcion, esta responde 503 y tampoco se manda.
+--
+-- El cuerpo del disparador se aplico con la migracion `aviso_incidencia_por_whatsapp`. Se documenta
+-- aqui en lugar de repetirlo para que no haya dos copias que se separen.
