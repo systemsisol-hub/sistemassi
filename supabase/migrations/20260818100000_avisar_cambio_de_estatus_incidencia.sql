@@ -1,0 +1,33 @@
+-- Avisa cuando una incidencia cambia de estatus: a quien la pidio y a Desarrollo Humano.
+--
+-- Aplicado en produccion como `avisar_cambio_de_estatus_incidencia`. El cuerpo vive en la funcion
+-- `notificar_cambio_de_estatus`; aqui se documenta el porque para no tener dos copias que se separen.
+--
+-- ─── El fallo reportado ──────────────────────────────────────────────────────
+--
+-- MARCO ANTONIO MONTOYA aprobo la solicitud de ANGEL VARGAS y no le llego a nadie: ni al solicitante ni
+-- a Desarrollo Humano. La causa esta en la bitacora de WhatsApp, no en una suposicion: aprobo POR
+-- WHATSAPP -«angel vargas», «0163», «aprovar», «si», a las 09:37- y ese camino pasa por la herramienta
+-- `actualizar_incidencia` de Soli, que hace el UPDATE y no notifica.
+--
+-- Lo revelador: los TRES menus de la pagina SI notificaban, cada uno con su propia copia de la llamada.
+-- El aviso estaba escrito tres veces y aun asi faltaba en el cuarto camino. Aqui esta una vez y cubre
+-- los cuatro; las tres copias de Dart se retiran.
+--
+-- ─── A quien se avisa, y a quien no ──────────────────────────────────────────
+--
+-- A quien pidio las vacaciones -es su solicitud- y a Desarrollo Humano, que lleva el control. NO a quien
+-- hizo el cambio: si Marco aprueba, no necesita que le avisen de lo que acaba de hacer.
+--
+-- Por la via de Soli `auth.uid()` es NULO, porque corre con la llave de servicio, asi que ahi no se
+-- puede excluir a quien cambio. Se acepta: quien aprueba por WhatsApp ya recibio la respuesta de Soli
+-- confirmandolo, asi que un aviso de mas no confunde a nadie.
+--
+-- ─── El disparador es `AFTER UPDATE OF status` y con condicion ───────────────
+--
+-- Sin el `OF status` y sin `when (old.status is distinct from new.status)`, cualquier edicion -corregir
+-- una fecha, cambiar los dias- mandaria un aviso de un cambio de estatus que no ocurrio.
+--
+-- Verificado en produccion con una incidencia de prueba creada y borrada: el alta genero los dos avisos
+-- de siempre -jefe y Desarrollo Humano- y el paso a APROBADA genero otros dos, «Tu solicitud fue
+-- APROBADA» a ANGEL (0163) y «Solicitud APROBADA» a KANDI (1230), los dos tambien por WhatsApp.
