@@ -738,6 +738,92 @@ export async function runTool(
     };
   }
 
+  // ── BASE DE CONOCIMIENTO ──────────────────────────────────────────
+  //
+  // La misma regla que la pagina de Conocimientos: los articulos de `audience = 'all'` los ve
+  // cualquiera, y los de `audience = 'admin'` solo un administrador. Son sus dos pestañas.
+  //
+  // ─── El filtro se escribe A MANO, y no es opcional ──────────────────────────
+  //
+  // `knowledge_articles` YA tiene la politica correcta -SELECT si `audience = 'all'` o eres admin- pero
+  // esta funcion consulta con la LLAVE DE SERVICIO, que se salta RLS por completo. Confiar en la
+  // politica aqui seria entregarle a cualquiera con `show_ai` los articulos internos de
+  // administracion. La politica sigue siendo la red para la aplicacion; esta linea es la que cuenta
+  // para Soli.
+  if (name === "buscar_conocimiento") {
+    const CAMPOS_KB = "id,title,description,content,category,audience,tags," +
+      "file_name,file_url,pinned,updated_at";
+
+    // Un articulo concreto, con su contenido COMPLETO.
+    if (input.articulo_id) {
+      const dado = String(input.articulo_id).trim();
+      if (!esUuid(dado)) {
+        return { error: `"${dado}" no es un UUID de articulo. Busca primero por texto y usa el id que venga.` };
+      }
+      let q1 = db.from("knowledge_articles").select(CAMPOS_KB).eq("id", dado);
+      if (!isAdmin) q1 = (q1 as any).eq("audience", "all");
+      const { data, error } = await (q1 as any).maybeSingle();
+      if (error) return { error: error.message };
+      if (!data) {
+        return {
+          error: "No existe ese articulo, o es de la pestaña de Administradores y no tienes acceso.",
+        };
+      }
+      return { articulo: data, contenido_completo: true };
+    }
+
+    let q = db.from("knowledge_articles").select(CAMPOS_KB);
+    if (!isAdmin) q = (q as any).eq("audience", "all");
+    if (input.categoria) q = (q as any).eq("category", input.categoria);
+
+    if (input.texto) {
+      // Se limpian los caracteres que rompen el filtro `or=()` de PostgREST: la coma separa
+      // condiciones, y el parentesis las delimita. Es el mismo cuidado que en `tokensDeNombre`, donde
+      // una coma en un nombre dejaba la consulta sin sentido.
+      const t = String(input.texto).replace(/[,()%*]/g, " ").trim();
+      if (t.length > 0) {
+        q = (q as any).or(
+          `title.ilike.%${t}%,description.ilike.%${t}%,content.ilike.%${t}%`,
+        );
+      }
+    }
+
+    const tope = Math.min(Number(input.limit) || 6, 15);
+    const { data, error } = await (q as any)
+      .order("pinned", { ascending: false })
+      .order("updated_at", { ascending: false })
+      .limit(tope);
+    if (error) return { error: error.message };
+
+    const filas = (data || []) as Array<Record<string, unknown>>;
+
+    // El contenido se RECORTA en la busqueda.
+    //
+    // Siete articulos completos son varias decenas de miles de caracteres: llenan la ventana del
+    // modelo y encarecen cada pregunta para nada. Se manda un trozo, y si hace falta el resto se pide
+    // ese articulo por su id.
+    const TOPE_TEXTO = 1200;
+    return {
+      results: filas.map((a) => {
+        const texto = typeof a.content === "string" ? a.content : "";
+        const recortado = texto.length > TOPE_TEXTO;
+        return {
+          ...a,
+          content: recortado ? texto.slice(0, TOPE_TEXTO) : texto,
+          contenido_recortado: recortado,
+        };
+      }),
+      count: filas.length,
+      instruccion: filas.some((a) => (typeof a.content === "string" ? a.content.length : 0) > TOPE_TEXTO)
+        ? "Algun contenido viene RECORTADO. Si la respuesta esta en la parte que falta, vuelve a "
+          + "llamar con `articulo_id` para leerlo completo, y NO completes lo que no viste."
+        : undefined,
+      alcance: isAdmin
+        ? "Articulos de las dos pestañas: Colaboradores y Administradores."
+        : "Solo los articulos de la pestaña Colaboradores.",
+    };
+  }
+
   // ── CONTACTOS ────────────────────────────────────────────────────
   if (name === "buscar_contactos") {
     let q = db.from("external_contacts").select("*");
