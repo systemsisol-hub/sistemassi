@@ -83,6 +83,7 @@ export const QUE_HACE: Record<string, string> = {
   actualizar_incidencia:  "Cambiar el estatus u otros datos de una incidencia",
   actualizar_inventario:  "Asignar o liberar un equipo",
   gestionar_contacto:     "Crear o modificar un contacto externo",
+  buscar_conocimiento:    "Leer politicas, manuales y articulos de la base de Conocimientos",
   buscar_asistencia:      "Faltas, retardos y puntualidad, con las mismas cifras que la pagina de Asistencia",
 };
 

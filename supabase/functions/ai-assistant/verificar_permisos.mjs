@@ -94,7 +94,13 @@ console.log('1. Toda herramienta tiene permiso, o esta exenta a proposito');
 //   (`social_page.dart:39`). Pedir un permiso aqui daria una respuesta distinta a la de la pantalla
 //   para la misma pregunta, que es peor que no tenerlo. Devuelve dia, nombre, puesto y ubicacion; ni
 //   el año de nacimiento ni la edad, que es lo unico sensible de esa fecha.
-const EXENTAS = new Set(['enviar_notificacion', 'buscar_colaborador', 'buscar_cumpleanos']);
+// buscar_conocimiento: la pagina de Conocimientos esta abierta a TODO el mundo -no lleva `show_*`
+//   en main_navigation-, asi que pedir un permiso aqui daria una respuesta distinta a la de la
+//   pantalla para la misma pregunta. El control real es el `audience`: un usuario normal solo
+//   alcanza los articulos de la pestaña Colaboradores, y eso lo filtra la herramienta A MANO,
+//   porque la funcion consulta con la llave de servicio y se salta RLS. Ver la comprobacion 13.
+const EXENTAS = new Set(['enviar_notificacion', 'buscar_colaborador', 'buscar_cumpleanos',
+  'buscar_conocimiento']);
 for (const h of Object.keys(HERRAMIENTAS)) {
   check(h in PERMISO || EXENTAS.has(h),
     `${h} ${h in PERMISO ? '-> ' + PERMISO[h] : '(exenta)'}`);
@@ -270,6 +276,24 @@ console.log('\n12. Toda herramienta tiene descripcion para la pagina');
 const queHace = src.slice(src.indexOf('const QUE_HACE'), src.indexOf('const VIAS_DIRECTAS'));
 for (const h of Object.keys(HERRAMIENTAS)) {
   check(new RegExp(`(^|\\s)${h}:`, 'm').test(queHace), `${h} se explica en QUE_HACE`);
+}
+
+console.log('\n13. La base de conocimiento filtra por audiencia A MANO');
+// `knowledge_articles` YA tiene la politica correcta -SELECT si audience='all' o eres admin- pero esta
+// funcion consulta con la LLAVE DE SERVICIO, que se salta RLS. Si estas dos lineas desaparecen,
+// cualquiera con acceso al asistente lee los articulos de la pestaña de Administradores, y nada mas
+// falla: la consulta seguiria funcionando y devolviendo MAS de lo que debe.
+{
+  const i = src.indexOf('name === "buscar_conocimiento"');
+  check(i > 0, 'existe el bloque de buscar_conocimiento');
+  if (i > 0) {
+    const bloque = src.slice(i, i + 4000);
+    const filtros = [...bloque.matchAll(/if \(!isAdmin\)[^\n]*eq\("audience", "all"\)/g)].length;
+    check(filtros >= 2,
+      `el filtro por audiencia aparece ${filtros} veces (hacen falta 2: la busqueda y el articulo suelto)`);
+    check(!/audience[^\n]*input\./.test(bloque),
+      'la audiencia NO se toma de lo que manda el modelo');
+  }
 }
 
 console.log(fallas === 0 ? '\nTODO BIEN' : `\n${fallas} FALLAS`);

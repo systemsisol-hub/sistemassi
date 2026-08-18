@@ -59,6 +59,30 @@ export const ALL_TOOLS = [
   {
     type: "function",
     function: {
+      name: "buscar_conocimiento",
+      description: "Busca en la BASE DE CONOCIMIENTO de Sisol -la pagina de Conocimientos- y "
+        + "devuelve el CONTENIDO de los articulos: politicas, manuales, codigo de etica, "
+        + "instructivos. USALA SIEMPRE que se pregunte por una politica, una norma interna o como "
+        + "se hace un tramite: es la unica fuente de eso y no puedes deducirlo. "
+        + "Un usuario normal solo ve los articulos de la pestaña Colaboradores; un admin ve tambien "
+        + "los de Administradores. "
+        + "El `content` de la busqueda viene RECORTADO a 1200 caracteres: si la respuesta puede estar "
+        + "en la parte que falta, vuelve a llamar con `articulo_id` para leer ese articulo completo, y "
+        + "NO rellenes lo que no viste. Cita el titulo del articulo del que sacas la respuesta.",
+      parameters: {
+        type: "object",
+        properties: {
+          texto: { type: "string", description: "Palabras a buscar en el titulo, la descripcion y el contenido." },
+          categoria: { type: "string", description: "Acota a una categoria exacta." },
+          articulo_id: { type: "string", description: "UUID de un articulo, para leerlo COMPLETO." },
+          limit: { type: "number", description: "Cuantos articulos, hasta 15. Por omision 6." },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "buscar_asistencia",
       description: "Faltas, retardos y puntualidad de una persona, con las MISMAS cifras que la "
         + "pagina de Asistencia. Un usuario no-admin solo ve la suya. Para la de otra persona pasa "
