@@ -411,11 +411,72 @@ Deno.serve(async (req: Request) => {
   // Registrarlo a mano exigiria que alguien leyera `OPENWA_API_KEY` y `OPENWA_WEBHOOK_SECRET` y los
   // pegara en una terminal. Haciendolo aqui, los dos secretos no salen nunca de Supabase: la funcion
   // ya tiene los dos, porque con la llave manda las respuestas y con el secreto verifica.
-  if (req.headers.get("Authorization")) {
-    let accion = "";
+  // La accion se lee ANTES de la puerta de `Authorization`.
+  //
+  // `avisar` la llama Postgres con pg_net, que manda `X-Aviso` y NO manda `Authorization`. Dentro de
+  // esa puerta el aviso nunca se habria atendido: es el fallo que tuve al escribirlo.
+  let accion = "";
+  try {
+    accion = String((JSON.parse(crudo) as Record<string, unknown>).accion ?? "");
+  } catch { /* cuerpo no-JSON: es un webhook de WhatsApp, sigue abajo */ }
+
+  // ── Avisar por WhatsApp a un colaborador ─────────────────────────────
+  //
+  // La llama la BASE con pg_net cuando se crea una incidencia; ver el disparador
+  // `notificar_incidencia_nueva`. Va con su propio secreto en `X-Aviso`, no con una sesion: quien
+  // llama es Postgres, que no tiene ninguna.
+  //
+  // ─── El numero sale de `whatsapp_autorizados`, NO de `profiles.celular` ────
+  //
+  // Medido: el celular de la coordinadora de Desarrollo Humano esta capturado en DOS perfiles, y
+  // `0000000000` aparece en cinco. Con `celular` no se puede afirmar de quien es un numero, y
+  // mandarle la solicitud de vacaciones de alguien a un desconocido es una fuga, no un fallo de
+  // formato. La lista de autorizados tiene el `profile_id` puesto a mano por alguien, asi que ahi si
+  // se sabe. Y de paso es el interruptor: quien no este en la lista no recibe nada.
+  if (accion === "avisar") {
+    const secreto = req.headers.get("X-Aviso") ?? "";
+    const esperado = Deno.env.get("AVISO_WHATSAPP_SECRET") ?? "";
+    if (esperado.length === 0) {
+      return new Response(JSON.stringify({ error: "sin AVISO_WHATSAPP_SECRET configurado" }),
+        { status: 503, headers: { ...CORS, "Content-Type": "application/json" } });
+    }
+    if (!igualesEnTiempoConstante(secreto, esperado)) {
+      return new Response(JSON.stringify({ error: "secreto invalido" }),
+        { status: 401, headers: { ...CORS, "Content-Type": "application/json" } });
+    }
+
+    const cuerpoAviso = JSON.parse(crudo) as Record<string, unknown>;
+    const destinoId = String(cuerpoAviso.profile_id ?? "");
+    const texto = String(cuerpoAviso.texto ?? "").trim();
+    if (!destinoId || !texto) {
+      return new Response(JSON.stringify({ error: "faltan profile_id o texto" }),
+        { status: 400, headers: { ...CORS, "Content-Type": "application/json" } });
+    }
+
+    const { data: aut } = await svc.from("whatsapp_autorizados")
+      .select("telefono").eq("profile_id", destinoId).eq("activo", true).limit(1);
+    const tel = ((aut || [])[0] as { telefono?: string } | undefined)?.telefono;
+    if (!tel) {
+      // No es un error: es que esa persona no esta en la lista. La campana de la aplicacion ya le
+      // llego, asi que no se pierde el aviso, solo el canal.
+      console.log(`aviso: ${destinoId} no esta en whatsapp_autorizados activo, no se manda`);
+      return new Response(JSON.stringify({ ok: true, enviado: false, motivo: "no autorizado" }),
+        { headers: { ...CORS, "Content-Type": "application/json" } });
+    }
+
     try {
-      accion = String((JSON.parse(crudo) as Record<string, unknown>).accion ?? "");
-    } catch { /* cuerpo no-JSON: cae al 400 de abajo */ }
+      await enviar(`521${tel}@c.us`, texto);
+      console.log(`aviso enviado a ${destinoId}`);
+      return new Response(JSON.stringify({ ok: true, enviado: true }),
+        { headers: { ...CORS, "Content-Type": "application/json" } });
+    } catch (e) {
+      console.error(`aviso: no se pudo enviar a ${destinoId}: ${e}`);
+      return new Response(JSON.stringify({ error: `${e}` }),
+        { status: 502, headers: { ...CORS, "Content-Type": "application/json" } });
+    }
+  }
+
+  if (req.headers.get("Authorization")) {
     if (accion !== "activar_firma") {
       return new Response(JSON.stringify({ error: "accion desconocida" }),
         { status: 400, headers: { ...CORS, "Content-Type": "application/json" } });
