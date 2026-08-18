@@ -1163,12 +1163,16 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                             await Supabase.instance.client
                                 .from('incidencias')
                                 .insert(data);
-                            await NotificationService.sendToAdmins(
-                              title: 'Nueva Incidencia',
-                              message:
-                                  '$_userFullName ha creado una nueva petición.',
-                              type: 'new_incidencia',
-                            );
+                            // El aviso ya NO se manda desde aqui.
+                            //
+                            // Lo hace un disparador de la base -`notificar_incidencia_nueva`- que
+                            // avisa al JEFE DIRECTO de quien pide y a Desarrollo Humano. Dejarlo aqui
+                            // mandaria las dos cosas a la vez: el dirigido y el antiguo a los cinco
+                            // administradores.
+                            //
+                            // Y el antiguo tenia dos problemas: iba a TODOS los admins sin importar de
+                            // quien fuera la solicitud, y solo salia por este camino. Una peticion
+                            // creada por WhatsApp no avisaba a nadie, que es lo que se reporto.
                           }
                           if (mounted) {
                             Navigator.pop(context);
