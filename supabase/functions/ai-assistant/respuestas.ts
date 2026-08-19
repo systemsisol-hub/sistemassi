@@ -180,10 +180,10 @@ export function preguntaSuHorario(texto: string): boolean {
   const t = sinAcentos(texto).toLowerCase();
   if (!/horario|jornada|a que hora (entro|salgo)|mi turno/.test(t)) return false;
   // De otra persona lo resuelve el modelo, que sabe buscar el nombre.
-  if (/de\s+(?!trabajo|oficina|la\s|los\s|las\s|el\s|mi\s|mis\s)[a-z]{2,}/.test(t)) return false;
+  if (/\bde\s+(?!trabajo|oficina|la\s|los\s|las\s|el\s|mi\s|mis\s)[a-z]{2,}/.test(t)) return false;
   // Y del checador o de una zona no es «mi horario».
   if (/todos|zona|sucursal|cuantos horarios|lista de horarios/.test(t)) return false;
-  return /mi|mis|tengo|entro|salgo|me toca/.test(t);
+  return /\bmi\b|\bmis\b|\btengo\b|\bentro\b|\bsalgo\b|me toca/.test(t);
 }
 
 /** El horario propio, escrito desde las reglas de `schedules`. */
@@ -205,10 +205,8 @@ export function textoHorario(datos: Record<string, unknown>): string {
     return `• ${d.dia}: ${d.entrada ?? "—"} a ${d.salida ?? "—"}`
       + (tol > 0 ? ` (tolerancia ${tol} min)` : "");
   });
-  return `Tu horario${nombre ? ` es «${nombre}»` : ""}${zona ? `, zona ${zona}` : ""}:
-`
-    + lineas.join("
-");
+  return `Tu horario${nombre ? ` es «${nombre}»` : ""}${zona ? `, zona ${zona}` : ""}:\n`
+    + lineas.join("\n");
 }
 
 /** Si el mensaje es SOLO un identificador: un uuid, o un numero de empleado.
