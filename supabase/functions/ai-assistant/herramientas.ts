@@ -31,7 +31,7 @@ export const ALL_TOOLS = [
     type: "function",
     function: {
       name: "calcular_vacaciones",
-      description: "Vacaciones de un colaborador: devuelve la TABLA de periodos, el total disponible Y sus ÚLTIMAS SOLICITUDES en una sola llamada, así que NO hace falta buscar las incidencias aparte. Calcula los días según su antigüedad y las incidencias aprobadas/pendientes. Usa esta herramienta cuando el usuario pregunte cuántos días de vacaciones tiene, cuántos ha usado, cuál es su saldo o quiera ver el historial de periodos de vacaciones. Devuelve la lista de periodos y el total; si en cambio devuelve `error`, es un FALLO y no un saldo de cero.",
+      description: "Vacaciones de un colaborador: devuelve la TABLA de periodos, el total disponible Y sus ÚLTIMAS SOLICITUDES en una sola llamada, así que NO hace falta buscar las incidencias aparte. Calcula los días según su antigüedad y descuenta SÓLO las incidencias APROBADAS: una solicitud PENDIENTE no reserva días, así que sus días siguen apareciendo disponibles. Usa esta herramienta cuando el usuario pregunte cuántos días de vacaciones tiene, cuántos ha usado, cuál es su saldo o quiera ver el historial de periodos de vacaciones. Devuelve la lista de periodos y el total; si en cambio devuelve `error`, es un FALLO y no un saldo de cero.",
       parameters: {
         type: "object",
         properties: {

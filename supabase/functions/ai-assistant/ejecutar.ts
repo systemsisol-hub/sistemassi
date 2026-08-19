@@ -381,12 +381,20 @@ export async function runTool(
     const base = fechaReingreso ?? fechaIngreso;
     if (!base) return { error: "El colaborador no tiene fecha de ingreso registrada. No es posible calcular los días de vacaciones." };
 
-    // Incidencias APROBADAS y PENDIENTES para el cálculo
+    // Sólo las APROBADAS descuentan del saldo.
+    //
+    // Decidido el 18/08/2026, al revés de como estaba: antes contaban también las PENDIENTES, porque
+    // una solicitud pendiente reservaba los días. Con este cambio, los días de una solicitud sin
+    // autorizar siguen apareciendo disponibles.
+    //
+    // Tiene que coincidir con la tabla del Historial y con el formulario —ver el comentario en
+    // `_buildHistorialTable` de incidencias_page.dart—. Si estos tres se separan, Soli y la pantalla
+    // dan saldos distintos para la misma persona, y ya pasó una vez.
     const { data: incs } = await db
       .from("incidencias")
       .select("periodo,dias,status")
       .eq("usuario_id", targetId)
-      .in("status", ["APROBADA", "PENDIENTE"]);
+      .eq("status", "APROBADA");
 
     const normalize = (s: string | null) => (s || "").replace(/\D/g, "");
     const usedMap: Record<string, number> = {};
