@@ -30,6 +30,56 @@ export function alcanceDeLaConsulta(deQuien: string, cosa: string): string {
     + "Para los suyos hay que repetir la consulta pasando su usuario_id.";
 }
 
+/** Los horarios que usan estas filas, resueltos y legibles, indexados por su uuid.
+ *
+ * ─── El fallo que la hizo necesaria ──────────────────────────────────────────
+ *
+ * `profiles.horario` guarda el UUID de un renglon de `schedules`, no un texto. `buscar_colaborador` lo
+ * devolvia crudo, asi que preguntar «cual es mi horario» contestaba con
+ * «3ac244d0-bf7f-4cfa-99ce-b9f3bffd749d». Reportado tal cual.
+ *
+ * Se resuelven TODOS de una sola consulta y no uno por fila: una busqueda que devuelve veinte personas
+ * haria veinte consultas para lo mismo.
+ */
+async function horariosDe(
+  db: Db,
+  filas: Array<Record<string, unknown>>,
+): Promise<Record<string, unknown>> {
+  const ids = [...new Set(filas
+    .map((f) => f.horario)
+    .filter((h): h is string => typeof h === "string" && esUuid(h)))];
+  if (ids.length === 0) return {};
+
+  const { data } = await db.from("schedules").select("id,name,zone,rules").in("id", ids);
+  const DIAS = ["", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo"];
+  const hhmm = (v: unknown) => String(v ?? "").slice(0, 5);
+
+  const mapa: Record<string, unknown> = {};
+  for (const h of (data || []) as Array<Record<string, unknown>>) {
+    const reglas = Array.isArray(h.rules) ? h.rules as Array<Record<string, unknown>> : [];
+    // Una entrada y una salida por dia. La tolerancia va con la ENTRADA, que es la que decide un
+    // retardo; en la salida siempre viene en cero.
+    const porDia: Record<number, Record<string, unknown>> = {};
+    for (const r of reglas) {
+      const d = Number(r.day);
+      if (!d) continue;
+      porDia[d] ??= { dia: DIAS[d] ?? String(d) };
+      if (r.type === "ENTRADA") {
+        porDia[d].entrada = hhmm(r.time);
+        porDia[d].tolerancia_min = Number(r.tol) || 0;
+      } else if (r.type === "SALIDA") {
+        porDia[d].salida = hhmm(r.time);
+      }
+    }
+    mapa[String(h.id)] = {
+      nombre: h.name ?? null,
+      zona: h.zone ?? null,
+      dias: Object.keys(porDia).map(Number).sort((a, b) => a - b).map((d) => porDia[d]),
+    };
+  }
+  return mapa;
+}
+
 export async function runTool(
   name: string,
   input: ToolInput,
@@ -135,6 +185,7 @@ export async function runTool(
         return {
           results: filas,
           count: filas.length,
+          horarios: await horariosDe(db, filas),
           aviso: "Había demasiados candidatos; el resultado puede estar incompleto. Acota la búsqueda.",
         };
       }
@@ -158,6 +209,7 @@ export async function runTool(
             return {
               results: aprox,
               count: aprox.length,
+              horarios: await horariosDe(db, aprox),
               aviso: `No hay nadie escrito exactamente así. Esto es lo más parecido a `
                 + `"${input.nombre_completo}"; confírmalo con el usuario antes de darlo por bueno.`,
             };
@@ -169,6 +221,7 @@ export async function runTool(
             return {
               results: cerca,
               count: cerca.length,
+              horarios: await horariosDe(db, cerca),
               aviso: `Nadie coincide con todo "${input.nombre_completo}". Estos coinciden en parte: `
                 + `MUESTRALOS y pregunta si es alguno, o pide un apellido más, el correo o el número.`,
             };
@@ -177,7 +230,14 @@ export async function runTool(
       }
     }
     // Los vigentes arriba: con un apellido comun, la lista es en su mayoria gente que ya no esta.
-    return { results: vigentesPrimero(filas), count: filas.length };
+    // `horarios` traduce el uuid de `horario` a nombre, zona y las horas de cada dia. Sin esto,
+    // «cual es mi horario» contestaba con el uuid.
+    const ordenadas = vigentesPrimero(filas);
+    return {
+      results: ordenadas,
+      count: filas.length,
+      horarios: await horariosDe(db, ordenadas),
+    };
   }
 
   if (name === "crear_colaborador") {
@@ -321,12 +381,20 @@ export async function runTool(
     const base = fechaReingreso ?? fechaIngreso;
     if (!base) return { error: "El colaborador no tiene fecha de ingreso registrada. No es posible calcular los días de vacaciones." };
 
-    // Incidencias APROBADAS y PENDIENTES para el cálculo
+    // Sólo las APROBADAS descuentan del saldo.
+    //
+    // Decidido el 18/08/2026, al revés de como estaba: antes contaban también las PENDIENTES, porque
+    // una solicitud pendiente reservaba los días. Con este cambio, los días de una solicitud sin
+    // autorizar siguen apareciendo disponibles.
+    //
+    // Tiene que coincidir con la tabla del Historial y con el formulario —ver el comentario en
+    // `_buildHistorialTable` de incidencias_page.dart—. Si estos tres se separan, Soli y la pantalla
+    // dan saldos distintos para la misma persona, y ya pasó una vez.
     const { data: incs } = await db
       .from("incidencias")
       .select("periodo,dias,status")
       .eq("usuario_id", targetId)
-      .in("status", ["APROBADA", "PENDIENTE"]);
+      .eq("status", "APROBADA");
 
     const normalize = (s: string | null) => (s || "").replace(/\D/g, "");
     const usedMap: Record<string, number> = {};

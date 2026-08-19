@@ -1156,7 +1156,7 @@ class _VacationCard extends StatelessWidget {
                   child: Text(
                     'Días según Ley Federal del Trabajo. '
                     'Proporcional al tiempo transcurrido del periodo actual. '
-                    'Se descuentan incidencias APROBADAS y PENDIENTES.',
+                    'Se descuentan sólo las incidencias APROBADAS.',
                     style:
                         TextStyle(fontSize: 10, color: c.ink4, height: 1.4),
                   ),

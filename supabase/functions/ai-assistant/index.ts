@@ -17,7 +17,7 @@ import { ALL_TOOLS, ToolInput } from "./herramientas.ts";
 import { CORS, igualesEnTiempoConstante, INTERNAL_SECRET, OLLAMA_BASE, OLLAMA_KEY, OLLAMA_MODEL, OLLAMA_MODEL_RESPALDO, SERVICE_KEY, SUPABASE_URL } from "./config.ts";
 import { ADMIN_ONLY_TOOLS, Identidad, PERMISO_POR_HERRAMIENTA, Permisos, puedeUsarHerramienta, QUE_HACE, VIAS_DIRECTAS } from "./permisos.ts";
 import { construirPrompt } from "./prompt.ts";
-import { afirmaDatoSinRespaldo, preguntaCumpleanos, preguntaFaltasDe, preguntaIncidenciasDe, preguntaSuEquipo, preguntaSusVacaciones, soloUnIdentificador, textoAsistencia, textoCumpleanos, textoIncidencias, textoEquipoPropio, textoUltimaSolicitud, textoVacacionesPropias } from "./respuestas.ts";
+import { afirmaDatoSinRespaldo, preguntaCumpleanos, preguntaFaltasDe, preguntaIncidenciasDe, preguntaSuEquipo, preguntaSuHorario, preguntaSusVacaciones, soloUnIdentificador, textoAsistencia, textoCumpleanos, textoIncidencias, textoEquipoPropio, textoHorario, textoUltimaSolicitud, textoVacacionesPropias } from "./respuestas.ts";
 import { runTool } from "./ejecutar.ts";
 import { jefeAlQueSeRefiere } from "./nombres.ts";
 
@@ -194,6 +194,60 @@ Deno.serve(async (req: Request) => {
       // Si falla se deja seguir al modelo, que al menos puede explicarlo. El guardia de abajo evita
       // que convierta el fallo en un cero.
       console.log(`via directa fallo, sigue el modelo: ${propio.error}`);
+    }
+
+    // ── Via directa: su propio horario ─────────────────────────────────────
+    //
+    // `profiles.horario` guarda el UUID de un renglon de `schedules`, y preguntar «quiero mi horario»
+    // contestaba con ese uuid. Reportado tal cual.
+    //
+    // Se consulta aqui y no por `buscar_colaborador` porque `USER_COLABORADOR_FIELDS` no incluye
+    // `horario`: a un usuario normal esa herramienta no le devuelve el suyo, y anadirlo a esa lista
+    // expondria el horario de CUALQUIERA en una busqueda de directorio. Por aqui cada quien ve el suyo.
+    if (preguntaSuHorario(ultimoUsuario)) {
+      const { data: perfilHorario } = await svc.from("profiles")
+        .select("horario").eq("id", actorId).maybeSingle();
+      const idHorario = (perfilHorario as Record<string, unknown> | null)?.horario;
+
+      if (typeof idHorario === "string" && idHorario.length > 0) {
+        const { data: h } = await svc.from("schedules")
+          .select("name,zone,rules").eq("id", idHorario).maybeSingle();
+        if (h) {
+          const DIAS = ["", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo"];
+          const hhmm = (v: unknown) => String(v ?? "").slice(0, 5);
+          const reglas = Array.isArray((h as Record<string, unknown>).rules)
+            ? (h as Record<string, unknown>).rules as Array<Record<string, unknown>>
+            : [];
+          const porDia: Record<number, Record<string, unknown>> = {};
+          for (const r of reglas) {
+            const d = Number(r.day);
+            if (!d) continue;
+            porDia[d] ??= { dia: DIAS[d] ?? String(d) };
+            if (r.type === "ENTRADA") {
+              porDia[d].entrada = hhmm(r.time);
+              porDia[d].tolerancia_min = Number(r.tol) || 0;
+            } else if (r.type === "SALIDA") {
+              porDia[d].salida = hhmm(r.time);
+            }
+          }
+          const datos = {
+            nombre: (h as Record<string, unknown>).name ?? null,
+            zona: (h as Record<string, unknown>).zone ?? null,
+            dias: Object.keys(porDia).map(Number).sort((a, b) => a - b).map((d) => porDia[d]),
+          };
+          console.log(`via directa: horario propio de ${actorId}, ${datos.dias.length} dias`);
+          return new Response(
+            JSON.stringify({ text: textoHorario(datos), structured: null }),
+            { headers: { ...CORS, "Content-Type": "application/json" } },
+          );
+        }
+      }
+      // Sin horario asignado se dice, y se dice lo que implica: sin el no se pueden calcular faltas.
+      console.log(`via directa: ${actorId} sin horario asignado`);
+      return new Response(
+        JSON.stringify({ text: textoHorario({ dias: [] }), structured: null }),
+        { headers: { ...CORS, "Content-Type": "application/json" } },
+      );
     }
 
     // ── Via directa: las faltas o la asistencia de alguien ─────────────────

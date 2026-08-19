@@ -68,6 +68,8 @@ writeFileSync(tmp, `${extraerConst('MESES')}\n\n`
   + `${extraerFuncion('preguntaSusVacaciones')}\n\n`
   + `${extraerFuncion('textoUltimaSolicitud')}\n\n`
   + `${extraerFuncion('textoVacacionesPropias')}\n\n`
+  + `${extraerFuncion('preguntaSuHorario')}\n\n`
+  + `${extraerFuncion('textoHorario')}\n\n`
   + `${extraerFuncion('soloUnIdentificador')}\n\n`
   + `${extraerFuncion('preguntaFaltasDe')}\n\n`
   + `${extraerFuncion('textoAsistencia')}\n\n`
@@ -81,11 +83,13 @@ writeFileSync(tmp, `${extraerConst('MESES')}\n\n`
   + 'export { afirmaDatoSinRespaldo, preguntaSusVacaciones, textoVacacionesPropias,\n'
   + '  preguntaCumpleanos, textoCumpleanos, textoUltimaSolicitud,\n'
   + '  preguntaSuEquipo, textoEquipoPropio, alcanceDeLaConsulta, soloUnIdentificador,\n'
-  + '  preguntaIncidenciasDe, textoIncidencias, preguntaFaltasDe, textoAsistencia };\n', 'utf8');
+  + '  preguntaIncidenciasDe, textoIncidencias, preguntaFaltasDe, textoAsistencia,\n'
+  + '  preguntaSuHorario, textoHorario };\n', 'utf8');
 const { afirmaDatoSinRespaldo, preguntaSusVacaciones, textoVacacionesPropias,
   preguntaCumpleanos, textoCumpleanos, textoUltimaSolicitud,
   preguntaSuEquipo, textoEquipoPropio, alcanceDeLaConsulta, soloUnIdentificador,
-  preguntaIncidenciasDe, textoIncidencias, preguntaFaltasDe, textoAsistencia } =
+  preguntaIncidenciasDe, textoIncidencias, preguntaFaltasDe, textoAsistencia,
+  preguntaSuHorario, textoHorario } =
   await import('file://' + tmp.replace(/\\/g, '/'));
 
 let fallos = 0;
@@ -564,6 +568,49 @@ ok('sin nadie lo dice, no deja la lista vacia',
    textoCumpleanos({ mes: 8, rango: '10 al 16', count: 0, results: [] })
      .startsWith('No hay cumpleaños esta semana'),
    textoCumpleanos({ mes: 8, rango: '10 al 16', count: 0, results: [] }));
+
+console.log('\nEl horario propio: se pedia y salia el uuid');
+// Reportado: «quiero mi horario» contestaba «3ac244d0-bf7f-4cfa-99ce-b9f3bffd749d», porque
+// `profiles.horario` guarda el uuid de un renglon de `schedules` y se devolvia crudo.
+for (const q of ['quiero mi horario', 'cual es mi horario', 'a que hora entro',
+                 'a que hora salgo', 'mi jornada', 'que horario tengo']) {
+  ok(`la atiende: "${q}"`, preguntaSuHorario(q));
+}
+for (const q of [
+  'el horario de brenda mondragon',
+  'que horario tiene marco montoya',
+  'cuantos horarios hay',
+  'lista de horarios',
+  'horarios por zona',
+  'cuantas vacaciones tengo',
+  'hola',
+]) {
+  ok(`no se la queda: "${q}"`, !preguntaSuHorario(q));
+}
+
+// El horario REAL de Angel: lunes a jueves 08:00-18:00 y VIERNES 09:00-15:00. Ese viernes distinto es
+// lo que explica el retardo del 24/07 con entrada a las 09:00, y por eso se listan los dias uno a uno
+// en vez de resumir «L-V de 8 a 18», que seria falso.
+const horarioReal = {
+  nombre: 'Horario Oficina L-V ( Consti )', zona: 'Constituyentes',
+  dias: [
+    { dia: 'lunes', entrada: '08:00', salida: '18:00', tolerancia_min: 15 },
+    { dia: 'viernes', entrada: '09:00', salida: '15:00', tolerancia_min: 15 },
+  ],
+};
+const txtHor = textoHorario(horarioReal);
+console.log(`  -> ${txtHor.replace(/\n/g, ' | ')}`);
+ok('dice el nombre del horario', txtHor.includes('Horario Oficina L-V'));
+ok('y la zona', txtHor.includes('Constituyentes'));
+ok('la entrada y la salida de cada dia',
+   txtHor.includes('lunes: 08:00 a 18:00') && txtHor.includes('viernes: 09:00 a 15:00'));
+ok('la tolerancia, que es la que decide un retardo', txtHor.includes('tolerancia 15 min'));
+// Lo reportado: que NO salga el uuid.
+ok('NO aparece ningun uuid', !/[0-9a-f]{8}-[0-9a-f]{4}/.test(txtHor));
+ok('sin horario asignado se dice, y que sin el no hay faltas que calcular',
+   textoHorario({ dias: [] }).includes('no se pueden calcular'));
+ok('con nombre pero sin dias se distingue',
+   textoHorario({ nombre: 'Turno X', dias: [] }).includes('no tiene dias capturados'));
 
 console.log(fallos === 0 ? '\nTODO BIEN' : `\n${fallos} FALLAS`);
 process.exit(fallos === 0 ? 0 : 1);

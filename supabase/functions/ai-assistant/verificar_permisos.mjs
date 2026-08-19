@@ -296,5 +296,33 @@ console.log('\n13. La base de conocimiento filtra por audiencia A MANO');
   }
 }
 
+const archivos = readdirSync(aqui).filter((f) => f.endsWith('.ts')).sort();
+
+console.log('14. Ningun caracter de control suelto en el codigo');
+// El fallo que lo motivo: al inyectar codigo con un heredoc, `\b` se convirtio en el CARACTER de
+// retroceso (0x08) once veces. Deno rechazo el despliegue por sintaxis, pero
+// `node --experimental-strip-types --check` habia dado OK -tercer falso «OK» del dia- y los arneses
+// tambien pasaban, porque un `\b` perdido no rompe una expresion regular: solo cambia lo que empata.
+//
+// Un `\b` que se vuelve 0x08 deja de ser un limite de palabra, asi que «de» empieza a coincidir dentro
+// de «tarde». Es un cambio de comportamiento invisible, y de los peores de encontrar.
+{
+  const nombres = { 8: 'retroceso (era \b)', 12: 'form feed (era \f)', 11: 'tab vertical (era \v)', 0: 'nulo (era \0)', 13: 'CR' };
+  let sucios = 0;
+  for (const f of archivos) {
+    const src = leer(join(aqui, f));
+    const malos = new Set();
+    for (const ch of src) {
+      const c = ch.codePointAt(0);
+      if (c < 32 && ch !== '\n' && ch !== '\t') malos.add(c);
+    }
+    if (malos.size > 0) {
+      sucios++;
+      check(false, `${f} lleva ${[...malos].map((c) => nombres[c] ?? c).join(', ')}`);
+    }
+  }
+  check(sucios === 0, `los ${archivos.length} archivos sin controles sueltos`);
+}
+
 console.log(fallas === 0 ? '\nTODO BIEN' : `\n${fallas} FALLAS`);
 process.exit(fallas === 0 ? 0 : 1);

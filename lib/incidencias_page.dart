@@ -508,11 +508,14 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
 
     String norm(String? p) => (p ?? '').replaceAll(RegExp(r'\D'), '');
 
-    // Días usados por período (solo APROBADA + PENDIENTE = reservados)
+    // Días usados por período: SÓLO las APROBADAS.
+    //
+    // Decidido el 18/08/2026, y es lo contrario de lo que estaba: antes se contaban también las
+    // PENDIENTES, porque una solicitud pendiente reservaba los días. Ver el comentario largo en
+    // `_buildHistorialTable`, que explica la consecuencia de este cambio.
     final used = <String, int>{};
     for (final inc in _incidencias) {
-      if (inc['usuario_id'] == targetId &&
-          (inc['status'] == 'APROBADA' || inc['status'] == 'PENDIENTE')) {
+      if (inc['usuario_id'] == targetId && inc['status'] == 'APROBADA') {
         final k = norm(inc['periodo'] as String?);
         if (k.isNotEmpty) {
           used[k] = (used[k] ?? 0) + (inc['dias'] as int? ?? 0);
@@ -584,12 +587,23 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
 
     final usedDaysMap = <String, int>{};
     for (final inc in _incidencias) {
-      // Cuenta APROBADA **y PENDIENTE**: una solicitud pendiente ya reserva los días. Es decisión
-      // de RH, y con ella las tres implementaciones dicen lo mismo — antes esta tabla contaba sólo
-      // las aprobadas mientras `_getAvailablePeriods` —el que alimenta el formulario— y Soli contaban
-      // las dos, así que la tabla mostraba más días disponibles de los que el formulario dejaba pedir.
-      if (inc['usuario_id'] == targetUserId &&
-          (inc['status'] == 'APROBADA' || inc['status'] == 'PENDIENTE')) {
+      // Cuenta SÓLO las APROBADAS.
+      //
+      // ─── Las dos decisiones, y por qué está escrito aquí ────────────────────
+      //
+      // En junio se decidió contar también las PENDIENTES, porque una solicitud pendiente reserva los
+      // días. El 18/08/2026 se decidió lo contrario: sólo cuentan los días ya autorizados.
+      //
+      // La consecuencia, para que nadie la descubra por sorpresa: mientras una solicitud espera
+      // autorización, sus días siguen apareciendo como disponibles. Alguien con 5 días y una solicitud
+      // pendiente de 5 puede pedir otros 5, y las dos pueden aprobarse. El control de eso pasa a ser
+      // de quien autoriza, no del cálculo.
+      //
+      // Lo que NO cambia es que los TRES sitios cuentan igual —esta tabla, `_getAvailablePeriods` que
+      // alimenta el formulario, y `calcular_vacaciones` que usa Soli—. Cuando no coincidían, la tabla
+      // mostraba más días disponibles de los que el formulario dejaba pedir; ése es el fallo que hay
+      // que evitar al cambiar esta regla, y por eso se cambian los tres a la vez.
+      if (inc['usuario_id'] == targetUserId && inc['status'] == 'APROBADA') {
         final normP = normalizePeriod(inc['periodo'] as String?);
         final dias = inc['dias'] as int? ?? 0;
         if (normP.isNotEmpty) {
