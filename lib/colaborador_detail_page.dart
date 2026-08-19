@@ -138,10 +138,7 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
                           _infoRow(context, Icons.fingerprint, 'CURP', colab['curp']),
                           _infoRow(context, Icons.receipt_long, 'RFC', colab['rfc']),
                           _infoRow(context, Icons.local_hospital, 'IMSS', colab['imss']),
-                    _infoRow(context, Icons.bloodtype, 'Tipo de sangre',
-                        colab['tipo_sangre']),
-                          // Despues del IMSS, como se pidio. Es dato de salud: esta pantalla ya
-                          // exige el permiso del expediente, y el asistente NO lo expone.
+                          // Después del IMSS, como se pidió.
                           _infoRow(context, Icons.bloodtype, 'Tipo de sangre',
                               colab['tipo_sangre']),
                         ]),
@@ -233,6 +230,9 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
                     _infoRow(context, Icons.fingerprint, 'CURP', colab['curp']),
                     _infoRow(context, Icons.receipt_long, 'RFC', colab['rfc']),
                     _infoRow(context, Icons.local_hospital, 'IMSS', colab['imss']),
+                    // Después del IMSS, igual que en la otra vista de la ficha.
+                    _infoRow(context, Icons.bloodtype, 'Tipo de sangre',
+                        colab['tipo_sangre']),
                   ]),
                   const SizedBox(height: SiSpace.x4),
                   _buildInfoCard(context, 'Domicilio y Contacto', [
