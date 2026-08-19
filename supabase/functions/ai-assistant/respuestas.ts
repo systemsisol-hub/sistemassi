@@ -166,6 +166,51 @@ export function textoAsistencia(
   return lineas.join("\n");
 }
 
+/** Si la persona pregunta por SU HORARIO.
+ *
+ * Reportado: «quiero mi horario» contestaba con «3ac244d0-bf7f-4cfa-99ce-b9f3bffd749d», porque
+ * `profiles.horario` guarda el uuid de un renglon de `schedules` y se devolvia crudo.
+ *
+ * Hace falta como via directa y no solo arreglando la herramienta: `USER_COLABORADOR_FIELDS` no
+ * incluye `horario`, asi que a un usuario normal `buscar_colaborador` no le devuelve el suyo. Y
+ * anadirlo a esa lista expondria el horario de CUALQUIERA en una busqueda de directorio. Por aqui cada
+ * quien ve el suyo, sin ampliar nada.
+ */
+export function preguntaSuHorario(texto: string): boolean {
+  const t = sinAcentos(texto).toLowerCase();
+  if (!/horario|jornada|a que hora (entro|salgo)|mi turno/.test(t)) return false;
+  // De otra persona lo resuelve el modelo, que sabe buscar el nombre.
+  if (/de\s+(?!trabajo|oficina|la\s|los\s|las\s|el\s|mi\s|mis\s)[a-z]{2,}/.test(t)) return false;
+  // Y del checador o de una zona no es «mi horario».
+  if (/todos|zona|sucursal|cuantos horarios|lista de horarios/.test(t)) return false;
+  return /mi|mis|tengo|entro|salgo|me toca/.test(t);
+}
+
+/** El horario propio, escrito desde las reglas de `schedules`. */
+export function textoHorario(datos: Record<string, unknown>): string {
+  const nombre = datos.nombre ? String(datos.nombre) : null;
+  const zona = datos.zona ? String(datos.zona) : null;
+  const dias = (datos.dias ?? []) as Array<Record<string, unknown>>;
+
+  if (dias.length === 0) {
+    return nombre
+      ? `Tu horario es «${nombre}»${zona ? ` (${zona})` : ""}, pero no tiene dias capturados. `
+        + `Avisa a Sistemas para que lo revisen.`
+      : "No tienes horario asignado en el sistema. Sin el, tus faltas y retardos no se pueden calcular; "
+        + "avisa a Sistemas o a Desarrollo Humano.";
+  }
+
+  const lineas = dias.map((d) => {
+    const tol = Number(d.tolerancia_min) || 0;
+    return `• ${d.dia}: ${d.entrada ?? "—"} a ${d.salida ?? "—"}`
+      + (tol > 0 ? ` (tolerancia ${tol} min)` : "");
+  });
+  return `Tu horario${nombre ? ` es «${nombre}»` : ""}${zona ? `, zona ${zona}` : ""}:
+`
+    + lineas.join("
+");
+}
+
 /** Si el mensaje es SOLO un identificador: un uuid, o un numero de empleado.
  *
  * ─── El fallo que la hizo necesaria ──────────────────────────────────────────

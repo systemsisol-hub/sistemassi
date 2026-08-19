@@ -98,6 +98,7 @@ export const VIAS_DIRECTAS = [
   { pregunta: "«qué equipo tengo asignado»", resuelve: "Los equipos que están a tu nombre en el inventario, con su serie" },
   { pregunta: "«incidencias de <persona>» / «mis incidencias»", resuelve: "El historial con sus fechas de salida, regreso, días y periodo" },
   { pregunta: "un número de empleado o un UUID a secas", resuelve: "La ficha de esa persona, con su nombre y su número del mismo registro" },
+  { pregunta: "«cuál es mi horario»", resuelve: "Su jornada por día, con la hora de entrada, la de salida y la tolerancia" },
   { pregunta: "«faltas de <persona>» / «mis faltas»", resuelve: "Faltas, justificados, retardos y días de descuento, con los días listados" },
 ];
 
