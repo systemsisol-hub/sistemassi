@@ -625,6 +625,110 @@ export async function runTool(
     return { success: true, updated: data };
   }
 
+  // ── CONTACTO DE EMERGENCIA ────────────────────────────────────────
+  //
+  // Nombre, telefono y relacion de la referencia, mas el tipo de sangre. Es la informacion que se
+  // busca cuando alguien esta en un hospital, asi que la respuesta tiene que ser corta y sin adornos.
+  //
+  // ─── Quien puede pedir el de quien ──────────────────────────────────────────
+  //
+  // Lo PROPIO lo pide cualquiera: es su contacto y su tipo de sangre. Para eso esta herramienta NO
+  // exige permiso de pagina, y por eso figura en EXENTAS del arnes.
+  //
+  // El de OTRA PERSONA exige ser administrador Y tener `show_cssi`, que es exactamente lo que abre la
+  // pagina del expediente donde vive este dato -ver `main_navigation.dart`-. La comprobacion esta aqui
+  // dentro y no en el mapa de permisos porque las dos reglas son distintas segun de quien se pregunte;
+  // un solo permiso para las dos habria dejado a un usuario normal sin poder ver el suyo.
+  if (name === "buscar_contacto_emergencia") {
+    const CAMPOS_EMERGENCIA = "id,numero_empleado,nombre,paterno,materno,puesto,area," +
+      "referencia_nombre,referencia_telefono,referencia_relacion,tipo_sangre";
+
+    const pideDeOtro = Boolean(input.nombre_completo || input.numero_empleado
+      || (input.usuario_id && String(input.usuario_id) !== userId));
+
+    if (pideDeOtro && !(isAdmin && permisos.show_cssi === true)) {
+      return {
+        error: "El contacto de emergencia de otra persona solo lo ve un administrador con el permiso "
+          + "«show_cssi», el mismo que abre la pagina de Colaborador. Si es el tuyo, vuelve a "
+          + "preguntar sin nombre ni numero.",
+      };
+    }
+
+    let objetivo = userId;
+    if (pideDeOtro && input.nombre_completo) {
+      const { fila, candidatos, relajado } = await resolverPorNombre(
+        db, String(input.nombre_completo),
+        "id,nombre,paterno,materno,numero_empleado,status_rh,puesto,area",
+      );
+      if (candidatos.length === 0) {
+        return {
+          necesita_confirmacion: true, candidatos: [], buscado: input.nombre_completo,
+          instruccion: `No hay nadie que se llame "${input.nombre_completo}". Pide un apellido, `
+            + `el correo o el numero de empleado.`,
+        };
+      }
+      if (candidatos.length > 1 || relajado || !fila) {
+        return {
+          necesita_confirmacion: true,
+          buscado: input.nombre_completo,
+          total_coincidencias: candidatos.length,
+          candidatos: candidatos.slice(0, 8).map((f) => ({
+            ...f, estatus: esVigente(f) ? "VIGENTE" : "BAJA",
+          })),
+          instruccion: "MUESTRALOS TODOS en una tabla con numero de empleado, nombre, puesto y la "
+            + "columna «estatus», y pregunta a cual se refiere. NO omitas a los de BAJA.",
+        };
+      }
+      objetivo = String(fila.id);
+    } else if (pideDeOtro && input.numero_empleado) {
+      const variants = numeroEmpleadoVariants(String(input.numero_empleado));
+      const { data: enc } = await db.from("profiles").select("id")
+        .or(variants.map((v) => `numero_empleado.eq.${v}`).join(",")).limit(2);
+      if (!enc || enc.length === 0) {
+        return { error: `No existe ningun colaborador con el numero de empleado ${input.numero_empleado}.` };
+      }
+      objetivo = (enc[0] as { id: string }).id;
+    } else if (pideDeOtro && input.usuario_id) {
+      const dado = String(input.usuario_id);
+      if (!esUuid(dado)) {
+        return { error: `"${dado}" no es un UUID. Si es un numero de empleado pasalo en numero_empleado.` };
+      }
+      objetivo = dado;
+    }
+
+    const { data, error } = await db.from("profiles")
+      .select(CAMPOS_EMERGENCIA).eq("id", objetivo).maybeSingle();
+    if (error) return { error: error.message };
+    if (!data) return { error: "No se encontro ese perfil." };
+
+    const p = data as Record<string, unknown>;
+    const tieneAlgo = Boolean(p.referencia_nombre || p.referencia_telefono
+      || p.referencia_relacion || p.tipo_sangre);
+
+    return {
+      colaborador: [p.nombre, p.paterno, p.materno].filter(Boolean).join(" "),
+      numero_empleado: p.numero_empleado ?? null,
+      puesto: p.puesto ?? null,
+      referencia_nombre: p.referencia_nombre ?? null,
+      referencia_telefono: p.referencia_telefono ?? null,
+      referencia_relacion: p.referencia_relacion ?? null,
+      tipo_sangre: p.tipo_sangre ?? null,
+      alcance: objetivo === userId
+        ? "El contacto de emergencia de quien pregunta."
+        : "El contacto de emergencia del colaborador que se pidio.",
+      // Un hueco NO es un hecho sobre la persona: es un hecho sobre el expediente.
+      //
+      // Medido el 18/08/2026: de 244 vigentes solo 23 tienen la referencia capturada y NINGUNO el
+      // tipo de sangre. Decir «no tiene contacto de emergencia» seria afirmar algo que nadie sabe,
+      // y en una urgencia mandaria a no seguir buscando.
+      instruccion: tieneAlgo
+        ? "Da los datos que vengan y NO rellenes los que salgan vacios."
+        : "Este expediente NO tiene capturado ningun dato de emergencia. Dilo asi: que no esta "
+          + "REGISTRADO, no que la persona no tenga contacto. Sugiere capturarlo en la pagina de "
+          + "Colaborador, y si es una urgencia, preguntar a Desarrollo Humano.",
+    };
+  }
+
   // ── ASISTENCIA ────────────────────────────────────────────────────
   //
   // Las cifras salen de las MISMAS dos vistas que pinta la pagina de Asistencia, y se agregan con las

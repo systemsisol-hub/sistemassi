@@ -17,7 +17,7 @@ import { ALL_TOOLS, ToolInput } from "./herramientas.ts";
 import { CORS, igualesEnTiempoConstante, INTERNAL_SECRET, OLLAMA_BASE, OLLAMA_KEY, OLLAMA_MODEL, OLLAMA_MODEL_RESPALDO, SERVICE_KEY, SUPABASE_URL } from "./config.ts";
 import { ADMIN_ONLY_TOOLS, Identidad, PERMISO_POR_HERRAMIENTA, Permisos, puedeUsarHerramienta, QUE_HACE, VIAS_DIRECTAS } from "./permisos.ts";
 import { construirPrompt } from "./prompt.ts";
-import { afirmaDatoSinRespaldo, preguntaCumpleanos, preguntaFaltasDe, preguntaIncidenciasDe, preguntaSuEquipo, preguntaSuHorario, preguntaSusVacaciones, soloUnIdentificador, textoAsistencia, textoCumpleanos, textoIncidencias, textoEquipoPropio, textoHorario, textoUltimaSolicitud, textoVacacionesPropias } from "./respuestas.ts";
+import { afirmaDatoSinRespaldo, preguntaContactoEmergencia, preguntaCumpleanos, preguntaFaltasDe, preguntaIncidenciasDe, preguntaSuEquipo, preguntaSuHorario, preguntaSusVacaciones, soloUnIdentificador, textoAsistencia, textoContactoEmergencia, textoCumpleanos, textoIncidencias, textoEquipoPropio, textoHorario, textoUltimaSolicitud, textoVacacionesPropias } from "./respuestas.ts";
 import { runTool } from "./ejecutar.ts";
 import { jefeAlQueSeRefiere } from "./nombres.ts";
 
@@ -194,6 +194,33 @@ Deno.serve(async (req: Request) => {
       // Si falla se deja seguir al modelo, que al menos puede explicarlo. El guardia de abajo evita
       // que convierta el fallo en un cero.
       console.log(`via directa fallo, sigue el modelo: ${propio.error}`);
+    }
+
+    // ── Via directa: el contacto de emergencia ─────────────────────────────
+    //
+    // Pedido para la aplicacion Y para WhatsApp. Es informacion que se busca cuando alguien esta en un
+    // hospital, asi que no puede depender de que el modelo acierte a llamar la herramienta.
+    const emergencia = preguntaContactoEmergencia(ultimoUsuario);
+    if (emergencia) {
+      const entrada = "propio" in emergencia
+        ? {}
+        : { nombre_completo: emergencia.quien };
+      const datos = await runTool(
+        "buscar_contacto_emergencia", entrada, svc, isAdmin, actorId, userFullName, permisos,
+      ) as Record<string, unknown>;
+      if (!datos.error && datos.necesita_confirmacion !== true) {
+        console.log(`via directa: contacto de emergencia de ${datos.numero_empleado ?? actorId}`);
+        return new Response(
+          JSON.stringify({
+            text: textoContactoEmergencia(datos, "propio" in emergencia),
+            structured: null,
+          }),
+          { headers: { ...CORS, "Content-Type": "application/json" } },
+        );
+      }
+      // Un nombre ambiguo, o sin permiso para el de otra persona: lo explica el modelo, que puede
+      // mostrar los candidatos o el motivo del rechazo.
+      console.log(`via directa de emergencia no resolvio: ${datos.error ?? "ambiguo"}`);
     }
 
     // ── Via directa: su propio horario ─────────────────────────────────────

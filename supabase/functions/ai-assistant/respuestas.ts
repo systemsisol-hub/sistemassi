@@ -166,6 +166,83 @@ export function textoAsistencia(
   return lineas.join("\n");
 }
 
+/** Si la persona pide UN CONTACTO DE EMERGENCIA, y de quien.
+ *
+ * Se pidio que Soli lo diera por la aplicacion y por WhatsApp: nombre, telefono y relacion de la
+ * referencia, mas el tipo de sangre.
+ *
+ * El propio no exige permiso de pagina -es su contacto-; el de otra persona si, y eso lo comprueba
+ * `buscar_contacto_emergencia`. Aqui solo se decide DE QUIEN se esta hablando.
+ */
+export function preguntaContactoEmergencia(
+  texto: string,
+): { propio: true } | { quien: string } | null {
+  const t = sinAcentos(texto).toLowerCase().trim();
+
+  // «tipo de sangre» entra sola: es la otra mitad de lo mismo y se pregunta suelta.
+  if (!/emergencia|referencia|tipo de sangre|grupo sanguineo|a quien avisar|a quien le aviso/
+      .test(t)) {
+    return null;
+  }
+  // «contactos externos» es otra pagina y otra herramienta.
+  if (/contactos? externos?|proveedor|cliente/.test(t)) return null;
+
+  if (/\bmi\b|\bmis\b|\btengo\b|\bmio\b|me\s+registraron/.test(t)) return { propio: true };
+
+  const m = /\b(?:de|del|tiene|registro)\s+(.+)$/.exec(t);
+  if (!m) return null;
+
+  let quien = m[1].trim().replace(/[?!.,;:]+$/, "");
+  let antes;
+  do {
+    antes = quien;
+    quien = quien.replace(/^(el|la|los|las|sr|sra|srta|senor|senora|don|dona|ing|lic|c)\s+/, "").trim();
+  } while (quien !== antes);
+
+  // Lo que va detras de «de» aqui casi siempre es «emergencia» o «sangre», no una persona.
+  if (quien.length < 3) return null;
+  if (/^(emergencia|sangre|referencia|urgencia|contacto|quien)/.test(quien)) return null;
+  if (/^(19|20)\d{2}$/.test(quien)) return null;
+  return { quien };
+}
+
+/** El contacto de emergencia, escrito desde el expediente. */
+export function textoContactoEmergencia(
+  datos: Record<string, unknown>,
+  esPropio: boolean,
+): string {
+  const quien = esPropio
+    ? "Tus datos de emergencia"
+    : `Datos de emergencia de ${datos.colaborador}`
+      + (datos.numero_empleado ? ` (empleado ${datos.numero_empleado})` : "");
+
+  const nombre = datos.referencia_nombre as string | null;
+  const tel = datos.referencia_telefono as string | null;
+  const rel = datos.referencia_relacion as string | null;
+  const sangre = datos.tipo_sangre as string | null;
+
+  // Un hueco NO es un hecho sobre la persona: es un hecho sobre el expediente.
+  //
+  // Medido: de 244 vigentes solo 23 tienen la referencia capturada y NINGUNO el tipo de sangre. Decir
+  // «no tiene contacto de emergencia» seria afirmar algo que nadie sabe, y en una urgencia mandaria a
+  // dejar de buscar. Se dice que no esta REGISTRADO, que es lo unico comprobable.
+  if (!nombre && !tel && !rel && !sangre) {
+    return `${quien}: no hay ninguno REGISTRADO en el expediente. `
+      + `Eso no significa que no exista, solo que no esta capturado. `
+      + `Se captura en la pagina de Colaborador; si es una urgencia, pregunta a Desarrollo Humano.`;
+  }
+
+  const lineas = [`${quien}:`];
+  lineas.push(`• Contacto: ${nombre ?? "sin registrar"}`
+    + (rel ? ` (${rel})` : ""));
+  lineas.push(`• Telefono: ${tel ?? "sin registrar"}`);
+  lineas.push(`• Tipo de sangre: ${sangre ?? "sin registrar"}`);
+
+  // Se dice que falta, en lugar de omitir el renglon: en una urgencia hay que saber que ese dato NO
+  // esta, no quedarse con la duda de si se olvido decirlo.
+  return lineas.join("\n");
+}
+
 /** Si la persona pregunta por SU HORARIO.
  *
  * Reportado: «quiero mi horario» contestaba con «3ac244d0-bf7f-4cfa-99ce-b9f3bffd749d», porque

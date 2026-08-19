@@ -100,7 +100,13 @@ console.log('1. Toda herramienta tiene permiso, o esta exenta a proposito');
 //   alcanza los articulos de la pestaña Colaboradores, y eso lo filtra la herramienta A MANO,
 //   porque la funcion consulta con la llave de servicio y se salta RLS. Ver la comprobacion 13.
 const EXENTAS = new Set(['enviar_notificacion', 'buscar_colaborador', 'buscar_cumpleanos',
-  'buscar_conocimiento']);
+  'buscar_conocimiento',
+//
+// buscar_contacto_emergencia: las dos reglas son distintas segun DE QUIEN se pregunte, y un solo
+//   permiso no las expresa. El propio lo pide cualquiera -es su contacto y su tipo de sangre-; el de
+//   otra persona exige ser admin CON show_cssi, el mismo permiso que abre la pagina del expediente
+//   donde vive ese dato. La comprobacion esta dentro de la herramienta; ver la comprobacion 15.
+  'buscar_contacto_emergencia']);
 for (const h of Object.keys(HERRAMIENTAS)) {
   check(h in PERMISO || EXENTAS.has(h),
     `${h} ${h in PERMISO ? '-> ' + PERMISO[h] : '(exenta)'}`);
@@ -322,6 +328,29 @@ console.log('14. Ningun caracter de control suelto en el codigo');
     }
   }
   check(sucios === 0, `los ${archivos.length} archivos sin controles sueltos`);
+}
+
+console.log('\n15. El contacto de emergencia de OTRA persona exige admin con show_cssi');
+// Es la unica linea que separa «mi contacto» de «el contacto de cualquiera». Si desaparece, un usuario
+// normal con acceso al asistente puede pedir el telefono de la referencia y el tipo de sangre de los
+// 244 vigentes, y nada mas falla: la consulta seguiria funcionando.
+//
+// La herramienta esta EXENTA del mapa de permisos a proposito -el propio lo pide cualquiera- asi que
+// la comprobacion 1 no la cubre. Esta es la que la cubre.
+{
+  const i = src.indexOf('name === "buscar_contacto_emergencia"');
+  check(i > 0, 'existe el bloque de buscar_contacto_emergencia');
+  if (i > 0) {
+    const bloque = src.slice(i, i + 5000);
+    check(/pideDeOtro\s*&&\s*!\(isAdmin\s*&&\s*permisos\.show_cssi\s*===\s*true\)/.test(bloque),
+      'pedir el de otra persona exige isAdmin Y show_cssi');
+    check(/pideDeOtro\s*=\s*Boolean\(/.test(bloque),
+      'se decide si es de otro ANTES de consultar');
+    // Que el propio NO exija permiso: si alguien "arregla" esto metiendo la herramienta en el mapa,
+    // un usuario normal dejaria de poder ver su propio contacto de emergencia.
+    check(!/buscar_contacto_emergencia:\s*"show_/.test(src),
+      'el propio NO pide permiso de pagina (no esta en PERMISO_POR_HERRAMIENTA)');
+  }
 }
 
 console.log(fallas === 0 ? '\nTODO BIEN' : `\n${fallas} FALLAS`);
