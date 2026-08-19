@@ -10,6 +10,13 @@ import 'theme/si_theme.dart';
 import 'services/notification_service.dart';
 import 'services/trash_service.dart';
 
+/// Los ocho grupos del sistema ABO/Rh, en un solo sitio.
+///
+/// La base lleva la MISMA lista como restriccion -`profiles_tipo_sangre_check`-. Si alguna vez se
+/// añade un valor aqui sin añadirlo alla, el guardado falla con un error de restriccion en lugar de
+/// aceptar un dato que la base no reconoce.
+const tiposDeSangre = <String>['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+
 class ColaboradorPage extends StatefulWidget {
   final String role;
   final String? pendingEditId;
@@ -359,6 +366,20 @@ Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
     String? estadoCivil = item?['estado_civil'];
     String? escolaridad = item?['escolaridad'];
     String? credito = item?['credito'];
+    // Se toma tal cual venga de la base, incluso si no está en `tiposDeSangre`.
+    //
+    // `DropdownButtonFormField` revienta si su `value` no está entre los `items`, y en un expediente
+    // viejo podría haber quedado un valor de otra forma. Se cae a `null` —el desplegable sale vacío—
+    // en lugar de tumbar el formulario y dejar el expediente sin poder editarse.
+    // El cast va en su propia línea, no dentro del condicional.
+    //
+    // `cond ? x as String? : y` no compila: el `?` del tipo nullable choca con los dos puntos del
+    // operador condicional y el parser de Dart no puede desambiguarlo. Es un error real del lenguaje,
+    // no un dedazo, y el mensaje que da —«Conditions must have a static type of bool»— apunta al sitio
+    // equivocado.
+    final sangreGuardada = item?['tipo_sangre'] as String?;
+    String? tipoSangre =
+        tiposDeSangre.contains(sangreGuardada) ? sangreGuardada : null;
     String? lugarNacimiento = item?['lugar_nacimiento'];
     String? talla = item?['talla'];
     String? tipoColaborador = item?['empresa_tipo'];
@@ -646,6 +667,19 @@ Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
           fieldColumn(TextField(
               controller: imssCtrl,
               decoration: const InputDecoration(labelText: 'IMSS'))),
+          // Desplegable y no texto libre, a propósito.
+          //
+          // Es un dato que se consulta en una urgencia, y ahí un valor mal capturado es peor que un
+          // hueco: un hueco hace preguntar, y un «0+» hace actuar. El error clásico de este campo es
+          // justo ése —el CERO en lugar de la letra O— y con él «o positivo», «O +» u «orh+», que
+          // después no se pueden agrupar ni buscar. La base lleva la misma lista como restricción.
+          fieldColumn(DropdownButtonFormField<String>(
+              value: tipoSangre,
+              decoration: const InputDecoration(labelText: 'Tipo de sangre'),
+              items: tiposDeSangre
+                  .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                  .toList(),
+              onChanged: (v) => setDialogState(() => tipoSangre = v))),
           fieldColumn(DropdownButtonFormField<String>(
               value: credito,
               decoration: const InputDecoration(labelText: 'Crédito'),
@@ -1331,6 +1365,8 @@ Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
         'curp': toUpper(curpCtrl.text),
         'rfc': toUpper(rfcCtrl.text),
         'imss': toUpper(imssCtrl.text),
+        // Ya viene de un desplegable con los ocho valores validos, asi que no se toca.
+        'tipo_sangre': tipoSangre,
         'credito': credito,
         'fecha_nacimiento':
             fechaNacCtrl.text.isEmpty ? null : fechaNacCtrl.text,
