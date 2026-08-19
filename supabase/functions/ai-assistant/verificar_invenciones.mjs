@@ -68,6 +68,12 @@ writeFileSync(tmp, `${extraerConst('MESES')}\n\n`
   + `${extraerFuncion('preguntaSusVacaciones')}\n\n`
   + `${extraerFuncion('textoUltimaSolicitud')}\n\n`
   + `${extraerFuncion('textoVacacionesPropias')}\n\n`
+  + `${extraerFuncion('preguntaContactoEmergencia')}
+
+`
+  + `${extraerFuncion('textoContactoEmergencia')}
+
+`
   + `${extraerFuncion('preguntaSuHorario')}\n\n`
   + `${extraerFuncion('textoHorario')}\n\n`
   + `${extraerFuncion('soloUnIdentificador')}\n\n`
@@ -84,12 +90,12 @@ writeFileSync(tmp, `${extraerConst('MESES')}\n\n`
   + '  preguntaCumpleanos, textoCumpleanos, textoUltimaSolicitud,\n'
   + '  preguntaSuEquipo, textoEquipoPropio, alcanceDeLaConsulta, soloUnIdentificador,\n'
   + '  preguntaIncidenciasDe, textoIncidencias, preguntaFaltasDe, textoAsistencia,\n'
-  + '  preguntaSuHorario, textoHorario };\n', 'utf8');
+  + '  preguntaSuHorario, textoHorario, preguntaContactoEmergencia, textoContactoEmergencia };\n', 'utf8');
 const { afirmaDatoSinRespaldo, preguntaSusVacaciones, textoVacacionesPropias,
   preguntaCumpleanos, textoCumpleanos, textoUltimaSolicitud,
   preguntaSuEquipo, textoEquipoPropio, alcanceDeLaConsulta, soloUnIdentificador,
   preguntaIncidenciasDe, textoIncidencias, preguntaFaltasDe, textoAsistencia,
-  preguntaSuHorario, textoHorario } =
+  preguntaSuHorario, textoHorario, preguntaContactoEmergencia, textoContactoEmergencia } =
   await import('file://' + tmp.replace(/\\/g, '/'));
 
 let fallos = 0;
@@ -611,6 +617,64 @@ ok('sin horario asignado se dice, y que sin el no hay faltas que calcular',
    textoHorario({ dias: [] }).includes('no se pueden calcular'));
 ok('con nombre pero sin dias se distingue',
    textoHorario({ nombre: 'Turno X', dias: [] }).includes('no tiene dias capturados'));
+
+console.log('\nContacto de emergencia: lo propio sin permiso, lo de otro con');
+for (const q of ['mi contacto de emergencia', 'a quien le aviso si me pasa algo',
+                 'cual es mi tipo de sangre', 'mi referencia', 'mis datos de emergencia']) {
+  ok(`propio: "${q}"`, preguntaContactoEmergencia(q)?.propio === true,
+     JSON.stringify(preguntaContactoEmergencia(q)));
+}
+for (const [q, esperado] of [
+  ['contacto de emergencia de marco montoya', 'marco montoya'],
+  ['tipo de sangre de brenda mondragon', 'brenda mondragon'],
+  ['la referencia de hector figueroa', 'hector figueroa'],
+]) {
+  const r = preguntaContactoEmergencia(q);
+  ok(`"${q}" -> "${esperado}"`, r?.quien === esperado, JSON.stringify(r));
+}
+for (const q of [
+  // «de emergencia» y «de sangre» no nombran a nadie: son parte de la pregunta.
+  'contacto de emergencia',
+  'tipo de sangre',
+  'datos de referencia',
+  // Otra pagina y otra herramienta.
+  'contactos externos de la empresa',
+  'el contacto del proveedor',
+  // Y lo que no es esto.
+  'cuantas vacaciones tengo',
+  'hola',
+]) {
+  const r = preguntaContactoEmergencia(q);
+  ok(`no se la queda como «de otro»: "${q}"`, r === null || r.propio === true, JSON.stringify(r));
+}
+
+// Con datos: se dan los que hay y se dice cual falta.
+const conDatosEm = {
+  colaborador: 'MARCO ANTONIO MONTOYA LOPEZ', numero_empleado: '0186',
+  referencia_nombre: 'MARIA LOPEZ', referencia_telefono: '5551234567',
+  referencia_relacion: 'ESPOSA', tipo_sangre: 'O+',
+};
+const txtEm = textoContactoEmergencia(conDatosEm, false);
+console.log(`  -> ${txtEm.replace(/\n/g, ' | ')}`);
+ok('dice de quien es', txtEm.includes('MARCO ANTONIO MONTOYA LOPEZ'));
+ok('el nombre y la relacion juntos', txtEm.includes('MARIA LOPEZ') && txtEm.includes('ESPOSA'));
+ok('el telefono', txtEm.includes('5551234567'));
+ok('y el tipo de sangre', txtEm.includes('O+'));
+
+// Un dato a medias: se dice que falta, NO se omite el renglon.
+const aMedias = textoContactoEmergencia(
+  { colaborador: 'X', referencia_nombre: 'ANA', referencia_telefono: null,
+    referencia_relacion: null, tipo_sangre: null }, false);
+ok('un dato ausente se dice, no se calla', aMedias.includes('sin registrar'));
+ok('y sigue apareciendo el renglon del telefono', aMedias.includes('Telefono'));
+
+// LA distincion que importa: de 244 vigentes solo 23 tienen referencia y NINGUNO tipo de sangre.
+const vacio = textoContactoEmergencia(
+  { colaborador: 'Y', referencia_nombre: null, referencia_telefono: null,
+    referencia_relacion: null, tipo_sangre: null }, true);
+ok('vacio se dice como NO REGISTRADO', vacio.includes('REGISTRADO'));
+ok('y NO como «no tiene contacto»', !/no tiene contacto/i.test(vacio));
+ok('dice donde se captura', vacio.includes('Colaborador'));
 
 console.log(fallos === 0 ? '\nTODO BIEN' : `\n${fallos} FALLAS`);
 process.exit(fallos === 0 ? 0 : 1);

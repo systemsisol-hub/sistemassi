@@ -83,6 +83,28 @@ export const ALL_TOOLS = [
   {
     type: "function",
     function: {
+      name: "buscar_contacto_emergencia",
+      description: "Contacto de emergencia de un colaborador: nombre, telefono y relacion de la "
+        + "referencia, mas su TIPO DE SANGRE. Usala cuando pregunten a quien avisar, por la "
+        + "referencia, por el contacto de emergencia o por el tipo de sangre. "
+        + "El PROPIO lo puede pedir cualquiera. El de OTRA persona exige ser administrador con el "
+        + "permiso show_cssi, el mismo que abre la pagina de Colaborador. "
+        + "Si los campos vienen vacios NO digas que la persona no tiene contacto: di que no esta "
+        + "REGISTRADO en el expediente, que es distinto, y que se captura en la pagina de "
+        + "Colaborador. En una urgencia esa diferencia decide si se sigue buscando o no.",
+      parameters: {
+        type: "object",
+        properties: {
+          nombre_completo: { type: "string", description: "[Solo admin con show_cssi]" },
+          numero_empleado: { type: "string", description: "[Solo admin con show_cssi]" },
+          usuario_id:      { type: "string", description: "[Solo admin con show_cssi] UUID" },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "buscar_asistencia",
       description: "Faltas, retardos y puntualidad de una persona, con las MISMAS cifras que la "
         + "pagina de Asistencia. Un usuario no-admin solo ve la suya. Para la de otra persona pasa "

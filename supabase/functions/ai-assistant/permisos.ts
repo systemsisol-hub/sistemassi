@@ -83,6 +83,7 @@ export const QUE_HACE: Record<string, string> = {
   actualizar_incidencia:  "Cambiar el estatus u otros datos de una incidencia",
   actualizar_inventario:  "Asignar o liberar un equipo",
   gestionar_contacto:     "Crear o modificar un contacto externo",
+  buscar_contacto_emergencia: "Contacto de emergencia y tipo de sangre. El propio, cualquiera; el de otro, admin con show_cssi",
   buscar_conocimiento:    "Leer politicas, manuales y articulos de la base de Conocimientos",
   buscar_asistencia:      "Faltas, retardos y puntualidad, con las mismas cifras que la pagina de Asistencia",
 };
@@ -98,6 +99,7 @@ export const VIAS_DIRECTAS = [
   { pregunta: "«qué equipo tengo asignado»", resuelve: "Los equipos que están a tu nombre en el inventario, con su serie" },
   { pregunta: "«incidencias de <persona>» / «mis incidencias»", resuelve: "El historial con sus fechas de salida, regreso, días y periodo" },
   { pregunta: "un número de empleado o un UUID a secas", resuelve: "La ficha de esa persona, con su nombre y su número del mismo registro" },
+  { pregunta: "«mi contacto de emergencia» / «el de <persona>»", resuelve: "Nombre, teléfono y relación de la referencia, más el tipo de sangre" },
   { pregunta: "«cuál es mi horario»", resuelve: "Su jornada por día, con la hora de entrada, la de salida y la tolerancia" },
   { pregunta: "«faltas de <persona>» / «mis faltas»", resuelve: "Faltas, justificados, retardos y días de descuento, con los días listados" },
 ];
