@@ -202,9 +202,13 @@ Deno.serve(async (req: Request) => {
     // hospital, asi que no puede depender de que el modelo acierte a llamar la herramienta.
     const emergencia = preguntaContactoEmergencia(ultimoUsuario);
     if (emergencia) {
+      // Un numero de empleado va como numero, no como nombre: `resolverPorNombre` buscaria «0163»
+      // dentro de los nombres y no encontraria a nadie.
       const entrada = "propio" in emergencia
         ? {}
-        : { nombre_completo: emergencia.quien };
+        : (/^\d{1,4}$/.test(emergencia.quien)
+            ? { numero_empleado: emergencia.quien }
+            : { nombre_completo: emergencia.quien });
       const datos = await runTool(
         "buscar_contacto_emergencia", entrada, svc, isAdmin, actorId, userFullName, permisos,
       ) as Record<string, unknown>;

@@ -177,17 +177,32 @@ export function textoAsistencia(
 export function preguntaContactoEmergencia(
   texto: string,
 ): { propio: true } | { quien: string } | null {
-  const t = sinAcentos(texto).toLowerCase().trim();
+  const t0 = sinAcentos(texto).toLowerCase().trim();
 
   // «tipo de sangre» entra sola: es la otra mitad de lo mismo y se pregunta suelta.
   if (!/emergencia|referencia|tipo de sangre|grupo sanguineo|a quien avisar|a quien le aviso/
-      .test(t)) {
+      .test(t0)) {
     return null;
   }
   // «contactos externos» es otra pagina y otra herramienta.
-  if (/contactos? externos?|proveedor|cliente/.test(t)) return null;
+  if (/contactos? externos?|proveedor|cliente/.test(t0)) return null;
 
-  if (/\bmi\b|\bmis\b|\btengo\b|\bmio\b|me\s+registraron/.test(t)) return { propio: true };
+  if (/\bmi\b|\bmis\b|\btengo\b|\bmio\b|me\s+registraron/.test(t0)) return { propio: true };
+
+  // Se BORRAN las frases fijas antes de buscar a la persona.
+  //
+  // Reportado el 19/08/2026: «cual es el contacto de emergencia de 0163» no se atendia. La causa es
+  // que «contacto DE emergencia» ya lleva un «de», y la expresion agarraba el PRIMERO: se quedaba con
+  // «emergencia de 0163», que luego caia en el descarte de palabras que no son personas. El «de 0163»
+  // nunca se miraba.
+  //
+  // Quitando primero la frase fija, lo que sobra es la persona -o nada-.
+  const t = t0
+    .replace(/contactos? de emergencia|datos de emergencia|contacto de urgencia/g, " ")
+    .replace(/tipo de sangre|grupo sanguineo/g, " ")
+    .replace(/datos de referencia|la referencia/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
   const m = /\b(?:de|del|tiene|registro)\s+(.+)$/.exec(t);
   if (!m) return null;
@@ -196,10 +211,10 @@ export function preguntaContactoEmergencia(
   let antes;
   do {
     antes = quien;
-    quien = quien.replace(/^(el|la|los|las|sr|sra|srta|senor|senora|don|dona|ing|lic|c)\s+/, "").trim();
+    quien = quien.replace(/^(el|la|los|las|sr|sra|srta|senor|senora|don|dona|ing|lic|c|colaborador|empleado)\s+/, "").trim();
   } while (quien !== antes);
 
-  // Lo que va detras de «de» aqui casi siempre es «emergencia» o «sangre», no una persona.
+  // Lo que queda detras de «de» todavia puede no ser una persona.
   if (quien.length < 3) return null;
   if (/^(emergencia|sangre|referencia|urgencia|contacto|quien)/.test(quien)) return null;
   if (/^(19|20)\d{2}$/.test(quien)) return null;
