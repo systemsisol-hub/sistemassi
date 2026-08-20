@@ -641,7 +641,10 @@ export async function runTool(
   // un solo permiso para las dos habria dejado a un usuario normal sin poder ver el suyo.
   if (name === "buscar_contacto_emergencia") {
     const CAMPOS_EMERGENCIA = "id,numero_empleado,nombre,paterno,materno,puesto,area," +
-      "referencia_nombre,referencia_telefono,referencia_relacion,tipo_sangre";
+      "referencia_nombre,referencia_telefono,referencia_relacion,tipo_sangre," +
+      // `imss` ES el NSS: 324 perfiles con exactamente 11 digitos, el formato del numero de
+      // seguro social. Se devuelve con el nombre que la gente usa, no con el de la columna.
+      "alergias,padecimientos,imss";
 
     const pideDeOtro = Boolean(input.nombre_completo || input.numero_empleado
       || (input.usuario_id && String(input.usuario_id) !== userId));
@@ -703,7 +706,7 @@ export async function runTool(
 
     const p = data as Record<string, unknown>;
     const tieneAlgo = Boolean(p.referencia_nombre || p.referencia_telefono
-      || p.referencia_relacion || p.tipo_sangre);
+      || p.referencia_relacion || p.tipo_sangre || p.alergias || p.padecimientos || p.imss);
 
     return {
       colaborador: [p.nombre, p.paterno, p.materno].filter(Boolean).join(" "),
@@ -713,6 +716,9 @@ export async function runTool(
       referencia_telefono: p.referencia_telefono ?? null,
       referencia_relacion: p.referencia_relacion ?? null,
       tipo_sangre: p.tipo_sangre ?? null,
+      alergias: p.alergias ?? null,
+      padecimientos: p.padecimientos ?? null,
+      nss: p.imss ?? null,
       alcance: objetivo === userId
         ? "El contacto de emergencia de quien pregunta."
         : "El contacto de emergencia del colaborador que se pidio.",

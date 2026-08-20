@@ -84,9 +84,12 @@ export const ALL_TOOLS = [
     type: "function",
     function: {
       name: "buscar_contacto_emergencia",
-      description: "Contacto de emergencia de un colaborador: nombre, telefono y relacion de la "
-        + "referencia, mas su TIPO DE SANGRE. Usala cuando pregunten a quien avisar, por la "
-        + "referencia, por el contacto de emergencia o por el tipo de sangre. "
+      description: "Datos de emergencia de un colaborador: nombre, telefono y relacion de la "
+        + "referencia, TIPO DE SANGRE, ALERGIAS, enfermedades cronicas y el NSS -su numero de "
+        + "seguro social, 11 digitos-. Usala cuando pregunten a quien avisar, por la referencia, "
+        + "por el contacto de emergencia, por el tipo de sangre, por alergias o por el NSS. "
+        + "Las ALERGIAS son el dato mas util en una urgencia: dilas primero. "
+        + "Si vienen vacias di «sin registrar», NUNCA «ninguna»: son cosas distintas. "
         + "El PROPIO lo puede pedir cualquiera. El de OTRA persona exige ser administrador con el "
         + "permiso show_cssi, el mismo que abre la pagina de Colaborador. "
         + "Si los campos vienen vacios NO digas que la persona no tiene contacto: di que no esta "

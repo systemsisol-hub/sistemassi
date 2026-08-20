@@ -9,11 +9,11 @@
 // comparan estan verificadas en SQL. Dos de ellos salieron en la aplicacion, no por WhatsApp: la
 // pagina parecia acertar porque pinta una tarjeta con los datos crudos y la vista va a la tarjeta,
 // pero su prosa tiene el mismo problema. De ahi que el guardia viva en la funcion y no en el puente.
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { leer } from './verificar_permisos.mjs';
+import { leer } from './leer.mjs';
 
 // Se leen LOS OCHO modulos, no `index.ts` solo: al partir el archivo estas funciones se fueron a
 // nombres.ts y respuestas.ts. Leer el directorio completo evita volver aqui cada vez que algo se
@@ -698,6 +698,67 @@ for (const q of ['contacto de emergencia', 'datos de emergencia', 'tipo de sangr
   const r = preguntaContactoEmergencia(q);
   ok(`sin persona detras: "${q}"`, r === null || r.propio === true, JSON.stringify(r));
 }
+
+
+// --- Los tres datos que se agregaron el 20/08/2026 -------------------------
+//
+// Alergias, enfermedades cronicas y NSS viven en el mismo bloque del expediente que el tipo de
+// sangre, y se piden igual de sueltos. Si el reconocedor no los toma, la pregunta se va al modelo,
+// que no tiene esos datos por ninguna otra via: los inventa o dice que no puede.
+console.log('\nAlergias, enfermedades cronicas y NSS');
+for (const q of ['cuales son mis alergias', 'soy alergico a algo', 'cual es mi nss',
+                 'mi numero de seguro social', 'tengo alguna enfermedad cronica',
+                 'mis padecimientos']) {
+  const r = preguntaContactoEmergencia(q);
+  ok(`propio: "${q}"`, r?.propio === true, JSON.stringify(r));
+}
+// El mismo tropiezo que «contacto DE emergencia»: «numero DE seguro social» lleva su propio «de»,
+// y sin borrar la frase la persona que se buscaba era «seguro social de 0163».
+for (const [q, esperado] of [
+  ['alergias de marco montoya', 'marco montoya'],
+  ['cual es el nss de 0163', '0163'],
+  ['numero de seguro social de 0163', '0163'],
+  ['enfermedades cronicas del colaborador 0186', '0186'],
+  ['padecimientos de brenda mondragon', 'brenda mondragon'],
+]) {
+  const r = preguntaContactoEmergencia(q);
+  ok(`"${q}" -> "${esperado}"`, r?.quien === esperado, JSON.stringify(r));
+}
+
+const conTodo = textoContactoEmergencia({
+  colaborador: 'MARCO ANTONIO MONTOYA LOPEZ', numero_empleado: '0163',
+  referencia_nombre: 'ANA LOPEZ', referencia_telefono: '5512345678',
+  referencia_relacion: 'ESPOSA', tipo_sangre: 'O+',
+  alergias: 'PENICILINA', padecimientos: 'DIABETES TIPO 2', nss: '12345678901',
+}, false);
+ok('sale la alergia', conTodo.includes('PENICILINA'));
+ok('sale el padecimiento', conTodo.includes('DIABETES TIPO 2'));
+ok('sale el NSS', conTodo.includes('12345678901'));
+// En una urgencia la alergia es lo que cambia lo que se le puede administrar: va lo mas arriba.
+ok('las alergias van antes del padecimiento',
+   conTodo.indexOf('Alergias') < conTodo.indexOf('Enfermedades'));
+ok('y antes del NSS', conTodo.indexOf('Alergias') < conTodo.indexOf('NSS'));
+
+// «sin registrar» NO es «ninguna»: son cosas distintas y la diferencia es clinica.
+const sinAlergias = textoContactoEmergencia({
+  colaborador: 'X', numero_empleado: '0001',
+  referencia_nombre: 'ANA', referencia_telefono: '5512345678',
+  referencia_relacion: 'ESPOSA', tipo_sangre: 'O+',
+  alergias: null, padecimientos: null, nss: null,
+}, false);
+ok('alergias vacias se dicen «sin registrar»', /Alergias: sin registrar/.test(sinAlergias));
+ok('y NUNCA «ninguna»', !/ninguna/i.test(sinAlergias));
+ok('se advierte que puede tenerlas', /NO quiere decir que no tenga/.test(sinAlergias));
+
+// Y con SOLO uno de los tres capturado ya no es un expediente vacio: tiene que responderse.
+const soloNss = textoContactoEmergencia({
+  colaborador: 'X', numero_empleado: '0001',
+  referencia_nombre: null, referencia_telefono: null, referencia_relacion: null,
+  tipo_sangre: null, alergias: null, padecimientos: null, nss: '12345678901',
+}, false);
+ok('con solo el NSS no se dice que no hay nada', !soloNss.includes('no hay ninguno REGISTRADO'));
+ok('y se da el NSS', soloNss.includes('12345678901'));
+
 
 console.log(fallos === 0 ? '\nTODO BIEN' : `\n${fallos} FALLAS`);
 process.exit(fallos === 0 ? 0 : 1);
