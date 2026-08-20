@@ -72,9 +72,15 @@ export function preguntaFaltasDe(
     return null;
   }
 
-  if (/\bmis\b|\bmi\b|\btengo\b|\btuve\b|me\s+pusieron/.test(t)) return { propio: true };
+  // `llegue` es primera persona y no necesita un «mi» al lado: «que dias llegue tarde» es suya.
+  if (/\bmis\b|\bmi\b|\btengo\b|\btuve\b|me\s+pusieron|\bllegue\b/.test(t)) return { propio: true };
 
-  const m = /\b(?:de|del|tiene|tuvo|lleva)\s+(.+)$/.exec(t);
+  // Dos formas de nombrar a la persona, y la segunda NO lleva preposicion.
+  //
+  // «retardos DE brenda» la trae el primer patron. «que dias llego tarde brenda mondragon» no: el
+  // nombre va pegado al verbo. Es la forma en que se pregunto de verdad, asi que se atiende igual.
+  const m = /\b(?:de|del|tiene|tuvo|lleva)\s+(.+)$/.exec(t)
+    ?? /\b(?:llego|entro|checo|falto)\s+(?:tarde\s+|a\s+destiempo\s+)?(.+)$/.exec(t);
   if (!m) return null;
 
   let quien = m[1].trim().replace(/[?!.,;:]+$/, "");
@@ -87,6 +93,12 @@ export function preguntaFaltasDe(
   if (quien.length < 3) return null;
   if (/^(19|20)\d{2}$/.test(quien)) return null;
   if (/^(este|esta|ese|esa|hoy|ayer|manana|mes|ano|semana|quincena|periodo|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)/
+      .test(quien)) {
+    return null;
+  }
+  // Sin preposicion, detras del verbo puede no venir una persona sino el resto de la pregunta:
+  // «a que hora llego tarde», «llego tarde el lunes». Nada de esto es un nombre.
+  if (/^(tarde|temprano|destiempo|a\s+tiempo|hora|dia|dias|veces|algo|alguien|nada|lunes|martes|miercoles|jueves|viernes|sabado|domingo)\b/
       .test(quien)) {
     return null;
   }
@@ -179,15 +191,22 @@ export function preguntaContactoEmergencia(
 ): { propio: true } | { quien: string } | null {
   const t0 = sinAcentos(texto).toLowerCase().trim();
 
-  // «tipo de sangre» entra sola: es la otra mitad de lo mismo y se pregunta suelta.
+  // «tipo de sangre» entra sola: es la otra mitad de lo mismo y se pregunta suelta. Y con ella
+  // entran los otros datos del mismo bloque del expediente -alergias, padecimientos y el NSS-,
+  // porque se preguntan igual de sueltos: «soy alergico a algo?», «cual es mi NSS».
   if (!/emergencia|referencia|tipo de sangre|grupo sanguineo|a quien avisar|a quien le aviso/
-      .test(t0)) {
+      .test(t0)
+      && !/alergi|enfermedad(es)? cronica|padecimiento|\bnss\b|seguro social/.test(t0)) {
     return null;
   }
   // «contactos externos» es otra pagina y otra herramienta.
   if (/contactos? externos?|proveedor|cliente/.test(t0)) return null;
 
-  if (/\bmi\b|\bmis\b|\btengo\b|\bmio\b|me\s+registraron/.test(t0)) return { propio: true };
+  // «a quien le aviso si me pasa algo» no lleva «mi» en ningun lado y es la propia, claramente.
+  if (/\bmi\b|\bmis\b|\btengo\b|\bmio\b|me\s+registraron|soy\s+alergic|me\s+pas(a|ara)\b|me\s+ocurre/
+      .test(t0)) {
+    return { propio: true };
+  }
 
   // Se BORRAN las frases fijas antes de buscar a la persona.
   //
@@ -201,6 +220,10 @@ export function preguntaContactoEmergencia(
     .replace(/contactos? de emergencia|datos de emergencia|contacto de urgencia/g, " ")
     .replace(/tipo de sangre|grupo sanguineo/g, " ")
     .replace(/datos de referencia|la referencia/g, " ")
+    // «numero de seguro social» lleva su propio «de», el mismo tropiezo que «contacto DE
+    // emergencia»: sin borrarlo, la persona que se buscaba era «seguro social de 0163».
+    .replace(/numero de seguro social|num(?:ero)? de seguridad social|seguro social/g, " ")
+    .replace(/enfermedad(?:es)? cronica(?:s)?|padecimientos?|alergias?|\bnss\b/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 
@@ -216,7 +239,7 @@ export function preguntaContactoEmergencia(
 
   // Lo que queda detras de «de» todavia puede no ser una persona.
   if (quien.length < 3) return null;
-  if (/^(emergencia|sangre|referencia|urgencia|contacto|quien)/.test(quien)) return null;
+  if (/^(emergencia|sangre|referencia|urgencia|contacto|quien|social|alergi|padecimiento)/.test(quien)) return null;
   if (/^(19|20)\d{2}$/.test(quien)) return null;
   return { quien };
 }
@@ -235,26 +258,36 @@ export function textoContactoEmergencia(
   const tel = datos.referencia_telefono as string | null;
   const rel = datos.referencia_relacion as string | null;
   const sangre = datos.tipo_sangre as string | null;
+  const alergias = datos.alergias as string | null;
+  const padecimientos = datos.padecimientos as string | null;
+  const nss = datos.nss as string | null;
 
   // Un hueco NO es un hecho sobre la persona: es un hecho sobre el expediente.
   //
-  // Medido: de 244 vigentes solo 23 tienen la referencia capturada y NINGUNO el tipo de sangre. Decir
-  // «no tiene contacto de emergencia» seria afirmar algo que nadie sabe, y en una urgencia mandaria a
-  // dejar de buscar. Se dice que no esta REGISTRADO, que es lo unico comprobable.
-  if (!nombre && !tel && !rel && !sangre) {
+  // Medido: de 244 vigentes solo 23 tienen la referencia capturada. Decir «no tiene contacto de
+  // emergencia» seria afirmar algo que nadie sabe, y en una urgencia mandaria a dejar de buscar. Se
+  // dice que no esta REGISTRADO, que es lo unico comprobable.
+  if (!nombre && !tel && !rel && !sangre && !alergias && !padecimientos && !nss) {
     return `${quien}: no hay ninguno REGISTRADO en el expediente. `
       + `Eso no significa que no exista, solo que no esta capturado. `
       + `Se captura en la pagina de Colaborador; si es una urgencia, pregunta a Desarrollo Humano.`;
   }
 
   const lineas = [`${quien}:`];
-  lineas.push(`• Contacto: ${nombre ?? "sin registrar"}`
-    + (rel ? ` (${rel})` : ""));
+  lineas.push(`• Contacto: ${nombre ?? "sin registrar"}` + (rel ? ` (${rel})` : ""));
   lineas.push(`• Telefono: ${tel ?? "sin registrar"}`);
   lineas.push(`• Tipo de sangre: ${sangre ?? "sin registrar"}`);
 
-  // Se dice que falta, en lugar de omitir el renglon: en una urgencia hay que saber que ese dato NO
-  // esta, no quedarse con la duda de si se olvido decirlo.
+  // Las alergias van ANTES de los padecimientos y del NSS, a proposito: en una urgencia es el dato que
+  // cambia lo que se le puede administrar a alguien, asi que va lo mas arriba posible de los tres.
+  //
+  // Y «sin registrar» NO es «ninguna». El campo del formulario lo dice tambien: si no se sabe, se deja
+  // vacio. Un «ninguna» capturado por costumbre afirma algo que nadie comprobo.
+  lineas.push(`• Alergias: ${alergias ?? "sin registrar (NO quiere decir que no tenga)"}`);
+  lineas.push(`• Enfermedades cronicas: ${padecimientos ?? "sin registrar"}`);
+  // El NSS es lo que piden en la clinica. Son 11 digitos; `imss` es la columna donde vive.
+  lineas.push(`• NSS: ${nss ?? "sin registrar"}`);
+
   return lineas.join("\n");
 }
 

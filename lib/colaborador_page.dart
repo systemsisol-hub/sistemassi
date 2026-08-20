@@ -667,9 +667,14 @@ Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
                     controller: rfcCtrl,
                     decoration: const InputDecoration(labelText: 'RFC'))),
           ])),
+          // `imss` ES el NSS. Medido: 324 perfiles con exactamente 11 digitos, el formato del numero de
+          // seguro social. Se renombra la etiqueta en lugar de crear una columna `nss`, que seria el mismo
+          // dato dos veces y acabaria desincronizado.
           fieldColumn(TextField(
               controller: imssCtrl,
-              decoration: const InputDecoration(labelText: 'IMSS'))),
+              decoration: const InputDecoration(
+                  labelText: 'NSS (Núm. de Seguro Social)',
+                  helperText: 'Son 11 dígitos'))),
           // Desplegable y no texto libre, a propósito.
           //
           // Es un dato que se consulta en una urgencia, y ahí un valor mal capturado es peor que un

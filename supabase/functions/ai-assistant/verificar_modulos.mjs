@@ -18,10 +18,10 @@
 //      a medias).
 //   3. Nada se usa sin importarse, cuando vive en otro modulo.
 //   4. No hay ciclos de importacion.
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { leer } from './verificar_permisos.mjs';
+import { leer } from './leer.mjs';
 
 const aqui = dirname(fileURLToPath(import.meta.url));
 const archivos = readdirSync(aqui).filter((f) => f.endsWith('.ts')).sort();

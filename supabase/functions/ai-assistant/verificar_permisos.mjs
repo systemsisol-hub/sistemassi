@@ -5,7 +5,8 @@
 // separada del esquema, un campo peligroso colado.
 //
 // Correr con:  node supabase/functions/ai-assistant/verificar_permisos.mjs
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync } from 'node:fs';
+import { leer } from './leer.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -16,17 +17,6 @@ import { dirname, join } from 'node:path';
 // completo tambien evita tener que volver aqui la proxima vez que algo se mueva de sitio.
 const aqui = dirname(fileURLToPath(import.meta.url));
 
-/// Lee un archivo NORMALIZANDO los finales de linea.
-///
-/// git deja los archivos en CRLF en el disco -core.autocrlf-, y basta un `git checkout` de otra rama
-/// para que vuelvan a estarlo. Con el `\r` al final de cada linea, borrar comentarios con
-/// `/\/\/.*$/` no coincide: `.` no come el `\r` y `$` exige el final de la cadena. El efecto es
-/// silencioso y del peor tipo -los COMENTARIOS se analizan como si fueran codigo- y aparecio como una
-/// falsa FALLA en la comprobacion 10, disparada por un comentario que explicaba por que ya no se usa
-/// `user.id`.
-export function leer(ruta) {
-  return readFileSync(ruta, 'utf8').replace(/\r\n/g, '\n');
-}
 const src = readdirSync(aqui).filter((f) => f.endsWith('.ts')).sort()
   .map((f) => leer(join(aqui, f))).join('\n');
 

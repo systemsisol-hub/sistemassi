@@ -8,11 +8,11 @@
 // El caso que dio origen a esto: preguntar por "las vacaciones de Enrique Ortega Gomez" devolvia
 // cero registros, porque el nombre entero se buscaba en la columna `nombre`, que guarda solo el
 // nombre de pila.
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { leer } from './verificar_permisos.mjs';
+import { leer } from './leer.mjs';
 
 // Se leen LOS OCHO modulos, no `index.ts` solo: al partir el archivo estas funciones se fueron a
 // nombres.ts y respuestas.ts. Leer el directorio completo evita volver aqui cada vez que algo se

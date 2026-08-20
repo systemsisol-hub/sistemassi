@@ -137,7 +137,7 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
                           const Divider(height: 24),
                           _infoRow(context, Icons.fingerprint, 'CURP', colab['curp']),
                           _infoRow(context, Icons.receipt_long, 'RFC', colab['rfc']),
-                          _infoRow(context, Icons.local_hospital, 'IMSS', colab['imss']),
+                          _infoRow(context, Icons.local_hospital, 'NSS', colab['imss']),
                           // Después del IMSS, como se pidió.
                           _infoRow(context, Icons.bloodtype, 'Tipo de sangre',
                               colab['tipo_sangre']),
@@ -233,7 +233,7 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
                     const Divider(height: 24),
                     _infoRow(context, Icons.fingerprint, 'CURP', colab['curp']),
                     _infoRow(context, Icons.receipt_long, 'RFC', colab['rfc']),
-                    _infoRow(context, Icons.local_hospital, 'IMSS', colab['imss']),
+                    _infoRow(context, Icons.local_hospital, 'NSS', colab['imss']),
                     // Después del IMSS, igual que en la otra vista de la ficha.
                     _infoRow(context, Icons.bloodtype, 'Tipo de sangre',
                         colab['tipo_sangre']),
@@ -625,10 +625,12 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
                         [Icons.location_city, 'Lugar Nacimiento', colab['lugar_nacimiento']],
                         [Icons.info_outline, 'RFC', colab['rfc']],
                         [Icons.info_outline, 'CURP', colab['curp']],
-                        [Icons.info_outline, 'IMSS', colab['imss']],
+                        [Icons.info_outline, 'NSS', colab['imss']],
                         [Icons.info_outline, 'Tipo de sangre', colab['tipo_sangre']],
                         [Icons.info_outline, 'Alergias', colab['alergias']],
-                        [Icons.info_outline, 'Padecimientos', colab['padecimientos']],
+                        // Mismo nombre que en las dos vistas de pantalla, a propósito: es el mismo
+                        // dato y esta es la hoja que se imprime y circula.
+                        [Icons.info_outline, 'Enfermedades crónicas', colab['padecimientos']],
                         [Icons.straighten, 'Talla', colab['talla']],
                       ], brandColor, iconFont),
                       _pwCard('DATOS BANCARIOS', [

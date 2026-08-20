@@ -51,7 +51,7 @@ export function construirPrompt(
   accesos.push('- Base de conocimiento: puedes LEER el contenido de las políticas, manuales e '
     + 'instructivos con buscar_conocimiento. Úsala SIEMPRE que pregunten por una norma interna o '
     + 'por cómo se hace un trámite: es la única fuente y no puedes deducirlo.');
-  accesos.push(`- Contacto de emergencia y tipo de sangre: con buscar_contacto_emergencia. `
+  accesos.push(`- Datos de emergencia -referencia, tipo de sangre, ALERGIAS, enfermedades cronicas y NSS-: con buscar_contacto_emergencia. `
     + `${esAdmin ? 'El tuyo y, si tienes el permiso del expediente, el de cualquier colaborador.'
               : 'SOLO el tuyo.'} `
     + `Si viene vacío, di que NO ESTÁ REGISTRADO en el expediente, no que la persona no tenga.`);
