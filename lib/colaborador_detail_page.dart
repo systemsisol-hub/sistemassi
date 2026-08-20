@@ -141,6 +141,10 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
                           // Después del IMSS, como se pidió.
                           _infoRow(context, Icons.bloodtype, 'Tipo de sangre',
                               colab['tipo_sangre']),
+                          _infoRow(context, Icons.warning_amber, 'Alergias',
+                              colab['alergias']),
+                          _infoRow(context, Icons.medical_information,
+                              'Enfermedades crónicas', colab['padecimientos']),
                         ]),
                         const SizedBox(height: SiSpace.x4),
                         _buildInfoCard(context, 'Domicilio y Contacto', [
@@ -233,6 +237,10 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
                     // Después del IMSS, igual que en la otra vista de la ficha.
                     _infoRow(context, Icons.bloodtype, 'Tipo de sangre',
                         colab['tipo_sangre']),
+                    _infoRow(context, Icons.warning_amber, 'Alergias',
+                        colab['alergias']),
+                    _infoRow(context, Icons.medical_information,
+                        'Enfermedades crónicas', colab['padecimientos']),
                   ]),
                   const SizedBox(height: SiSpace.x4),
                   _buildInfoCard(context, 'Domicilio y Contacto', [
@@ -619,6 +627,8 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
                         [Icons.info_outline, 'CURP', colab['curp']],
                         [Icons.info_outline, 'IMSS', colab['imss']],
                         [Icons.info_outline, 'Tipo de sangre', colab['tipo_sangre']],
+                        [Icons.info_outline, 'Alergias', colab['alergias']],
+                        [Icons.info_outline, 'Padecimientos', colab['padecimientos']],
                         [Icons.straighten, 'Talla', colab['talla']],
                       ], brandColor, iconFont),
                       _pwCard('DATOS BANCARIOS', [

@@ -43,6 +43,18 @@ export function construirPrompt(
   if (puede("buscar_contactos")) {
     accesos.push('- Contactos externos: puedes consultarlos.');
   }
+  if (puede("buscar_asistencia")) {
+    accesos.push(`- Asistencia: puedes consultar faltas, retardos y puntualidad `
+      + `${esAdmin ? 'de cualquier colaborador' : `de ${nombre}`}, con las mismas cifras que la `
+      + `página de Asistencia. Es la ÚNICA forma de saberlo.`);
+  }
+  accesos.push('- Base de conocimiento: puedes LEER el contenido de las políticas, manuales e '
+    + 'instructivos con buscar_conocimiento. Úsala SIEMPRE que pregunten por una norma interna o '
+    + 'por cómo se hace un trámite: es la única fuente y no puedes deducirlo.');
+  accesos.push(`- Contacto de emergencia y tipo de sangre: con buscar_contacto_emergencia. `
+    + `${esAdmin ? 'El tuyo y, si tienes el permiso del expediente, el de cualquier colaborador.'
+              : 'SOLO el tuyo.'} `
+    + `Si viene vacío, di que NO ESTÁ REGISTRADO en el expediente, no que la persona no tenga.`);
   accesos.push('- Cumpleaños: puedes consultarlos con buscar_cumpleanos. Es la ÚNICA forma; no los sabes de memoria.');
   accesos.push('- Puedes enviar notificaciones.');
 

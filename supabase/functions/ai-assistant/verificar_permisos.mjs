@@ -353,5 +353,28 @@ console.log('\n15. El contacto de emergencia de OTRA persona exige admin con sho
   }
 }
 
+console.log('\n16. Toda herramienta esta MENCIONADA en el prompt');
+// El fallo que la motivo, del 19/08/2026: se añadieron tres herramientas -asistencia, conocimiento y
+// contacto de emergencia- y ninguna se menciono en el prompt. El modelo no sabia que existian, asi que
+// contestaba «Eso queda fuera de lo mio... no tengo acceso al contacto de emergencia» teniendo la
+// herramienta disponible y el permiso puesto.
+//
+// Es un fallo que las vias directas TAPAN: la de asistencia funcionaba, asi que nadie noto que por el
+// modelo no habia forma de llegar. Solo salio cuando se pregunto algo que la via directa no reconocia.
+//
+// El prompt es lo unico que le dice al modelo lo que puede hacer. Estar en `ALL_TOOLS` no basta.
+{
+  const prompt = leer(join(aqui, 'prompt.ts'));
+  // `enviar_notificacion` se menciona como «Puedes enviar notificaciones», sin el nombre tecnico, y
+  // esta bien asi: se comprueba aparte para no exigir una cadena que no aporta.
+  const porFrase = { enviar_notificacion: /enviar notificaciones/i };
+  for (const h of Object.keys(HERRAMIENTAS)) {
+    // Las escrituras se enumeran en bloque -`const escrituras = [...]`- asi que basta con que su
+    // nombre aparezca en el archivo.
+    const mencionada = prompt.includes(h) || (porFrase[h]?.test(prompt) ?? false);
+    check(mencionada, `${h} ${mencionada ? 'aparece en el prompt' : 'NO se le dice al modelo que existe'}`);
+  }
+}
+
 console.log(fallas === 0 ? '\nTODO BIEN' : `\n${fallas} FALLAS`);
 process.exit(fallas === 0 ? 0 : 1);

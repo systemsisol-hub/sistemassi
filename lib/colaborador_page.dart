@@ -309,6 +309,9 @@ Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
     final curpCtrl = TextEditingController(text: item?['curp']);
     final rfcCtrl = TextEditingController(text: item?['rfc']);
     final imssCtrl = TextEditingController(text: item?['imss']);
+    final alergiasCtrl = TextEditingController(text: item?['alergias']);
+    final padecimientosCtrl =
+        TextEditingController(text: item?['padecimientos']);
     final numeroEmpleadoCtrl =
         TextEditingController(text: item?['numero_empleado']);
 
@@ -680,6 +683,24 @@ Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
                   .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                   .toList(),
               onChanged: (v) => setDialogState(() => tipoSangre = v))),
+          // Texto libre y de varias lineas, al contrario que el tipo de sangre.
+          //
+          // «penicilina», «diabetes tipo 2 e hipertension controlada» no caben en una lista
+          // cerrada, y una lista incompleta obligaria a dejar el campo vacio cuando lo que falta
+          // es justo lo importante. `maxLines` deja crecer el campo sin abrir un dialogo aparte.
+          fieldColumn(TextField(
+              controller: alergiasCtrl,
+              minLines: 1,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                  labelText: 'Alergias',
+                  helperText: 'Si no se sabe, dejar vacío en lugar de escribir «ninguna»'))),
+          fieldColumn(TextField(
+              controller: padecimientosCtrl,
+              minLines: 1,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                  labelText: 'Enfermedades crónicas / padecimientos'))),
           fieldColumn(DropdownButtonFormField<String>(
               value: credito,
               decoration: const InputDecoration(labelText: 'Crédito'),
@@ -1358,6 +1379,9 @@ Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
       setDialogState(() => saving = true);
       String? toUpper(String val) =>
           val.trim().isEmpty ? null : val.trim().toUpperCase();
+      // Como `toUpper` pero sin cambiar las mayusculas: para los campos que se leen, no se
+      // comparan.
+      String? soloTexto(String val) => val.trim().isEmpty ? null : val.trim();
       final data = {
         'nombre': toUpper(nombreCtrl.text)!,
         'paterno': toUpper(paternoCtrl.text)!,
@@ -1367,6 +1391,11 @@ Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
         'imss': toUpper(imssCtrl.text),
         // Ya viene de un desplegable con los ocho valores validos, asi que no se toca.
         'tipo_sangre': tipoSangre,
+        // SIN pasar a mayusculas, al contrario que el resto del expediente. Los demas campos son
+        // codigos o se comparan entre si; esto es prosa que alguien va a LEER, probablemente
+        // deprisa, y en mayusculas se lee peor.
+        'alergias': soloTexto(alergiasCtrl.text),
+        'padecimientos': soloTexto(padecimientosCtrl.text),
         'credito': credito,
         'fecha_nacimiento':
             fechaNacCtrl.text.isEmpty ? null : fechaNacCtrl.text,

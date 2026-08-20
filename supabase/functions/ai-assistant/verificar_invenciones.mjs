@@ -676,5 +676,28 @@ ok('vacio se dice como NO REGISTRADO', vacio.includes('REGISTRADO'));
 ok('y NO como «no tiene contacto»', !/no tiene contacto/i.test(vacio));
 ok('dice donde se captura', vacio.includes('Colaborador'));
 
+
+// El caso reportado el 19/08/2026: no se atendia por WhatsApp.
+//
+// «contacto DE emergencia» ya lleva un «de», y la expresion agarraba el PRIMERO: se quedaba con
+// «emergencia de 0163» y lo descartaba por no ser una persona. El «de 0163» nunca se miraba.
+for (const [q, esperado] of [
+  ['cual es el contacto de emergencia de 0163', '0163'],
+  ['cual es el contacto de emergencia del colaborador 0163', '0163'],
+  ['contacto de emergencia de marco montoya', 'marco montoya'],
+  ['datos de emergencia del empleado 0186', '0186'],
+  ['tipo de sangre de brenda mondragon', 'brenda mondragon'],
+  ['a quien le aviso de hector figueroa', 'hector figueroa'],
+]) {
+  const r = preguntaContactoEmergencia(q);
+  ok(`"${q}" -> "${esperado}"`, r?.quien === esperado, JSON.stringify(r));
+}
+// Y sin nadie detras sigue siendo la propia, no la de un fantasma llamado «emergencia».
+for (const q of ['contacto de emergencia', 'datos de emergencia', 'tipo de sangre',
+                 'cual es mi contacto de emergencia']) {
+  const r = preguntaContactoEmergencia(q);
+  ok(`sin persona detras: "${q}"`, r === null || r.propio === true, JSON.stringify(r));
+}
+
 console.log(fallos === 0 ? '\nTODO BIEN' : `\n${fallos} FALLAS`);
 process.exit(fallos === 0 ? 0 : 1);
