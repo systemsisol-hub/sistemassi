@@ -628,7 +628,9 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
                         [Icons.info_outline, 'NSS', colab['imss']],
                         [Icons.info_outline, 'Tipo de sangre', colab['tipo_sangre']],
                         [Icons.info_outline, 'Alergias', colab['alergias']],
-                        [Icons.info_outline, 'Padecimientos', colab['padecimientos']],
+                        // Mismo nombre que en las dos vistas de pantalla, a propósito: es el mismo
+                        // dato y esta es la hoja que se imprime y circula.
+                        [Icons.info_outline, 'Enfermedades crónicas', colab['padecimientos']],
                         [Icons.straighten, 'Talla', colab['talla']],
                       ], brandColor, iconFont),
                       _pwCard('DATOS BANCARIOS', [
