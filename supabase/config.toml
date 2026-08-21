@@ -16,7 +16,7 @@
 # Sólo lo lee el CLI. Un despliegue por la API de gestión —o por el panel— manda `verify_jwt` como
 # parámetro y no consulta esto, así que ahí sigue habiendo que ponerlo bien a mano.
 #
-# Las seis funciones se declaran, incluidas las que llevan el valor por omisión. Ser explícito cuesta
+# Las cinco funciones se declaran, incluidas las que llevan el valor por omisión. Ser explícito cuesta
 # tres líneas y evita que alguien tenga que saberse el valor por omisión de memoria.
 
 project_id = "zkmbebybyyefmqcxjqrg"
@@ -42,16 +42,14 @@ verify_jwt = false
 [functions.ai-assistant]
 verify_jwt = false
 
-# La pide un `<iframe>`, y un iframe no puede mandar la cabecera `Authorization`: la dirección es
-# todo lo que tiene. Con `verify_jwt = true` el visor de Herramientas mostraría un 401 en lugar de la
-# herramienta.
+# Aquí hubo una función `herramienta-html` que entregaba el HTML de las herramientas declarando
+# `text/html`. NO SIRVE, y conviene que quede escrito para que nadie lo reintente: la pasarela de
+# Supabase SOBRESCRIBE el `Content-Type` de la respuesta a `text/plain` y le añade una
+# `Content-Security-Policy: default-src 'none'; sandbox`. Es una protección de la plataforma contra
+# alojar HTML ejecutable en `*.supabase.co`, y se aplica igual a Storage y a las Edge Functions.
 #
-# Lo que la protege no es la puerta de Supabase sino el `token` que exige en la dirección: es el de
-# una URL firmada del bucket `herramientas`, y ésas sólo se generan pasando por RLS y por las
-# políticas de Storage. La función no tiene llave de servicio, así que sin un token válido no puede
-# leer nada. Ver el encabezado de `herramienta-html/index.ts`.
-[functions.herramienta-html]
-verify_jwt = false
+# El archivo se sigue GUARDANDO en Storage; lo entrega una Pages Function en Cloudflare, en
+# `functions/h/[[ruta]].js`, y desde otro nombre de host para que quede en otro origen.
 
 # ─── Cerradas por Supabase ───────────────────────────────────────────────────
 #

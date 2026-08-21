@@ -41,6 +41,14 @@ class _HerramientasPageState extends State<HerramientasPage> {
 
   static const _bucket = 'herramientas';
 
+  /// Nombre de host desde el que se entrega el HTML de las herramientas.
+  ///
+  /// Es un dominio personalizado del MISMO proyecto de Pages, así que se despliega con el mismo
+  /// `git push` que la aplicación. Está aparte de `sistemassi.com` a propósito: un host distinto es
+  /// un origen distinto, y eso es lo que impide que el HTML del proveedor lea el `localStorage`
+  /// donde `supabase_flutter` guarda el token de sesión.
+  static const _hostHerramientas = 'herramientas.sistemassi.com';
+
   /// Cuánto vive la URL firmada con la que se abre una herramienta.
   ///
   /// Ocho horas y no cinco minutos como en los PDF del inventario: aquí el archivo pesa varios MB y
@@ -156,21 +164,19 @@ class _HerramientasPageState extends State<HerramientasPage> {
         .from(_bucket)
         .createSignedUrl(archivo, _vigenciaUrl.inSeconds);
 
-    // No se usa la URL firmada tal cual. Storage neutraliza el tipo de contenido del HTML que sube
-    // un usuario y lo entrega como texto plano, así que el visor mostraba el CÓDIGO del cotizador en
-    // lugar de la herramienta. La función `herramienta-html` reenvía el mismo objeto declarando
-    // `text/html`, y para eso sólo necesita la ruta y el token de esta firma.
+    // No se usa la URL firmada tal cual: Supabase no puede ENTREGAR el HTML. Se comprobó pidiéndolo
+    // —devuelve `Content-Type: text/plain`, sobrescribiendo el declarado, y añade una
+    // `Content-Security-Policy: default-src 'none'; sandbox`—, y vale igual para Storage y para las
+    // Edge Functions. El visor mostraba el CÓDIGO del cotizador.
     //
-    // El origen se saca de la propia URL firmada en lugar de leer la dirección del proyecto de la
-    // configuración: es el mismo dominio, y así no hay un segundo sitio donde pueda quedar desfasada.
-    final u = Uri.parse(firmada);
-    final token = u.queryParameters['token'];
+    // Lo entrega la Pages Function de `functions/h/[[ruta]].js`, que sólo necesita la ruta y el token
+    // de esta firma. Y lo hace en OTRO nombre de host para que quede en otro origen: así el HTML del
+    // proveedor no puede leer el `localStorage` donde vive el token de sesión. El detalle está en el
+    // encabezado de esa función.
+    final token = Uri.parse(firmada).queryParameters['token'];
     final url = token == null
         ? firmada
-        : u.replace(
-            path: '/functions/v1/herramienta-html',
-            queryParameters: {'path': archivo, 'token': token},
-          ).toString();
+        : Uri.https(_hostHerramientas, '/h/$archivo', {'token': token}).toString();
 
     _urlCache[id] = url;
     _urlVence[id] = DateTime.now().add(_vigenciaUrl);
