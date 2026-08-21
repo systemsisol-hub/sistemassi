@@ -41,13 +41,31 @@ class _HerramientasPageState extends State<HerramientasPage> {
 
   static const _bucket = 'herramientas';
 
-  /// Nombre de host desde el que se entrega el HTML de las herramientas.
+  /// Hosts desde los que se entrega el HTML de las herramientas. Los dos son del MISMO proyecto de
+  /// Pages, así que la función viaja en el mismo `git push` que la aplicación.
   ///
-  /// Es un dominio personalizado del MISMO proyecto de Pages, así que se despliega con el mismo
-  /// `git push` que la aplicación. Está aparte de `sistemassi.com` a propósito: un host distinto es
-  /// un origen distinto, y eso es lo que impide que el HTML del proveedor lea el `localStorage`
-  /// donde `supabase_flutter` guarda el token de sesión.
-  static const _hostHerramientas = 'herramientas.sistemassi.com';
+  /// Siempre es un host DISTINTO del que sirve la aplicación, y eso es lo importante: un host
+  /// distinto es un origen distinto, y es lo que impide que el HTML del proveedor lea el
+  /// `localStorage` donde `supabase_flutter` guarda el token de sesión.
+  static const _hostProduccion = 'herramientas.sistemassi.com';
+
+  /// Alias de rama de Pages. El subdominio de producción sirve el despliegue de `main`, así que
+  /// apuntar ahí desde una previsualización pide el archivo a una versión que todavía no tiene la
+  /// función: el iframe acabó mostrando la pantalla de acceso de sistemassi.
+  ///
+  /// Sirve además para poder PROBAR un cambio en la función antes de que llegue a producción, que de
+  /// otro modo sería imposible.
+  static const _hostPruebas = 'develop.sistemassi.pages.dev';
+
+  /// El host de producción sólo cuando la aplicación se está sirviendo desde producción. Fuera de la
+  /// web no hay `Uri.base` útil, y ahí la aplicación es la compilada, así que va a producción.
+  static String get _hostHerramientas {
+    if (!kIsWeb) return _hostProduccion;
+    final propio = Uri.base.host;
+    return (propio == 'sistemassi.com' || propio == 'www.sistemassi.com')
+        ? _hostProduccion
+        : _hostPruebas;
+  }
 
   /// Cuánto vive la URL firmada con la que se abre una herramienta.
   ///
