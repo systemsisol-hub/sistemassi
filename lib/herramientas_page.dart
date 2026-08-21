@@ -152,9 +152,26 @@ class _HerramientasPageState extends State<HerramientasPage> {
       return _urlCache[id];
     }
 
-    final url = await _supabase.storage
+    final firmada = await _supabase.storage
         .from(_bucket)
         .createSignedUrl(archivo, _vigenciaUrl.inSeconds);
+
+    // No se usa la URL firmada tal cual. Storage neutraliza el tipo de contenido del HTML que sube
+    // un usuario y lo entrega como texto plano, así que el visor mostraba el CÓDIGO del cotizador en
+    // lugar de la herramienta. La función `herramienta-html` reenvía el mismo objeto declarando
+    // `text/html`, y para eso sólo necesita la ruta y el token de esta firma.
+    //
+    // El origen se saca de la propia URL firmada en lugar de leer la dirección del proyecto de la
+    // configuración: es el mismo dominio, y así no hay un segundo sitio donde pueda quedar desfasada.
+    final u = Uri.parse(firmada);
+    final token = u.queryParameters['token'];
+    final url = token == null
+        ? firmada
+        : u.replace(
+            path: '/functions/v1/herramienta-html',
+            queryParameters: {'path': archivo, 'token': token},
+          ).toString();
+
     _urlCache[id] = url;
     _urlVence[id] = DateTime.now().add(_vigenciaUrl);
     return url;
@@ -324,6 +341,9 @@ class _HerramientasPageState extends State<HerramientasPage> {
             fileOptions: const FileOptions(
               upsert: true,
               contentType: 'text/html',
+              // Las mismas 8 horas que dura la firma. Con el `max-age=3600` por omisión de Storage,
+              // el navegador revalidaría varios MB cada hora sin que el archivo haya cambiado.
+              cacheControl: '28800',
             ),
           );
 

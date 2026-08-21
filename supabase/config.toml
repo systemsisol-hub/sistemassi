@@ -16,8 +16,8 @@
 # Sólo lo lee el CLI. Un despliegue por la API de gestión —o por el panel— manda `verify_jwt` como
 # parámetro y no consulta esto, así que ahí sigue habiendo que ponerlo bien a mano.
 #
-# Las cinco funciones se declaran, incluidas las tres que llevan el valor por omisión. Ser explícito
-# cuesta tres líneas y evita que alguien tenga que saberse el valor por omisión de memoria.
+# Las seis funciones se declaran, incluidas las que llevan el valor por omisión. Ser explícito cuesta
+# tres líneas y evita que alguien tenga que saberse el valor por omisión de memoria.
 
 project_id = "zkmbebybyyefmqcxjqrg"
 
@@ -40,6 +40,17 @@ verify_jwt = false
 # WhatsApp. Los permisos se leen de `profiles` en los dos casos; el camino interno no reimplementa
 # ninguno. Con `verify_jwt = true` el puente dejaría de funcionar.
 [functions.ai-assistant]
+verify_jwt = false
+
+# La pide un `<iframe>`, y un iframe no puede mandar la cabecera `Authorization`: la dirección es
+# todo lo que tiene. Con `verify_jwt = true` el visor de Herramientas mostraría un 401 en lugar de la
+# herramienta.
+#
+# Lo que la protege no es la puerta de Supabase sino el `token` que exige en la dirección: es el de
+# una URL firmada del bucket `herramientas`, y ésas sólo se generan pasando por RLS y por las
+# políticas de Storage. La función no tiene llave de servicio, así que sin un token válido no puede
+# leer nada. Ver el encabezado de `herramienta-html/index.ts`.
+[functions.herramienta-html]
 verify_jwt = false
 
 # ─── Cerradas por Supabase ───────────────────────────────────────────────────
