@@ -1357,6 +1357,7 @@ class _PermIcons extends StatelessWidget {
       _PermIcon(Icons.bar_chart_outlined, perms['show_powerbi'] == true),
       _PermIcon(Icons.vpn_key_outlined, perms['show_passwords'] == true),
       _PermIcon(Icons.contacts_outlined, perms['show_directorio'] == true),
+      _PermIcon(Icons.apps_outlined, perms['show_herramientas'] == true),
       _PermIcon(Icons.smart_toy_outlined, perms['show_ai'] == true),
       _PermIcon(Icons.delete_outline, perms['show_trash'] == true),
     ];
@@ -1461,6 +1462,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
       'show_external_contacts': false,
       'show_avisos': false,
       'show_convertidor': false,
+      'show_herramientas': false,
       'show_whatsapp': false,
       'show_directorio': false,
       'show_asistencia': false,
@@ -1950,6 +1952,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
         _permSwitch(c, 'Logs del sistema', 'show_logs', Icons.assignment_outlined),
         _permSwitch(c, 'Avisos', 'show_avisos', Icons.campaign_outlined),
         _permSwitch(c, 'Convertidor', 'show_convertidor', Icons.swap_horiz),
+        _permSwitch(c, 'Herramientas', 'show_herramientas', Icons.apps_outlined),
         _permSwitch(c, 'WhatsApp', 'show_whatsapp', Icons.chat),
         _permSwitch(c, 'Directorio', 'show_directorio', Icons.contacts_outlined),
         _permSwitch(c, 'Contactos externos', 'show_external_contacts', Icons.contact_phone_outlined),
