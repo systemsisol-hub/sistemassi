@@ -13,6 +13,7 @@ import 'external_contacts_page.dart';
 import 'directorio_page.dart';
 import 'avisos_page.dart';
 import 'convertidor_page.dart';
+import 'herramientas_page.dart';
 import 'whatsapp_page.dart';
 import 'avisos_store.dart';
 import 'widgets/banner_avisos.dart';
@@ -37,7 +38,7 @@ class _OpenSearchIntent extends Intent {
 
 // Visual-only nav group definitions — order here is render order.
 final _navGroups = <(String, List<String>)>[
-  ('GENERAL',        ['Mi Perfil', 'Social', 'Avisos', 'Directorio', 'Conocimientos', 'Contraseñas', 'Contactos Ext.', 'Firmas', 'Convertidor', 'Calendario']),
+  ('GENERAL',        ['Mi Perfil', 'Social', 'Avisos', 'Directorio', 'Conocimientos', 'Contraseñas', 'Contactos Ext.', 'Firmas', 'Convertidor', 'Herramientas', 'Calendario']),
   ('OPERACIÓN',      ['Incidencias', 'Inventario', 'Colaborador', 'Asistencia']),
   ('ANÁLISIS',       ['BI', 'Logs', 'Tablas']),
   ('ADMINISTRACIÓN', ['Usuarios', 'IA', 'WhatsApp', 'Papelera']),
@@ -137,6 +138,21 @@ class _MainNavigationState extends State<MainNavigation> {
         'icon': Icons.swap_horiz,
         'activeIcon': Icons.swap_horiz,
         'widget': const ConvertidorPage(),
+      });
+    }
+    if (widget.permissions['show_herramientas'] == true) {
+      pages.add({
+        'title': 'Herramientas',
+        // El mismo glifo en los dos estados y uno que YA se usa en el proyecto, por lo explicado
+        // arriba con el Convertidor: `flutter build web` recorta MaterialIcons a los iconos usados y
+        // los sirve en una URL fija, así que un icono nuevo sale en blanco para quien tenga la fuente
+        // anterior en caché. `apps_outlined` ya estaba en circulación.
+        'icon': Icons.apps_outlined,
+        'activeIcon': Icons.apps_outlined,
+        'widget': HerramientasPage(
+          role: widget.role,
+          permissions: widget.permissions,
+        ),
       });
     }
     if (widget.permissions['show_avisos'] == true) {

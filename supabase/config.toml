@@ -16,8 +16,8 @@
 # Sólo lo lee el CLI. Un despliegue por la API de gestión —o por el panel— manda `verify_jwt` como
 # parámetro y no consulta esto, así que ahí sigue habiendo que ponerlo bien a mano.
 #
-# Las cinco funciones se declaran, incluidas las tres que llevan el valor por omisión. Ser explícito
-# cuesta tres líneas y evita que alguien tenga que saberse el valor por omisión de memoria.
+# Las cinco funciones se declaran, incluidas las que llevan el valor por omisión. Ser explícito cuesta
+# tres líneas y evita que alguien tenga que saberse el valor por omisión de memoria.
 
 project_id = "zkmbebybyyefmqcxjqrg"
 
@@ -41,6 +41,15 @@ verify_jwt = false
 # ninguno. Con `verify_jwt = true` el puente dejaría de funcionar.
 [functions.ai-assistant]
 verify_jwt = false
+
+# Aquí hubo una función `herramienta-html` que entregaba el HTML de las herramientas declarando
+# `text/html`. NO SIRVE, y conviene que quede escrito para que nadie lo reintente: la pasarela de
+# Supabase SOBRESCRIBE el `Content-Type` de la respuesta a `text/plain` y le añade una
+# `Content-Security-Policy: default-src 'none'; sandbox`. Es una protección de la plataforma contra
+# alojar HTML ejecutable en `*.supabase.co`, y se aplica igual a Storage y a las Edge Functions.
+#
+# El archivo se sigue GUARDANDO en Storage; lo entrega una Pages Function en Cloudflare, en
+# `functions/h/[[ruta]].js`, y desde otro nombre de host para que quede en otro origen.
 
 # ─── Cerradas por Supabase ───────────────────────────────────────────────────
 #

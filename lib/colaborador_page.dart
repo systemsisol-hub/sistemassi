@@ -675,37 +675,6 @@ Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
               decoration: const InputDecoration(
                   labelText: 'NSS (Núm. de Seguro Social)',
                   helperText: 'Son 11 dígitos'))),
-          // Desplegable y no texto libre, a propósito.
-          //
-          // Es un dato que se consulta en una urgencia, y ahí un valor mal capturado es peor que un
-          // hueco: un hueco hace preguntar, y un «0+» hace actuar. El error clásico de este campo es
-          // justo ése —el CERO en lugar de la letra O— y con él «o positivo», «O +» u «orh+», que
-          // después no se pueden agrupar ni buscar. La base lleva la misma lista como restricción.
-          fieldColumn(DropdownButtonFormField<String>(
-              value: tipoSangre,
-              decoration: const InputDecoration(labelText: 'Tipo de sangre'),
-              items: tiposDeSangre
-                  .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                  .toList(),
-              onChanged: (v) => setDialogState(() => tipoSangre = v))),
-          // Texto libre y de varias lineas, al contrario que el tipo de sangre.
-          //
-          // «penicilina», «diabetes tipo 2 e hipertension controlada» no caben en una lista
-          // cerrada, y una lista incompleta obligaria a dejar el campo vacio cuando lo que falta
-          // es justo lo importante. `maxLines` deja crecer el campo sin abrir un dialogo aparte.
-          fieldColumn(TextField(
-              controller: alergiasCtrl,
-              minLines: 1,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                  labelText: 'Alergias',
-                  helperText: 'Si no se sabe, dejar vacío en lugar de escribir «ninguna»'))),
-          fieldColumn(TextField(
-              controller: padecimientosCtrl,
-              minLines: 1,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                  labelText: 'Enfermedades crónicas / padecimientos'))),
           fieldColumn(DropdownButtonFormField<String>(
               value: credito,
               decoration: const InputDecoration(labelText: 'Crédito'),
@@ -1324,23 +1293,62 @@ Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
               minLines: 5,
               keyboardType: TextInputType.multiline)),
           const SizedBox(height: 24),
-          _sectionTitle('Referencia'),
+          // «Referencia» no decia para que sirve. Las columnas de la base siguen llamandose
+          // `referencia_*` -renombrarlas costaria una migracion y romperia lo que ya las lee-, pero
+          // en pantalla se llama por lo que es. Las etiquetas de los campos pierden el «Ref.»:
+          // debajo de este titulo ya sobra.
+          _sectionTitle('Contacto de emergencia'),
           fieldColumn(TextField(
               controller: refNombreCtrl,
-              decoration:
-                  const InputDecoration(labelText: 'Nombre Referencia'))),
+              decoration: const InputDecoration(labelText: 'Nombre'))),
           fieldColumn(Row(children: [
             Expanded(
                 child: TextField(
                     controller: refTelCtrl,
-                    decoration:
-                        const InputDecoration(labelText: 'Teléfono Ref.'))),
+                    decoration: const InputDecoration(labelText: 'Teléfono'))),
             const SizedBox(width: 8),
             Expanded(
                 child: TextField(
                     controller: refRelacionCtrl,
                     decoration: const InputDecoration(labelText: 'Relación'))),
           ])),
+          const SizedBox(height: 24),
+          // Los tres datos de salud, juntos y detras del contacto de emergencia.
+          //
+          // Estaban sueltos detras del NSS, entre el RFC y el credito, que es donde no se buscan.
+          // Se consultan en una urgencia y junto al telefono de a quien avisar, asi que van ahi.
+          _sectionTitle('Ficha médica'),
+          // Desplegable y no texto libre, a propósito.
+          //
+          // Es un dato que se consulta en una urgencia, y ahí un valor mal capturado es peor que un
+          // hueco: un hueco hace preguntar, y un «0+» hace actuar. El error clásico de este campo es
+          // justo ése —el CERO en lugar de la letra O— y con él «o positivo», «O +» u «orh+», que
+          // después no se pueden agrupar ni buscar. La base lleva la misma lista como restricción.
+          fieldColumn(DropdownButtonFormField<String>(
+              value: tipoSangre,
+              decoration: const InputDecoration(labelText: 'Tipo de sangre'),
+              items: tiposDeSangre
+                  .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                  .toList(),
+              onChanged: (v) => setDialogState(() => tipoSangre = v))),
+          // Texto libre y de varias lineas, al contrario que el tipo de sangre.
+          //
+          // «penicilina», «diabetes tipo 2 e hipertension controlada» no caben en una lista
+          // cerrada, y una lista incompleta obligaria a dejar el campo vacio cuando lo que falta
+          // es justo lo importante. `maxLines` deja crecer el campo sin abrir un dialogo aparte.
+          fieldColumn(TextField(
+              controller: alergiasCtrl,
+              minLines: 1,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                  labelText: 'Alergias',
+                  helperText: 'Si no se sabe, dejar vacío en lugar de escribir «ninguna»'))),
+          fieldColumn(TextField(
+              controller: padecimientosCtrl,
+              minLines: 1,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                  labelText: 'Enfermedades crónicas / padecimientos'))),
           const SizedBox(height: 40),
         ],
       );
