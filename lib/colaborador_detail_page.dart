@@ -122,7 +122,7 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Col 1 — Personal + Domicilio+Referencia + Acceso + Equipo
+                  // Col 1 — Personal + Domicilio + Emergencia + Ficha médica
                   Expanded(
                     child: Column(
                       children: [
@@ -138,13 +138,6 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
                           _infoRow(context, Icons.fingerprint, 'CURP', colab['curp']),
                           _infoRow(context, Icons.receipt_long, 'RFC', colab['rfc']),
                           _infoRow(context, Icons.local_hospital, 'NSS', colab['imss']),
-                          // Después del IMSS, como se pidió.
-                          _infoRow(context, Icons.bloodtype, 'Tipo de sangre',
-                              colab['tipo_sangre']),
-                          _infoRow(context, Icons.warning_amber, 'Alergias',
-                              colab['alergias']),
-                          _infoRow(context, Icons.medical_information,
-                              'Enfermedades crónicas', colab['padecimientos']),
                         ]),
                         const SizedBox(height: SiSpace.x4),
                         _buildInfoCard(context, 'Domicilio y Contacto', [
@@ -157,10 +150,27 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
                           _infoRow(context, Icons.phone, 'Teléfono', colab['telefono']),
                           _infoRow(context, Icons.smartphone, 'Celular', colab['celular']),
                           _infoRow(context, Icons.email, 'Email', colab['correo_personal']),
-                          const Divider(height: 24),
-                          _infoRow(context, Icons.person_outline, 'Ref. Nombre', colab['referencia_nombre']),
-                          _infoRow(context, Icons.call, 'Ref. Teléfono', colab['referencia_telefono']),
-                          _infoRow(context, Icons.family_restroom, 'Ref. Relación', colab['referencia_relacion']),
+                        ]),
+                        const SizedBox(height: SiSpace.x4),
+                        // Dos tarjetas propias, y en este orden.
+                        //
+                        // El contacto de emergencia estaba al final de «Domicilio y Contacto» y los
+                        // tres datos de salud al final de «Datos Personales», a media ficha uno del
+                        // otro. Se consultan juntos y en el peor momento, asi que van juntos: primero
+                        // a quien se llama, luego lo que hay que decirle a quien atienda.
+                        _buildInfoCard(context, 'Contacto de Emergencia', [
+                          _infoRow(context, Icons.person_outline, 'Nombre', colab['referencia_nombre']),
+                          _infoRow(context, Icons.call, 'Teléfono', colab['referencia_telefono']),
+                          _infoRow(context, Icons.family_restroom, 'Relación', colab['referencia_relacion']),
+                        ]),
+                        const SizedBox(height: SiSpace.x4),
+                        _buildInfoCard(context, 'Ficha Médica', [
+                          _infoRow(context, Icons.bloodtype, 'Tipo de sangre',
+                              colab['tipo_sangre']),
+                          _infoRow(context, Icons.warning_amber, 'Alergias',
+                              colab['alergias']),
+                          _infoRow(context, Icons.medical_information,
+                              'Enfermedades crónicas', colab['padecimientos']),
                         ]),
                       ],
                     ),
@@ -234,13 +244,6 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
                     _infoRow(context, Icons.fingerprint, 'CURP', colab['curp']),
                     _infoRow(context, Icons.receipt_long, 'RFC', colab['rfc']),
                     _infoRow(context, Icons.local_hospital, 'NSS', colab['imss']),
-                    // Después del IMSS, igual que en la otra vista de la ficha.
-                    _infoRow(context, Icons.bloodtype, 'Tipo de sangre',
-                        colab['tipo_sangre']),
-                    _infoRow(context, Icons.warning_amber, 'Alergias',
-                        colab['alergias']),
-                    _infoRow(context, Icons.medical_information,
-                        'Enfermedades crónicas', colab['padecimientos']),
                   ]),
                   const SizedBox(height: SiSpace.x4),
                   _buildInfoCard(context, 'Domicilio y Contacto', [
@@ -249,6 +252,23 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
                     _infoRow(context, Icons.phone, 'Teléfono', colab['telefono']),
                     _infoRow(context, Icons.smartphone, 'Celular', colab['celular']),
                     _infoRow(context, Icons.email, 'Email', colab['correo_personal']),
+                  ]),
+                  const SizedBox(height: SiSpace.x4),
+                  // Mismas dos tarjetas y mismo orden que en escritorio. La vista movil se quedo sin
+                  // el contacto de emergencia cuando se escribio; aqui se repone.
+                  _buildInfoCard(context, 'Contacto de Emergencia', [
+                    _infoRow(context, Icons.person_outline, 'Nombre', colab['referencia_nombre']),
+                    _infoRow(context, Icons.call, 'Teléfono', colab['referencia_telefono']),
+                    _infoRow(context, Icons.family_restroom, 'Relación', colab['referencia_relacion']),
+                  ]),
+                  const SizedBox(height: SiSpace.x4),
+                  _buildInfoCard(context, 'Ficha Médica', [
+                    _infoRow(context, Icons.bloodtype, 'Tipo de sangre',
+                        colab['tipo_sangre']),
+                    _infoRow(context, Icons.warning_amber, 'Alergias',
+                        colab['alergias']),
+                    _infoRow(context, Icons.medical_information,
+                        'Enfermedades crónicas', colab['padecimientos']),
                   ]),
                   const SizedBox(height: SiSpace.x4),
                   if (_hasAccessData()) ...[
@@ -626,11 +646,6 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
                         [Icons.info_outline, 'RFC', colab['rfc']],
                         [Icons.info_outline, 'CURP', colab['curp']],
                         [Icons.info_outline, 'NSS', colab['imss']],
-                        [Icons.info_outline, 'Tipo de sangre', colab['tipo_sangre']],
-                        [Icons.info_outline, 'Alergias', colab['alergias']],
-                        // Mismo nombre que en las dos vistas de pantalla, a propósito: es el mismo
-                        // dato y esta es la hoja que se imprime y circula.
-                        [Icons.info_outline, 'Enfermedades crónicas', colab['padecimientos']],
                         [Icons.straighten, 'Talla', colab['talla']],
                       ], brandColor, iconFont),
                       _pwCard('DATOS BANCARIOS', [
@@ -674,6 +689,21 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
               [Icons.public, 'Estado', colab['estado_federal']],
               [Icons.smartphone, 'Celular', colab['celular']],
               [Icons.email, 'Correo', colab['correo_personal']],
+            ], brandColor, iconFont),
+
+            // La hoja impresa NO llevaba contacto de emergencia. Es la unica de las tres vistas que
+            // se lleva encima, asi que era justo donde mas faltaba. Los tres datos de salud se
+            // mueven aqui desde DATOS PERSONALES, detras de a quien hay que llamar.
+            _pwCard('CONTACTO DE EMERGENCIA', [
+              [Icons.person_outline, 'Nombre', colab['referencia_nombre']],
+              [Icons.call, 'Teléfono', colab['referencia_telefono']],
+              [Icons.family_restroom, 'Relación', colab['referencia_relacion']],
+            ], brandColor, iconFont),
+
+            _pwCard('FICHA MEDICA', [
+              [Icons.bloodtype, 'Tipo de sangre', colab['tipo_sangre']],
+              [Icons.warning_amber, 'Alergias', colab['alergias']],
+              [Icons.medical_information, 'Enfermedades crónicas', colab['padecimientos']],
             ], brandColor, iconFont),
 
             if (_assignedEquipment != null && _assignedEquipment!.isNotEmpty)
