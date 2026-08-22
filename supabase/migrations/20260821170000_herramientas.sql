@@ -39,8 +39,11 @@ CREATE TABLE IF NOT EXISTS herramientas (
   --
   -- Es deliberado: si la ruta fuera fija y se sobrescribiera, el navegador de cada asesor podría
   -- seguir sirviendo de su caché el HTML anterior, y nadie se enteraría de que está cotizando con
-  -- precios viejos. Con una ruta nueva por versión, la actualización llega sí o sí, y la anterior
-  -- queda en el bucket por si hay que volver a ella.
+  -- precios viejos. Con una ruta nueva por versión, la actualización llega sí o sí.
+  --
+  -- Del bucket se conserva UNA SOLA versión: al subir una nueva, la página borra las anteriores. Los
+  -- archivos pesan varios MB y acumularlos no aporta nada; si una entrega sale mal, el proveedor
+  -- manda otra corregida. El contador, en cambio, sigue subiendo: es lo que hace que la ruta cambie.
   version       integer NOT NULL DEFAULT 0,
 
   -- Tamaño en bytes de la versión vigente. Se guarda para poder mostrarlo sin ir a Storage: son

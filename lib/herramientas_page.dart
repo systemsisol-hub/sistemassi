@@ -379,6 +379,31 @@ class _HerramientasPageState extends State<HerramientasPage> {
         'subido_en': DateTime.now().toUtc().toIso8601String(),
       }).eq('id', id);
 
+      // Se conserva UNA SOLA versión: cada archivo pesa varios MB y acumularlos engorda el bucket
+      // sin dar nada a cambio. Si una entrega sale mal, el proveedor manda otro archivo corregido,
+      // que es más fiable que volver a una copia nuestra.
+      //
+      // Se borra DESPUÉS de que la subida haya terminado y la fila apunte a la versión nueva. Al
+      // revés, un fallo a mitad dejaría la herramienta sin archivo.
+      //
+      // Se listan todas y se borra todo lo que no sea la recién subida, en lugar de calcular «la
+      // anterior»: así barre también los restos de subidas hechas antes de que existiera esta
+      // limpieza, y no depende de que el contador de versiones sea correcto.
+      try {
+        final previos = await _supabase.storage.from(_bucket).list(path: id);
+        final sobran = previos
+            .map((f) => '$id/${f.name}')
+            .where((p) => p != path)
+            .toList();
+        if (sobran.isNotEmpty) {
+          await _supabase.storage.from(_bucket).remove(sobran);
+        }
+      } catch (e) {
+        // No poder limpiar no invalida la subida: la herramienta ya apunta a la versión nueva. Se
+        // registra y sigue, en lugar de dar por fallida una publicación que sí ocurrió.
+        debugPrint('No se pudieron borrar versiones anteriores: $e');
+      }
+
       // La firma guardada apunta al archivo anterior.
       _urlCache.remove(id);
       _urlVence.remove(id);
