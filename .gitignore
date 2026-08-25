@@ -89,3 +89,12 @@ android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
 skills/
 .agents/
 skills-lock.json
+
+# Llaves SSH. `Soledad00` es una llave PRIVADA y estaba en la raiz del repo sin ignorar:
+# un `git add -A` la habria publicado. Conviene sacarla del repo, pero mientras siga aqui,
+# que no se pueda commitear por accidente.
+Soledad00
+Soledad00.pub
+*.pem
+id_rsa
+id_ed25519
