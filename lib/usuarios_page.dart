@@ -1657,14 +1657,22 @@ class _UserFormSheetState extends State<_UserFormSheet> {
                     const SizedBox(height: SiSpace.x6),
                   ],
                   if (isDesktop)
+                    // Cinco columnas de igual ancho, repartidas 1 + 2 + 2.
+                    //
+                    // Con tres iguales, Control gastaba un tercio de la pantalla en tres campos y
+                    // un interruptor, mientras los 18 accesos caian en una lista que no se veia
+                    // entera. Control necesita una columna; los accesos, dos; y Credenciales se
+                    // queda como estaba -sus dos campos por renglon, usuario y contraseña-.
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(child: _buildGeneralSection(c)),
                         const SizedBox(width: SiSpace.x8),
-                        Expanded(child: _buildPermissionsSection(c)),
+                        Expanded(
+                            flex: 2,
+                            child: _buildPermissionsSection(c, dosColumnas: true)),
                         const SizedBox(width: SiSpace.x8),
-                        Expanded(child: _buildCredentialsSection(c)),
+                        Expanded(flex: 2, child: _buildCredentialsSection(c)),
                       ],
                     )
                   else
@@ -1939,29 +1947,62 @@ class _UserFormSheetState extends State<_UserFormSheet> {
     );
   }
 
-  Widget _buildPermissionsSection(SiColors c) {
+  /// Los accesos, en el orden en que se muestran.
+  ///
+  /// Antes eran 18 llamadas escritas una debajo de otra. Partirlas en dos columnas a mano habria
+  /// obligado a mover el corte cada vez que se agrega un permiso —el de WhatsApp se agregó este
+  /// mes—, y el que se olvidara de moverlo dejaría una columna con nueve y la otra con diez.
+  /// Saliendo de una lista, el corte se calcula.
+  static const _accesos = <(String, String, IconData)>[
+    ('Calendario', 'show_calendar', Icons.calendar_month_outlined),
+    ('Gestión de usuarios', 'show_users', Icons.group_outlined),
+    ('Inventario ISSI', 'show_issi', Icons.inventory_2_outlined),
+    ('Colaboradores CSSI', 'show_cssi', Icons.badge_outlined),
+    ('Incidencias', 'show_incidencias', Icons.description_outlined),
+    ('Logs del sistema', 'show_logs', Icons.assignment_outlined),
+    ('Avisos', 'show_avisos', Icons.campaign_outlined),
+    ('Convertidor', 'show_convertidor', Icons.swap_horiz),
+    ('Herramientas', 'show_herramientas', Icons.apps_outlined),
+    ('WhatsApp', 'show_whatsapp', Icons.chat),
+    ('Directorio', 'show_directorio', Icons.contacts_outlined),
+    ('Contactos externos', 'show_external_contacts', Icons.contact_phone_outlined),
+    ('Asistencia', 'show_asistencia', Icons.fingerprint),
+    ('Power BI', 'show_powerbi', Icons.bar_chart_outlined),
+    ('Contraseñas', 'show_passwords', Icons.vpn_key_outlined),
+    ('Tablas', 'show_tablas', Icons.table_chart_outlined),
+    ('Asistente IA', 'show_ai', Icons.smart_toy_outlined),
+    ('Papelera', 'show_trash', Icons.delete_outline),
+  ];
+
+  /// `dosColumnas` sólo en escritorio: en un teléfono la columna quedaría tan angosta que las
+  /// etiquetas largas —«Contactos externos»— se partirían en dos renglones cada una.
+  Widget _buildPermissionsSection(SiColors c, {bool dosColumnas = false}) {
+    Widget columna(Iterable<(String, String, IconData)> items) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final a in items) _permSwitch(c, a.$1, a.$2, a.$3),
+          ],
+        );
+
+    // Si el total es impar, la primera columna se lleva el de más: se lee de arriba a abajo y
+    // luego a la derecha, así que el hueco queda al final, que es donde no estorba.
+    final mitad = (_accesos.length + 1) ~/ 2;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _buildSectionTitle(c, 'ACCESOS (VISIBILIDAD)'),
-        _permSwitch(c, 'Calendario', 'show_calendar', Icons.calendar_month_outlined),
-        _permSwitch(c, 'Gestión de usuarios', 'show_users', Icons.group_outlined),
-        _permSwitch(c, 'Inventario ISSI', 'show_issi', Icons.inventory_2_outlined),
-        _permSwitch(c, 'Colaboradores CSSI', 'show_cssi', Icons.badge_outlined),
-        _permSwitch(c, 'Incidencias', 'show_incidencias', Icons.description_outlined),
-        _permSwitch(c, 'Logs del sistema', 'show_logs', Icons.assignment_outlined),
-        _permSwitch(c, 'Avisos', 'show_avisos', Icons.campaign_outlined),
-        _permSwitch(c, 'Convertidor', 'show_convertidor', Icons.swap_horiz),
-        _permSwitch(c, 'Herramientas', 'show_herramientas', Icons.apps_outlined),
-        _permSwitch(c, 'WhatsApp', 'show_whatsapp', Icons.chat),
-        _permSwitch(c, 'Directorio', 'show_directorio', Icons.contacts_outlined),
-        _permSwitch(c, 'Contactos externos', 'show_external_contacts', Icons.contact_phone_outlined),
-        _permSwitch(c, 'Asistencia', 'show_asistencia', Icons.fingerprint),
-        _permSwitch(c, 'Power BI', 'show_powerbi', Icons.bar_chart_outlined),
-        _permSwitch(c, 'Contraseñas', 'show_passwords', Icons.vpn_key_outlined),
-        _permSwitch(c, 'Tablas', 'show_tablas', Icons.table_chart_outlined),
-        _permSwitch(c, 'Asistente IA', 'show_ai', Icons.smart_toy_outlined),
-        _permSwitch(c, 'Papelera', 'show_trash', Icons.delete_outline),
+        if (dosColumnas)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: columna(_accesos.take(mitad))),
+              const SizedBox(width: SiSpace.x6),
+              Expanded(child: columna(_accesos.skip(mitad))),
+            ],
+          )
+        else
+          columna(_accesos),
       ],
     );
   }
