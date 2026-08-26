@@ -169,6 +169,19 @@ Deno.serve(async (req: Request) => {
     console.log(`modelo ${OLLAMA_MODEL} en ${OLLAMA_BASE}, ${tools.length} herramientas`
       + (OLLAMA_MODEL_RESPALDO ? `, respaldo ${OLLAMA_MODEL_RESPALDO}` : ", SIN respaldo"));
 
+    // El ultimo mensaje de la persona. Lo miran TODAS las vias directas, asi que se declara antes
+    // de la primera.
+    //
+    // Estaba declarado dentro del bloque de «sus propias vacaciones», que era la primera via cuando
+    // se escribio. Al poner la de «Autorizo» por delante quedo DESPUES de su primer uso y `const`
+    // no se iza: toda peticion moria con «Cannot access 'ultimoUsuario' before initialization»,
+    // incluidas las que no tenian nada que ver con autorizar. El 26/08/2026 Soli quedo muda diez
+    // minutos -dos mensajes perdidos a las 10:01, corregido a las 10:11- y ni `node --check` ni los
+    // cuatro arneses lo vieron: no es un error de sintaxis, y los arneses prueban los reconocedores
+    // por separado, nunca este archivo. Lo unico que lo habria atrapado es ejecutar el manejador.
+    const ultimoUsuario = [...messages].reverse()
+      .find((mm) => mm.role === "user")?.content ?? "";
+
     // ── Via directa: «Autorizo» ────────────────────────────────────────────
     //
     // El caso del 26/08/2026: el aviso de una solicitud nueva le dice al jefe «te toca autorizarla»,
@@ -230,9 +243,6 @@ Deno.serve(async (req: Request) => {
     //
     // Se resuelve sin pasar por el modelo; ver `preguntaSusVacaciones`. El permiso se comprueba con
     // la misma funcion que usa todo lo demas, asi que esta via no abre nada.
-    const ultimoUsuario = [...messages].reverse()
-      .find((mm) => mm.role === "user")?.content ?? "";
-
     if (preguntaSusVacaciones(ultimoUsuario)
         && puedeUsarHerramienta("calcular_vacaciones", isAdmin, permisos)) {
       const propio = await runTool(
