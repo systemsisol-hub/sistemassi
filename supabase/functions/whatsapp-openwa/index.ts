@@ -39,6 +39,17 @@ const LIMITE_POR_HORA = Number(Deno.env.get("WHATSAPP_LIMITE_HORA") ?? "20");
 /// Turnos que se conservan del hilo. El historial completo encarece cada llamada sin aportar.
 const TURNOS_MEMORIA = 12;
 
+/// Cuantas horas vale el hilo antes de empezar de cero.
+///
+/// El corte era SOLO por cantidad, y `actualizado_en` se escribia sin leerse nunca. El 26/08/2026
+/// eso hizo que una charla de TRECE DIAS antes -sobre las vacaciones de otra persona, y que
+/// terminaba preguntando «¿deseas gestionar una solicitud?»- siguiera siendo el contexto vigente.
+/// Un jefe contesto «Autorizo» al aviso de una solicitud y Soli le pidio fechas para crear otra.
+///
+/// Cuatro horas cubre una manana de ida y vuelta y descarta el contexto de ayer, que es el que
+/// hace dano: no se nota que esta ahi y cambia el sentido de una respuesta corta.
+const MEMORIA_HORAS = Number(Deno.env.get("WHATSAPP_MEMORIA_HORAS") ?? "4");
+
 type Resultado =
   | "ATENDIDO" | "NO_AUTORIZADO" | "SIN_REGISTRO" | "AMBIGUO"
   | "SIN_PERMISO" | "LIMITE" | "ERROR"
@@ -710,8 +721,19 @@ async function atender(
     // ── El hilo ──────────────────────────────────────────────────────────────
     const { data: conv } = await svc
       .from("whatsapp_conversaciones")
-      .select("mensajes").eq("telefono", telefono).maybeSingle();
-    const previos = Array.isArray(conv?.mensajes) ? conv!.mensajes as Array<{ role: string; content: string }> : [];
+      .select("mensajes,actualizado_en").eq("telefono", telefono).maybeSingle();
+    // El hilo CADUCA. Ver `MEMORIA_HORAS`: sin esto, el contexto de la semana pasada decide como se
+    // lee un «si» o un «autorizo» de hoy.
+    const edadHoras = conv?.actualizado_en
+      ? (Date.now() - new Date(conv.actualizado_en as string).getTime()) / 3_600_000
+      : Infinity;
+    const vencido = edadHoras > MEMORIA_HORAS;
+    if (vencido && conv) {
+      console.log(`hilo de ${telefono} descartado: ${edadHoras.toFixed(1)} h > ${MEMORIA_HORAS} h`);
+    }
+    const previos = !vencido && Array.isArray(conv?.mensajes)
+      ? conv!.mensajes as Array<{ role: string; content: string }>
+      : [];
     const mensajes = [...previos.slice(-TURNOS_MEMORIA), { role: "user", content: m.texto }];
 
     // ── Puerta 4 y la respuesta: la pone Soli ────────────────────────────────

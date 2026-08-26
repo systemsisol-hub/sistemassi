@@ -769,3 +769,130 @@ export function afirmaDatoSinRespaldo(
 
   return false;
 }
+
+
+// ─── «Autorizo» ──────────────────────────────────────────────────────────────
+//
+// El caso que la hizo falta, el 26/08/2026. A HECTOR FIGUEROA se le crearon dos solicitudes de
+// vacaciones a las 08:27 y 08:28. El aviso llego a RODRIGO CAMACHO, su jefe, con el texto «te toca
+// autorizarla». Rodrigo contesto «Autorizo» a las 08:33 y Soli le pidio fechas para CREAR una
+// solicitud nueva: en su hilo, el turno anterior era de trece dias antes -sobre las vacaciones de
+// otra persona- y terminaba preguntando «¿deseas gestionar una solicitud de vacaciones?».
+//
+// Nada se aprobo. El aviso invitaba a contestar ahi mismo y el sistema no sabia recibir la respuesta.
+//
+// Esto lo resuelve SIN pasar por el modelo, y a proposito: es una escritura, y dejar que el modelo
+// decida cuando algo cuenta como «autorizo» es exactamente como se aprueba lo que no era.
+
+/// Qué se está decidiendo y sobre cuál solicitud.
+///
+/// `cual` es null cuando no se dijo: con una sola pendiente eso alcanza, con varias no.
+export interface Decision {
+  decision: "APROBADA" | "RECHAZADA";
+  todas: boolean;
+  numero: number | null;
+  quien: string | null;
+}
+
+export function preguntaAutorizacion(texto: string): Decision | null {
+  const t = sinAcentos(texto).toLowerCase().trim().replace(/[.!]+$/, "");
+
+  // Se exige un mensaje CORTO. «Autorizo» dentro de un párrafo largo casi nunca es una decisión:
+  // es alguien contando algo. Aprobar por una palabra suelta en medio de un relato sería peor que
+  // no hacer nada.
+  if (t.length > 90) return null;
+
+  // El rechazo se prueba PRIMERO, porque «no autorizo» contiene «autorizo». Al revés, un «no» se
+  // convertiría en un sí, que es el único error inaceptable de los dos.
+  const rechaza = /\bno\s+(?:lo\s+|la\s+|las\s+|los\s+)?(?:autoriz|aprueb|apruebo)|rechaz|denieg|no\s+aprobad/
+    .test(t);
+  const aprueba = /\bautoriz(?:o|ada?|ado|adas|ados)\b|\bapruebo\b|\baprueba\b|\baprobad[oa]s?\b|\bvisto\s+bueno\b|\bde\s+acuerdo\b/
+    .test(t);
+  if (!rechaza && !aprueba) return null;
+
+  const todas = /\btodas?\b|\blas\s+dos\b|\bambas\b|\blos\s+dos\b/.test(t);
+
+  // «la 1», «numero 2», «#2». NO «la del 28»: ahí «la» va seguido de «del», y el 28 es una fecha.
+  // Sin esta distinción, «autorizo la del 1 de septiembre» elegiría la solicitud número 1.
+  const mNum = /\b(?:la|el|numero|numero|opcion|#)\s*([1-9])\b/.exec(t);
+
+  // El nombre, si lo dijo. Se borran primero las frases fijas, igual que en el contacto de
+  // emergencia: «autorizo las vacaciones DE hector» lleva un «de» que no es el del nombre.
+  const limpio = t
+    .replace(/las?\s+vacaciones|la\s+solicitud|la\s+incidencia|el\s+permiso|los\s+dias/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  let quien: string | null = null;
+  const mQuien = /\b(?:de|del)\s+(.+)$/.exec(limpio);
+  if (mQuien) {
+    let cand = mQuien[1].trim().replace(/[?!.,;:]+$/, "");
+    let antes;
+    do {
+      antes = cand;
+      cand = cand.replace(/^(el|la|los|las|sr|sra|srta|senor|senora|don|dona|ing|lic|c|colaborador|empleado)\s+/, "").trim();
+    } while (cand !== antes);
+    // Detrás de «de» puede venir una fecha o el resto de la frase, no una persona.
+    const noEsPersona = /^(\d|enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre|hoy|manana|ayer|una|un|todo|todas)/;
+    if (cand.length >= 3 && !noEsPersona.test(cand)) quien = cand;
+  }
+
+  return {
+    decision: rechaza ? "RECHAZADA" : "APROBADA",
+    todas,
+    numero: mNum ? Number(mNum[1]) : null,
+    quien,
+  };
+}
+
+/// Cómo se lee una solicitud en una línea: quién, cuándo y cuántos días.
+function unaLinea(f: Record<string, unknown>): string {
+  const dias = f.dias ?? "?";
+  return `${f.colaborador ?? "?"} — ${f.fecha_inicio ?? "?"} a ${f.fecha_fin ?? "?"} (${dias} `
+    + `${dias === 1 ? "dia" : "dias"})`;
+}
+
+/// El texto de la decisión. Dice SIEMPRE qué se tocó, con nombre y fechas.
+///
+/// Aprobar directo fue una decisión del usuario, sin paso de confirmación. Por eso la respuesta
+/// tiene que ser un acuse completo y no un «listo»: si se aprobó lo que no era, hay que poder verlo
+/// en el mismo mensaje y no descubrirlo en la nómina.
+export interface ResultadoAutorizacion {
+  estado: string;
+  decision?: string;
+  hechas?: Record<string, unknown>[];
+  pendientes?: Record<string, unknown>[];
+}
+
+export function textoAutorizacion(r: ResultadoAutorizacion): string {
+  if (r.estado === "sin_pendientes") {
+    return "No tienes solicitudes PENDIENTES de tu gente. Si esperabas alguna, puede que ya este "
+      + "resuelta o que la persona no te tenga como jefe inmediato en su expediente.";
+  }
+
+  if (r.estado === "ambiguo") {
+    const lista = (r.pendientes ?? []).map((f, i) => `${i + 1}. ${unaLinea(f)}`).join("\n");
+    // NO se elige por su cuenta. Hoy mismo Rodrigo tenía DOS pendientes, las dos de Héctor: con un
+    // «Autorizo» a secas, cualquier regla automática -la primera, la más próxima- acertaría la
+    // mitad de las veces.
+    return `Tienes ${(r.pendientes ?? []).length} solicitudes pendientes:\n${lista}\n\n`
+      + `Dime cual: «autorizo la 1», «autorizo la de ${primerNombreDe(r.pendientes?.[0])}» o `
+      + `«autorizo todas».`;
+  }
+
+  if (r.estado === "no_encontrada") {
+    const lista = (r.pendientes ?? []).map((f, i) => `${i + 1}. ${unaLinea(f)}`).join("\n");
+    return `No encontre esa solicitud entre tus pendientes. Las que tienes son:\n${lista}`;
+  }
+
+  const hechas = r.hechas ?? [];
+  const verbo = r.decision === "RECHAZADA" ? "Rechazada" : "Aprobada";
+  const plural = hechas.length === 1 ? verbo : `${verbo}s ${hechas.length}`;
+  const detalle = hechas.map((f) => `• ${unaLinea(f)}`).join("\n");
+  return `${plural}:\n${detalle}`;
+}
+
+/// El primer nombre, para el ejemplo del mensaje. Con el nombre completo la frase se hace ilegible.
+function primerNombreDe(f: Record<string, unknown> | undefined): string {
+  const n = String(f?.colaborador ?? "").trim();
+  return n ? n.split(/\s+/)[0].toLowerCase() : "esa persona";
+}

@@ -17,9 +17,9 @@ import { ALL_TOOLS, ToolInput } from "./herramientas.ts";
 import { CORS, igualesEnTiempoConstante, INTERNAL_SECRET, OLLAMA_BASE, OLLAMA_KEY, OLLAMA_MODEL, OLLAMA_MODEL_RESPALDO, SERVICE_KEY, SUPABASE_URL } from "./config.ts";
 import { ADMIN_ONLY_TOOLS, Identidad, PERMISO_POR_HERRAMIENTA, Permisos, puedeUsarHerramienta, QUE_HACE, VIAS_DIRECTAS } from "./permisos.ts";
 import { construirPrompt } from "./prompt.ts";
-import { afirmaDatoSinRespaldo, preguntaContactoEmergencia, preguntaCumpleanos, preguntaFaltasDe, preguntaIncidenciasDe, preguntaSuEquipo, preguntaSuHorario, preguntaSusVacaciones, soloUnIdentificador, textoAsistencia, textoContactoEmergencia, textoCumpleanos, textoIncidencias, textoEquipoPropio, textoHorario, textoUltimaSolicitud, textoVacacionesPropias } from "./respuestas.ts";
-import { runTool } from "./ejecutar.ts";
-import { jefeAlQueSeRefiere } from "./nombres.ts";
+import { afirmaDatoSinRespaldo, preguntaAutorizacion, textoAutorizacion, preguntaContactoEmergencia, preguntaCumpleanos, preguntaFaltasDe, preguntaIncidenciasDe, preguntaSuEquipo, preguntaSuHorario, preguntaSusVacaciones, soloUnIdentificador, textoAsistencia, textoContactoEmergencia, textoCumpleanos, textoIncidencias, textoEquipoPropio, textoHorario, textoUltimaSolicitud, textoVacacionesPropias } from "./respuestas.ts";
+import { decidirIncidencias, pendientesACargoDe, runTool } from "./ejecutar.ts";
+import { jefeAlQueSeRefiere, sinAcentos, tokensDeNombre } from "./nombres.ts";
 
 interface OllamaToolCall { function: { name: string; arguments: ToolInput }; }
 interface OllamaMessage  { role: string; content: string; tool_calls?: OllamaToolCall[]; }
@@ -168,6 +168,63 @@ Deno.serve(async (req: Request) => {
     // una de las causas candidatas.
     console.log(`modelo ${OLLAMA_MODEL} en ${OLLAMA_BASE}, ${tools.length} herramientas`
       + (OLLAMA_MODEL_RESPALDO ? `, respaldo ${OLLAMA_MODEL_RESPALDO}` : ", SIN respaldo"));
+
+    // ── Via directa: «Autorizo» ────────────────────────────────────────────
+    //
+    // El caso del 26/08/2026: el aviso de una solicitud nueva le dice al jefe «te toca autorizarla»,
+    // el jefe contesto «Autorizo» y Soli le pidio fechas para CREAR otra solicitud. El aviso invitaba
+    // a contestar ahi mismo y el sistema no sabia recibir la respuesta. Ver `preguntaAutorizacion`.
+    //
+    // Va ANTES que las demas vias porque es la unica que ESCRIBE. Y no pasa por el modelo: quien
+    // decide si un mensaje es una autorizacion es una expresion, no un criterio.
+    const decision = preguntaAutorizacion(ultimoUsuario);
+    if (decision && puedeUsarHerramienta("actualizar_incidencia", isAdmin, permisos)) {
+      // Los dos correos porque `jefe_inmediato` guarda un correo en 6 de los 33 jefes.
+      const correos = [prof?.mail_user, prof?.email]
+        .filter((v): v is string => typeof v === "string" && v.trim().length > 0);
+      const pendientes = await pendientesACargoDe(svc, userFullName, correos);
+
+      let elegidas: Record<string, unknown>[] = [];
+      let estado = "hecho";
+      if (pendientes.length === 0) {
+        estado = "sin_pendientes";
+      } else if (decision.todas) {
+        elegidas = pendientes;
+      } else if (decision.numero !== null) {
+        const f = pendientes[decision.numero - 1];
+        if (f) elegidas = [f]; else estado = "no_encontrada";
+      } else if (decision.quien) {
+        const tokens = tokensDeNombre(decision.quien);
+        const empatan = pendientes.filter((f) =>
+          tokens.every((t) => sinAcentos(String(f.colaborador ?? "")).toLowerCase().includes(t)));
+        if (empatan.length === 1) elegidas = empatan;
+        else if (empatan.length === 0) estado = "no_encontrada";
+        else estado = "ambiguo";
+      } else if (pendientes.length === 1) {
+        // Una sola pendiente: «Autorizo» a secas no tiene otra lectura posible. Se aprueba directo,
+        // como se pidio, sin paso de confirmacion.
+        elegidas = pendientes;
+      } else {
+        // Varias. NO se elige por cuenta propia: el dia del fallo habia DOS, las dos de la misma
+        // persona, y cualquier regla automatica acertaria la mitad de las veces.
+        estado = "ambiguo";
+      }
+
+      const hechas = elegidas.length > 0
+        ? await decidirIncidencias(svc, elegidas, decision.decision)
+        : [];
+      if (elegidas.length > 0 && hechas.length === 0) estado = "no_encontrada";
+
+      console.log(`via directa: autorizacion ${decision.decision} por ${actorId}, `
+        + `${pendientes.length} pendientes, ${hechas.length} escritas, estado ${estado}`);
+      return new Response(
+        JSON.stringify({
+          text: textoAutorizacion({ estado, decision: decision.decision, hechas, pendientes }),
+          structured: { type: "autorizacion", data: { estado, hechas, pendientes } },
+        }),
+        { headers: { ...CORS, "Content-Type": "application/json" } },
+      );
+    }
 
     // ── Via directa: sus propias vacaciones ────────────────────────────────
     //

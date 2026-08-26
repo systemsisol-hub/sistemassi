@@ -71,6 +71,18 @@ writeFileSync(tmp, `${extraerConst('MESES')}\n\n`
   + `${extraerFuncion('preguntaContactoEmergencia')}
 
 `
+  + `${extraerFuncion('preguntaAutorizacion')}
+
+`
+  + `${extraerFuncion('unaLinea')}
+
+`
+  + `${extraerFuncion('primerNombreDe')}
+
+`
+  + `${extraerFuncion('textoAutorizacion')}
+
+`
   + `${extraerFuncion('textoContactoEmergencia')}
 
 `
@@ -90,12 +102,13 @@ writeFileSync(tmp, `${extraerConst('MESES')}\n\n`
   + '  preguntaCumpleanos, textoCumpleanos, textoUltimaSolicitud,\n'
   + '  preguntaSuEquipo, textoEquipoPropio, alcanceDeLaConsulta, soloUnIdentificador,\n'
   + '  preguntaIncidenciasDe, textoIncidencias, preguntaFaltasDe, textoAsistencia,\n'
-  + '  preguntaSuHorario, textoHorario, preguntaContactoEmergencia, textoContactoEmergencia };\n', 'utf8');
+  + '  preguntaSuHorario, textoHorario, preguntaContactoEmergencia, textoContactoEmergencia,\n  preguntaAutorizacion, textoAutorizacion };\n', 'utf8');
 const { afirmaDatoSinRespaldo, preguntaSusVacaciones, textoVacacionesPropias,
   preguntaCumpleanos, textoCumpleanos, textoUltimaSolicitud,
   preguntaSuEquipo, textoEquipoPropio, alcanceDeLaConsulta, soloUnIdentificador,
   preguntaIncidenciasDe, textoIncidencias, preguntaFaltasDe, textoAsistencia,
-  preguntaSuHorario, textoHorario, preguntaContactoEmergencia, textoContactoEmergencia } =
+  preguntaSuHorario, textoHorario, preguntaContactoEmergencia, textoContactoEmergencia,
+  preguntaAutorizacion, textoAutorizacion } =
   await import('file://' + tmp.replace(/\\/g, '/'));
 
 let fallos = 0;
@@ -759,6 +772,93 @@ const soloNss = textoContactoEmergencia({
 ok('con solo el NSS no se dice que no hay nada', !soloNss.includes('no hay ninguno REGISTRADO'));
 ok('y se da el NSS', soloNss.includes('12345678901'));
 
+
+
+// --- «Autorizo»: el fallo del 26/08/2026 -------------------------------------
+//
+// El aviso de una solicitud nueva le dice al jefe «te toca autorizarla». RODRIGO CAMACHO contesto
+// «Autorizo» y Soli le pidio fechas para CREAR otra solicitud: el turno anterior de su hilo era de
+// trece dias antes y terminaba ofreciendo justo eso. Nada se aprobo.
+console.log('\n«Autorizo»: se reconoce como decision, y el «no» no se pierde');
+for (const q of ['Autorizo', 'autorizo', 'AUTORIZO', 'lo autorizo', 'autorizado',
+                 'apruebo', 'aprobado', 'visto bueno', 'de acuerdo']) {
+  const r = preguntaAutorizacion(q);
+  ok(`aprueba: "${q}"`, r?.decision === 'APROBADA', JSON.stringify(r));
+}
+// El unico error inaceptable de los dos: convertir un «no» en un si. Se prueba el rechazo PRIMERO
+// en el codigo justo porque «no autorizo» contiene «autorizo».
+for (const q of ['no autorizo', 'No autorizo', 'no lo autorizo', 'no la autorizo',
+                 'rechazo', 'rechazada', 'no apruebo', 'deniego']) {
+  const r = preguntaAutorizacion(q);
+  ok(`rechaza: "${q}"`, r?.decision === 'RECHAZADA', JSON.stringify(r));
+}
+// Lo que NO es una decision. Si esto se colara, se escribiria sobre la nomina de alguien.
+for (const q of ['cuantas vacaciones tengo', 'quien autoriza las vacaciones?',
+                 'mis incidencias', 'hola', 'que dias llego tarde brenda']) {
+  ok(`no es decision: "${q}"`, preguntaAutorizacion(q) === null,
+     JSON.stringify(preguntaAutorizacion(q)));
+}
+// Un parrafo largo con «autorizo» dentro casi nunca es una decision: es alguien contando algo.
+const relato = 'ayer hable con recursos humanos y me dijeron que yo autorizo las vacaciones de mi '
+  + 'area pero no me quedo claro si tambien las de otra zona';
+ok('un parrafo largo no aprueba nada', preguntaAutorizacion(relato) === null);
+
+// Elegir cual, cuando hay varias.
+ok('«autorizo todas» marca todas', preguntaAutorizacion('autorizo todas')?.todas === true);
+ok('«autorizo las dos» tambien', preguntaAutorizacion('autorizo las dos')?.todas === true);
+ok('«autorizo la 1» toma el numero', preguntaAutorizacion('autorizo la 1')?.numero === 1);
+ok('«autorizo la numero 2»', preguntaAutorizacion('autorizo la numero 2')?.numero === 2);
+// «la del 1 de septiembre» es una FECHA, no la solicitud numero 1. Sin esta distincion se aprobaria
+// la primera de la lista, que puede ser de otra persona.
+ok('«la del 1 de septiembre» no es la numero 1',
+   preguntaAutorizacion('autorizo la del 1 de septiembre')?.numero === null,
+   JSON.stringify(preguntaAutorizacion('autorizo la del 1 de septiembre')));
+ok('«autorizo la de hector» toma el nombre',
+   preguntaAutorizacion('autorizo la de hector')?.quien === 'hector',
+   JSON.stringify(preguntaAutorizacion('autorizo la de hector')));
+ok('«autorizo las vacaciones de hector figueroa» tambien',
+   preguntaAutorizacion('autorizo las vacaciones de hector figueroa')?.quien === 'hector figueroa',
+   JSON.stringify(preguntaAutorizacion('autorizo las vacaciones de hector figueroa')));
+ok('«autorizo» a secas no nombra a nadie ni numero',
+   preguntaAutorizacion('autorizo')?.quien === null
+   && preguntaAutorizacion('autorizo')?.numero === null);
+
+// El acuse. Aprobar es directo, SIN confirmacion -decision del usuario-, asi que el mensaje tiene
+// que decir exactamente que se toco: si se aprobo lo que no era, hay que verlo ahi y no en la nomina.
+const acuse = textoAutorizacion({
+  estado: 'hecho', decision: 'APROBADA',
+  hechas: [{ colaborador: 'HECTOR FIGUEROA VALLEJO', fecha_inicio: '2026-08-28',
+             fecha_fin: '2026-08-31', dias: 2 }],
+});
+ok('el acuse nombra a la persona', acuse.includes('HECTOR FIGUEROA VALLEJO'));
+ok('y dice las fechas', acuse.includes('2026-08-28') && acuse.includes('2026-08-31'));
+ok('y los dias', /2 dias/.test(acuse));
+ok('y que quedo aprobada', /Aprobada/.test(acuse));
+
+const acuseRechazo = textoAutorizacion({
+  estado: 'hecho', decision: 'RECHAZADA',
+  hechas: [{ colaborador: 'X Y', fecha_inicio: '2026-09-01', fecha_fin: '2026-09-02', dias: 1 }],
+});
+ok('el rechazo NO dice aprobada', !/Aprobada/.test(acuseRechazo));
+ok('dice rechazada', /Rechazada/.test(acuseRechazo));
+ok('un dia va en singular', /1 dia\b/.test(acuseRechazo), acuseRechazo);
+
+// Con varias pendientes no se elige por cuenta propia: el dia del fallo habia DOS, las dos de la
+// misma persona, y cualquier regla automatica acertaria la mitad de las veces.
+const dos = textoAutorizacion({
+  estado: 'ambiguo',
+  pendientes: [
+    { colaborador: 'HECTOR FIGUEROA VALLEJO', fecha_inicio: '2026-08-28', fecha_fin: '2026-08-31', dias: 2 },
+    { colaborador: 'HECTOR FIGUEROA VALLEJO', fecha_inicio: '2026-09-01', fecha_fin: '2026-09-02', dias: 2 },
+  ],
+});
+ok('con dos pendientes las lista numeradas', dos.includes('1.') && dos.includes('2.'));
+ok('y NO dice que aprobo nada', !/Aprobada/.test(dos));
+ok('y explica como elegir', /autorizo la 1/.test(dos));
+
+const sinNada = textoAutorizacion({ estado: 'sin_pendientes' });
+ok('sin pendientes lo dice claro', /No tienes solicitudes PENDIENTES/.test(sinNada));
+ok('y no afirma que no existan', /jefe inmediato/.test(sinNada));
 
 console.log(fallos === 0 ? '\nTODO BIEN' : `\n${fallos} FALLAS`);
 process.exit(fallos === 0 ? 0 : 1);

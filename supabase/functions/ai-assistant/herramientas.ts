@@ -141,7 +141,7 @@ export const ALL_TOOLS = [
       parameters: {
         type: "object",
         properties: {
-          status:     { type: "string", enum: ["PENDIENTE","APROBADA","CANCELADA"] },
+          status:     { type: "string", enum: ["PENDIENTE","APROBADA","RECHAZADA","CANCELADA"] },
           periodo:    { type: "string" }, limit: { type: "number" },
           usuario_id: { type: "string", description: "[Solo admin] UUID del colaborador" },
         },
@@ -269,7 +269,7 @@ export const ALL_TOOLS = [
         type: "object",
         required: ["id"],
         properties: {
-          id: { type: "string" }, status: { type: "string", enum: ["PENDIENTE","APROBADA","CANCELADA"] },
+          id: { type: "string" }, status: { type: "string", enum: ["PENDIENTE","APROBADA","RECHAZADA","CANCELADA"] },
           dias: { type: "number" }, periodo: { type: "string" },
           fecha_inicio: { type: "string" }, fecha_fin: { type: "string" }, fecha_regreso: { type: "string" },
         },
