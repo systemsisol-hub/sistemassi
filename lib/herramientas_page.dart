@@ -90,6 +90,15 @@ class _HerramientasPageState extends State<HerramientasPage> {
 
   bool get _isAdmin => widget.role == 'admin';
 
+  /// Si esta persona puede subir versiones, editar y borrar ESTA herramienta.
+  ///
+  /// Antes era `_isAdmin` a secas y la única forma de dejar que alguien mantuviera una herramienta
+  /// era hacerlo administrador del sistema entero. Ahora la respuesta es por herramienta: sale de
+  /// `puede_editar` en la asignación, y las políticas de la tabla y del bucket exigen lo mismo, así
+  /// que esto decide qué se PINTA y no qué se permite.
+  bool _puedeEditar(Map<String, dynamic> h) =>
+      _isAdmin || h['puede_editar'] == true;
+
   @override
   void initState() {
     super.initState();
@@ -122,14 +131,21 @@ class _HerramientasPageState extends State<HerramientasPage> {
         // Igual que en BI: se entra por la tabla de asignación y se trae la herramienta embebida.
         final data = await _supabase
             .from('herramientas_users')
-            .select('herramientas($_campos)')
+            .select('puede_editar, herramientas($_campos)')
             .eq('user_id', userId);
         _herramientas = (data as List)
+            // El editor ve la SUYA aunque este apagada; los demas asignados, solo las activas.
+            // Si no, apagarla la dejaria fuera de su alcance y no podria volver a encenderla.
             .where((e) =>
                 e['herramientas'] != null &&
-                e['herramientas']['is_active'] == true)
-            .map<Map<String, dynamic>>(
-                (e) => Map<String, dynamic>.from(e['herramientas'] as Map))
+                (e['herramientas']['is_active'] == true ||
+                    e['puede_editar'] == true))
+            // `puede_editar` vive en la ASIGNACIÓN, no en la herramienta, así que se copia dentro
+            // del mapa: de ahí en adelante cada herramienta ya sabe si esta persona la mantiene.
+            .map<Map<String, dynamic>>((e) => {
+                  ...Map<String, dynamic>.from(e['herramientas'] as Map),
+                  'puede_editar': e['puede_editar'] == true,
+                })
             .toList()
           ..sort((a, b) => (a['titulo'] ?? '')
               .toString()
@@ -266,12 +282,33 @@ class _HerramientasPageState extends State<HerramientasPage> {
         .toList();
   }
 
-  Future<List<String>> _getAsignados(String herramientaId) async {
+  /// Quién tiene la herramienta, y de ésos quién la MANTIENE.
+  ///
+  /// Devuelve un mapa y no una lista porque son dos cosas distintas por persona: tener acceso y
+  /// poder cambiarla.
+  Future<Map<String, bool>> _getAsignados(String herramientaId) async {
     final data = await _supabase
         .from('herramientas_users')
-        .select('user_id')
+        .select('user_id, puede_editar')
         .eq('herramienta_id', herramientaId);
-    return (data as List).map((e) => e['user_id'].toString()).toList();
+    return {
+      for (final e in data as List)
+        e['user_id'].toString(): e['puede_editar'] == true,
+    };
+  }
+
+  /// Le da o le quita el mantenimiento de una herramienta a alguien que ya la tiene asignada.
+  Future<void> _toggleEdicion(
+      String herramientaId, String userId, bool puede) async {
+    try {
+      await _supabase
+          .from('herramientas_users')
+          .update({'puede_editar': puede})
+          .eq('herramienta_id', herramientaId)
+          .eq('user_id', userId);
+    } catch (e) {
+      debugPrint('Error cambiando quién mantiene la herramienta: $e');
+    }
   }
 
   Future<void> _toggleAcceso(
@@ -284,6 +321,8 @@ class _HerramientasPageState extends State<HerramientasPage> {
           {'herramienta_id': herramientaId, 'user_id': userId},
           onConflict: 'herramienta_id,user_id',
         );
+        // Entra con acceso de lectura y sin mantenimiento: dar acceso y dar mando son dos
+        // decisiones, y juntarlas convertiría un descuido en un permiso de borrado.
       } else {
         await _supabase
             .from('herramientas_users')
@@ -306,6 +345,7 @@ class _HerramientasPageState extends State<HerramientasPage> {
         getUsers: _getUsers,
         getAsignados: _getAsignados,
         toggleAcceso: _toggleAcceso,
+        toggleEdicion: _toggleEdicion,
         onSave: (data) async {
           if (herramienta != null) {
             await _supabase
@@ -701,7 +741,7 @@ class _HerramientasPageState extends State<HerramientasPage> {
                       : 'Sin archivo cargado',
                   style: TextStyle(fontSize: 11, color: c.ink4),
                 ),
-                if (_isAdmin) ...[
+                if (_puedeEditar(h)) ...[
                   Divider(height: SiSpace.x6, color: c.line),
                   Row(
                     children: [
@@ -822,14 +862,16 @@ class _VisorHerramienta extends StatelessWidget {
 class _HerramientaFormSheet extends StatefulWidget {
   final Map<String, dynamic>? herramienta;
   final Future<List<Map<String, dynamic>>> Function() getUsers;
-  final Future<List<String>> Function(String) getAsignados;
+  final Future<Map<String, bool>> Function(String) getAsignados;
   final Future<void> Function(String, String, bool) toggleAcceso;
+  final Future<void> Function(String, String, bool) toggleEdicion;
   final Future<void> Function(Map<String, dynamic>) onSave;
 
   const _HerramientaFormSheet({
     required this.getUsers,
     required this.getAsignados,
     required this.toggleAcceso,
+    required this.toggleEdicion,
     required this.onSave,
     this.herramienta,
   });
@@ -988,6 +1030,7 @@ class _HerramientaFormSheetState extends State<_HerramientaFormSheet> {
                     getUsers: widget.getUsers,
                     getAsignados: widget.getAsignados,
                     toggleAcceso: widget.toggleAcceso,
+                    toggleEdicion: widget.toggleEdicion,
                   ),
                 ],
               ],
@@ -1023,14 +1066,16 @@ class _HerramientaFormSheetState extends State<_HerramientaFormSheet> {
 class _AsignarUsuarios extends StatefulWidget {
   final String herramientaId;
   final Future<List<Map<String, dynamic>>> Function() getUsers;
-  final Future<List<String>> Function(String) getAsignados;
+  final Future<Map<String, bool>> Function(String) getAsignados;
   final Future<void> Function(String, String, bool) toggleAcceso;
+  final Future<void> Function(String, String, bool) toggleEdicion;
 
   const _AsignarUsuarios({
     required this.herramientaId,
     required this.getUsers,
     required this.getAsignados,
     required this.toggleAcceso,
+    required this.toggleEdicion,
   });
 
   @override
@@ -1039,7 +1084,7 @@ class _AsignarUsuarios extends StatefulWidget {
 
 class _AsignarUsuariosState extends State<_AsignarUsuarios> {
   List<Map<String, dynamic>> _users = [];
-  Set<String> _asignados = {};
+  Map<String, bool> _asignados = {};
   bool _cargando = true;
 
   @override
@@ -1055,7 +1100,7 @@ class _AsignarUsuariosState extends State<_AsignarUsuarios> {
       if (!mounted) return;
       setState(() {
         _users = users;
-        _asignados = asignados.toSet();
+        _asignados = asignados;
         _cargando = false;
       });
     } catch (e) {
@@ -1115,7 +1160,8 @@ class _AsignarUsuariosState extends State<_AsignarUsuarios> {
         itemBuilder: (_, i) {
           final u = _users[i];
           final id = u['id'].toString();
-          final tiene = _asignados.contains(id);
+          final tiene = _asignados.containsKey(id);
+          final mantiene = _asignados[id] == true;
           return CheckboxListTile(
             value: tiene,
             dense: true,
@@ -1124,11 +1170,34 @@ class _AsignarUsuariosState extends State<_AsignarUsuarios> {
             title: Text(_nombre(u), style: const TextStyle(fontSize: 13)),
             subtitle: Text((u['email'] ?? '').toString(),
                 style: TextStyle(fontSize: 11, color: c.ink4)),
+            // El botón de mantenimiento sólo existe si la persona tiene la herramienta: mandar
+            // sobre algo que no se ve no significa nada.
+            //
+            // Va como icono y no como segunda casilla a propósito: son permisos de peso distinto
+            // —ver y poder BORRAR— y dos casillas iguales invitan a marcarlas de un pasada.
+            secondary: tiene
+                ? IconButton(
+                    onPressed: () async {
+                      final ahora = !mantiene;
+                      setState(() => _asignados[id] = ahora);
+                      await widget.toggleEdicion(widget.herramientaId, id, ahora);
+                    },
+                    icon: Icon(
+                      mantiene ? Icons.edit : Icons.edit_off_outlined,
+                      size: 17,
+                      color: mantiene ? c.brand : c.ink4,
+                    ),
+                    tooltip: mantiene
+                        ? 'Puede subir versiones, editar y borrar esta herramienta'
+                        : 'Sólo puede usarla. Toca para dejarle mantenerla',
+                    visualDensity: VisualDensity.compact,
+                  )
+                : null,
             onChanged: (v) async {
               final dar = v ?? false;
               // Se pinta primero y se guarda después: la lista tiene que responder al toque, y un
               // fallo se corrige al recargar la hoja.
-              setState(() => dar ? _asignados.add(id) : _asignados.remove(id));
+              setState(() => dar ? _asignados[id] = false : _asignados.remove(id));
               await widget.toggleAcceso(widget.herramientaId, id, dar);
             },
           );
