@@ -1042,3 +1042,92 @@ export async function runTool(
 
   return { error: `Tool desconocida: ${name}` };
 }
+
+
+// ─── Autorizar lo que uno tiene a su cargo ───────────────────────────────────
+//
+// NO es una herramienta del catalogo, y eso es deliberado: el modelo no puede llamarla. La usa solo
+// la via directa de `index.ts`, que reconoce «Autorizo» con una expresion y no con criterio del
+// modelo. Aprobar es una escritura sobre la nomina de alguien; el camino tiene que ser estrecho.
+//
+// El permiso que exige es el MISMO que hoy: `actualizar_incidencia` -administrador con
+// `show_incidencias`-, comprobado por quien llama con `puedeUsarHerramienta`. Esto no concede nada
+// nuevo: le da un camino corto a quien ya podia hacerlo desde la pagina. Un jefe que NO sea
+// administrador sigue sin poder, igual que hoy.
+
+/// Las solicitudes PENDIENTES de la gente que le reporta a alguien.
+///
+/// El vinculo es `profiles.jefe_inmediato`, que guarda un NOMBRE en texto, no una llave. Medido el
+/// 26/08/2026: de 33 jefes distintos, 27 empatan exacto con `nombre paterno materno` y los otros 6
+/// guardan ahi un CORREO -«KCC@SISOL.COM.MX»- en lugar del nombre. Por eso se comparan las dos
+/// cosas: sin el correo, esos 6 jefes recibirian «no tienes pendientes» teniendolas.
+export async function pendientesACargoDe(
+  db: Db,
+  nombreArmado: string,
+  correos: string[],
+): Promise<Record<string, unknown>[]> {
+  const clave = (v: unknown) => String(v ?? "").trim().toUpperCase();
+  const mio = clave(nombreArmado);
+  const misCorreos = correos.map(clave).filter((c) => c.length > 0);
+
+  const { data: incid, error } = await db
+    .from("incidencias")
+    .select("id,status,periodo,dias,fecha_inicio,fecha_fin,fecha_regreso,usuario_id,created_at")
+    .eq("status", "PENDIENTE")
+    .order("fecha_inicio", { ascending: true });
+  if (error || !incid || incid.length === 0) return [];
+
+  const ids = [...new Set(incid.map((i: Record<string, unknown>) => i.usuario_id).filter(Boolean))];
+  if (ids.length === 0) return [];
+
+  const { data: gente } = await db
+    .from("profiles")
+    .select("id,nombre,paterno,materno,numero_empleado,jefe_inmediato")
+    .in("id", ids as string[]);
+
+  const mios = new Map<string, Record<string, unknown>>();
+  for (const g of (gente ?? []) as Record<string, unknown>[]) {
+    const jefe = clave(g.jefe_inmediato);
+    if (jefe.length === 0) continue;
+    if (jefe === mio || misCorreos.includes(jefe)) mios.set(String(g.id), g);
+  }
+  if (mios.size === 0) return [];
+
+  return (incid as Record<string, unknown>[])
+    .filter((i) => mios.has(String(i.usuario_id)))
+    .map((i) => {
+      const g = mios.get(String(i.usuario_id))!;
+      const nombre = [g.nombre, g.paterno, g.materno].filter(Boolean).join(" ");
+      return { ...i, colaborador: nombre, numero_empleado: g.numero_empleado ?? null };
+    });
+}
+
+/// Aprueba o rechaza, y devuelve lo que QUEDO escrito, no lo que se pidió escribir.
+///
+/// Se relee con `.select()` a proposito: la lección de esta misma sesión es que «no dio error» no es
+/// «se hizo». El acuse que ve el jefe se arma con esto.
+export async function decidirIncidencias(
+  db: Db,
+  filas: Record<string, unknown>[],
+  decision: "APROBADA" | "RECHAZADA",
+): Promise<Record<string, unknown>[]> {
+  const hechas: Record<string, unknown>[] = [];
+  for (const f of filas) {
+    const { data, error } = await db.from("incidencias")
+      .update({ status: decision })
+      // La condicion de PENDIENTE va tambien aqui, no solo en la busqueda: entre leer y escribir
+      // alguien pudo resolverla desde la pagina, y entonces esto NO debe pisarla.
+      .eq("id", f.id as string).eq("status", "PENDIENTE")
+      .select().maybeSingle();
+    if (error) {
+      console.error(`autorizacion: no se pudo poner ${decision} en ${f.id}: ${error.message}`);
+      continue;
+    }
+    if (!data) {
+      console.log(`autorizacion: ${f.id} ya no estaba PENDIENTE, no se toco`);
+      continue;
+    }
+    hechas.push({ ...f, status: (data as Record<string, unknown>).status });
+  }
+  return hechas;
+}

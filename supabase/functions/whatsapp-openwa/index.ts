@@ -39,6 +39,17 @@ const LIMITE_POR_HORA = Number(Deno.env.get("WHATSAPP_LIMITE_HORA") ?? "20");
 /// Turnos que se conservan del hilo. El historial completo encarece cada llamada sin aportar.
 const TURNOS_MEMORIA = 12;
 
+/// Cuantas horas vale el hilo antes de empezar de cero.
+///
+/// El corte era SOLO por cantidad, y `actualizado_en` se escribia sin leerse nunca. El 26/08/2026
+/// eso hizo que una charla de TRECE DIAS antes -sobre las vacaciones de otra persona, y que
+/// terminaba preguntando «¿deseas gestionar una solicitud?»- siguiera siendo el contexto vigente.
+/// Un jefe contesto «Autorizo» al aviso de una solicitud y Soli le pidio fechas para crear otra.
+///
+/// Cuatro horas cubre una manana de ida y vuelta y descarta el contexto de ayer, que es el que
+/// hace dano: no se nota que esta ahi y cambia el sentido de una respuesta corta.
+const MEMORIA_HORAS = Number(Deno.env.get("WHATSAPP_MEMORIA_HORAS") ?? "4");
+
 type Resultado =
   | "ATENDIDO" | "NO_AUTORIZADO" | "SIN_REGISTRO" | "AMBIGUO"
   | "SIN_PERMISO" | "LIMITE" | "ERROR"
@@ -694,6 +705,9 @@ async function atender(
     }
 
     // ── Límite por hora ──────────────────────────────────────────────────────
+    //
+    // La ventana es MOVIL: los últimos 60 minutos, no la hora del reloj. Se cuentan sólo las
+    // ATENDIDAS, así que un error o un rechazo no gasta cupo.
     const desde = new Date(Date.now() - 3600_000).toISOString();
     const { count } = await svc
       .from("whatsapp_bitacora")
@@ -702,16 +716,51 @@ async function atender(
     if ((count ?? 0) >= LIMITE_POR_HORA) {
       await registrar(svc, telefono, profileId, "LIMITE", m.texto, null,
         `${count} mensajes atendidos en la última hora`);
+
+      // Se le dice CUÁNTOS MINUTOS, no «espera un momento».
+      //
+      // El 27/08/2026 MARCO ANTONIO MONTOYA hizo 20 consultas en 50 minutos y quedó frenado cuatro
+      // veces. Una de las preguntas que le rebotaron era literalmente «Qué tiempo tengo que
+      // esperar»: pregunto cuanto faltaba y el aviso no se lo decia, asi que volvio a intentarlo a
+      // los 13 y a los 15 minutos. El dato estaba aqui todo el tiempo.
+      //
+      // En cuanto la MAS ANTIGUA de las que cuentan sale de la ventana, queda un hueco libre. Esa es
+      // la espera, y no hace falta calcular nada mas.
+      let espera = "";
+      const { data: masVieja } = await svc
+        .from("whatsapp_bitacora")
+        .select("creado_en")
+        .eq("telefono", telefono).eq("resultado", "ATENDIDO").gte("creado_en", desde)
+        .order("creado_en", { ascending: true }).limit(1).maybeSingle();
+      if (masVieja?.creado_en) {
+        const libreEn = new Date(masVieja.creado_en as string).getTime() + 3600_000;
+        const minutos = Math.max(1, Math.ceil((libreEn - Date.now()) / 60_000));
+        espera = ` Vuelve a preguntarme en ${minutos} ${minutos === 1 ? "minuto" : "minutos"}.`;
+      }
+
       // Aquí SÍ se avisa: es alguien autorizado, y el silencio parecería una avería.
-      await enviar(destino, "Has hecho muchas consultas seguidas. Espera un momento y vuelve a intentarlo.");
+      await enviar(destino,
+        `Has hecho ${count} consultas en la última hora, que es el máximo.${espera}`
+        + (espera ? "" : " Espera un momento y vuelve a intentarlo."));
       return;
     }
 
     // ── El hilo ──────────────────────────────────────────────────────────────
     const { data: conv } = await svc
       .from("whatsapp_conversaciones")
-      .select("mensajes").eq("telefono", telefono).maybeSingle();
-    const previos = Array.isArray(conv?.mensajes) ? conv!.mensajes as Array<{ role: string; content: string }> : [];
+      .select("mensajes,actualizado_en").eq("telefono", telefono).maybeSingle();
+    // El hilo CADUCA. Ver `MEMORIA_HORAS`: sin esto, el contexto de la semana pasada decide como se
+    // lee un «si» o un «autorizo» de hoy.
+    const edadHoras = conv?.actualizado_en
+      ? (Date.now() - new Date(conv.actualizado_en as string).getTime()) / 3_600_000
+      : Infinity;
+    const vencido = edadHoras > MEMORIA_HORAS;
+    if (vencido && conv) {
+      console.log(`hilo de ${telefono} descartado: ${edadHoras.toFixed(1)} h > ${MEMORIA_HORAS} h`);
+    }
+    const previos = !vencido && Array.isArray(conv?.mensajes)
+      ? conv!.mensajes as Array<{ role: string; content: string }>
+      : [];
     const mensajes = [...previos.slice(-TURNOS_MEMORIA), { role: "user", content: m.texto }];
 
     // ── Puerta 4 y la respuesta: la pone Soli ────────────────────────────────
