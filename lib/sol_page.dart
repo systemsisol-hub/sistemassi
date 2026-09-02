@@ -122,43 +122,245 @@ class _SolPageState extends State<SolPage> with SingleTickerProviderStateMixin {
 
 // ── Chat ─────────────────────────────────────────────────────────────────────
 
-/// El chat, todavía sin función detrás.
+/// El chat de SOL.
 ///
-/// Se entrega así a propósito. La cuenta del proveedor y la llave de SOL están en camino, y el panel
-/// de Desarrollos ya sirve desde hoy: se puede ir capturando la información mientras el chat se
-/// termina. Un chat que diga claramente que no está configurado es mejor que uno que dé un error de
-/// red y parezca averiado.
-class _ChatSol extends StatelessWidget {
+/// Habla con la función `sol-assistant`, que usa la MISMA cuenta de Ollama que Soli con otro
+/// modelo. Si no hay modelo configurado la función lo dice en su respuesta y aquí se muestra tal
+/// cual: es más útil que un error de red.
+///
+/// El hilo se guarda sólo en memoria. SOL no tiene puente de WhatsApp, así que no hay una segunda
+/// vía que tenga que compartir la conversación —que es lo que obligó a guardarla en Soli—.
+class _ChatSol extends StatefulWidget {
   const _ChatSol();
+
+  @override
+  State<_ChatSol> createState() => _ChatSolState();
+}
+
+class _ChatSolState extends State<_ChatSol> {
+  final _supabase = Supabase.instance.client;
+  final _entrada = TextEditingController();
+  final _scroll = ScrollController();
+  final _mensajes = <({bool mio, String texto})>[];
+  bool _enviando = false;
+
+  static const _ejemplos = [
+    '¿Qué desarrollos tenemos?',
+    '¿Cuánto cuesta AG117?',
+    '¿Qué promociones hay vigentes?',
+  ];
+
+  @override
+  void dispose() {
+    _entrada.dispose();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  Future<void> _enviar([String? texto]) async {
+    final pregunta = (texto ?? _entrada.text).trim();
+    if (pregunta.isEmpty || _enviando) return;
+
+    setState(() {
+      _mensajes.add((mio: true, texto: pregunta));
+      _entrada.clear();
+      _enviando = true;
+    });
+    _alFinal();
+
+    try {
+      // Se manda el hilo completo para que pueda seguir el contexto —«¿y el enganche?» después de
+      // preguntar por un desarrollo—. El tope de turnos lo pone la función, no esto.
+      final r = await _supabase.functions.invoke('sol-assistant', body: {
+        'messages': [
+          for (final m in _mensajes)
+            {'role': m.mio ? 'user' : 'assistant', 'content': m.texto},
+        ],
+      });
+      final datos = r.data as Map<String, dynamic>?;
+      final respuesta = (datos?['text'] ?? datos?['error'] ?? '').toString().trim();
+      if (!mounted) return;
+      setState(() {
+        _mensajes.add((
+          mio: false,
+          texto: respuesta.isEmpty ? 'No recibí respuesta.' : respuesta,
+        ));
+        _enviando = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        // El error se muestra: si es de permisos o de configuración, el texto lo dice y es lo que
+        // hace falta leer.
+        _mensajes.add((mio: false, texto: 'No se pudo consultar a SOL: $e'));
+        _enviando = false;
+      });
+    }
+    _alFinal();
+  }
+
+  void _alFinal() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scroll.hasClients) {
+        _scroll.animateTo(_scroll.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final c = SiColors.of(context);
+    return Column(
+      children: [
+        Expanded(
+          child: _mensajes.isEmpty
+              ? _bienvenida(c)
+              : ListView.builder(
+                  controller: _scroll,
+                  padding: const EdgeInsets.all(SiSpace.x5),
+                  itemCount: _mensajes.length + (_enviando ? 1 : 0),
+                  itemBuilder: (_, i) {
+                    if (i == _mensajes.length) return _pensando(c);
+                    return _burbuja(c, _mensajes[i]);
+                  },
+                ),
+        ),
+        _barraEntrada(c),
+      ],
+    );
+  }
+
+  Widget _bienvenida(SiColors c) {
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 460),
+        constraints: const BoxConstraints(maxWidth: 480),
         child: Padding(
           padding: const EdgeInsets.all(SiSpace.x6),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.smart_toy_outlined, size: 56, color: c.line),
+              Icon(Icons.smart_toy_outlined, size: 52, color: c.line),
               const SizedBox(height: SiSpace.x4),
-              Text('SOL todavía no está conectado',
-                  textAlign: TextAlign.center,
+              Text('SOL, tu asistente comercial',
                   style: TextStyle(
                       fontSize: 17, fontWeight: FontWeight.w600, color: c.ink)),
-              const SizedBox(height: SiSpace.x3),
+              const SizedBox(height: SiSpace.x2),
               Text(
-                'Falta darle su cuenta y su llave del proveedor de IA. Mientras tanto, en la '
-                'pestaña de Desarrollos ya se puede capturar todo lo que SOL va a saber: '
-                'precios, promociones y notas.',
+                'Pregúntale por desarrollos, precios y promociones. Responde sólo con lo que está '
+                'capturado: lo que no tenga, lo dice.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 13, color: c.ink3, height: 1.5),
+              ),
+              const SizedBox(height: SiSpace.x5),
+              // Tres ejemplos y no una lista larga: sirven para arrancar, no de manual.
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: SiSpace.x2,
+                runSpacing: SiSpace.x2,
+                children: [
+                  for (final e in _ejemplos)
+                    OutlinedButton(
+                      onPressed: () => _enviar(e),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: c.brand,
+                        side: BorderSide(color: c.line),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: SiSpace.x4, vertical: SiSpace.x2),
+                      ),
+                      child: Text(e, style: const TextStyle(fontSize: 12.5)),
+                    ),
+                ],
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _burbuja(SiColors c, ({bool mio, String texto}) m) {
+    return Align(
+      alignment: m.mio ? Alignment.centerRight : Alignment.centerLeft,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 620),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: SiSpace.x3),
+          padding: const EdgeInsets.symmetric(
+              horizontal: SiSpace.x4, vertical: SiSpace.x3),
+          decoration: BoxDecoration(
+            color: m.mio ? c.brand : c.panel,
+            border: m.mio ? null : Border.all(color: c.line),
+            borderRadius: SiRadius.rMd,
+          ),
+          // Seleccionable: un precio o un enlace de folleto se copian para pegarlos en WhatsApp.
+          child: SelectionArea(
+            child: Text(
+              m.texto,
+              style: TextStyle(
+                  fontSize: 13.5,
+                  height: 1.5,
+                  color: m.mio ? Colors.white : c.ink),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _pensando(SiColors c) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: SiSpace.x3),
+        padding: const EdgeInsets.symmetric(
+            horizontal: SiSpace.x4, vertical: SiSpace.x3),
+        decoration: BoxDecoration(
+          color: c.panel,
+          border: Border.all(color: c.line),
+          borderRadius: SiRadius.rMd,
+        ),
+        child: Row(children: [
+          SizedBox(
+              width: 13,
+              height: 13,
+              child: CircularProgressIndicator(strokeWidth: 2, color: c.ink4)),
+          const SizedBox(width: SiSpace.x3),
+          Text('Consultando…', style: TextStyle(fontSize: 13, color: c.ink3)),
+        ]),
+      ),
+    );
+  }
+
+  Widget _barraEntrada(SiColors c) {
+    return Container(
+      padding: const EdgeInsets.all(SiSpace.x4),
+      decoration: BoxDecoration(
+        color: c.panel,
+        border: Border(top: BorderSide(color: c.line)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _entrada,
+              minLines: 1,
+              maxLines: 4,
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: 'Pregúntale a SOL…',
+                border: OutlineInputBorder(borderRadius: SiRadius.rMd),
+              ),
+              onSubmitted: (_) => _enviar(),
+            ),
+          ),
+          const SizedBox(width: SiSpace.x3),
+          IconButton.filled(
+            onPressed: _enviando ? null : () => _enviar(),
+            icon: const Icon(Icons.send, size: 17),
+            tooltip: 'Enviar',
+          ),
+        ],
       ),
     );
   }
@@ -1037,12 +1239,14 @@ class _PanelDesarrollosState extends State<_PanelDesarrollos> {
 
 // ── Configuración ────────────────────────────────────────────────────────────
 
-/// El modelo de SOL, editable sin desplegar.
+/// La configuración de SOL, sólo para verla.
 ///
-/// La LLAVE no se edita aquí: `SOL_API_KEY` y `SOL_BASE_URL` viven en los secretos de Supabase,
-/// porque un secreto en la base lo lee cualquiera con acceso al proyecto. Aquí sólo se dice CON QUÉ
-/// modelo hablar, que no es un secreto y que conviene poder cambiar en caliente: el 12/08/2026 el
-/// modelo de Soli empezó a fallar y se quedó muerta hasta que alguien entró al panel a cambiarlo.
+/// NO se puede cambiar desde aquí, por decisión del usuario el 02/09/2026: toda la configuración
+/// vive en variables de entorno de Supabase, igual que la de Soli.
+///
+/// Y se pregunta A LA FUNCIÓN en lugar de tener una copia en Dart, por lo mismo que en Soli: la
+/// única fuente es el código que de verdad corre. Una copia aquí se queda vieja en cuanto alguien
+/// toque la función, y entonces la pantalla miente sobre con qué modelo se está hablando.
 class _ConfiguracionSol extends StatefulWidget {
   const _ConfiguracionSol();
 
@@ -1052,11 +1256,9 @@ class _ConfiguracionSol extends StatefulWidget {
 
 class _ConfiguracionSolState extends State<_ConfiguracionSol> {
   final _supabase = Supabase.instance.client;
-  final _modelo = TextEditingController();
-  final _respaldo = TextEditingController();
-  final _instrucciones = TextEditingController();
+  Map<String, dynamic>? _config;
+  String? _error;
   bool _cargando = true;
-  String? _actualizado;
 
   @override
   void initState() {
@@ -1064,147 +1266,152 @@ class _ConfiguracionSolState extends State<_ConfiguracionSol> {
     _cargar();
   }
 
-  @override
-  void dispose() {
-    _modelo.dispose();
-    _respaldo.dispose();
-    _instrucciones.dispose();
-    super.dispose();
-  }
-
   Future<void> _cargar() async {
     try {
-      final d = await _supabase.from('sol_config').select().maybeSingle();
+      final r = await _supabase.functions
+          .invoke('sol-assistant', body: {'configuracion': true, 'messages': []});
+      final d = r.data as Map<String, dynamic>?;
       if (!mounted) return;
       setState(() {
-        _modelo.text = (d?['modelo'] ?? '').toString();
-        _respaldo.text = (d?['modelo_respaldo'] ?? '').toString();
-        _instrucciones.text = (d?['instrucciones'] ?? '').toString();
-        _actualizado = d?['actualizado_en']?.toString();
+        if (d?['error'] != null) {
+          _error = d!['error'].toString();
+        } else {
+          _config = d;
+        }
         _cargando = false;
       });
     } catch (e) {
-      debugPrint('Error cargando la configuración de SOL: $e');
-      if (mounted) setState(() => _cargando = false);
-    }
-  }
-
-  Future<void> _guardar() async {
-    final c = SiColors.of(context);
-    try {
-      await _supabase.from('sol_config').update({
-        'modelo': _modelo.text.trim().isEmpty ? null : _modelo.text.trim(),
-        'modelo_respaldo':
-            _respaldo.text.trim().isEmpty ? null : _respaldo.text.trim(),
-        'instrucciones': _instrucciones.text.trim().isEmpty
-            ? null
-            : _instrucciones.text.trim(),
-      }).eq('id', true);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: const Text('Configuración guardada'),
-          backgroundColor: c.success));
-      await _cargar();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('No se pudo guardar: $e'), backgroundColor: c.danger));
+      setState(() {
+        _error = '$e';
+        _cargando = false;
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final c = SiColors.of(context);
-    if (_cargando) {
-      return const Center(child: CircularProgressIndicator());
+    if (_cargando) return const Center(child: CircularProgressIndicator());
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(SiSpace.x6),
+          child: Text('No se pudo leer la configuración: $_error',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, color: c.danger)),
+        ),
+      );
     }
+
+    final cfg = _config!;
+    final modelo = (cfg['modelo'] ?? '').toString();
+    final respaldo = (cfg['modelo_respaldo'] ?? '').toString();
+    final cuenta = cfg['cuenta_configurada'] == true;
+    final herramientas = (cfg['herramientas'] as List?) ?? const [];
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(SiSpace.x6),
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 620),
+          constraints: const BoxConstraints(maxWidth: 680),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('El modelo de SOL',
+              Text('Configuración de SOL',
                   style: TextStyle(
                       fontSize: 16, fontWeight: FontWeight.w700, color: c.ink)),
               const SizedBox(height: SiSpace.x2),
               Text(
-                'SOL usa un modelo y una cuenta distintos de los de Soli, para que los costos se '
-                'puedan separar. Aquí se elige el modelo; se puede cambiar en caliente, sin '
-                'desplegar nada.',
+                'Sólo de consulta. Todo esto vive en las variables de entorno de Supabase y no se '
+                'puede cambiar desde la aplicación.',
                 style: TextStyle(fontSize: 13, color: c.ink3, height: 1.5),
               ),
               const SizedBox(height: SiSpace.x5),
-              TextField(
-                controller: _modelo,
-                decoration: const InputDecoration(
-                  labelText: 'Modelo',
-                  helperText: 'El identificador exacto que da el proveedor',
+
+              _tarjeta(c, 'El modelo', [
+                // Un hueco aquí no es un cero: es que nadie lo configuró, y se dice así.
+                _fila(c, 'Modelo', modelo.isEmpty ? 'sin configurar' : modelo,
+                    alerta: modelo.isEmpty),
+                _fila(c, 'Respaldo',
+                    respaldo.isEmpty ? 'sin respaldo configurado' : respaldo,
+                    alerta: respaldo.isEmpty),
+                _fila(c, 'Proveedor', (cfg['proveedor'] ?? '—').toString()),
+                _fila(c, 'Cuenta',
+                    cuenta ? 'configurada' : 'FALTA la llave del proveedor',
+                    alerta: !cuenta),
+                _fila(c, 'Comparte cuenta con',
+                    (cfg['cuenta_compartida_con'] ?? '—').toString()),
+              ]),
+              const SizedBox(height: SiSpace.x4),
+
+              _tarjeta(c, 'Qué sabe hacer', [
+                for (final h in herramientas)
+                  _fila(c, (h['nombre'] ?? '').toString(),
+                      (h['que_hace'] ?? '').toString()),
+              ]),
+              const SizedBox(height: SiSpace.x4),
+
+              _tarjeta(c, 'Hasta dónde llega', [
+                Padding(
+                  padding: const EdgeInsets.only(top: SiSpace.x2),
+                  child: Text((cfg['ambito'] ?? '').toString(),
+                      style: TextStyle(fontSize: 13, color: c.ink2, height: 1.5)),
                 ),
-              ),
-              const SizedBox(height: SiSpace.x5),
-              TextField(
-                controller: _respaldo,
-                decoration: const InputDecoration(
-                  labelText: 'Modelo de respaldo',
-                  helperText:
-                      'Al que se cambia si el principal falla. Conviene que sea de otra familia: '
-                      'si los dos son del mismo proveedor, la caída que tumbe a uno tumbará al otro',
-                ),
-              ),
-              const SizedBox(height: SiSpace.x5),
-              TextField(
-                controller: _instrucciones,
-                minLines: 4,
-                maxLines: 10,
-                decoration: const InputDecoration(
-                  labelText: 'Instrucciones adicionales',
-                  helperText:
-                      'Se añaden al final de su prompt. Para el tono y lo que no debe hacer; '
-                      'los precios NO se ponen aquí, se capturan en Desarrollos',
-                ),
-              ),
-              const SizedBox(height: SiSpace.x5),
-              Container(
-                padding: const EdgeInsets.all(SiSpace.x4),
-                decoration: BoxDecoration(
-                  color: c.panel,
-                  border: Border.all(color: c.line),
-                  borderRadius: SiRadius.rMd,
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(Icons.vpn_key_outlined, size: 16, color: c.ink3),
-                    const SizedBox(width: SiSpace.x3),
-                    Expanded(
-                      child: Text(
-                        'La llave no se pone aquí. SOL_API_KEY y SOL_BASE_URL viven en los '
-                        'secretos de Supabase: una llave guardada en la base la puede leer '
-                        'cualquiera con acceso al proyecto.',
-                        style:
-                            TextStyle(fontSize: 12, color: c.ink3, height: 1.45),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: SiSpace.x5),
-              Row(
-                children: [
-                  ElevatedButton(
-                      onPressed: _guardar, child: const Text('Guardar')),
-                  const SizedBox(width: SiSpace.x4),
-                  if (_actualizado != null)
-                    Text('Última vez: ${_actualizado!.substring(0, 16)}',
-                        style: TextStyle(fontSize: 11.5, color: c.ink4)),
-                ],
-              ),
+              ]),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _tarjeta(SiColors c, String titulo, List<Widget> hijos) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(SiSpace.x4),
+      decoration: BoxDecoration(
+        color: c.panel,
+        border: Border.all(color: c.line),
+        borderRadius: SiRadius.rMd,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(titulo.toUpperCase(),
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: c.ink3,
+                  letterSpacing: .5)),
+          const SizedBox(height: SiSpace.x2),
+          ...hijos,
+        ],
+      ),
+    );
+  }
+
+  Widget _fila(SiColors c, String etiqueta, String valor, {bool alerta = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 168,
+            child: Text(etiqueta,
+                style: TextStyle(fontSize: 12.5, color: c.ink3)),
+          ),
+          Expanded(
+            child: SelectionArea(
+              child: Text(valor,
+                  style: TextStyle(
+                      fontSize: 12.5,
+                      color: alerta ? c.danger : c.ink,
+                      fontWeight: alerta ? FontWeight.w600 : FontWeight.w400)),
+            ),
+          ),
+        ],
       ),
     );
   }
