@@ -37,12 +37,17 @@ class _OpenSearchIntent extends Intent {
   const _OpenSearchIntent();
 }
 
-// Visual-only nav group definitions — order here is render order.
+// Las secciones del menú. El orden de aquí es el orden en que se pintan.
+//
+// OJO: `_buildGroupedItems` sólo pinta las páginas cuyo título esté en uno de estos grupos. Una
+// página que se agregue a `_buildPages()` y NO se agregue aquí desaparece del menú sin dar ningún
+// error. Pasó el 28/08/2026 con SOL: compiló, se desplegó, y no estaba en el menú; el código sí
+// estaba en el paquete servido. Lo cubre `test/menu_agrupado_test.dart`.
 final _navGroups = <(String, List<String>)>[
   ('GENERAL',        ['Mi Perfil', 'Social', 'Avisos', 'Directorio', 'Conocimientos', 'Contraseñas', 'Contactos Ext.', 'Firmas', 'Convertidor', 'Herramientas', 'Calendario']),
   ('OPERACIÓN',      ['Incidencias', 'Inventario', 'Colaborador', 'Asistencia']),
   ('ANÁLISIS',       ['BI', 'Logs', 'Tablas']),
-  ('ADMINISTRACIÓN', ['Usuarios', 'IA', 'WhatsApp', 'Papelera']),
+  ('ADMINISTRACIÓN', ['Usuarios', 'IA', 'SOL', 'WhatsApp', 'Papelera']),
 ];
 
 class MainNavigation extends StatefulWidget {
