@@ -1972,6 +1972,14 @@ class _UserFormSheetState extends State<_UserFormSheet> {
     ('Tablas', 'show_tablas', Icons.table_chart_outlined),
     ('Asistente IA', 'show_ai', Icons.smart_toy_outlined),
     ('Papelera', 'show_trash', Icons.delete_outline),
+    // SOL es el asistente comercial, aparte de Soli: otro modelo y otra factura. Ver
+    // 20260828160000_desarrollos_y_promociones.sql.
+    //
+    // Dos permisos y no uno, por lo mismo que en Herramientas: `show_sol` es para USARLO y ver los
+    // precios; `edit_desarrollos` es para capturarlos. Juntarlos convertiria un descuido al dar
+    // acceso en permiso de borrado sobre los precios de la empresa.
+    ('SOL (comercial)', 'show_sol', Icons.smart_toy_outlined),
+    ('Editar desarrollos', 'edit_desarrollos', Icons.business),
   ];
 
   /// `dosColumnas` sólo en escritorio: en un teléfono la columna quedaría tan angosta que las
