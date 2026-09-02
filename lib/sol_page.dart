@@ -98,9 +98,9 @@ class _SolPageState extends State<SolPage> with SingleTickerProviderStateMixin {
           tabs: [
             const Tab(
               height: 42,
-              // El robot de SOL, no el de Soli: son dos asistentes distintos y conviene que se
+              // El icono de SOL, distinto del robot de Soli: son dos asistentes y conviene que se
               // note desde el primer golpe de vista.
-              icon: Icon(Icons.adb, size: 16),
+              icon: Icon(Icons.support_agent_outlined, size: 16),
               iconMargin: EdgeInsets.zero,
               text: 'Chat',
             ),
@@ -252,7 +252,7 @@ class _ChatSolState extends State<_ChatSol> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.adb, size: 52, color: c.line),
+              Icon(Icons.support_agent_outlined, size: 52, color: c.line),
               const SizedBox(height: SiSpace.x4),
               Text('SOL, tu asistente comercial',
                   style: TextStyle(

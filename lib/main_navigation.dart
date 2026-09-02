@@ -296,16 +296,23 @@ class _MainNavigationState extends State<MainNavigation> {
     if (widget.role == 'admin' || widget.permissions['show_sol'] == true) {
       pages.add({
         'title': 'SOL',
-        // `adb` es una figura de robot completa. Se elige por dos razones: es un robot -SOL es un
-        // asistente, no un edificio, que es lo que decia antes- y su silueta no se confunde con la
-        // CABEZA de robot de Soli, que esta dos renglones mas arriba en el mismo menu.
+        // Una persona con auricular: un asesor atendiendo, que es lo que SOL hace. Se paso por el
+        // edificio y por `adb`; el segundo se descarto porque es la silueta literal de Android.
+        //
+        // OJO: la misma figura ya significa «Soporte» en dos sitios -el chat flotante de soporte usa
+        // `support_agent_rounded` y la categoria Soporte de Conocimientos usa `support_agent_outlined`-.
+        // Se acepto la coincidencia porque los contextos no se cruzan, pero conviene saberlo.
         //
         // Es un glifo NUEVO en la aplicacion, asi que saldra en blanco para quien tenga la fuente
         // de iconos en cache. Medido el 02/09/2026: se sirve con `max-age=14400`, o sea cuatro
         // horas como maximo, y con Ctrl+Shift+R al instante. No es el caso permanente del
         // Convertidor, que venia de un `?v=` fijo en el arranque.
-        'icon': Icons.adb,
-        'activeIcon': Icons.adb,
+        // El MISMO glifo en los dos estados, como WhatsApp, Convertidor y Herramientas: el
+        // `_outlined` ya esta en circulacion y el relleno seria nuevo, asi que el estado activo
+        // saldria en blanco para quien tenga la fuente anterior en cache. El activo se distingue
+        // por color y fondo, que es lo que ya hacen las otras tres entradas.
+        'icon': Icons.support_agent_outlined,
+        'activeIcon': Icons.support_agent_outlined,
         'widget': SolPage(role: widget.role, permissions: widget.permissions),
       });
     }
