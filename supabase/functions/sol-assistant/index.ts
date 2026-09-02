@@ -258,9 +258,16 @@ Deno.serve(async (req: Request) => {
         return responde({ text: aviso, enlaces_invalidos: inventados.length, documentos });
       }
 
+      // Las URL se quitan del TEXTO: ya van como botones, y repetirlas es lo que el usuario
+      // pidio eliminar. Se hace aqui y no con el prompt porque el prompt ya se lo dice y las
+      // escribe igual; confiar en que obedezca es lo que se lleva fallando toda la tarde.
+      //
+      // Va DESPUES del guardia, a proposito: primero se comprueba que no haya enlaces inventados
+      // -para eso hay que verlos- y solo despues se recortan.
+      const limpio = sinEnlaces(texto);
       await bitacora(svc, user.id, modeloEnUso, usoTotal, mensajes.at(-1)?.content ?? "", texto);
       return responde({
-        text: texto || "No pude armar una respuesta. Vuelve a preguntarme de otra forma.",
+        text: limpio || "No pude armar una respuesta. Vuelve a preguntarme de otra forma.",
         modelo: modeloEnUso,
         // Los botones que va a pintar la aplicacion. Vienen de las herramientas, no del texto.
         documentos,
@@ -292,6 +299,21 @@ Deno.serve(async (req: Request) => {
       }
       // Los documentos se guardan tal como salieron, sin pasar por el modelo.
       for (const r of (resultado.resultados ?? []) as Array<Record<string, unknown>>) {
+        // El folleto viaja en la fila del desarrollo y no como documento. Se recoge igual: si no
+        // fuera boton, el recorte de URL del texto lo perderia sin dejar rastro.
+        if (typeof r.url_folleto === "string" && r.url_folleto.length > 0
+            && !vistos.has(r.url_folleto)) {
+          vistos.add(r.url_folleto);
+          documentos.push({
+            desarrollo: r.nombre ?? null,
+            categoria: "Folleto",
+            nombre: "Folleto del desarrollo",
+            idioma: null, variante: null,
+            url: r.url_folleto,
+            es_carpeta: false,
+            visibilidad: "COMPARTIBLE",
+          });
+        }
         const url = typeof r.enlace === "string" ? r.enlace : null;
         if (!url || vistos.has(url)) continue;
         vistos.add(url);
@@ -351,4 +373,35 @@ async function bitacora(
   } catch (e) {
     console.error("SOL: no se pudo registrar en la bitacora:", e);
   }
+}
+
+/// Quita las direcciones web del texto, dejando la frase legible.
+///
+/// Los enlaces se entregan como BOTONES, asi que en la prosa son ruido: una direccion de Drive mide
+/// setenta caracteres y aparecia dos veces, en el texto y en el boton.
+///
+/// No basta con borrar la URL: hay que dejar el renglon presentable.
+///
+///   «- Version Espanol: https://...»  ->  «- Version Espanol»   (el nombre SI sirve: dice que es
+///                                                                 cada boton)
+///   «https://...»                     ->  se borra el renglon entero
+///
+/// Y si al quitar los enlaces no queda nada, se devuelve cadena vacia para que quien llama ponga su
+/// propio texto en lugar de mandar un mensaje en blanco.
+function sinEnlaces(texto: string): string {
+  const renglones = texto.split("\n").map((linea) => {
+    const sin = linea.replace(/https?:\/\/[^\s"'<>)\]]+/g, "").trim();
+    // Lo que queda puede ser solo adornos: un guion, un asterisco, dos puntos, un parentesis.
+    if (/^[-*•\d.)\]\s:—–]*$/.test(sin)) return "";
+    // Los dos puntos o el guion que quedaron colgando al final ya no anuncian nada.
+    return sin.replace(/[\s:—–-]+$/, "").replace(/\(\s*\)/g, "").trim();
+  });
+
+  // Los renglones vacios seguidos se colapsan en uno: al borrar una lista de enlaces quedan huecos.
+  const salida: string[] = [];
+  for (const r of renglones) {
+    if (r === "" && (salida.length === 0 || salida[salida.length - 1] === "")) continue;
+    salida.push(r);
+  }
+  return salida.join("\n").trim();
 }
