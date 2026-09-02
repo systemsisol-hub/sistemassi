@@ -28,6 +28,7 @@ import 'signature_generator_page.dart';
 import 'tablas_page.dart';
 import 'passwords_page.dart';
 import 'ai_page.dart';
+import 'sol_page.dart';
 import 'knowledge_page.dart';
 import 'trash_page.dart';
 import 'theme/si_theme.dart';
@@ -282,6 +283,17 @@ class _MainNavigationState extends State<MainNavigation> {
         'icon': Icons.smart_toy_outlined,
         'activeIcon': Icons.smart_toy,
         'widget': AiPage(role: widget.role, permissions: widget.permissions),
+      });
+    }
+    // SOL, el asistente comercial. Va junto a IA y no dentro: es otro asistente, con otro modelo y
+    // otra factura, no una pestaña de Soli. Su panel de Desarrollos y su configuración SÍ viven
+    // dentro de él, por el mismo criterio de la línea de abajo.
+    if (widget.role == 'admin' || widget.permissions['show_sol'] == true) {
+      pages.add({
+        'title': 'SOL',
+        'icon': Icons.business,
+        'activeIcon': Icons.business,
+        'widget': SolPage(role: widget.role, permissions: widget.permissions),
       });
     }
     // La configuración del agente NO va aquí: vive en una pestaña dentro de la propia página de IA.
