@@ -143,7 +143,7 @@ class _ChatSolState extends State<_ChatSol> {
   final _supabase = Supabase.instance.client;
   final _entrada = TextEditingController();
   final _scroll = ScrollController();
-  final _mensajes = <({bool mio, String texto})>[];
+  final _mensajes = <({bool mio, String texto, List<Map<String, dynamic>> docs})>[];
   bool _enviando = false;
 
   static const _ejemplos = [
@@ -164,7 +164,7 @@ class _ChatSolState extends State<_ChatSol> {
     if (pregunta.isEmpty || _enviando) return;
 
     setState(() {
-      _mensajes.add((mio: true, texto: pregunta));
+      _mensajes.add((mio: true, texto: pregunta, docs: const []));
       _entrada.clear();
       _enviando = true;
     });
@@ -181,11 +181,17 @@ class _ChatSolState extends State<_ChatSol> {
       });
       final datos = r.data as Map<String, dynamic>?;
       final respuesta = (datos?['text'] ?? datos?['error'] ?? '').toString().trim();
+      // Los documentos vienen APARTE del texto: los manda la función desde lo que devolvieron sus
+      // herramientas, así que son enlaces reales por construcción. El modelo no los escribe.
+      final docs = ((datos?['documentos'] as List?) ?? const [])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
       if (!mounted) return;
       setState(() {
         _mensajes.add((
           mio: false,
           texto: respuesta.isEmpty ? 'No recibí respuesta.' : respuesta,
+          docs: docs,
         ));
         _enviando = false;
       });
@@ -194,7 +200,8 @@ class _ChatSolState extends State<_ChatSol> {
       setState(() {
         // El error se muestra: si es de permisos o de configuración, el texto lo dice y es lo que
         // hace falta leer.
-        _mensajes.add((mio: false, texto: 'No se pudo consultar a SOL: $e'));
+        _mensajes.add((
+            mio: false, texto: 'No se pudo consultar a SOL: $e', docs: const []));
         _enviando = false;
       });
     }
@@ -281,7 +288,8 @@ class _ChatSolState extends State<_ChatSol> {
     );
   }
 
-  Widget _burbuja(SiColors c, ({bool mio, String texto}) m) {
+  Widget _burbuja(
+      SiColors c, ({bool mio, String texto, List<Map<String, dynamic>> docs}) m) {
     return Align(
       alignment: m.mio ? Alignment.centerRight : Alignment.centerLeft,
       child: ConstrainedBox(
@@ -311,10 +319,95 @@ class _ChatSolState extends State<_ChatSol> {
                         fontSize: 13.5, height: 1.5, color: Colors.white),
                   ),
                 )
-              : TextoConEnlaces(
-                  m.texto,
-                  style: TextStyle(fontSize: 13.5, height: 1.5, color: c.ink),
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextoConEnlaces(
+                      m.texto,
+                      style: TextStyle(fontSize: 13.5, height: 1.5, color: c.ink),
+                    ),
+                    if (m.docs.isNotEmpty) _botonesDocumentos(c, m.docs),
+                  ],
                 ),
+        ),
+      ),
+    );
+  }
+
+  /// Un botón por documento, con su nombre en lugar de la dirección.
+  ///
+  /// La dirección de Drive tiene setenta caracteres: en un teléfono es imposible atinarle con el
+  /// dedo, y en pantalla tapa la respuesta. El botón dice «Brochure» y ocupa lo que ocupa un dedo.
+  ///
+  /// Y estos enlaces son auténticos por construcción: los manda la función desde lo que
+  /// devolvieron sus herramientas, sin pasar por el texto del modelo. Es la misma razón por la que
+  /// las vacaciones de Soli se pintan desde los datos crudos y no desde su prosa.
+  Widget _botonesDocumentos(SiColors c, List<Map<String, dynamic>> docs) {
+    return Padding(
+      padding: const EdgeInsets.only(top: SiSpace.x3),
+      child: Wrap(
+        spacing: SiSpace.x2,
+        runSpacing: SiSpace.x2,
+        children: [
+          for (final d in docs) _unBoton(c, d),
+        ],
+      ),
+    );
+  }
+
+  Widget _unBoton(SiColors c, Map<String, dynamic> d) {
+    final esCarpeta = d['es_carpeta'] == true;
+    final interno = (d['visibilidad'] ?? '').toString() == 'INTERNO';
+    // El nombre corto: la categoría, y el idioma o la variante sólo si distinguen algo.
+    final extra = [d['idioma'], d['variante']]
+        .where((v) => v != null && v.toString().isNotEmpty)
+        .join(' · ');
+    final etiqueta = (d['categoria'] ?? d['nombre'] ?? 'Documento').toString();
+
+    return Tooltip(
+      message: (d['nombre'] ?? '').toString(),
+      child: InkWell(
+        onTap: () async {
+          final uri = Uri.tryParse((d['url'] ?? '').toString());
+          if (uri == null) return;
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        },
+        borderRadius: SiRadius.rMd,
+        child: Container(
+          // 44 de alto: lo mínimo para un objetivo táctil cómodo.
+          constraints: const BoxConstraints(minHeight: 44),
+          padding: const EdgeInsets.symmetric(
+              horizontal: SiSpace.x4, vertical: SiSpace.x2),
+          decoration: BoxDecoration(
+            color: c.bg,
+            border: Border.all(color: interno ? c.warn : c.brand),
+            borderRadius: SiRadius.rMd,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(esCarpeta ? Icons.folder_outlined : Icons.picture_as_pdf,
+                  size: 15, color: interno ? c.warn : c.brand),
+              const SizedBox(width: SiSpace.x2),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(etiqueta,
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: interno ? c.warn : c.brand)),
+                  if (extra.isNotEmpty || interno)
+                    Text(
+                      [if (extra.isNotEmpty) extra, if (interno) 'interno']
+                          .join(' · '),
+                      style: TextStyle(fontSize: 10.5, color: c.ink4),
+                    ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
