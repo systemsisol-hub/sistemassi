@@ -50,12 +50,35 @@ export async function runTool(
     if (filas.length === 0) {
       // NO es «no existe»: es «no esta capturado». La diferencia importa, porque lo primero manda
       // al asesor a decirle a un cliente que no lo tenemos.
+      //
+      // Y no se le deja con la negativa a secas: se le dice QUE SI hay. Un asesor que pregunta por
+      // un desarrollo que no esta cargado sigue necesitando trabajar, y saber que existen otros
+      // -o que de ese si tenemos documentos- es informacion util. Va en los DATOS y no confiado a
+      // que el modelo se acuerde de hacer una segunda consulta.
+      const { data: todos } = await db.from("desarrollos")
+        .select("nombre").eq("is_active", true).order("nombre");
+      const nombres = ((todos ?? []) as Record<string, unknown>[]).map((d) => String(d.nombre));
+
+      // Puede que el desarrollo no este capturado pero SI tenga documentos cargados.
+      let docs: string[] = [];
+      if (input.nombre) {
+        const { data: dd } = await db.from("documentos")
+          .select("categoria,desarrollos!inner(nombre)")
+          .ilike("desarrollos.nombre", `%${input.nombre}%`)
+          .eq("is_active", true);
+        docs = [...new Set(((dd ?? []) as Record<string, unknown>[])
+          .map((r) => String(r.categoria)))];
+      }
+
       return {
         resultados: [],
         count: 0,
+        desarrollos_capturados: nombres,
+        documentos_de_ese_desarrollo: docs.length > 0 ? docs : undefined,
         nota: "No hay ningun desarrollo capturado que coincida. Eso no quiere decir que no exista: "
-          + "puede que todavia no este en el sistema. Se captura en la pagina de SOL, pestaña "
-          + "Desarrollos.",
+          + "puede que todavia no este en el sistema. OFRECE lo que si hay: los desarrollos de "
+          + "`desarrollos_capturados`, y si viene `documentos_de_ese_desarrollo`, esos documentos "
+          + "-que pueden incluir su lista de precios- con la herramienta buscar_documento.",
       };
     }
 
@@ -76,6 +99,17 @@ export async function runTool(
       }
     }
 
+    // Que documentos tiene cada uno. Van JUNTO al desarrollo, por lo mismo que las promociones:
+    // si el precio no esta capturado pero existe la lista de precios en el Drive, el modelo tiene
+    // las dos cosas delante y puede ofrecer la segunda sin tener que acordarse de preguntar.
+    const { data: docsTodos } = await db.from("documentos")
+      .select("desarrollo_id,categoria").in("desarrollo_id", ids as string[]).eq("is_active", true);
+    const catsPorId = new Map<string, Set<string>>();
+    for (const r of (docsTodos ?? []) as Record<string, unknown>[]) {
+      const k = String(r.desarrollo_id);
+      (catsPorId.get(k) ?? catsPorId.set(k, new Set()).get(k)!).add(String(r.categoria));
+    }
+
     return {
       resultados: filas.map((f) => {
         const nombreD = String(f.nombre ?? "");
@@ -87,6 +121,7 @@ export async function runTool(
           ...f,
           id: undefined,
           promociones_vigentes: mias,
+          documentos_disponibles: [...(catsPorId.get(String(f.id)) ?? [])].sort(),
           // Con que fecha se esta contestando. Sin esto, una respuesta correcta hoy parece correcta
           // para siempre.
           datos_al: f.actualizado_en,
@@ -173,12 +208,27 @@ export async function runTool(
         notas: f.notas ?? null,
       })),
       count: filas.length,
+      // Igual que arriba: si no hay lo que pidio, se le dice que categorias SI existen en lugar de
+      // dejarlo con la negativa.
+      categorias_disponibles: filas.length === 0 ? await categoriasDe(db, ids as string[]) : undefined,
       nota: filas.length === 0
-        ? "No hay documentos capturados con ese criterio. Puede que existan en el Drive y todavia "
-          + "no esten dados de alta."
+        ? "No hay documentos con ESE criterio. Mira `categorias_disponibles` y ofrece lo que si "
+          + "existe en lugar de dejarlo sin nada."
         : undefined,
     };
   }
 
   return { error: `Herramienta desconocida: ${nombre}` };
+}
+
+/// Las categorias de documentos que existen para esos desarrollos.
+///
+/// Sirve para no dejar al asesor con un «no hay»: si pidio el brochure y no esta, pero si estan los
+/// planos y los prototipos, eso es lo que necesita saber.
+async function categoriasDe(db: Db, ids: string[]): Promise<string[]> {
+  if (ids.length === 0) return [];
+  const { data } = await db.from("documentos")
+    .select("categoria").in("desarrollo_id", ids).eq("is_active", true);
+  return [...new Set(((data ?? []) as Record<string, unknown>[])
+    .map((r) => String(r.categoria)))].sort();
 }
