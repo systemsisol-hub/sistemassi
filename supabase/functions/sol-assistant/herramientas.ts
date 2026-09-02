@@ -46,12 +46,38 @@ export const ALL_TOOLS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "buscar_documento",
+      description: "Los archivos de un desarrollo que estan en el Drive: brochures, planos, "
+        + "prototipos, fotos, videos, listas de precios y formatos de venta. Devuelve el ENLACE. "
+        + "USALA cuando pidan un documento, un brochure, un plano o «que me puedas mandar». "
+        + "Cada uno viene con `visibilidad`: si dice COMPARTIBLE se le puede mandar a un cliente; "
+        + "si dice INTERNO, ADVIERTELO de forma explicita en tu respuesta, porque el asesor puede "
+        + "reenviar lo que le digas tal cual por WhatsApp. La cuenta de deposito, el CV del "
+        + "desarrollador y el estudio de mercado son INTERNOS. "
+        + "Si `es_carpeta` es true, el enlace abre una carpeta y el asesor elige dentro; dilo asi. "
+        + "Cuando haya varias versiones -ESP, ENG, movil, PC, NO TEL- ofrecelas y deja que elija; "
+        + "no escojas por el.",
+      parameters: {
+        type: "object",
+        properties: {
+          desarrollo: { type: "string", description: "Nombre del desarrollo. Ej. «AG117»." },
+          categoria: { type: "string", description: "Ej. «brochure», «planos», «prototipos». Parcial vale." },
+          idioma: { type: "string", description: "ESP o ENG, si lo piden." },
+          solo_compartibles: { type: "boolean", description: "true para listar solo lo que se le puede mandar a un cliente." },
+        },
+      },
+    },
+  },
 ];
 
 /// Lo que hace cada herramienta, en una frase, para la pantalla de configuracion.
 export const QUE_HACE: Record<string, string> = {
   buscar_desarrollo: "Consultar desarrollos: ubicacion, etapa, precios, condiciones y folleto",
   buscar_promocion: "Consultar promociones vigentes, con su fecha de vencimiento",
+  buscar_documento: "Entregar el enlace de brochures, planos y formatos del Drive",
 };
 
 export const AMBITO =
@@ -80,6 +106,15 @@ COMO CONTESTAS
 - Los precios tal como los devuelve la herramienta, sin redondear ni convertir monedas.
 - De cada promocion di SIEMPRE hasta cuando aplica.
 - Si hay folleto, ofrece el enlace: es lo que el asesor le va a mandar al cliente.
+- Cuando pidan un documento, da el ENLACE. Si hay varias versiones -espanol, ingles, movil, PC-
+  ofrecelas y deja que elija; no escojas por el.
+
+DOCUMENTOS INTERNOS
+Cada documento trae su visibilidad. Si dice INTERNO, dilo en la respuesta con esas palabras: «este
+es interno, no se lo mandes al cliente». El asesor puede reenviar lo que le contestes tal cual por
+WhatsApp, y ahi hay material que no es para un cliente -la cuenta de deposito, el CV del
+desarrollador, el estudio de mercado-. Avisar cuesta una linea; no avisar puede costar los datos
+bancarios del proyecto en una captura de pantalla.
 - Si te preguntan algo que no es de desarrollos ni de ofertas, dilo y sugiere preguntarle a Soli.
 
 QUE NO HACES

@@ -101,5 +101,32 @@ void main() {
     test('texto vacío no revienta', () {
       expect(partirEnEnlaces(''), isEmpty);
     });
+
+    // ── Los enlaces de Google Drive ──────────────────────────────────────────
+    //
+    // Desde el 02/09/2026 son la carga principal: SOL entrega brochures y planos, y lo que manda es
+    // una dirección de Drive. Llevan guiones bajos, guiones y mayúsculas mezcladas en el
+    // identificador, así que conviene fijarlas en lugar de suponer que el patrón general las cubre.
+    test('un archivo de Drive se reconoce completo', () {
+      const u = 'https://drive.google.com/file/d/1q75bfG6UFqdNIBJLA04jI7b_kKE254v8';
+      expect(enlaces('Aquí está el brochure: $u'), [(u, u)]);
+    });
+
+    test('una carpeta de Drive también', () {
+      const u = 'https://drive.google.com/drive/folders/1bWHl6xNZsQSw-fV6tGr-KBuM5lQz639g';
+      expect(enlaces('Los prototipos están en $u'), [(u, u)]);
+    });
+
+    test('el punto final de la frase no se lleva el id', () {
+      // El caso que rompería el enlace sin el recorte de colgantes: SOL termina la frase con punto.
+      const u = 'https://drive.google.com/file/d/1OuhhmDNQVwgEUdg5YBO2BB_NBun8p6BM';
+      expect(enlaces('Te mando la versión móvil: $u.'), [(u, u)]);
+    });
+
+    test('dos enlaces en la misma respuesta se separan', () {
+      const a = 'https://drive.google.com/file/d/1AAA';
+      const b = 'https://drive.google.com/file/d/1BBB';
+      expect(enlaces('Versión PC $a y móvil $b'), [(a, a), (b, b)]);
+    });
   });
 }

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'theme/si_theme.dart';
+import 'widgets/texto_con_enlaces.dart';
 
 /// SOL: el asistente comercial.
 ///
@@ -293,16 +295,26 @@ class _ChatSolState extends State<_ChatSol> {
             border: m.mio ? null : Border.all(color: c.line),
             borderRadius: SiRadius.rMd,
           ),
-          // Seleccionable: un precio o un enlace de folleto se copian para pegarlos en WhatsApp.
-          child: SelectionArea(
-            child: Text(
-              m.texto,
-              style: TextStyle(
-                  fontSize: 13.5,
-                  height: 1.5,
-                  color: m.mio ? Colors.white : c.ink),
-            ),
-          ),
+          // Los enlaces de SOL se pueden PULSAR y abren en otra pestaña, y el texto sigue
+          // siendo seleccionable para copiar un precio. `TextoConEnlaces` ya resuelve las dos
+          // cosas a la vez -se escribió para los avisos, con sus doce pruebas- y usa
+          // `SelectionArea` con `Text.rich` justamente porque `SelectableText` se queda los
+          // gestos y el enlace no responde.
+          //
+          // Sólo en las respuestas de SOL: en lo que uno escribió no hay enlaces que abrir, y el
+          // texto va en blanco sobre el color de marca, donde un enlace azul no se leería.
+          child: m.mio
+              ? SelectionArea(
+                  child: Text(
+                    m.texto,
+                    style: const TextStyle(
+                        fontSize: 13.5, height: 1.5, color: Colors.white),
+                  ),
+                )
+              : TextoConEnlaces(
+                  m.texto,
+                  style: TextStyle(fontSize: 13.5, height: 1.5, color: c.ink),
+                ),
         ),
       ),
     );
@@ -702,27 +714,46 @@ class _PanelDesarrollosState extends State<_PanelDesarrollos> {
   }
 
   Widget _enlaceFolleto(SiColors c, String url) {
-    // Se copia en lugar de abrirse: la aplicación no arrastra `url_launcher` y un enlace del Drive
-    // se pega donde haga falta. Lo importante es que el enlace exista para poder mandarlo.
-    return InkWell(
-      onTap: () async {
-        await Clipboard.setData(ClipboardData(text: url));
-        _aviso('Enlace del folleto copiado');
-      },
-      child: Row(
-        children: [
-          Icon(Icons.link, size: 14, color: c.brand),
-          const SizedBox(width: SiSpace.x2),
-          Flexible(
-            child: Text(url,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 12, color: c.brand)),
+    // Abre en otra pestaña, y el botón de al lado copia. Al escribirlo dije que la aplicación no
+    // traía `url_launcher` y me equivoqué: está en el pubspec y los avisos lo usan desde hace
+    // semanas. Copiar era la solución a un problema que no existía.
+    return Row(
+      children: [
+        Flexible(
+          child: InkWell(
+            onTap: () async {
+              final uri = Uri.tryParse(url);
+              if (uri == null) return;
+              await launchUrl(uri, mode: LaunchMode.externalApplication);
+            },
+            child: Row(
+              children: [
+                Icon(Icons.link, size: 14, color: c.brand),
+                const SizedBox(width: SiSpace.x2),
+                Flexible(
+                  child: Text(url,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: c.brand,
+                          decoration: TextDecoration.underline,
+                          decorationColor: c.brand)),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(width: SiSpace.x2),
-          Icon(Icons.copy, size: 12, color: c.ink4),
-        ],
-      ),
+        ),
+        IconButton(
+          onPressed: () async {
+            await Clipboard.setData(ClipboardData(text: url));
+            _aviso('Enlace del folleto copiado');
+          },
+          icon: Icon(Icons.copy, size: 13, color: c.ink4),
+          tooltip: 'Copiar el enlace',
+          visualDensity: VisualDensity.compact,
+        ),
+      ],
     );
   }
 

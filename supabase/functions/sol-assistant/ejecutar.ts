@@ -130,5 +130,55 @@ export async function runTool(
     };
   }
 
+  if (nombre === "buscar_documento") {
+    // Se entra por el desarrollo para poder filtrar por su NOMBRE, que es como lo pide el asesor.
+    let qd = db.from("desarrollos").select("id,nombre");
+    if (input.desarrollo) qd = (qd as any).ilike("nombre", `%${input.desarrollo}%`);
+    const { data: des } = await qd;
+    const ids = ((des ?? []) as Record<string, unknown>[]).map((d) => d.id);
+    if (ids.length === 0) {
+      return {
+        resultados: [], count: 0,
+        nota: "No encontre ese desarrollo. Los documentos se dan de alta junto al desarrollo, en "
+          + "la pagina de SOL.",
+      };
+    }
+    const nombrePorId = new Map(
+      ((des ?? []) as Record<string, unknown>[]).map((d) => [String(d.id), String(d.nombre)]),
+    );
+
+    let q = db.from("documentos")
+      .select("desarrollo_id,categoria,idioma,variante,nombre,url,es_carpeta,visibilidad,notas")
+      .in("desarrollo_id", ids as string[])
+      .eq("is_active", true)
+      .order("categoria");
+    if (input.categoria) q = (q as any).ilike("categoria", `%${input.categoria}%`);
+    if (input.idioma) q = (q as any).ilike("idioma", `%${input.idioma}%`);
+    if (input.solo_compartibles === true) q = (q as any).eq("visibilidad", "COMPARTIBLE");
+
+    const { data, error } = await q;
+    if (error) return { error: error.message };
+    const filas = (data ?? []) as Record<string, unknown>[];
+
+    return {
+      resultados: filas.map((f) => ({
+        desarrollo: nombrePorId.get(String(f.desarrollo_id)) ?? null,
+        categoria: f.categoria,
+        idioma: f.idioma ?? null,
+        variante: f.variante ?? null,
+        nombre: f.nombre,
+        enlace: f.url,
+        es_carpeta: f.es_carpeta,
+        visibilidad: f.visibilidad,
+        notas: f.notas ?? null,
+      })),
+      count: filas.length,
+      nota: filas.length === 0
+        ? "No hay documentos capturados con ese criterio. Puede que existan en el Drive y todavia "
+          + "no esten dados de alta."
+        : undefined,
+    };
+  }
+
   return { error: `Herramienta desconocida: ${nombre}` };
 }
