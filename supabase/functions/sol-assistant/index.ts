@@ -23,7 +23,12 @@ import { runTool } from "./ejecutar.ts";
 //   - No se puede configurar desde la aplicacion. Todo esta en variables de entorno y la pantalla
 //     solo lo MUESTRA.
 
-interface Mensaje { role: string; content: string }
+interface Mensaje {
+  role: string;
+  content: string;
+  /// Las llamadas a herramientas que pidió el modelo. Van de vuelta en la conversación.
+  tool_calls?: unknown;
+}
 
 interface Cuerpo {
   messages?: Mensaje[];
@@ -211,7 +216,20 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    conversacion.push({ role: "assistant", content: msg?.content ?? "" });
+    // Las llamadas van DE VUELTA en el mensaje del asistente. Sin ellas, el modelo no ve que ya
+    // consultó: la conversación le muestra el resultado de una herramienta sin la petición que lo
+    // provocó, así que vuelve a pedirla.
+    //
+    // Es lo que pasó el 02/09/2026 con la primera pregunta real: cuatro llamadas a
+    // `buscar_desarrollo` seguidas hasta agotar el tope de vueltas, y el usuario recibió el mensaje
+    // de «me quedé dando vueltas» creyendo que era la respuesta buena. Soli lo hacía bien desde el
+    // principio -`msgs.push({ role: "assistant", content, tool_calls })`- y yo lo omití al escribir
+    // esta función.
+    conversacion.push({
+      role: "assistant",
+      content: msg?.content ?? "",
+      tool_calls: msg?.tool_calls,
+    });
     for (const c of llamadas) {
       const args = typeof c.function.arguments === "string"
         ? JSON.parse(c.function.arguments || "{}")
@@ -222,10 +240,15 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  return responde({
-    text: "Me quede dando vueltas sin llegar a una respuesta. Preguntame algo mas concreto: el "
-      + "nombre del desarrollo, o «que promociones hay».",
-  });
+  // Se registra igual, y es lo que importa: son las conversaciones MAS caras -cuatro llamadas al
+  // modelo- y eran justo las que no se contaban. Un fallo invisible en la bitacora es un fallo que
+  // no se arregla.
+  const sinSalida = "Me quede dando vueltas sin llegar a una respuesta. Preguntame algo mas "
+    + "concreto: el nombre del desarrollo, o «que promociones hay».";
+  await bitacora(svc, user.id, modeloEnUso, usoTotal,
+    mensajes.at(-1)?.content ?? "", `[SIN SALIDA tras ${MAX_VUELTAS} vueltas] ${sinSalida}`);
+  console.error(`SOL: ${modeloEnUso} agoto las ${MAX_VUELTAS} vueltas sin contestar`);
+  return responde({ text: sinSalida, sin_salida: true });
 });
 
 /// Deja constancia de cada consulta, con el modelo y los tokens.
