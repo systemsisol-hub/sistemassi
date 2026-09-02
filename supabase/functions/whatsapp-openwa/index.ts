@@ -34,7 +34,17 @@ const WEBHOOK_SECRET = Deno.env.get("OPENWA_WEBHOOK_SECRET") ?? "";
 ///
 /// Cada mensaje es una llamada al modelo: cuesta y tarda. Sin tope, un teléfono en un bucle —o una
 /// persona impaciente— gasta el presupuesto de todos.
-const LIMITE_POR_HORA = Number(Deno.env.get("WHATSAPP_LIMITE_HORA") ?? "20");
+///
+/// ─── De 20 a 40, el 02/09/2026 ───────────────────────────────────────────────
+///
+/// El 20 se puso a ojo, antes de tener un solo dato de uso. Ya lo hay, y decía que era corto:
+/// MARCO ANTONIO MONTOYA hizo 20 consultas legítimas en 12 minutos —preguntas distintas, probando
+/// el sistema— y quedó frenado CINCO veces, con 48 minutos de espera por delante. Con 40 no se
+/// habría frenado ninguna vez.
+///
+/// La ventana sigue siendo de una hora móvil y se cuentan sólo las ATENDIDAS, así que un error o un
+/// rechazo no gasta cupo. `WHATSAPP_LIMITE_HORA` lo sigue sobrescribiendo si hace falta otro número.
+const LIMITE_POR_HORA = Number(Deno.env.get("WHATSAPP_LIMITE_HORA") ?? "40");
 
 /// Turnos que se conservan del hilo. El historial completo encarece cada llamada sin aportar.
 const TURNOS_MEMORIA = 12;
