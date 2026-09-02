@@ -144,6 +144,12 @@ Deno.serve(async (req: Request) => {
   /// Cada intento fallido, para poder informarlos todos y no solo el ultimo.
   const fallos: Array<{ modelo: string; status: number; detalle: string }> = [];
 
+  /// Los enlaces que DE VERDAD salieron de una herramienta.
+  ///
+  /// Es la lista blanca del guardia de abajo. Se llena con lo que devuelven las herramientas y con
+  /// nada mas: un enlace que no este aqui es un enlace que el modelo se invento.
+  const enlacesLegitimos = new Set<string>();
+
   for (let vuelta = 0; vuelta < MAX_VUELTAS; vuelta++) {
     let r: Response;
     try {
@@ -209,6 +215,36 @@ Deno.serve(async (req: Request) => {
 
     if (llamadas.length === 0) {
       const texto = (msg?.content ?? "").trim();
+
+      // ── Ningun enlace que no venga de una herramienta ──────────────────────
+      //
+      // El 02/09/2026, preguntado por los documentos de BONANZA COTO 4, SOL contesto con cuatro
+      // enlaces cuyos identificadores terminaban en «_example1», «_example2», «_example3» y
+      // «_example4», y con nombres de documento que no existen -«Planta Arquitectonica», «Formato
+      // de Reserva»-. El registro lo delato: en esa vuelta NO llamo a buscar_documento ni una vez.
+      // Contesto de memoria.
+      //
+      // Un precio inventado se nota. Un enlace inventado se REENVIA: el asesor lo manda al cliente
+      // y el error aparece del otro lado. Por eso esto no es un aviso, es un bloqueo.
+      //
+      // La comprobacion es exacta y no una heuristica: se sabe con certeza que enlaces devolvieron
+      // las herramientas en esta conversacion. Cualquier otro esta inventado.
+      const enlacesDichos = texto.match(/https?:\/\/[^\s"'<>)\]]+/g) ?? [];
+      const inventados = enlacesDichos
+        .map((u) => u.replace(/[.,;:!?)\]]+$/, ""))
+        .filter((u) => !enlacesLegitimos.has(u));
+
+      if (inventados.length > 0) {
+        console.error(`SOL: ${modeloEnUso} invento ${inventados.length} enlaces: `
+          + inventados.slice(0, 3).join(" | "));
+        const aviso = "No pude confirmar esos documentos con el sistema, asi que prefiero no "
+          + "darte enlaces que podrian no existir. Preguntame otra vez nombrando el desarrollo "
+          + "-por ejemplo «documentos de Bonanza Coto 4»- y los consulto.";
+        await bitacora(svc, user.id, modeloEnUso, usoTotal, mensajes.at(-1)?.content ?? "",
+          `[ENLACES INVENTADOS: ${inventados.join(" ")}] ${texto}`);
+        return responde({ text: aviso, enlaces_invalidos: inventados.length });
+      }
+
       await bitacora(svc, user.id, modeloEnUso, usoTotal, mensajes.at(-1)?.content ?? "", texto);
       return responde({
         text: texto || "No pude armar una respuesta. Vuelve a preguntarme de otra forma.",
@@ -235,7 +271,11 @@ Deno.serve(async (req: Request) => {
         ? JSON.parse(c.function.arguments || "{}")
         : (c.function.arguments ?? {});
       const resultado = await runTool(c.function.name, args as Record<string, unknown>, svc);
-      console.log(`SOL: ${c.function.name} -> ${JSON.stringify(resultado).slice(0, 160)}`);
+      const crudo = JSON.stringify(resultado);
+      for (const u of crudo.match(/https?:\/\/[^\s"'<>\\]+/g) ?? []) {
+        enlacesLegitimos.add(u);
+      }
+      console.log(`SOL: ${c.function.name} -> ${crudo.slice(0, 160)}`);
       conversacion.push({ role: "tool", content: JSON.stringify(resultado) });
     }
   }
