@@ -44,10 +44,13 @@ class _OpenSearchIntent extends Intent {
 // error. Pasó el 28/08/2026 con SOL: compiló, se desplegó, y no estaba en el menú; el código sí
 // estaba en el paquete servido. Lo cubre `test/menu_agrupado_test.dart`.
 final _navGroups = <(String, List<String>)>[
-  ('GENERAL',        ['Mi Perfil', 'Social', 'Avisos', 'Directorio', 'Conocimientos', 'Contraseñas', 'Contactos Ext.', 'Firmas', 'Convertidor', 'Herramientas', 'Calendario']),
+  // Los dos asistentes van en GENERAL y JUNTOS, arriba: son de uso diario y se preguntan entre
+  // ellos. Estaban en ADMINISTRACIÓN, que es donde se configura el sistema, no donde se trabaja.
+  ('GENERAL',        ['Mi Perfil', 'IA', 'SOL', 'Social', 'Avisos', 'Directorio', 'Conocimientos', 'Contraseñas', 'Contactos Ext.', 'Firmas', 'Convertidor', 'Herramientas', 'Calendario']),
   ('OPERACIÓN',      ['Incidencias', 'Inventario', 'Colaborador', 'Asistencia']),
-  ('ANÁLISIS',       ['BI', 'Logs', 'Tablas']),
-  ('ADMINISTRACIÓN', ['Usuarios', 'IA', 'SOL', 'WhatsApp', 'Papelera']),
+  // Logs sale de ANÁLISIS: no se analiza el negocio con ellos, se revisa el sistema.
+  ('ANÁLISIS',       ['BI', 'Tablas']),
+  ('ADMINISTRACIÓN', ['Usuarios', 'Logs', 'WhatsApp', 'Papelera']),
 ];
 
 class MainNavigation extends StatefulWidget {
