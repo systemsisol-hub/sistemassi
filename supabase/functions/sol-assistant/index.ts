@@ -128,6 +128,13 @@ Deno.serve(async (req: Request) => {
   // redacta»; sin tope, una herramienta que devuelve vacio puede dejarlo en bucle.
   const MAX_VUELTAS = 4;
   let modeloEnUso = SOL_MODEL;
+
+  // Con que modelo se esta trabajando. No es un secreto y hace falta: `SOL_MODEL` vive en las
+  // variables del proyecto, no en el repositorio, asi que desde el codigo solo se ve el respaldo del
+  // `??` —que es cadena vacia y no es lo que corre—. Sin esto, diagnosticar por que SOL se salta las
+  // herramientas es adivinar. Es la misma linea que tiene Soli, y por el mismo motivo.
+  console.log(`SOL: modelo ${modeloEnUso} en ${OLLAMA_BASE}, ${ALL_TOOLS.length} herramientas`
+    + (SOL_MODEL_RESPALDO ? `, respaldo ${SOL_MODEL_RESPALDO}` : `, SIN respaldo`));
   let usoTotal = { prompt: 0, respuesta: 0 };
 
   for (let vuelta = 0; vuelta < MAX_VUELTAS; vuelta++) {
