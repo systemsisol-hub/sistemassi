@@ -242,10 +242,39 @@ Deno.serve(async (req: Request) => {
       //
       // La comprobacion es exacta y no una heuristica: se sabe con certeza que enlaces devolvieron
       // las herramientas en esta conversacion. Cualquier otro esta inventado.
-      const enlacesDichos = texto.match(/https?:\/\/[^\s"'<>)\]]+/g) ?? [];
-      const inventados = enlacesDichos
-        .map((u) => u.replace(/[.,;:!?)\]]+$/, ""))
-        .filter((u) => !enlacesLegitimos.has(u));
+      const enlacesDichos = (texto.match(/https?:\/\/[^\s"'<>)\]]+/g) ?? [])
+        .map((u) => u.replace(/[.,;:!?)\]]+$/, ""));
+
+      // Los que no salieron de una herramienta EN ESTA VUELTA se comprueban contra la BASE.
+      //
+      // El modelo recuerda enlaces de turnos anteriores de la conversacion, y esos son legitimos:
+      // salieron de una herramienta, solo que antes. Validando contra la tabla en lugar de contra
+      // la vuelta actual, un enlace real recordado se convierte en boton en vez de desaparecer al
+      // recortar el texto -que es lo que paso el 02/09/2026 a las 17:09-.
+      const dudosos = enlacesDichos.filter((u) => !enlacesLegitimos.has(u));
+      if (dudosos.length > 0) {
+        const { data: enBase } = await svc.from("documentos")
+          .select("categoria,idioma,variante,nombre,url,es_carpeta,visibilidad")
+          .in("url", dudosos);
+        for (const d of (enBase ?? []) as Array<Record<string, unknown>>) {
+          const url = String(d.url);
+          enlacesLegitimos.add(url);
+          if (vistos.has(url)) continue;
+          vistos.add(url);
+          documentos.push({
+            desarrollo: null,
+            categoria: d.categoria ?? null,
+            nombre: d.nombre ?? d.categoria ?? "Documento",
+            idioma: d.idioma ?? null,
+            variante: d.variante ?? null,
+            url,
+            es_carpeta: d.es_carpeta === true,
+            visibilidad: d.visibilidad ?? null,
+          });
+        }
+      }
+
+      const inventados = enlacesDichos.filter((u) => !enlacesLegitimos.has(u));
 
       if (inventados.length > 0) {
         console.error(`SOL: ${modeloEnUso} invento ${inventados.length} enlaces: `
@@ -314,19 +343,26 @@ Deno.serve(async (req: Request) => {
             visibilidad: "COMPARTIBLE",
           });
         }
-        const url = typeof r.enlace === "string" ? r.enlace : null;
-        if (!url || vistos.has(url)) continue;
-        vistos.add(url);
-        documentos.push({
-          desarrollo: r.desarrollo ?? null,
-          categoria: r.categoria ?? null,
-          nombre: r.nombre ?? r.categoria ?? "Documento",
-          idioma: r.idioma ?? null,
-          variante: r.variante ?? null,
-          url,
-          es_carpeta: r.es_carpeta === true,
-          visibilidad: r.visibilidad ?? null,
-        });
+        // Los documentos vienen sueltos -de `buscar_documento`- o anidados dentro de cada
+        // desarrollo -de `buscar_desarrollo`-. Se recogen de las dos formas.
+        const anidados = Array.isArray(r.documentos)
+          ? r.documentos as Array<Record<string, unknown>>
+          : [];
+        for (const dd of [r, ...anidados]) {
+          const url = typeof dd.enlace === "string" ? dd.enlace : null;
+          if (!url || vistos.has(url)) continue;
+          vistos.add(url);
+          documentos.push({
+            desarrollo: dd.desarrollo ?? r.nombre ?? null,
+            categoria: dd.categoria ?? null,
+            nombre: dd.nombre ?? dd.categoria ?? "Documento",
+            idioma: dd.idioma ?? null,
+            variante: dd.variante ?? null,
+            url,
+            es_carpeta: dd.es_carpeta === true,
+            visibilidad: dd.visibilidad ?? null,
+          });
+        }
       }
       console.log(`SOL: ${c.function.name} -> ${crudo.slice(0, 160)}`);
       conversacion.push({ role: "tool", content: JSON.stringify(resultado) });

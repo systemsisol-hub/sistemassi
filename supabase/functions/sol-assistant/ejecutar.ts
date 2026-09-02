@@ -102,12 +102,28 @@ export async function runTool(
     // Que documentos tiene cada uno. Van JUNTO al desarrollo, por lo mismo que las promociones:
     // si el precio no esta capturado pero existe la lista de precios en el Drive, el modelo tiene
     // las dos cosas delante y puede ofrecer la segunda sin tener que acordarse de preguntar.
+    // Se devuelven los documentos COMPLETOS, con su enlace, no solo los nombres de categoria.
+    //
+    // Al principio devolvia solo los nombres, y eso creo el peor estado posible: el modelo sabia que
+    // el brochure existia y no tenia como entregarlo. El 02/09/2026 contesto
+    // «- Brochure: [Enlace al Brochure]» -un marcador de posicion- porque el prompt le prohibe
+    // escribir direcciones y no tenia ninguna a mano. Saber de un documento que no puedes dar es
+    // peor que no saber de el.
     const { data: docsTodos } = await db.from("documentos")
-      .select("desarrollo_id,categoria").in("desarrollo_id", ids as string[]).eq("is_active", true);
-    const catsPorId = new Map<string, Set<string>>();
+      .select("desarrollo_id,categoria,idioma,variante,nombre,url,es_carpeta,visibilidad")
+      .in("desarrollo_id", ids as string[]).eq("is_active", true).order("categoria");
+    const docsPorId = new Map<string, Record<string, unknown>[]>();
     for (const r of (docsTodos ?? []) as Record<string, unknown>[]) {
       const k = String(r.desarrollo_id);
-      (catsPorId.get(k) ?? catsPorId.set(k, new Set()).get(k)!).add(String(r.categoria));
+      (docsPorId.get(k) ?? docsPorId.set(k, []).get(k)!).push({
+        categoria: r.categoria,
+        idioma: r.idioma ?? null,
+        variante: r.variante ?? null,
+        nombre: r.nombre,
+        enlace: r.url,
+        es_carpeta: r.es_carpeta,
+        visibilidad: r.visibilidad,
+      });
     }
 
     return {
@@ -121,7 +137,7 @@ export async function runTool(
           ...f,
           id: undefined,
           promociones_vigentes: mias,
-          documentos_disponibles: [...(catsPorId.get(String(f.id)) ?? [])].sort(),
+          documentos: docsPorId.get(String(f.id)) ?? [],
           // Con que fecha se esta contestando. Sin esto, una respuesta correcta hoy parece correcta
           // para siempre.
           datos_al: f.actualizado_en,
