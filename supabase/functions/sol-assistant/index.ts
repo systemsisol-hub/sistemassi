@@ -144,6 +144,19 @@ Deno.serve(async (req: Request) => {
   /// Cada intento fallido, para poder informarlos todos y no solo el ultimo.
   const fallos: Array<{ modelo: string; status: number; detalle: string }> = [];
 
+  /// Los documentos que devolvieron las herramientas, para que los pinte la APLICACION.
+  ///
+  /// El modelo no escribe las URL: las manda la funcion aparte y la pantalla las convierte en
+  /// botones con el nombre del documento. Dos razones, y la segunda es la que importa:
+  ///
+  ///   1. Una URL de Drive tiene setenta caracteres y en un telefono es imposible atinarle con el
+  ///      dedo. Un boton que dice «Brochure» si.
+  ///   2. Si el enlace sale de los DATOS y no del texto, el modelo no puede inventarlo. Es la misma
+  ///      razon por la que la aplicacion pinta las vacaciones de Soli desde los datos crudos en vez
+  ///      de confiar en su prosa.
+  const documentos: Array<Record<string, unknown>> = [];
+  const vistos = new Set<string>();
+
   /// Los enlaces que DE VERDAD salieron de una herramienta.
   ///
   /// Es la lista blanca del guardia de abajo. Se llena con lo que devuelven las herramientas y con
@@ -242,13 +255,15 @@ Deno.serve(async (req: Request) => {
           + "-por ejemplo «documentos de Bonanza Coto 4»- y los consulto.";
         await bitacora(svc, user.id, modeloEnUso, usoTotal, mensajes.at(-1)?.content ?? "",
           `[ENLACES INVENTADOS: ${inventados.join(" ")}] ${texto}`);
-        return responde({ text: aviso, enlaces_invalidos: inventados.length });
+        return responde({ text: aviso, enlaces_invalidos: inventados.length, documentos });
       }
 
       await bitacora(svc, user.id, modeloEnUso, usoTotal, mensajes.at(-1)?.content ?? "", texto);
       return responde({
         text: texto || "No pude armar una respuesta. Vuelve a preguntarme de otra forma.",
         modelo: modeloEnUso,
+        // Los botones que va a pintar la aplicacion. Vienen de las herramientas, no del texto.
+        documentos,
       });
     }
 
@@ -274,6 +289,22 @@ Deno.serve(async (req: Request) => {
       const crudo = JSON.stringify(resultado);
       for (const u of crudo.match(/https?:\/\/[^\s"'<>\\]+/g) ?? []) {
         enlacesLegitimos.add(u);
+      }
+      // Los documentos se guardan tal como salieron, sin pasar por el modelo.
+      for (const r of (resultado.resultados ?? []) as Array<Record<string, unknown>>) {
+        const url = typeof r.enlace === "string" ? r.enlace : null;
+        if (!url || vistos.has(url)) continue;
+        vistos.add(url);
+        documentos.push({
+          desarrollo: r.desarrollo ?? null,
+          categoria: r.categoria ?? null,
+          nombre: r.nombre ?? r.categoria ?? "Documento",
+          idioma: r.idioma ?? null,
+          variante: r.variante ?? null,
+          url,
+          es_carpeta: r.es_carpeta === true,
+          visibilidad: r.visibilidad ?? null,
+        });
       }
       console.log(`SOL: ${c.function.name} -> ${crudo.slice(0, 160)}`);
       conversacion.push({ role: "tool", content: JSON.stringify(resultado) });
