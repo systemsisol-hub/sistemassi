@@ -136,6 +136,8 @@ Deno.serve(async (req: Request) => {
   console.log(`SOL: modelo ${modeloEnUso} en ${OLLAMA_BASE}, ${ALL_TOOLS.length} herramientas`
     + (SOL_MODEL_RESPALDO ? `, respaldo ${SOL_MODEL_RESPALDO}` : `, SIN respaldo`));
   let usoTotal = { prompt: 0, respuesta: 0 };
+  /// Cada intento fallido, para poder informarlos todos y no solo el ultimo.
+  const fallos: Array<{ modelo: string; status: number; detalle: string }> = [];
 
   for (let vuelta = 0; vuelta < MAX_VUELTAS; vuelta++) {
     let r: Response;
@@ -160,13 +162,33 @@ Deno.serve(async (req: Request) => {
     if (!r.ok) {
       const detalle = (await r.text()).slice(0, 300);
       console.error(`SOL: ${modeloEnUso} respondio ${r.status}: ${detalle}`);
+      fallos.push({ modelo: modeloEnUso, status: r.status, detalle });
       // Un 400 es NUESTRO —herramientas mal formadas— y cambiar de modelo no lo arregla.
       if (r.status !== 400 && SOL_MODEL_RESPALDO && modeloEnUso !== SOL_MODEL_RESPALDO) {
         console.log(`SOL: se cambia al respaldo ${SOL_MODEL_RESPALDO}`);
         modeloEnUso = SOL_MODEL_RESPALDO;
         continue;
       }
-      return responde({ error: `El proveedor respondio ${r.status}.` }, 502);
+      // Se informan TODOS los fallos, no solo el ultimo.
+      //
+      // El 02/09/2026 el mensaje que llego a la pantalla fue «el proveedor respondio 404», que era
+      // el error del RESPALDO: un nombre de modelo inexistente. El del principal era un 402 -el
+      // modelo no esta incluido en el plan de la cuenta-, que es el problema de verdad y el unico
+      // accionable. El respaldo tapo la causa y mando a diagnosticar lo que no era.
+      //
+      // Y se traduce el codigo a algo que se pueda hacer: un 402 se arregla en la cuenta y un 404
+      // en el nombre de la variable. Son dos sitios distintos.
+      const explica = (f: { modelo: string; status: number }) => {
+        const que = f.status === 402
+          ? "no esta incluido en el plan de la cuenta de Ollama"
+          : f.status === 404
+          ? "no existe con ese nombre; revisa la etiqueta exacta en ollama.com"
+          : f.status === 401 || f.status === 403
+          ? "la llave del proveedor no lo autoriza"
+          : `el proveedor respondio ${f.status}`;
+        return `${f.modelo}: ${que}`;
+      };
+      return responde({ error: fallos.map(explica).join(" | "), fallos }, 502);
     }
 
     const datos = await r.json() as {
