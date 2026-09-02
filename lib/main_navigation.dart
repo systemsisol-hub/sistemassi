@@ -296,8 +296,16 @@ class _MainNavigationState extends State<MainNavigation> {
     if (widget.role == 'admin' || widget.permissions['show_sol'] == true) {
       pages.add({
         'title': 'SOL',
-        'icon': Icons.business,
-        'activeIcon': Icons.business,
+        // `adb` es una figura de robot completa. Se elige por dos razones: es un robot -SOL es un
+        // asistente, no un edificio, que es lo que decia antes- y su silueta no se confunde con la
+        // CABEZA de robot de Soli, que esta dos renglones mas arriba en el mismo menu.
+        //
+        // Es un glifo NUEVO en la aplicacion, asi que saldra en blanco para quien tenga la fuente
+        // de iconos en cache. Medido el 02/09/2026: se sirve con `max-age=14400`, o sea cuatro
+        // horas como maximo, y con Ctrl+Shift+R al instante. No es el caso permanente del
+        // Convertidor, que venia de un `?v=` fijo en el arranque.
+        'icon': Icons.adb,
+        'activeIcon': Icons.adb,
         'widget': SolPage(role: widget.role, permissions: widget.permissions),
       });
     }
