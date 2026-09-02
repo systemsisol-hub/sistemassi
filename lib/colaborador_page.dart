@@ -4,7 +4,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:convert';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/services.dart';
-import 'dart:io';
 import 'colaborador_detail_page.dart';
 import 'theme/si_theme.dart';
 import 'services/notification_service.dart';
@@ -399,6 +398,13 @@ Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
     String? gerenteRegional = item?['gerente_regional'];
     String? directorValue = item?['director'];
     XFile? pickedFile;
+    // Los BYTES, no un File.
+    //
+    // `dart:io` no existe en Flutter web: `Image.file(File(x.path))` reventaba, y en web `x.path` es
+    // una URL de blob que ningun File puede leer. Guardando los bytes al elegir la foto, la
+    // vista previa y la subida usan el mismo dato y el mismo codigo sirve en web y en movil. Es lo
+    // que ya hacia `user_dashboard.dart`, que si funcionaba.
+    Uint8List? fotoBytes;
     String? currentFotoUrl = item?['foto_url'];
 
     Widget buildContent(StateSetter setDialogState) {
@@ -582,38 +588,63 @@ Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Center(
-            child: Stack(
-              children: [
-                CircleAvatar(
-                  radius: 50,
-                  backgroundColor: Colors.grey[200],
-                  backgroundImage: pickedFile != null
-                      ? null
-                      : (currentFotoUrl != null
-                          ? NetworkImage(currentFotoUrl)
-                          : null),
-                  child: pickedFile != null
-                      ? ClipOval(
-                          child: Image.file(File(pickedFile!.path),
-                              fit: BoxFit.cover, width: 100, height: 100))
-                      : (currentFotoUrl == null
-                          ? const Icon(Icons.person,
-                              size: 50, color: Colors.grey)
-                          : null),
+            // El icono de la camara NO TENIA manejador de toque: era un adorno.
+            //
+            // Reportado el 02/09/2026 como «no me deja usarlo», y era literal: no habia nada que
+            // pulsar en todo el bloque. Se veia como un boton y no lo era.
+            child: Tooltip(
+              message: 'Cambiar la foto',
+              child: InkWell(
+                borderRadius: BorderRadius.circular(50),
+                onTap: () async {
+                  // Mismos limites que en Mi Perfil: una foto de camara moderna pesa varios megas y
+                  // aqui solo se usa a 100 pixeles.
+                  final elegida = await ImagePicker().pickImage(
+                    source: ImageSource.gallery,
+                    imageQuality: 50,
+                    maxWidth: 800,
+                  );
+                  if (elegida == null) return;
+                  final bytes = await elegida.readAsBytes();
+                  setDialogState(() {
+                    pickedFile = elegida;
+                    fotoBytes = bytes;
+                  });
+                },
+                child: Stack(
+                  children: [
+                    CircleAvatar(
+                      radius: 50,
+                      backgroundColor: Colors.grey[200],
+                      backgroundImage: fotoBytes != null
+                          ? null
+                          : (currentFotoUrl != null
+                              ? NetworkImage(currentFotoUrl)
+                              : null),
+                      child: fotoBytes != null
+                          ? ClipOval(
+                              child: Image.memory(fotoBytes!,
+                                  fit: BoxFit.cover, width: 100, height: 100))
+                          : (currentFotoUrl == null
+                              ? const Icon(Icons.person,
+                                  size: 50, color: Colors.grey)
+                              : null),
+                    ),
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.primary,
+                            shape: BoxShape.circle),
+                        child: const Icon(Icons.camera_alt,
+                            color: Colors.white, size: 20),
+                      ),
+                    ),
+                  ],
                 ),
-                Positioned(
-                  bottom: 0,
-                  right: 0,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary,
-                        shape: BoxShape.circle),
-                    child: const Icon(Icons.camera_alt,
-                        color: Colors.white, size: 20),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
           const SizedBox(height: 20),
@@ -1463,14 +1494,24 @@ Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
         'foto_url': currentFotoUrl,
       };
       try {
-        if (pickedFile != null) {
-          final bytes = await pickedFile!.readAsBytes();
-          final fileExt = pickedFile!.path.split('.').last;
+        if (fotoBytes != null) {
+          // La extension sale de `name` y no de `path`: en web el `path` es una URL de blob sin
+          // extension, asi que `split('.').last` devolvia un trozo de la URL como si lo fuera.
+          final nombreOriginal = pickedFile?.name ?? '';
+          final fileExt = nombreOriginal.contains('.')
+              ? nombreOriginal.split('.').last.toLowerCase()
+              : 'jpg';
           final fileName = '${DateTime.now().millisecondsSinceEpoch}.$fileExt';
           final path = 'photos/$fileName';
           await Supabase.instance.client.storage
               .from('employee_photos')
-              .uploadBinary(path, bytes);
+              .uploadBinary(path, fotoBytes!,
+                  fileOptions: FileOptions(
+                    cacheControl: '3600',
+                    upsert: false,
+                    // Sin esto se guarda como octet-stream y hay visores que no la pintan.
+                    contentType: 'image/${fileExt == 'jpg' ? 'jpeg' : fileExt}',
+                  ));
           data['foto_url'] = Supabase.instance.client.storage
               .from('employee_photos')
               .getPublicUrl(path);
