@@ -71,6 +71,38 @@ comprobar('AG117 es desarrollo, no unidad',
 comprobar('sin catalogo no puede distinguir',
   M.preguntaUbicacion('cual es la ubicacion de AG117', []), false);
 
+// ── mencionaUbicacion: el filtro previo NO puede bloquear lo que el otro dejaria pasar ──────
+//
+// Es el error que se colo a produccion el 03/09/2026: `index.ts` usaba `preguntaUbicacion` con la
+// lista vacia como filtro previo, asi que «la ubicacion de AG117» se descartaba antes de consultar
+// el catalogo y la via directa nunca corria. Esta comprobacion es la que lo habria atrapado.
+console.log('mencionaUbicacion (filtro previo)');
+for (const q of [
+  'me puedes dar la ubicacion de AG117',
+  'cual es la direccion de AG117?',
+  'donde esta el AG008',
+  'ubicacion de la unidad AG035',
+  'donde queda',
+]) {
+  comprobar(`deja pasar: «${q}»`, M.mencionaUbicacion(q), true);
+}
+for (const q of ['de cuanto es el enganche?', 'dame el brochure', 'cuantas hay disponibles']) {
+  comprobar(`descarta: «${q}»`, M.mencionaUbicacion(q), false);
+}
+
+// La invariante, dicha como invariante: si `preguntaUbicacion` diria SI, el filtro previo tiene
+// que dejarlo pasar. Al reves puede diferir -eso es lo que aporta el catalogo-.
+for (const q of [
+  'me puedes dar la ubicacion de AG117',
+  'cual es su direccion?',
+  'donde queda ZÉNESIS CLUB',
+  'en que colonia esta',
+]) {
+  if (M.preguntaUbicacion(q, NOMBRES) && !M.mencionaUbicacion(q)) {
+    comprobar(`el filtro previo bloquea «${q}»`, false, true);
+  }
+}
+
 // ── desarrolloEnTexto ───────────────────────────────────────────────────────
 console.log('desarrolloEnTexto');
 comprobar('exacto', M.desarrolloEnTexto('que sabes de AG117', NOMBRES), 'AG117');

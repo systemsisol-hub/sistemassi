@@ -5,6 +5,7 @@ import {
 } from "./config.ts";
 import { ALL_TOOLS, AMBITO, construirPrompt, QUE_HACE } from "./herramientas.ts";
 import {
+  mencionaUbicacion,
   preguntaUbicacion,
   desarrolloDelHilo,
   documentoMencionado,
@@ -140,15 +141,15 @@ Deno.serve(async (req: Request) => {
   // sabe ofrecer el brochure o el mapa en su lugar; contestar «no esta capturado» aqui perderia
   // esa ayuda.
   const ultimoMensaje = mensajes.at(-1)?.content ?? "";
-  if (preguntaUbicacion(ultimoMensaje, [])) {
+  if (mencionaUbicacion(ultimoMensaje)) {
     const { data: catalogo } = await svc.from("desarrollos")
       .select("nombre,ubicacion,etapa").eq("is_active", true);
     const filas = (catalogo ?? []) as Array<Record<string, unknown>>;
     const nombres = filas.map((d) => String(d.nombre));
 
-    // Se vuelve a preguntar CON el catalogo: sin el, «AG117» no se distingue de una unidad
-    // «AG008», porque tienen la misma forma. La primera llamada es solo para no consultar la base
-    // en cada pregunta.
+    // Aqui SI con el catalogo: es lo que distingue el desarrollo «AG117» de la unidad «AG008»,
+    // que tienen la misma forma. El filtro de arriba solo mira si se pregunta por un donde, para
+    // no consultar la base en cada mensaje.
     if (preguntaUbicacion(ultimoMensaje, nombres)) {
       const cual = desarrolloDelHilo(mensajes, nombres);
       const fila = filas.find((d) => String(d.nombre) === cual);

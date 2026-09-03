@@ -20,23 +20,36 @@ export function sinAcentos(s: string): string {
   return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
 
-/// Si la pregunta es por DONDE esta un desarrollo.
+/// Solo si el texto pregunta por un DONDE, sin mirar de que.
+///
+/// Es el filtro previo barato, para no consultar el catalogo en cada mensaje. Va aparte de
+/// `preguntaUbicacion` por un error que costo una prueba real: el filtro previo la llamaba con la
+/// lista de nombres VACIA, y sin catalogo «AG117» se ve igual que la unidad «AG008», asi que la via
+/// directa NUNCA se disparaba cuando la pregunta nombraba al desarrollo. El 03/09/2026 a las
+/// 19:32, «me puedes dar la ubicacion de AG117» se fue al modelo y gasto 6693 tokens en un dato que
+/// estaba a una consulta de distancia. Habia hasta una prueba afirmando ese `false`: la prueba
+/// estaba bien y el uso mal.
+export function mencionaUbicacion(texto: string): boolean {
+  const t = sinAcentos(texto);
+  return /\b(ubicacion|ubicado|ubica|direccion|domicilio|codigo postal)\b/.test(t)
+    || /\bdonde\s+(esta|queda|se\s+encuentra|se\s+ubica)\b/.test(t)
+    || /\ben\s+que\s+(zona|colonia|calle|alcaldia|ciudad)\b/.test(t);
+}
+
+/// Si la pregunta es por DONDE esta un DESARROLLO.
 ///
 /// Se excluye cuando la pregunta nombra una UNIDAD -AG008, A-103-: ahi «donde esta» se refiere a
 /// la unidad dentro del edificio, y eso lo contesta el inventario, no este atajo.
 ///
 /// Distinguir unidad de desarrollo obliga a recibir los nombres: el desarrollo se llama «AG117» y
 /// sus unidades «AG004»..«AG168», o sea que la MISMA forma es una cosa o la otra segun el catalogo.
-/// Antes esto tenia el nombre AG117 escrito a mano, que habria fallado con el siguiente desarrollo
-/// que se llamara asi.
+/// Llamarla con `nombres` vacio es un uso valido solo para preguntar «¿esto podria ser de una
+/// unidad?»; para decidir la via directa hay que pasarle el catalogo.
 export function preguntaUbicacion(texto: string, nombres: string[] = []): boolean {
+  if (!mencionaUbicacion(texto)) return false;
   let t = sinAcentos(texto);
   for (const n of nombres) t = t.split(sinAcentos(n)).join(" ");
-  if (/\bag\s?\d{3}\b/.test(t) || /\b[a-e]-\d{2,3}\b/.test(t)) return false;
-
-  return /\b(ubicacion|ubicado|ubica|direccion|domicilio|codigo postal)\b/.test(t)
-    || /\bdonde\s+(esta|queda|se\s+encuentra|se\s+ubica)\b/.test(t)
-    || /\ben\s+que\s+(zona|colonia|calle|alcaldia|ciudad)\b/.test(t);
+  return !(/\bag\s?\d{3}\b/.test(t) || /\b[a-e]-\d{2,3}\b/.test(t));
 }
 
 /// Cual de los desarrollos nombra un texto, o `null`.
