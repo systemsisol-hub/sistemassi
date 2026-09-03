@@ -133,8 +133,8 @@ class _InventarioDesarrolloState extends State<InventarioDesarrollo> {
     final vistas = _unidades.where((u) {
       if (_filtro != 'TODAS' && (u['estatus'] ?? '') != _filtro) return false;
       if (q.isEmpty) return true;
-      return ('${u['numero']} ${u['depto']} ${u['torre']} ${u['nivel']} '
-              '${u['tipologia']} ${u['vista']}')
+      return ('${u['numero']} ${u['depto']} ${u['sector']} ${u['torre']} '
+              '${u['nivel']} ${u['tipologia']} ${u['vista']}')
           .toLowerCase()
           .contains(q);
     }).toList();
@@ -281,6 +281,13 @@ class _InventarioDesarrolloState extends State<InventarioDesarrollo> {
     );
   }
 
+  /// Si ALGUNA unidad de este desarrollo trae sector.
+  ///
+  /// AG117 no lo usa y Vidamar si, asi que la columna aparece o no segun el desarrollo. Una columna
+  /// vacia entre once ya ocupadas solo estorba, y la tabla ya desborda a lo ancho.
+  bool get _haySector =>
+      _unidades.any((u) => (u['sector'] ?? '').toString().trim().isNotEmpty);
+
   Widget _tabla(SiColors c, List<Map<String, dynamic>> filas) {
     if (filas.isEmpty) {
       return Center(
@@ -305,24 +312,26 @@ class _InventarioDesarrolloState extends State<InventarioDesarrollo> {
           headingTextStyle: TextStyle(
               fontSize: 11.5, fontWeight: FontWeight.w700, color: c.ink3),
           dataTextStyle: TextStyle(fontSize: 12.5, color: c.ink),
-          columns: const [
-            DataColumn(label: Text('NÚMERO')),
-            DataColumn(label: Text('DEPTO')),
-            DataColumn(label: Text('TORRE')),
-            DataColumn(label: Text('NIVEL')),
-            DataColumn(label: Text('TIPOLOGÍA')),
-            DataColumn(label: Text('VISTA')),
-            DataColumn(label: Text('M² TOTAL'), numeric: true),
-            DataColumn(label: Text('PRECIO'), numeric: true),
-            DataColumn(label: Text('\$/M²'), numeric: true),
-            DataColumn(label: Text('ESTATUS')),
-            DataColumn(label: Text('')),
+          columns: [
+            const DataColumn(label: Text('NÚMERO')),
+            const DataColumn(label: Text('DEPTO')),
+            if (_haySector) const DataColumn(label: Text('SECTOR')),
+            const DataColumn(label: Text('TORRE')),
+            const DataColumn(label: Text('NIVEL')),
+            const DataColumn(label: Text('TIPOLOGÍA')),
+            const DataColumn(label: Text('VISTA')),
+            const DataColumn(label: Text('M² TOTAL'), numeric: true),
+            const DataColumn(label: Text('PRECIO'), numeric: true),
+            const DataColumn(label: Text('\$/M²'), numeric: true),
+            const DataColumn(label: Text('ESTATUS')),
+            const DataColumn(label: Text('')),
           ],
           rows: filas.map((u) {
             return DataRow(cells: [
               DataCell(Text((u['numero'] ?? '').toString(),
                   style: const TextStyle(fontWeight: FontWeight.w600))),
               DataCell(Text((u['depto'] ?? '—').toString())),
+              if (_haySector) DataCell(Text((u['sector'] ?? '—').toString())),
               DataCell(Text((u['torre'] ?? '—').toString())),
               DataCell(Text((u['nivel'] ?? '—').toString())),
               DataCell(Text((u['tipologia'] ?? '—').toString())),
@@ -578,6 +587,14 @@ class _InventarioDesarrolloState extends State<InventarioDesarrollo> {
                     Text('Se leyeron ${r.unidades.length} unidades'
                         '${r.traiaEncabezado ? " (con encabezado)" : " (sin encabezado, se usó el orden del archivo)"}.',
                         style: TextStyle(fontSize: 12.5, color: c.ink3)),
+                    if (r.claveCompuestaDe.isNotEmpty) ...[
+                      const SizedBox(height: SiSpace.x2),
+                      Text(
+                          'La lista no trae una columna de clave propia, así que cada unidad se '
+                          'identifica por ${r.claveCompuestaDe} — la combinación más corta que no '
+                          'se repite en tu lista. Ejemplo: «${r.unidades.first.numero}».',
+                          style: TextStyle(fontSize: 11.5, color: c.ink3, height: 1.4)),
+                    ],
                     if (r.columnasIgnoradas.isNotEmpty) ...[
                       const SizedBox(height: SiSpace.x2),
                       Text('Columnas que no se reconocieron y NO se guardan: '
@@ -700,6 +717,9 @@ class _InventarioDesarrolloState extends State<InventarioDesarrollo> {
   ) async {
     try {
       final usuario = _supabase.auth.currentUser?.id;
+      // `aFila` ya trae el estatus que decia la lista -DISPONIBLE si no traia columna-, asi que
+      // aqui no se fuerza ninguno. Antes se escribia DISPONIBLE a todas, y una lista que marcara
+      // VENDIDO habria acabado ofreciendo unidades vendidas.
       final filas = r.unidades
           .map((u) => {
                 ...u.aFila(widget.desarrolloId, listaAl: listaAl),
