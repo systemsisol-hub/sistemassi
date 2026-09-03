@@ -1,15 +1,17 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 import {
-  CORS, hoy, OLLAMA_BASE, OLLAMA_KEY, SERVICE_KEY, SOL_MODEL, SOL_MODEL_RESPALDO, SUPABASE_URL,
+  CORS, hoy, hoyISO, OLLAMA_BASE, OLLAMA_KEY, SERVICE_KEY, SOL_MODEL, SOL_MODEL_RESPALDO,
+  SUPABASE_URL,
 } from "./config.ts";
 import { ALL_TOOLS, AMBITO, construirPrompt, QUE_HACE } from "./herramientas.ts";
 import {
-  mencionaUbicacion,
-  preguntaUbicacion,
+  AFECTADOS_POR_PROMOCION,
+  campoUnico,
   desarrolloDelHilo,
   documentoMencionado,
-  textoUbicacion,
+  preguntaUbicacion,
+  textoDe,
 } from "./directas.ts";
 import { runTool } from "./ejecutar.ts";
 
@@ -131,34 +133,62 @@ Deno.serve(async (req: Request) => {
 
   const nombrePila = (prof?.nombre ?? "").toString().split(/\s+/)[0] || "asesor";
 
-  // ── Via directa: donde esta un desarrollo ─────────────────────────────────
+  // ── Vias directas: un solo campo, contestado SIN modelo ───────────────────
   //
-  // Se contesta SIN modelo. El 03/09/2026, con la direccion completa ya capturada, SOL contesto
-  // dos veces «AG117 se encuentra en CDMX» -recortando el campo- y doce minutos antes «AG117 se
-  // ubica en Tulum», que es otro desarrollo. El dato estaba bien las dos veces.
+  // Por que existen: el 03/09/2026, con la direccion completa ya capturada, SOL contesto dos veces
+  // «AG117 se encuentra en CDMX» -recortando el campo- y doce minutos antes «AG117 se ubica en
+  // Tulum», que es otro desarrollo. El dato estaba bien las dos veces.
   //
-  // Solo contesta cuando TIENE el dato. Si `ubicacion` esta vacia, se deja pasar al modelo, que
-  // sabe ofrecer el brochure o el mapa en su lugar; contestar «no esta capturado» aqui perderia
-  // esa ayuda.
+  // Y de paso cuestan cero. Una pregunta por el modelo son ~8,700 tokens de promedio, de los que
+  // ~4,800 son el prompt y las herramientas reenviados en cada vuelta; un campo que ya esta en la
+  // base no necesita nada de eso.
+  //
+  // Hay TRES puertas que hay que pasar, y las tres son para no dar una respuesta peor que la del
+  // modelo:
+  //
+  //   1. Un solo campo preguntado. Con dos, contesta el modelo: un atajo contestaria uno y
+  //      dejaria el otro sin respuesta, sin que nadie lo notara.
+  //   2. El dato capturado. Si esta vacio pasa al modelo, que sabe ofrecer el brochure o la lista
+  //      de precios en su lugar; un «no esta capturado» dicho aqui perderia esa ayuda.
+  //   3. Sin promocion vigente que lo cambie, para el enganche y las mensualidades.
   const ultimoMensaje = mensajes.at(-1)?.content ?? "";
-  if (mencionaUbicacion(ultimoMensaje)) {
+  const campo = campoUnico(ultimoMensaje);
+  if (campo !== null) {
     const { data: catalogo } = await svc.from("desarrollos")
-      .select("nombre,ubicacion,etapa").eq("is_active", true);
+      .select("id,nombre,ubicacion,etapa,amenidades,enganche_pct,mensualidades")
+      .eq("is_active", true);
     const filas = (catalogo ?? []) as Array<Record<string, unknown>>;
     const nombres = filas.map((d) => String(d.nombre));
 
-    // Aqui SI con el catalogo: es lo que distingue el desarrollo «AG117» de la unidad «AG008»,
-    // que tienen la misma forma. El filtro de arriba solo mira si se pregunta por un donde, para
-    // no consultar la base en cada mensaje.
-    if (preguntaUbicacion(ultimoMensaje, nombres)) {
+    // La ubicacion tiene una trampa propia: el desarrollo «AG117» y la unidad «AG008» tienen la
+    // misma forma, y «donde esta el AG008» lo contesta el inventario, no esto. Distinguirlas
+    // necesita el catalogo, que es justo lo que se acaba de consultar.
+    const esDeVerdad = campo !== "ubicacion" || preguntaUbicacion(ultimoMensaje, nombres);
+
+    if (esDeVerdad) {
       const cual = desarrolloDelHilo(mensajes, nombres);
       const fila = filas.find((d) => String(d.nombre) === cual);
-      const donde = fila?.ubicacion;
-      if (typeof donde === "string" && donde.trim().length > 0) {
-        const texto = textoUbicacion(String(fila!.nombre), donde, fila!.etapa);
-        await bitacora(svc, user.id, "via-directa", { prompt: 0, respuesta: 0 },
-          ultimoMensaje, texto);
-        return responde({ text: texto, modelo: "via-directa", documentos: [] });
+
+      if (fila !== undefined) {
+        // Una promocion viva puede cambiar el enganche o el plazo. Si la hay, el dato de la tabla
+        // ya no es toda la verdad, asi que contesta el modelo, que tiene las dos cosas delante.
+        let hayPromoViva = false;
+        if (AFECTADOS_POR_PROMOCION.includes(campo)) {
+          const { data: promos } = await svc.from("promociones")
+            .select("id")
+            .or(`desarrollo_id.eq.${fila.id},desarrollo_id.is.null`)
+            .eq("is_active", true)
+            .lte("vigente_desde", hoyISO)
+            .gte("vigente_hasta", hoyISO);
+          hayPromoViva = ((promos ?? []) as unknown[]).length > 0;
+        }
+
+        const texto = hayPromoViva ? null : textoDe(campo, String(fila.nombre), fila);
+        if (texto !== null) {
+          await bitacora(svc, user.id, "via-directa", { prompt: 0, respuesta: 0 },
+            ultimoMensaje, texto);
+          return responde({ text: texto, modelo: "via-directa", documentos: [] });
+        }
       }
     }
   }
