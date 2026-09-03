@@ -52,6 +52,139 @@ export function preguntaUbicacion(texto: string, nombres: string[] = []): boolea
   return !(/\bag\s?\d{3}\b/.test(t) || /\b[a-e]-\d{2,3}\b/.test(t));
 }
 
+// ── Que campo se esta preguntando ───────────────────────────────────────────
+
+export type CampoDirecto =
+  | "ubicacion"
+  | "amenidades"
+  | "enganche"
+  | "mensualidades"
+  | "etapa";
+
+/// Los campos que una PROMOCION vigente puede cambiar.
+///
+/// Un atajo que lea `enganche_pct` y conteste «10%» seria PEOR que el modelo si hay una promocion
+/// viva que ofrece 5%: daria un dato correcto en la tabla y equivocado en la realidad. Asi que
+/// cuando el desarrollo tiene promocion vigente, estos campos NO se contestan directo y pasan al
+/// modelo, que tiene las dos cosas delante y puede decir cual manda.
+///
+/// Hoy no hay ninguna promocion capturada, pero eso es un accidente del momento: la primera que se
+/// capture activaria el problema sin que nadie lo relacionara con esto.
+export const AFECTADOS_POR_PROMOCION: CampoDirecto[] = ["enganche", "mensualidades"];
+
+/// Los reconocedores, con sus EXCLUSIONES.
+///
+/// Las exclusiones no son un detalle: sin ellas el atajo contesta otra pregunta.
+///
+/// El caso que las obligo: `mensualidades` guarda un NUMERO DE PAGOS -26-, no un importe.
+/// «¿Cuantas mensualidades?» se contesta con 26; «¿cuanto es la mensualidad?» pregunta cuanto paga
+/// al mes, y eso NO esta en la base -depende del precio de la unidad y del plan-. Contestar «se
+/// maneja a 26 mensualidades» a la segunda seria responder otra cosa. Peor: el modelo ya contestaba
+/// bien esa pregunta -«el monto exacto no esta capturado, consultalo en la Lista de precios»- y el
+/// atajo se habria llevado por delante esa ayuda.
+///
+/// El plural distingue las dos: «cuantas mensualidadES» frente a «cuanto es la mensualidAD».
+const RECONOCEDORES: Array<{
+  campo: CampoDirecto;
+  pruebas: RegExp[];
+  excluye?: RegExp[];
+}> = [
+  // La ubicacion tiene su propia funcion por la trampa de las unidades; aqui solo se detecta.
+  { campo: "ubicacion", pruebas: [] },
+  {
+    campo: "amenidades",
+    // A proposito NO incluye «tiene alberca?» ni «que incluye?»: ahi el modelo contesta mejor,
+    // porque puede decir si eso concreto esta o no en la lista.
+    pruebas: [/\bamenidad(es)?\b/, /\bareas\s+comunes\b/],
+  },
+  {
+    campo: "enganche",
+    pruebas: [/\benganche\b/],
+    // El campo es un PORCENTAJE. Preguntado en dinero, el importe depende de la unidad y no esta
+    // capturado: que lo conteste el modelo, que sabe ofrecer la lista de precios.
+    excluye: [/\ben\s+(pesos|dinero|efectivo)\b/, /\bcuant[oa]s?\s+(pesos|dinero)\b/, /\bmonto\b/],
+  },
+  {
+    campo: "mensualidades",
+    pruebas: [/\bmensualidad(es)?\b/, /\bcuantos\s+meses\b/, /\bplazo\b/],
+    // «mensualidad» en SINGULAR junto a «cuanto» es una pregunta por el importe, no por el numero
+    // de pagos. `\b` impide que esto empate con «mensualidades».
+    excluye: [/\bcuanto\b[\s\S]{0,30}\bmensualidad\b/, /\bmensualidad\b[\s\S]{0,20}\bcuanto\b/,
+      /\ben\s+(pesos|dinero)\b/, /\bmonto\b/],
+  },
+  { campo: "etapa", pruebas: [/\betapa\b/] },
+];
+
+/// TODOS los campos que menciona un texto.
+export function camposPreguntados(texto: string): CampoDirecto[] {
+  const t = sinAcentos(texto);
+  const encontrados: CampoDirecto[] = [];
+  if (mencionaUbicacion(texto)) encontrados.push("ubicacion");
+  for (const { campo, pruebas, excluye } of RECONOCEDORES) {
+    if (pruebas.length === 0) continue;
+    if (!pruebas.some((r) => r.test(t))) continue;
+    if (excluye?.some((r) => r.test(t))) continue;
+    encontrados.push(campo);
+  }
+  return encontrados;
+}
+
+/// El campo preguntado, SOLO si es exactamente uno.
+///
+/// Con dos o mas se devuelve `null` y contesta el modelo. «De cuanto es el enganche y cuantas
+/// mensualidades?» son dos preguntas, y un atajo que contestara solo la primera dejaria la segunda
+/// sin respuesta sin que nadie lo notara: el asesor leeria una respuesta completa a medias.
+export function campoUnico(texto: string): CampoDirecto | null {
+  const campos = camposPreguntados(texto);
+  return campos.length === 1 ? campos[0] : null;
+}
+
+/// Un numero de la base, sin los ceros de relleno: «10.00» -> «10», «7.50» -> «7.5».
+export function numeroBonito(v: unknown): string {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return String(v ?? "");
+  return String(Math.round(n * 100) / 100);
+}
+
+/// La respuesta directa de un campo, o `null` si el dato no esta capturado.
+///
+/// Devolver `null` es a proposito: se deja pasar al modelo, que sabe ofrecer el brochure o la lista
+/// de precios en su lugar. Un «no esta capturado» dicho aqui perderia esa ayuda.
+export function textoDe(
+  campo: CampoDirecto,
+  nombre: string,
+  fila: Record<string, unknown>,
+): string | null {
+  const vacio = (v: unknown) => v === null || v === undefined || String(v).trim() === "";
+
+  switch (campo) {
+    case "ubicacion":
+      return vacio(fila.ubicacion)
+        ? null
+        : textoUbicacion(nombre, String(fila.ubicacion), fila.etapa);
+
+    case "amenidades":
+      // Entero y tal cual. Es el campo que mas invita a resumir y el que menos lo tolera: el
+      // asesor lo esta leyendo para decirselo a un cliente.
+      return vacio(fila.amenidades)
+        ? null
+        : `Amenidades de ${nombre}:\n\n${String(fila.amenidades).trim()}`;
+
+    case "enganche":
+      return vacio(fila.enganche_pct)
+        ? null
+        : `El enganche de ${nombre} es del ${numeroBonito(fila.enganche_pct)}%.`;
+
+    case "mensualidades":
+      return vacio(fila.mensualidades)
+        ? null
+        : `${nombre} se maneja a ${numeroBonito(fila.mensualidades)} mensualidades.`;
+
+    case "etapa":
+      return vacio(fila.etapa) ? null : `${nombre} está en etapa ${fila.etapa}.`;
+  }
+}
+
 /// Cual de los desarrollos nombra un texto, o `null`.
 ///
 /// Devuelve el nombre MAS LARGO que empate: «ZENESIS CLUB» y «ZENESIS» son dos desarrollos

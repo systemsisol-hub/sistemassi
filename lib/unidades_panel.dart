@@ -55,6 +55,12 @@ class _InventarioDesarrolloState extends State<InventarioDesarrollo> {
   final _supabase = Supabase.instance.client;
   List<Map<String, dynamic>> _unidades = [];
   Map<String, dynamic>? _resumen;
+  /// Cómo llama ESTE desarrollo a cada campo: `{'torre': 'EDIFICIO'}`.
+  ///
+  /// Se aprende del encabezado del Excel al pegarlo, así que la tabla acaba diciendo «EDIFICIO» en
+  /// Vidamar y «Torre» en AG117 sin que nadie lo configure. Es la respuesta a «en AG117 torre sería
+  /// edificio en Vidamar»: un solo campo, y el nombre es un dato del desarrollo.
+  Map<String, String> _etiquetas = {};
   bool _cargando = true;
   String _filtro = 'DISPONIBLE';
   String _busqueda = '';
@@ -82,12 +88,19 @@ class _InventarioDesarrolloState extends State<InventarioDesarrollo> {
           .select()
           .eq('desarrollo_id', widget.desarrolloId)
           .maybeSingle();
+      final des = await _supabase
+          .from('desarrollos')
+          .select('etiquetas')
+          .eq('id', widget.desarrolloId)
+          .maybeSingle();
 
       if (!mounted) return;
       setState(() {
         _unidades =
             (uni as List).map((e) => Map<String, dynamic>.from(e)).toList();
         _resumen = res == null ? null : Map<String, dynamic>.from(res);
+        _etiquetas = ((des?['etiquetas'] ?? {}) as Map)
+            .map((k, v) => MapEntry(k.toString(), v.toString()));
         _cargando = false;
       });
     } catch (e) {
@@ -133,8 +146,8 @@ class _InventarioDesarrolloState extends State<InventarioDesarrollo> {
     final vistas = _unidades.where((u) {
       if (_filtro != 'TODAS' && (u['estatus'] ?? '') != _filtro) return false;
       if (q.isEmpty) return true;
-      return ('${u['numero']} ${u['depto']} ${u['torre']} ${u['nivel']} '
-              '${u['tipologia']} ${u['vista']}')
+      return ('${u['numero']} ${u['depto']} ${u['sector']} ${u['torre']} '
+              '${u['nivel']} ${u['tipologia']} ${u['vista']}')
           .toLowerCase()
           .contains(q);
     }).toList();
@@ -281,6 +294,17 @@ class _InventarioDesarrolloState extends State<InventarioDesarrollo> {
     );
   }
 
+  /// Si ALGUNA unidad de este desarrollo trae sector.
+  ///
+  /// AG117 no lo usa y Vidamar si, asi que la columna aparece o no segun el desarrollo. Una columna
+  /// vacia entre once ya ocupadas solo estorba, y la tabla ya desborda a lo ancho.
+  bool get _haySector =>
+      _unidades.any((u) => (u['sector'] ?? '').toString().trim().isNotEmpty);
+
+  /// El título de una columna: el nombre que le da este desarrollo, o el de siempre.
+  String _titulo(String columna, String porDefecto) =>
+      (_etiquetas[columna] ?? porDefecto).toUpperCase();
+
   Widget _tabla(SiColors c, List<Map<String, dynamic>> filas) {
     if (filas.isEmpty) {
       return Center(
@@ -305,24 +329,26 @@ class _InventarioDesarrolloState extends State<InventarioDesarrollo> {
           headingTextStyle: TextStyle(
               fontSize: 11.5, fontWeight: FontWeight.w700, color: c.ink3),
           dataTextStyle: TextStyle(fontSize: 12.5, color: c.ink),
-          columns: const [
-            DataColumn(label: Text('NÚMERO')),
-            DataColumn(label: Text('DEPTO')),
-            DataColumn(label: Text('TORRE')),
-            DataColumn(label: Text('NIVEL')),
-            DataColumn(label: Text('TIPOLOGÍA')),
-            DataColumn(label: Text('VISTA')),
-            DataColumn(label: Text('M² TOTAL'), numeric: true),
-            DataColumn(label: Text('PRECIO'), numeric: true),
-            DataColumn(label: Text('\$/M²'), numeric: true),
-            DataColumn(label: Text('ESTATUS')),
-            DataColumn(label: Text('')),
+          columns: [
+            const DataColumn(label: Text('CLAVE')),
+            DataColumn(label: Text(_titulo('depto', 'Depto'))),
+            if (_haySector) DataColumn(label: Text(_titulo('sector', 'Sector'))),
+            DataColumn(label: Text(_titulo('torre', 'Torre'))),
+            DataColumn(label: Text(_titulo('nivel', 'Nivel'))),
+            DataColumn(label: Text(_titulo('tipologia', 'Tipología'))),
+            const DataColumn(label: Text('VISTA')),
+            const DataColumn(label: Text('M² TOTAL'), numeric: true),
+            const DataColumn(label: Text('PRECIO'), numeric: true),
+            const DataColumn(label: Text('\$/M²'), numeric: true),
+            const DataColumn(label: Text('ESTATUS')),
+            const DataColumn(label: Text('')),
           ],
           rows: filas.map((u) {
             return DataRow(cells: [
               DataCell(Text((u['numero'] ?? '').toString(),
                   style: const TextStyle(fontWeight: FontWeight.w600))),
               DataCell(Text((u['depto'] ?? '—').toString())),
+              if (_haySector) DataCell(Text((u['sector'] ?? '—').toString())),
               DataCell(Text((u['torre'] ?? '—').toString())),
               DataCell(Text((u['nivel'] ?? '—').toString())),
               DataCell(Text((u['tipologia'] ?? '—').toString())),
@@ -578,6 +604,14 @@ class _InventarioDesarrolloState extends State<InventarioDesarrollo> {
                     Text('Se leyeron ${r.unidades.length} unidades'
                         '${r.traiaEncabezado ? " (con encabezado)" : " (sin encabezado, se usó el orden del archivo)"}.',
                         style: TextStyle(fontSize: 12.5, color: c.ink3)),
+                    if (r.claveCompuestaDe.isNotEmpty) ...[
+                      const SizedBox(height: SiSpace.x2),
+                      Text(
+                          'La lista no trae una columna de clave propia, así que cada unidad se '
+                          'identifica por ${r.claveCompuestaDe} — la combinación más corta que no '
+                          'se repite en tu lista. Ejemplo: «${r.unidades.first.numero}».',
+                          style: TextStyle(fontSize: 11.5, color: c.ink3, height: 1.4)),
+                    ],
                     if (r.columnasIgnoradas.isNotEmpty) ...[
                       const SizedBox(height: SiSpace.x2),
                       Text('Columnas que no se reconocieron y NO se guardan: '
@@ -700,6 +734,9 @@ class _InventarioDesarrolloState extends State<InventarioDesarrollo> {
   ) async {
     try {
       final usuario = _supabase.auth.currentUser?.id;
+      // `aFila` ya trae el estatus que decia la lista -DISPONIBLE si no traia columna-, asi que
+      // aqui no se fuerza ninguno. Antes se escribia DISPONIBLE a todas, y una lista que marcara
+      // VENDIDO habria acabado ofreciendo unidades vendidas.
       final filas = r.unidades
           .map((u) => {
                 ...u.aFila(widget.desarrolloId, listaAl: listaAl),
@@ -721,6 +758,41 @@ class _InventarioDesarrolloState extends State<InventarioDesarrollo> {
             .from('unidades')
             .update({'estatus': 'NO_DISPONIBLE', 'actualizado_por': usuario})
             .inFilter('id', cmp.desaparecidas.map((u) => u['id']).toList());
+      }
+
+      // Las etiquetas que dijo el encabezado. Se MEZCLAN con las que ya había: si el Excel del mes
+      // siguiente trae una columna menos, la etiqueta de la que falta no tiene por qué borrarse.
+      if (r.etiquetas.isNotEmpty) {
+        final mezcla = {..._etiquetas, ...r.etiquetas};
+        await _supabase
+            .from('desarrollos')
+            .update({'etiquetas': mezcla}).eq('id', widget.desarrolloId);
+      }
+
+      // Y las columnas que aparecieron sin campo donde guardarse, con un ejemplo.
+      //
+      // No se crean columnas por si acaso: se registra lo que de verdad apareció, y cuando una se
+      // repita en varios desarrollos se crea con evidencia. Se pidió así —«ir viendo un global»—.
+      for (final col in r.columnasIgnoradas) {
+        final ya = await _supabase
+            .from('columnas_sin_mapear')
+            .select('id,veces')
+            .eq('desarrollo_id', widget.desarrolloId)
+            .eq('columna', col)
+            .maybeSingle();
+        if (ya == null) {
+          await _supabase.from('columnas_sin_mapear').insert({
+            'desarrollo_id': widget.desarrolloId,
+            'columna': col,
+            'ejemplo': r.ejemplosIgnorados[col],
+          });
+        } else {
+          await _supabase.from('columnas_sin_mapear').update({
+            'veces': (int.tryParse('${ya['veces']}') ?? 1) + 1,
+            'ejemplo': r.ejemplosIgnorados[col],
+            'ultima_vez': DateTime.now().toIso8601String(),
+          }).eq('id', ya['id']);
+        }
       }
 
       final partes = <String>[

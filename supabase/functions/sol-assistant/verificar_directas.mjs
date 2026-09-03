@@ -103,6 +103,121 @@ for (const q of [
   }
 }
 
+// ── campoUnico ──────────────────────────────────────────────────────────────
+console.log('campoUnico');
+const CASOS = [
+  ['cual es su ubicacion?', 'ubicacion'],
+  ['me das la direccion', 'ubicacion'],
+  ['cuales son las amenidades de AG117?', 'amenidades'],
+  ['que amenidades tiene', 'amenidades'],
+  ['que areas comunes hay', 'amenidades'],
+  ['de cuanto es el enganche?', 'enganche'],
+  ['el enganche de zenesis', 'enganche'],
+  ['cuantas mensualidades son', 'mensualidades'],
+  ['a cuantos meses lo dan', 'mensualidades'],
+  ['cual es el plazo', 'mensualidades'],
+  ['en que etapa esta', 'etapa'],
+];
+for (const [q, esperado] of CASOS) {
+  comprobar(`«${q}» -> ${esperado}`, M.campoUnico(q), esperado);
+}
+
+// Lo que NO debe atajar: preguntas de varios campos, y preguntas que no son de un solo campo.
+for (const q of [
+  // Dos campos: un atajo contestaria solo uno y dejaria el otro sin respuesta.
+  'de cuanto es el enganche y cuantas mensualidades?',
+  'cual es la ubicacion y en que etapa esta',
+  // Ninguno: contesta el modelo, que puede ofrecer documentos.
+  'que me puedes decir de AG117',
+  'cuantas unidades hay disponibles',
+  'dame el brochure',
+  'de cuantos pisos es el edificio?',
+  // A proposito fuera de amenidades: el modelo dice SI o NO, que es lo que se pregunta.
+  'tiene alberca?',
+  'que incluye el departamento',
+]) {
+  comprobar(`sin atajo: «${q}»`, M.campoUnico(q), null);
+}
+
+comprobar('los dos campos se listan', M.camposPreguntados('el enganche y el plazo').sort(),
+  ['enganche', 'mensualidades']);
+
+// ── Las exclusiones: preguntas por el IMPORTE, que no esta en la base ───────
+//
+// `mensualidades` guarda 26, un numero de pagos, no un importe. Contestar «se maneja a 26
+// mensualidades» a quien pregunta cuanto paga al mes es responder otra cosa. Y el modelo ya lo
+// hacia bien: «el monto exacto no esta capturado, consultalo en la Lista de precios».
+console.log('exclusiones (preguntas por el importe)');
+for (const q of [
+  'cuanto es la mensualidad de ag117',
+  'de cuanto es la mensualidad?',
+  'la mensualidad de cuanto seria',
+  'cuanto seria la mensualidad',
+  'cual es el monto de la mensualidad',
+  'la mensualidad en pesos',
+  'cuanto es el enganche en pesos',
+  'cual es el monto del enganche',
+]) {
+  comprobar(`sin atajo: «${q}»`, M.campoUnico(q), null);
+}
+
+// Pero el PLURAL sigue atajando: es el numero de pagos, que si esta en la base.
+for (const [q, esperado] of [
+  ['cuantas mensualidades son', 'mensualidades'],
+  ['a cuantos meses lo dan', 'mensualidades'],
+  ['cual es el plazo de AG117', 'mensualidades'],
+  ['de cuanto es el enganche?', 'enganche'],
+]) {
+  comprobar(`si ataja: «${q}»`, M.campoUnico(q), esperado);
+}
+
+// ── textoDe ────────────────────────────────────────────────────────────────
+console.log('textoDe');
+const AG117 = {
+  ubicacion: 'Abraham González 117, Colonia Juárez, alcaldía Cuahutemoc, 06600, CDMX',
+  etapa: 'PREVENTA',
+  amenidades: 'Gimnasio, Lobby, Baños, Coworking, Salón de usos múltiples, Áreas comunes, Roof garden compartido.',
+  enganche_pct: '10.00',
+  mensualidades: 26,
+};
+
+comprobar('amenidades enteras, sin resumir',
+  M.textoDe('amenidades', 'AG117', AG117),
+  'Amenidades de AG117:\n\n'
+  + 'Gimnasio, Lobby, Baños, Coworking, Salón de usos múltiples, Áreas comunes, Roof garden compartido.');
+comprobar('enganche sin los ceros de relleno',
+  M.textoDe('enganche', 'AG117', AG117), 'El enganche de AG117 es del 10%.');
+comprobar('mensualidades',
+  M.textoDe('mensualidades', 'AG117', AG117), 'AG117 se maneja a 26 mensualidades.');
+comprobar('etapa', M.textoDe('etapa', 'AG117', AG117), 'AG117 está en etapa PREVENTA.');
+
+// Un campo sin capturar devuelve null: pasa al modelo, que sabe ofrecer el brochure.
+for (const campo of ['ubicacion', 'amenidades', 'enganche', 'mensualidades', 'etapa']) {
+  comprobar(`«${campo}» vacio -> null`, M.textoDe(campo, 'KOOX', {}), null);
+  comprobar(`«${campo}» en blanco -> null`,
+    M.textoDe(campo, 'KOOX', { [campo === 'enganche' ? 'enganche_pct' : campo]: '   ' }), null);
+}
+
+// ── numeroBonito ───────────────────────────────────────────────────────────
+console.log('numeroBonito');
+comprobar('10.00 -> 10', M.numeroBonito('10.00'), '10');
+comprobar('7.50 -> 7.5', M.numeroBonito('7.50'), '7.5');
+comprobar('26 -> 26', M.numeroBonito(26), '26');
+comprobar('12.345 -> 12.35', M.numeroBonito('12.345'), '12.35');
+comprobar('basura se devuelve tal cual', M.numeroBonito('n/a'), 'n/a');
+
+// ── La lista de campos sensibles a promociones ─────────────────────────────
+console.log('AFECTADOS_POR_PROMOCION');
+comprobar('el enganche lo puede cambiar una promocion',
+  M.AFECTADOS_POR_PROMOCION.includes('enganche'), true);
+comprobar('las mensualidades tambien',
+  M.AFECTADOS_POR_PROMOCION.includes('mensualidades'), true);
+comprobar('las amenidades NO',
+  M.AFECTADOS_POR_PROMOCION.includes('amenidades'), false);
+comprobar('la ubicacion NO',
+  M.AFECTADOS_POR_PROMOCION.includes('ubicacion'), false);
+comprobar('la etapa NO', M.AFECTADOS_POR_PROMOCION.includes('etapa'), false);
+
 // ── desarrolloEnTexto ───────────────────────────────────────────────────────
 console.log('desarrolloEnTexto');
 comprobar('exacto', M.desarrolloEnTexto('que sabes de AG117', NOMBRES), 'AG117');

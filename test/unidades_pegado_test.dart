@@ -164,15 +164,70 @@ void main() {
       expect(r.unidades.single.tipologia, 'B Lock off');
     });
 
-    test('una lista de CASAS todavía no se reconoce, y falla diciéndolo', () {
-      // Documenta el límite a propósito. «Manzana 5 Lote 12» no se puede convertir en clave sin
-      // ver una lista real: el lote 12 existe en cada manzana. Fallar claro es mejor que cargar
-      // trescientas casas con la clave equivocada.
+    test('una lista de CASAS carga, y la manzana entra en la clave', () {
+      // El lote 12 existe en cada manzana, así que el lote solo no puede ser la clave. La escalera
+      // lo resuelve midiendo: con dos manzanas que repiten el lote 12, sube a manzana + lote.
       final r = leerPegado(
           'Manzana\tLote\tModelo\tM2 Terreno\tM2 Construccion\tPrecio\n'
-          '5\t12\tJade 3R\t160\t142.5\t3850000');
-      expect(r.unidades, isEmpty);
-      expect(r.errores.single.motivo, contains('sin número'));
+          '5\t12\tJade 3R\t160\t142.5\t3850000\n'
+          '5\t13\tJade 3R\t160\t142.5\t3850000\n'
+          '6\t12\tAgata 2R\t150\t120\t3200000');
+      expect(r.errores, isEmpty);
+      expect(r.unidades.map((u) => u.numero), ['5 12', '5 13', '6 12']);
+      expect(r.unidades.first.sector, '5');
+      expect(r.unidades.first.tipologia, 'Jade 3R');
+    });
+
+    test('terreno y construcción van a campos PROPIOS, y no se suman', () {
+      // Una casa de 160 m² de terreno y 142.5 de construcción no es una casa de 302.5: son dos
+      // superficies distintas. Cada una tiene su campo y NINGUNA entra en el total.
+      final r = leerPegado(
+          'Manzana\tLote\tModelo\tM2 Terreno\tM2 Construccion\tRecamaras\tBaños\tPrecio\n'
+          '5\t12\tJade 3R\t160\t142.5\t3\t2.5\t3850000');
+      expect(r.errores, isEmpty);
+      expect(r.columnasIgnoradas, isEmpty);
+
+      final u = r.unidades.single;
+      expect(u.m2Terreno, 160);
+      expect(u.m2Construccion, 142.5);
+      expect(u.recamaras, 3);
+      expect(u.banos, 2.5, reason: 'los baños llevan decimal: «2.5 baños» es real');
+      expect(u.m2Superficie, isNull, reason: 'ninguna de las dos es «la» superficie');
+      expect(u.m2InteriorTechada, isNull);
+
+      final fila = u.aFila('x');
+      expect(fila['m2_terreno'], 160);
+      expect(fila['m2_construccion'], 142.5);
+      expect(fila.containsKey('m2_total'), isFalse,
+          reason: 'sigue siendo columna generada; la base decide, no el pegado');
+    });
+
+    test('las etiquetas salen del encabezado, sin teclear nada', () {
+      // «en AG117 torre sería edificio en Vidamar»: el campo es uno y el nombre es un dato del
+      // desarrollo, que ya viene escrito en el Excel.
+      final r = leerPegado('CLUSTER\tEDIFICIO\tDEPTO.\tSUP. M2\tPRECIO\n'
+          'LORETO\tA\t101\t158\t4797270');
+      expect(r.etiquetas['sector'], 'CLUSTER');
+      expect(r.etiquetas['torre'], 'EDIFICIO');
+      expect(r.etiquetas['depto'], 'DEPTO.');
+      expect(r.etiquetas['m2_superficie'], 'SUP. M2',
+          reason: 'la llave es el nombre de la COLUMNA, que es como la busca la vista');
+
+      final ag = leerPegado('$encabezado\n$filaA103');
+      expect(ag.etiquetas['torre'], 'Torre',
+          reason: 'el MISMO campo, con el nombre que le da cada lista');
+      expect(ag.etiquetas['depto'], '# Depto');
+    });
+
+    test('una columna huérfana se reporta CON un ejemplo de su valor', () {
+      // «apareció una columna TIPO DE CAMBIO» no dice lo suficiente para decidir si crear un campo.
+      final r = leerPegado('DEPTO.\tPRECIO\tVENDEDOR\tTIPO DE CAMBIO\n'
+          '101\t100\t\t18.50\n'
+          '102\t200\tRodrigo\t18.50');
+      expect(r.columnasIgnoradas, ['VENDEDOR', 'TIPO DE CAMBIO']);
+      expect(r.ejemplosIgnorados['TIPO DE CAMBIO'], '18.50');
+      expect(r.ejemplosIgnorados['VENDEDOR'], 'Rodrigo',
+          reason: 'el ejemplo sale de la primera fila que traiga algo, no de la primera fila');
     });
 
     test('el número se guarda en mayúsculas', () {
@@ -205,6 +260,134 @@ void main() {
       final r = leerPegado('$encabezado\n\n$filaA01\n\n\n$filaA103\n');
       expect(r.errores, isEmpty);
       expect(r.unidades, hasLength(2));
+    });
+  });
+
+  // ── VIDAMAR: la otra forma de lista que existe de verdad ───────────────────
+  //
+  // Se trae 17 filas reales porque las tres cosas que hay que probar sólo se ven con todas: que la
+  // clave necesita los tres campos, que la superficie viene de un solo número, y que el estatus
+  // viene en la lista.
+  group('VIDAMAR', () {
+    const encVidamar = 'CLUSTER\tEDIFICIO\tDEPTO.\tNIVEL\tSUP. M2\tPRECIO\tESTATUS';
+    const filasVidamar = [
+      'CLUSTER III\tA\t1\tPB\t155\t \$4,899,000.00 \tDISPONIBLE',
+      'CLUSTER III\tC\tPH2\tPH\t210\t \$5,249,000.00 \tDISPONIBLE',
+      'COSTA AZUL\tA\t202\tN2\t151.27\t \$4,954,000.00 \tDISPONIBLE',
+      'LORETO\tA\t101\tN1\t158\t \$4,797,270.00 \tDISPONIBLE',
+      'LORETO\tA\t202\tN2\t158\t \$5,003,270.00 \tDISPONIBLE',
+      'LORETO\tC\t101\tN1\t158\t \$4,797,270.00 \tDISPONIBLE',
+      'LORETO\tC\t102\tN1\t158\t \$4,797,270.00 \tDISPONIBLE',
+      'LORETO\tC\tPH1\tPH\t292.73\t \$6,451,070.00 \tDISPONIBLE',
+      'LORETO\tB\t101\tN1\t158\t \$4,797,270.00 \tDISPONIBLE',
+      'LORETO\tB\t102\tN1\t158\t \$4,797,270.00 \tDISPONIBLE',
+      'LORETO\tB\t201\tN2\t158\t \$5,003,270.00 \tDISPONIBLE',
+      'LORETO\tB\t202\tN2\t158\t \$5,003,270.00 \tDISPONIBLE',
+      'LORETO\tD\t101\tN1\t158\t \$4,797,270.00 \tDISPONIBLE',
+      'LORETO\tD\t102\tN1\t158\t \$4,797,270.00 \tDISPONIBLE',
+      'PUNTA ARENA\tD\t101\tN1\t158\t \$5,046,489.00 \tDISPONIBLE',
+      'PUNTA ARENA\tD\t102\tN2\t158\t \$5,216,684.00 \tDISPONIBLE',
+      'PUNTA ARENA\tD\t201\tN2\t158\t \$5,216,684.00 \tDISPONIBLE',
+    ];
+    final pegado = '$encVidamar\n${filasVidamar.join('\n')}';
+
+    test('las 17 filas entran, sin errores y sin columnas sin reconocer', () {
+      final r = leerPegado(pegado);
+      expect(r.errores, isEmpty);
+      expect(r.unidades, hasLength(17));
+      expect(r.columnasIgnoradas, isEmpty,
+          reason: 'las siete columnas de Vidamar deben tener destino');
+    });
+
+    test('la clave necesita CLUSTER + EDIFICIO + DEPTO., y sale única', () {
+      // Medido: el depto solo da 7 claves distintas de 17, y edificio + depto da 14. Sólo las tres
+      // juntas dan 17. Si la escalera se quedara corta, dos unidades se pisarían al guardar.
+      final r = leerPegado(pegado);
+      expect(r.claveCompuestaDe, 'sector + torre + depto');
+      final claves = r.unidades.map((u) => u.numero).toList();
+      expect(claves.toSet(), hasLength(17), reason: 'sin claves repetidas');
+      expect(claves, contains('LORETO A 101'));
+      expect(claves, contains('LORETO C 101'));
+      expect(claves, contains('PUNTA ARENA D 101'),
+          reason: 'los tres son «101» y tienen que quedar distintos');
+    });
+
+    test('«DEPTO.» con punto se reconoce', () {
+      // El punto rompía el empate y la lista entera fallaba con «sin número de unidad».
+      final r = leerPegado(pegado);
+      expect(r.unidades.first.depto, '1');
+    });
+
+    test('«EDIFICIO» es la torre y «CLUSTER» el sector', () {
+      final u = leerPegado(pegado).unidades.first;
+      expect(u.torre, 'A');
+      expect(u.sector, 'CLUSTER III');
+      expect(u.nivel, 'PB');
+    });
+
+    test('la superficie de un solo número va a m2Superficie, no al desglose', () {
+      final u = leerPegado(pegado).unidades.first;
+      expect(u.m2Superficie, 155);
+      expect(u.m2InteriorTechada, isNull,
+          reason: 'meterla en «interior techada» seria etiquetarla mal');
+      // La base calcula m2_total de esta, y del desglose cuando lo hay.
+      expect(u.aFila('x')['m2_superficie'], 155);
+      expect(u.aFila('x').containsKey('m2_total'), isFalse);
+    });
+
+    test('el precio con \$, comas y espacios alrededor', () {
+      final u = leerPegado(pegado).unidades.first;
+      expect(u.precio, 4899000);
+    });
+
+    test('con desglose, una columna de total se IGNORA', () {
+      // AG117 trae las tres partes y además «M2 TOTAL». Guardar el total además del desglose seria
+      // tener el mismo hecho escrito y calculado a la vez.
+      final r = leerPegado('$encabezado\n$filaA01');
+      expect(r.unidades.single.m2Superficie, isNull);
+      expect(r.unidades.single.m2InteriorTechada, 76);
+      expect(r.columnasIgnoradas, isEmpty);
+    });
+  });
+
+  group('estatusDe', () {
+    test('lo que trae la lista se respeta', () {
+      expect(estatusDe('DISPONIBLE'), 'DISPONIBLE');
+      expect(estatusDe('Vendido'), 'VENDIDO');
+      expect(estatusDe('VENDIDA'), 'VENDIDO');
+      expect(estatusDe('Apartado'), 'APARTADO');
+      expect(estatusDe('RESERVADO'), 'APARTADO');
+      expect(estatusDe('No disponible'), 'NO_DISPONIBLE');
+      expect(estatusDe('  disponible  '), 'DISPONIBLE');
+    });
+
+    test('sin columna de estatus se asume DISPONIBLE', () {
+      expect(estatusDe(null), 'DISPONIBLE');
+      expect(estatusDe(''), 'DISPONIBLE');
+    });
+
+    test('un valor que no se reconoce da null, no DISPONIBLE', () {
+      // Suponer «disponible» ante un valor que no entendemos es el peor error del sistema: un
+      // asesor ofreciendo a un cliente algo que ya se vendio.
+      expect(estatusDe('EN PROCESO'), isNull);
+      expect(estatusDe('bloqueado por legal'), isNull);
+    });
+
+    test('un estatus desconocido se reporta como error de esa línea', () {
+      final r = leerPegado('DEPTO.\tPRECIO\tESTATUS\n'
+          '101\t100\tDISPONIBLE\n'
+          '102\t200\tEN PROCESO');
+      expect(r.unidades, hasLength(1));
+      expect(r.errores.single.motivo, contains('estatus que no reconozco'));
+      expect(r.errores.single.motivo, contains('EN PROCESO'));
+    });
+
+    test('una lista con vendidas las carga como vendidas', () {
+      final r = leerPegado('DEPTO.\tPRECIO\tESTATUS\n'
+          '101\t100\tDISPONIBLE\n'
+          '102\t200\tVENDIDO');
+      expect(r.unidades.map((u) => u.estatus), ['DISPONIBLE', 'VENDIDO']);
+      expect(r.unidades.last.aFila('x')['estatus'], 'VENDIDO');
     });
   });
 
