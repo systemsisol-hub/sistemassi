@@ -30,6 +30,34 @@ library;
 /// Los estatus que acepta la base. El mismo orden y los mismos nombres que la restricción.
 const estatusValidos = ['DISPONIBLE', 'APARTADO', 'VENDIDO', 'NO_DISPONIBLE'];
 
+/// De cómo se llama el campo aquí a cómo se llama la COLUMNA en la base.
+///
+/// Existe porque las etiquetas por desarrollo se guardan con el nombre de la columna, no con el de
+/// aquí: la vista `v_campos_por_desarrollo` las busca con `etiquetas ->> campo`, y si aquí se
+/// escribiera «m2Superficie» y allá se buscara «m2_superficie», el nombre no aparecería nunca y
+/// nadie sabría por qué.
+const columnaDeCampo = <String, String>{
+  'numero': 'numero',
+  'depto': 'depto',
+  'sector': 'sector',
+  'torre': 'torre',
+  'nivel': 'nivel',
+  'tipo': 'tipo',
+  'tipologia': 'tipologia',
+  'vista': 'vista',
+  'm2InteriorTechada': 'm2_interior_techada',
+  'm2ExteriorTechada': 'm2_exterior_techada',
+  'm2JardinTerraza': 'm2_jardin_terraza',
+  'm2Superficie': 'm2_superficie',
+  'm2Terreno': 'm2_terreno',
+  'm2Construccion': 'm2_construccion',
+  'recamaras': 'recamaras',
+  'banos': 'banos',
+  'estacionamientos': 'estacionamientos',
+  'precio': 'precio',
+  'estatus': 'estatus',
+};
+
 /// Una unidad tal como venía en el texto pegado. Sin id: todavía no se sabe si existe.
 class UnidadPegada {
   /// La clave. Es la de la lista si la trae, o una compuesta por el sector, la torre y el depto.
@@ -59,6 +87,16 @@ class UnidadPegada {
   /// sigue siendo derivado —nunca teclado— sea cual sea la forma de la lista.
   final double? m2Superficie;
 
+  /// De una casa o un lote. NO se suman entre si ni entran en `m2_total`: una casa de 160 m2 de
+  /// terreno y 142 de construccion no es una casa de 302.
+  final double? m2Terreno;
+  final double? m2Construccion;
+
+  final int? recamaras;
+  /// Con decimal: «2.5 baños» es como se anuncia de verdad.
+  final double? banos;
+  final int? estacionamientos;
+
   final double? precio;
   final String estatus;
 
@@ -75,6 +113,11 @@ class UnidadPegada {
     this.m2ExteriorTechada,
     this.m2JardinTerraza,
     this.m2Superficie,
+    this.m2Terreno,
+    this.m2Construccion,
+    this.recamaras,
+    this.banos,
+    this.estacionamientos,
     this.precio,
     this.estatus = 'DISPONIBLE',
   });
@@ -95,6 +138,11 @@ class UnidadPegada {
         'm2_exterior_techada': m2ExteriorTechada,
         'm2_jardin_terraza': m2JardinTerraza,
         'm2_superficie': m2Superficie,
+        'm2_terreno': m2Terreno,
+        'm2_construccion': m2Construccion,
+        'recamaras': recamaras,
+        'banos': banos,
+        'estacionamientos': estacionamientos,
         'precio': precio,
         'estatus': estatus,
         if (listaAl != null)
@@ -123,12 +171,27 @@ class ResultadoPegado {
   /// propia, conviene que se vea cuál se compuso antes de guardar 17 renglones con ella.
   final String claveCompuestaDe;
 
+  /// El nombre que ESTA lista le dio a cada campo: `{'torre': 'EDIFICIO', 'sector': 'CLUSTER'}`.
+  ///
+  /// Es la respuesta a «en AG117 torre sería edificio en Vidamar»: el campo es uno y el nombre es
+  /// un dato del desarrollo. Y no hay que teclearlo, porque ya viene escrito en el encabezado del
+  /// Excel que se acaba de pegar.
+  final Map<String, String> etiquetas;
+
+  /// Las columnas sin campo, con un ejemplo de su valor.
+  ///
+  /// Se guardan en la base para poder decidir con datos qué campo crear después, en lugar de
+  /// crear columnas a ciegas por si acaso.
+  final Map<String, String> ejemplosIgnorados;
+
   const ResultadoPegado({
     required this.unidades,
     required this.errores,
     required this.traiaEncabezado,
     required this.columnasIgnoradas,
     this.claveCompuestaDe = '',
+    this.etiquetas = const {},
+    this.ejemplosIgnorados = const {},
   });
 
   bool get vacio => unidades.isEmpty;
@@ -181,6 +244,15 @@ String? _campoDe(String encabezado) {
   if (h.contains('interior techada')) return 'm2InteriorTechada';
   if (h.contains('exterior techada')) return 'm2ExteriorTechada';
   if (h.contains('jardin') || h.contains('terraza')) return 'm2JardinTerraza';
+  if (h.contains('terreno') || h.contains('lote m2')) return 'm2Terreno';
+  if (h.contains('construccion') || h.contains('construida')) return 'm2Construccion';
+  if (h.startsWith('recamara') || h == 'rec' || h == 'habitaciones' || h == 'dormitorios') {
+    return 'recamaras';
+  }
+  if (h.startsWith('bano') || h == 'wc') return 'banos';
+  if (h.contains('estacionamiento') || h.contains('cajon') || h == 'cochera') {
+    return 'estacionamientos';
+  }
   if (h.contains('precio')) return 'precio';
 
   // La superficie de un solo número, al final para que no le gane a las de desglose.
@@ -222,6 +294,11 @@ double? _numero(String? s) {
   return (v * 100).round() / 100;
 }
 
+int? _entero(String? s) {
+  final v = _numero(s);
+  return v == null ? null : v.round();
+}
+
 String? _texto(String? s) {
   final t = s?.trim();
   return (t == null || t.isEmpty) ? null : t;
@@ -243,7 +320,11 @@ String? estatusDe(String? crudo) {
 }
 
 /// Cómo se mapea cada columna del encabezado, aplicando las reglas que necesitan verlo COMPLETO.
-({List<String?> mapa, List<String> ignoradas}) _mapearEncabezado(List<String> encabezado) {
+({
+  List<String?> mapa,
+  List<String> ignoradas,
+  Map<String, String> etiquetas,
+}) _mapearEncabezado(List<String> encabezado) {
   final mapa = encabezado.map(_campoDe).toList();
 
   // La regla que necesita el encabezado entero: si la lista DESGLOSA la superficie, una columna de
@@ -261,14 +342,23 @@ String? estatusDe(String? crudo) {
   }
 
   final ignoradas = <String>[];
+  final etiquetas = <String, String>{};
   for (var i = 0; i < encabezado.length; i++) {
-    if (mapa[i] != null) continue;
+    final campo = mapa[i];
+    if (campo != null) {
+      // El nombre TAL CUAL lo escribió el Excel, para poder mostrarlo así en el panel.
+      final tal = encabezado[i].trim();
+      // Con el nombre de la COLUMNA como llave, no el de aqui: es como lo busca la vista.
+      final llave = columnaDeCampo[campo] ?? campo;
+      if (tal.isNotEmpty) etiquetas.putIfAbsent(llave, () => tal);
+      continue;
+    }
     final h = _normaliza(encabezado[i]);
     // Las calculadas no son «desconocidas»: se ignoran a propósito y decirlo sólo haría ruido.
     if (h.isEmpty || h == 'total interior m2' || h == 'm2 total') continue;
     ignoradas.add(encabezado[i]);
   }
-  return (mapa: mapa, ignoradas: ignoradas);
+  return (mapa: mapa, ignoradas: ignoradas, etiquetas: etiquetas);
 }
 
 /// Lee el texto pegado desde Excel.
@@ -317,10 +407,31 @@ ResultadoPegado leerPegado(String texto) {
 
   var mapa = _ordenPorDefecto;
   var ignoradas = <String>[];
+  var etiquetas = <String, String>{};
   if (pareceEncabezado) {
     final r = _mapearEncabezado(primera);
     mapa = r.mapa;
     ignoradas = r.ignoradas;
+    etiquetas = r.etiquetas;
+  }
+  // Un ejemplo del valor de cada columna huérfana, de la primera fila que lo traiga. Sin ejemplo,
+  // «apareció una columna llamada TIPO DE CAMBIO» no dice lo suficiente para decidir nada.
+  final ejemplos = <String, String>{};
+  if (pareceEncabezado && ignoradas.isNotEmpty) {
+    final donde = <String, int>{};
+    for (var i = 0; i < primera.length; i++) {
+      if (ignoradas.contains(primera[i].trim())) donde[primera[i].trim()] = i;
+    }
+    for (final l in lineas.skip(1)) {
+      final celdas = partir(l);
+      for (final e in donde.entries) {
+        if (ejemplos.containsKey(e.key)) continue;
+        if (e.value < celdas.length && celdas[e.value].isNotEmpty) {
+          ejemplos[e.key] = celdas[e.value];
+        }
+      }
+      if (ejemplos.length == donde.length) break;
+    }
   }
 
   // Primero se leen TODAS las celdas, y sólo después se decide la clave.
@@ -448,6 +559,11 @@ ResultadoPegado leerPegado(String texto) {
       m2ExteriorTechada: _numero(valores['m2ExteriorTechada']),
       m2JardinTerraza: _numero(valores['m2JardinTerraza']),
       m2Superficie: _numero(valores['m2Superficie']),
+      m2Terreno: _numero(valores['m2Terreno']),
+      m2Construccion: _numero(valores['m2Construccion']),
+      recamaras: _entero(valores['recamaras']),
+      banos: _numero(valores['banos']),
+      estacionamientos: _entero(valores['estacionamientos']),
       precio: precio,
       estatus: estatus,
     ));
@@ -460,6 +576,8 @@ ResultadoPegado leerPegado(String texto) {
     columnasIgnoradas: ignoradas,
     claveCompuestaDe:
         hayClavePropia ? '' : [...calificadores, 'depto'].join(' + '),
+    etiquetas: etiquetas,
+    ejemplosIgnorados: ejemplos,
   );
 }
 
@@ -555,6 +673,11 @@ Comparacion compararInventario(
         _comoDouble(actual['m2_exterior_techada']) == p.m2ExteriorTechada &&
         _comoDouble(actual['m2_jardin_terraza']) == p.m2JardinTerraza &&
         _comoDouble(actual['m2_superficie']) == p.m2Superficie &&
+        _comoDouble(actual['m2_terreno']) == p.m2Terreno &&
+        _comoDouble(actual['m2_construccion']) == p.m2Construccion &&
+        _entero(actual['recamaras']?.toString()) == p.recamaras &&
+        _comoDouble(actual['banos']) == p.banos &&
+        _entero(actual['estacionamientos']?.toString()) == p.estacionamientos &&
         (actual['estatus'] ?? 'DISPONIBLE') == p.estatus;
     if (!mismos) {
       cambiosDatos.add(p);

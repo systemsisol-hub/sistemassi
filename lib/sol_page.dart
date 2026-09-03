@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'theme/si_theme.dart';
+import 'campos_globales.dart';
 import 'unidades_panel.dart';
 import 'widgets/texto_con_enlaces.dart';
 
@@ -886,6 +887,14 @@ class _PanelDesarrollosState extends State<_PanelDesarrollos> {
             ),
           ),
           const SizedBox(width: SiSpace.x3),
+          // El mapa de campos abarca a TODOS los desarrollos, asi que vive en la cabecera y no
+          // dentro del detalle de uno.
+          OutlinedButton.icon(
+            onPressed: _verCampos,
+            icon: const Icon(Icons.table_chart_outlined, size: 15),
+            label: const Text('Campos'),
+          ),
+          const SizedBox(width: SiSpace.x3),
           if (widget.puedeEditar)
             ElevatedButton.icon(
               onPressed: () => _formDesarrollo(),
@@ -1384,6 +1393,40 @@ class _PanelDesarrollosState extends State<_PanelDesarrollos> {
       debugPrint('Error guardando desarrollo: $e');
       _aviso('No se pudo guardar: $e', error: true);
     }
+  }
+
+  void _verCampos() {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 900, maxHeight: 620),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                    SiSpace.x5, SiSpace.x4, SiSpace.x3, 0),
+                child: Row(
+                  children: [
+                    const Expanded(
+                      child: Text('Campos del inventario',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w700)),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      icon: const Icon(Icons.close, size: 18),
+                    ),
+                  ],
+                ),
+              ),
+              const Expanded(child: CamposGlobales()),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _borrarDesarrollo(Map<String, dynamic> d) async {

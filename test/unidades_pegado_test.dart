@@ -178,17 +178,56 @@ void main() {
       expect(r.unidades.first.tipologia, 'Jade 3R');
     });
 
-    test('de una casa NO se guarda superficie: terreno y construcción no se suman', () {
-      // Una casa de 160 m² de terreno y 142.5 de construcción no es una casa de 302.5. Mientras no
-      // haya campos propios para las dos, esas columnas se REPORTAN como ignoradas en lugar de
-      // meterse a la fuerza donde no van, y SOL dice que la superficie no está capturada.
+    test('terreno y construcción van a campos PROPIOS, y no se suman', () {
+      // Una casa de 160 m² de terreno y 142.5 de construcción no es una casa de 302.5: son dos
+      // superficies distintas. Cada una tiene su campo y NINGUNA entra en el total.
       final r = leerPegado(
-          'Manzana\tLote\tModelo\tM2 Terreno\tM2 Construccion\tPrecio\n'
-          '5\t12\tJade 3R\t160\t142.5\t3850000');
-      expect(r.columnasIgnoradas, ['M2 Terreno', 'M2 Construccion']);
+          'Manzana\tLote\tModelo\tM2 Terreno\tM2 Construccion\tRecamaras\tBaños\tPrecio\n'
+          '5\t12\tJade 3R\t160\t142.5\t3\t2.5\t3850000');
+      expect(r.errores, isEmpty);
+      expect(r.columnasIgnoradas, isEmpty);
+
       final u = r.unidades.single;
-      expect(u.m2Superficie, isNull);
+      expect(u.m2Terreno, 160);
+      expect(u.m2Construccion, 142.5);
+      expect(u.recamaras, 3);
+      expect(u.banos, 2.5, reason: 'los baños llevan decimal: «2.5 baños» es real');
+      expect(u.m2Superficie, isNull, reason: 'ninguna de las dos es «la» superficie');
       expect(u.m2InteriorTechada, isNull);
+
+      final fila = u.aFila('x');
+      expect(fila['m2_terreno'], 160);
+      expect(fila['m2_construccion'], 142.5);
+      expect(fila.containsKey('m2_total'), isFalse,
+          reason: 'sigue siendo columna generada; la base decide, no el pegado');
+    });
+
+    test('las etiquetas salen del encabezado, sin teclear nada', () {
+      // «en AG117 torre sería edificio en Vidamar»: el campo es uno y el nombre es un dato del
+      // desarrollo, que ya viene escrito en el Excel.
+      final r = leerPegado('CLUSTER\tEDIFICIO\tDEPTO.\tSUP. M2\tPRECIO\n'
+          'LORETO\tA\t101\t158\t4797270');
+      expect(r.etiquetas['sector'], 'CLUSTER');
+      expect(r.etiquetas['torre'], 'EDIFICIO');
+      expect(r.etiquetas['depto'], 'DEPTO.');
+      expect(r.etiquetas['m2_superficie'], 'SUP. M2',
+          reason: 'la llave es el nombre de la COLUMNA, que es como la busca la vista');
+
+      final ag = leerPegado('$encabezado\n$filaA103');
+      expect(ag.etiquetas['torre'], 'Torre',
+          reason: 'el MISMO campo, con el nombre que le da cada lista');
+      expect(ag.etiquetas['depto'], '# Depto');
+    });
+
+    test('una columna huérfana se reporta CON un ejemplo de su valor', () {
+      // «apareció una columna TIPO DE CAMBIO» no dice lo suficiente para decidir si crear un campo.
+      final r = leerPegado('DEPTO.\tPRECIO\tVENDEDOR\tTIPO DE CAMBIO\n'
+          '101\t100\t\t18.50\n'
+          '102\t200\tRodrigo\t18.50');
+      expect(r.columnasIgnoradas, ['VENDEDOR', 'TIPO DE CAMBIO']);
+      expect(r.ejemplosIgnorados['TIPO DE CAMBIO'], '18.50');
+      expect(r.ejemplosIgnorados['VENDEDOR'], 'Rodrigo',
+          reason: 'el ejemplo sale de la primera fila que traiga algo, no de la primera fila');
     });
 
     test('el número se guarda en mayúsculas', () {
