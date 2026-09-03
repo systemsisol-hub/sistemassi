@@ -229,7 +229,13 @@ ResultadoPegado leerPegado(String texto) {
       if (campo != null) valores[campo] = celdas[j];
     }
 
-    final numero = _texto(valores['numero'])?.toUpperCase();
+    // Si no hay columna de clave propia, el DEPARTAMENTO es la clave.
+    //
+    // AG117 trae las dos —AG008 y A-103— pero no toda lista tiene un código interno; muchas
+    // identifican la unidad solo por su número de departamento. Dentro de un desarrollo eso
+    // identifica igual de bien, y si se repitiera, el control de repetidos de abajo lo dice.
+    final numero =
+        (_texto(valores['numero']) ?? _texto(valores['depto']))?.toUpperCase();
     if (numero == null) {
       errores.add(ErrorDeLinea(i + 1, 'sin número de unidad', linea));
       continue;

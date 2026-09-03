@@ -111,7 +111,10 @@ void main() {
     });
 
     test('una fila sin número y una sin precio se reportan por separado', () {
-      final sinNumero = filaA01.replaceAll('\tAG004\t', '\t\t');
+      // Se vacían las DOS columnas de clave: con sólo `Numero` en blanco, el `Depto` toma su
+      // lugar y la fila es válida —que es lo que comprueba la prueba de abajo—.
+      final sinNumero =
+          filaA01.replaceAll('\tAG004\t', '\t\t').replaceAll('\tA-01\t', '\t\t');
       final sinPrecio = filaA103.replaceAll('\t9310000', '\t');
       final r = leerPegado('$encabezado\n$sinNumero\n$sinPrecio');
       expect(r.unidades, isEmpty);
@@ -120,6 +123,56 @@ void main() {
       expect(r.errores[1].motivo, contains('no trae precio'));
       expect(r.errores[0].linea, 2, reason: 'la línea es la del texto, contando el encabezado');
       expect(r.errores[1].linea, 3);
+    });
+
+    test('si no hay columna Numero, el Depto es la clave', () {
+      // Muchas listas identifican la unidad sólo por su número de departamento. Dentro de un
+      // desarrollo eso identifica igual de bien que un código interno.
+      final r = leerPegado('Torre\tNivel\tTipologia\t# Depto\tVista\tPrecio\n'
+          'A\t1\tB Lock off\tA-103\tCalle\t9310000');
+      expect(r.errores, isEmpty);
+      expect(r.unidades.single.numero, 'A-103');
+      expect(r.unidades.single.depto, 'A-103');
+    });
+
+    test('cuando vienen las dos columnas, manda Numero', () {
+      final r = leerPegado('$encabezado\n$filaA103');
+      expect(r.unidades.single.numero, 'AG008');
+      expect(r.unidades.single.depto, 'A-103');
+    });
+
+    test('columnas en otro orden, y una de sobra', () {
+      // Con encabezado el orden no importa, y lo que no se reconoce se REPORTA en lugar de
+      // guardarse en la columna equivocada.
+      final r = leerPegado(
+          'Numero\tPrecio\tVista\tTorre\tNivel\tTipologia\tVendedor\t# Depto\n'
+          'AG008\t9310000\tCalle\tA\t1\tB Lock off\tRodrigo\tA-103');
+      expect(r.errores, isEmpty);
+      expect(r.columnasIgnoradas, ['Vendedor']);
+      final u = r.unidades.single;
+      expect(u.numero, 'AG008');
+      expect(u.depto, 'A-103');
+      expect(u.vista, 'Calle');
+      expect(u.precio, 9310000);
+    });
+
+    test('acentos y mayúsculas en el encabezado', () {
+      final r = leerPegado('TORRE\tNIVEL\tTIPOLOGÍA\tNÚMERO\tVISTA\tPRECIO DE LISTA\n'
+          'A\t1\tB Lock off\tAG008\tCalle\t9310000');
+      expect(r.errores, isEmpty);
+      expect(r.unidades.single.numero, 'AG008');
+      expect(r.unidades.single.tipologia, 'B Lock off');
+    });
+
+    test('una lista de CASAS todavía no se reconoce, y falla diciéndolo', () {
+      // Documenta el límite a propósito. «Manzana 5 Lote 12» no se puede convertir en clave sin
+      // ver una lista real: el lote 12 existe en cada manzana. Fallar claro es mejor que cargar
+      // trescientas casas con la clave equivocada.
+      final r = leerPegado(
+          'Manzana\tLote\tModelo\tM2 Terreno\tM2 Construccion\tPrecio\n'
+          '5\t12\tJade 3R\t160\t142.5\t3850000');
+      expect(r.unidades, isEmpty);
+      expect(r.errores.single.motivo, contains('sin número'));
     });
 
     test('el número se guarda en mayúsculas', () {
