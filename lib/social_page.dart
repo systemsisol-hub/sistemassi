@@ -42,7 +42,7 @@ class _SocialPageState extends State<SocialPage> {
           .not('fecha_nacimiento', 'is', null)
           .neq('status_rh', 'BAJA')
           .eq('status_sys', 'ACTIVO')
-          .order('nombre');
+          .order('nombre', ascending: true);
 
       if (mounted) {
         setState(() {

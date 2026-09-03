@@ -211,7 +211,7 @@ class _IssiPageState extends State<IssiPage> {
             .from('profiles')
             .select('id, nombre, paterno, materno')
             .eq('status_sys', 'ACTIVO')
-            .order('nombre')
+            .order('nombre', ascending: true)
             .range(offset, offset + limit - 1);
 
         allUsuarios.addAll(List<Map<String, dynamic>>.from(data).map((u) {

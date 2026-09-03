@@ -70,7 +70,7 @@ class _DirectorioPageState extends State<DirectorioPage> {
           .from('directorio')
           .select('nombre, paterno, materno, full_name, puesto, area, '
               'ubicacion, empresa, telefono, celular, mail_user, email, foto_url')
-          .order('nombre');
+          .order('nombre', ascending: true);
 
       _personas = [
         for (final p in List<Map<String, dynamic>>.from(datos)) _Persona.de(p),

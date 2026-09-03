@@ -45,7 +45,7 @@ class _PasswordsPageState extends State<PasswordsPage>
           .from('passwords')
           .select()
           .eq('owner_id', userId)
-          .order('name');
+          .order('name', ascending: true);
 
       final sharedRaw = await Supabase.instance.client
           .from('password_shares')

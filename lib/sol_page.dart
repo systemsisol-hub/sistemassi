@@ -516,7 +516,7 @@ class _PanelDesarrollosState extends State<_PanelDesarrollos> {
   Future<void> _cargar() async {
     setState(() => _cargando = true);
     try {
-      final des = await _supabase.from('desarrollos').select().order('nombre');
+      final des = await _supabase.from('desarrollos').select().order('nombre', ascending: true);
       final pro = await _supabase
           .from('promociones')
           .select()

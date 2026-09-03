@@ -121,14 +121,14 @@ class _CalendarPageState extends State<CalendarPage> {
             .from('events')
             .select('*, profiles(full_name, id)')
             .eq('is_public', true)
-            .order('start_time');
+            .order('start_time', ascending: true);
       } else {
         final myEvents = await _supabase
             .from('events')
             .select('*, profiles(full_name, id)')
             .eq('creator_id', userId)
             .eq('is_public', false)
-            .order('start_time');
+            .order('start_time', ascending: true);
         response = [...myEvents];
 
         if (followedUserIds.isNotEmpty) {
@@ -137,7 +137,7 @@ class _CalendarPageState extends State<CalendarPage> {
                 .from('events')
                 .select('*, profiles(full_name, id)')
                 .eq('creator_id', followedId)
-                .order('start_time');
+                .order('start_time', ascending: true);
             response = [...response, ...followedEvents];
           }
         }
