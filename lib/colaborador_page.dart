@@ -419,7 +419,7 @@ Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
         future: Supabase.instance.client
             .from('schedules')
             .select('id, name')
-            .order('name')
+            .order('name', ascending: true)
             .then((data) => List<Map<String, dynamic>>.from(data)),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -539,7 +539,7 @@ Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
               .from('profiles')
               .select('nombre, paterno, materno')
               .neq('status_rh', 'BAJA')
-              .order('nombre')
+              .order('nombre', ascending: true)
               .then((data) {
                 final list = (data as List).map((e) {
                   final n = e['nombre'] ?? '';

@@ -45,7 +45,7 @@ class _ExternalContactsPageState extends State<ExternalContactsPage> {
       final data = await Supabase.instance.client
           .from('external_contacts')
           .select()
-          .order('nombre');
+          .order('nombre', ascending: true);
 
       if (mounted) {
         setState(() {

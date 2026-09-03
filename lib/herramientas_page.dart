@@ -124,7 +124,7 @@ class _HerramientasPageState extends State<HerramientasPage> {
         final data = await _supabase
             .from('herramientas')
             .select(_campos)
-            .order('titulo');
+            .order('titulo', ascending: true);
         _herramientas =
             (data as List).map((e) => Map<String, dynamic>.from(e)).toList();
       } else if (userId != null) {
@@ -272,7 +272,7 @@ class _HerramientasPageState extends State<HerramientasPage> {
         .from('profiles')
         .select('id, nombre, paterno, materno, email, status_sys, permissions')
         .eq('status_sys', 'ACTIVO')
-        .order('nombre');
+        .order('nombre', ascending: true);
     return (data as List)
         .where((u) {
           final p = u['permissions'];

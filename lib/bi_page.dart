@@ -80,7 +80,7 @@ class _BiPageState extends State<BiPage> {
       final gruposRaw = await _supabase
           .from('bi_grupos')
           .select('id, name')
-          .order('name');
+          .order('name', ascending: true);
       _grupos = (gruposRaw as List)
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
@@ -128,7 +128,7 @@ class _BiPageState extends State<BiPage> {
         .from('profiles')
         .select('id, nombre, paterno, materno, email, status_sys, permissions')
         .eq('status_sys', 'ACTIVO')
-        .order('nombre');
+        .order('nombre', ascending: true);
     return (data as List)
         .where((u) {
           final p = u['permissions'];
@@ -1349,7 +1349,7 @@ class _PapeleraSheetState extends State<_PapeleraSheet> {
           .from('powerbi_links')
           .select('id, title, descripcion, grupo_id, bi_grupos(name)')
           .eq('is_active', false)
-          .order('title');
+          .order('title', ascending: true);
       if (mounted) {
         setState(() {
           _items = (data as List)

@@ -80,7 +80,7 @@ class _InventarioDesarrolloState extends State<InventarioDesarrollo> {
           .from('unidades')
           .select()
           .eq('desarrollo_id', widget.desarrolloId)
-          .order('numero');
+          .order('numero', ascending: true);
       // El resumen sale de la vista, la MISMA que usa SOL. Si se contara aquí, el panel y el
       // asistente podrían acabar dando totales distintos.
       final res = await _supabase

@@ -108,7 +108,7 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
           .select('profile_id, nombre_reporte, numero_empleado, sucursal, departamento, '
               'horario_nombre, fecha, hora, limite, es_retardo, minutos_retardo, '
               'justificado, justificacion_tipo, justificacion_motivo, foto_url')
-          .order('fecha');
+          .order('fecha', ascending: false);
       _entradasTodas = List<Map<String, dynamic>>.from(entradas);
 
       final dias = await _supabase
@@ -118,7 +118,7 @@ class _ChecadorPanelState extends State<ChecadorPanel> {
               'foto_salida, limite_entrada, salida_esperada, es_retardo, minutos_retardo, '
               'salida_temprano, minutos_antes, justificado, justificacion_motivo, '
               'justificacion_tipo, horario_nombre')
-          .order('fecha');
+          .order('fecha', ascending: false);
       _diasTodos = List<Map<String, dynamic>>.from(dias);
 
       // Se abre en la quincena MÁS RECIENTE, no en el histórico.

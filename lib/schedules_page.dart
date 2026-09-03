@@ -45,7 +45,7 @@ class _SchedulesPageState extends State<SchedulesPage> {
   Future<void> _fetchSchedules() async {
     setState(() => _isLoading = true);
     try {
-      final data = await _supabase.from('schedules').select().order('name');
+      final data = await _supabase.from('schedules').select().order('name', ascending: true);
       setState(() {
         _schedules = List<Map<String, dynamic>>.from(data);
         _isLoading = false;

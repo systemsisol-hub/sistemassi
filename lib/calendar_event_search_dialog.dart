@@ -69,7 +69,7 @@ class _EventSearchDialogState extends State<EventSearchDialog>
           .eq('status_sys', 'ACTIVO')
           .eq('permissions->>show_calendar', 'true')
           .neq('id', currentUserId ?? '')
-          .order('full_name');
+          .order('full_name', ascending: true);
 
       final usersWithEventCount =
           await Future.wait((users as List).map((user) async {
