@@ -5,6 +5,17 @@ import 'unidades_pegado.dart';
 
 /// El inventario de un desarrollo: las unidades una por una.
 ///
+/// ─── Se EMBEBE, no se empuja ────────────────────────────────────────────────
+///
+/// Al principio esto era una pantalla aparte, a la que se llegaba desde un boton de la tarjeta del
+/// desarrollo. El usuario lo dijo claro el 03/09/2026: los datos, el inventario y las promociones
+/// del mismo desarrollo estaban repartidos en tres sitios y obligaban a entrar y salir. Asi que ya
+/// no trae Scaffold ni barra propia: es un bloque que se monta dentro del detalle del desarrollo.
+///
+/// Por eso la tabla NO tiene desplazamiento vertical propio: el de la pantalla que lo contiene se
+/// encarga. Dos desplazamientos verticales anidados pelean entre si y el de dentro se come el
+/// gesto del de fuera.
+///
 /// ─── Cómo se actualiza ──────────────────────────────────────────────────────
 ///
 /// De dos maneras, y las dos hacen falta:
@@ -24,11 +35,16 @@ class InventarioDesarrollo extends StatefulWidget {
   final String nombreDesarrollo;
   final bool puedeEditar;
 
+  /// Se avisa al padre cuando el inventario cambio, para que actualice lo que depende de el: los
+  /// contadores de la lista y el rango de precios del desarrollo, que sale de las unidades.
+  final VoidCallback? onCambio;
+
   const InventarioDesarrollo({
     super.key,
     required this.desarrolloId,
     required this.nombreDesarrollo,
     required this.puedeEditar,
+    this.onCambio,
   });
 
   @override
@@ -123,45 +139,25 @@ class _InventarioDesarrolloState extends State<InventarioDesarrollo> {
           .contains(q);
     }).toList();
 
-    return Scaffold(
-      backgroundColor: c.bg,
-      appBar: AppBar(
-        backgroundColor: c.panel,
-        foregroundColor: c.ink,
-        elevation: 0,
-        shape: Border(bottom: BorderSide(color: c.line)),
-        title: Text('Inventario · ${widget.nombreDesarrollo}',
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-        actions: [
-          if (widget.puedeEditar)
-            Padding(
-              padding: const EdgeInsets.only(right: SiSpace.x4),
-              child: FilledButton.icon(
-                onPressed: _pegarLista,
-                icon: const Icon(Icons.content_paste, size: 16),
-                label: const Text('Pegar lista del Excel'),
-              ),
-            ),
-        ],
-      ),
-      body: _cargando
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                _cabecera(c),
-                if (_unidades.isEmpty)
-                  Expanded(child: _vacio(c))
-                else
-                  Expanded(child: _tabla(c, vistas)),
-              ],
-            ),
+    if (_cargando) {
+      return const Padding(
+        padding: EdgeInsets.all(SiSpace.x8),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _cabecera(c),
+        if (_unidades.isEmpty) _vacio(c) else _tabla(c, vistas),
+      ],
     );
   }
 
   Widget _vacio(SiColors c) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(SiSpace.x8),
+        padding: const EdgeInsets.symmetric(vertical: SiSpace.x6),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -189,11 +185,7 @@ class _InventarioDesarrolloState extends State<InventarioDesarrollo> {
     final r = _resumen;
     final listaAl = r?['lista_al'];
     return Container(
-      padding: const EdgeInsets.all(SiSpace.x4),
-      decoration: BoxDecoration(
-        color: c.panel,
-        border: Border(bottom: BorderSide(color: c.line)),
-      ),
+      padding: const EdgeInsets.only(bottom: SiSpace.x4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -241,6 +233,14 @@ class _InventarioDesarrolloState extends State<InventarioDesarrollo> {
                     .toList(),
                 onChanged: (v) => setState(() => _filtro = v ?? 'DISPONIBLE'),
               ),
+              if (widget.puedeEditar) ...[
+                const SizedBox(width: SiSpace.x3),
+                FilledButton.icon(
+                  onPressed: _pegarLista,
+                  icon: const Icon(Icons.content_paste, size: 15),
+                  label: const Text('Pegar lista del Excel'),
+                ),
+              ],
             ],
           ),
         ],
@@ -287,12 +287,16 @@ class _InventarioDesarrolloState extends State<InventarioDesarrollo> {
         child: Text('Nada con ese filtro', style: TextStyle(color: c.ink3)),
       );
     }
-    // La tabla desborda a lo ancho en un teléfono: se deja rodar horizontalmente en su propio
-    // contenedor para que la página no se mueva de lado.
+    // Solo desplazamiento HORIZONTAL. El vertical lo pone la pantalla que contiene este bloque:
+    // dos verticales anidados pelean por el gesto y gana el de dentro, que es justo lo que no se
+    // quiere cuando la tabla es lo ultimo de una pagina larga.
+    //
+    // A lo ancho si desborda -once columnas- y por eso rueda en su propio contenedor, para que la
+    // pagina nunca se mueva de lado.
     return SingleChildScrollView(
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.all(SiSpace.x4),
+      scrollDirection: Axis.horizontal,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: SiSpace.x2),
         child: DataTable(
           headingRowHeight: 38,
           dataRowMinHeight: 40,
@@ -450,6 +454,7 @@ class _InventarioDesarrolloState extends State<InventarioDesarrollo> {
       }).eq('id', u['id']);
       _aviso('${u['numero']} actualizada');
       await _cargar();
+      widget.onCambio?.call();
     } catch (e) {
       _aviso('No se pudo guardar: $e', error: true);
     }
@@ -728,6 +733,7 @@ class _InventarioDesarrolloState extends State<InventarioDesarrollo> {
       ];
       _aviso(partes.join(' · '));
       await _cargar();
+      widget.onCambio?.call();
     } catch (e) {
       _aviso('No se pudo guardar: $e', error: true);
     }
