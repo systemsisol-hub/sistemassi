@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'theme/si_theme.dart';
+import 'unidades_panel.dart';
 import 'widgets/texto_con_enlaces.dart';
 
 /// SOL: el asistente comercial.
@@ -488,6 +489,11 @@ class _PanelDesarrollosState extends State<_PanelDesarrollos> {
   final _supabase = Supabase.instance.client;
   List<Map<String, dynamic>> _desarrollos = [];
   Map<String, List<Map<String, dynamic>>> _promos = {};
+  /// El resumen de inventario por desarrollo, de la vista `v_desarrollo_inventario`.
+  ///
+  /// Es la MISMA vista que consulta SOL. Si el panel contara las unidades por su cuenta, un dia el
+  /// panel diria «12 disponibles» y SOL diria otra cosa, y no habria forma de saber cual miente.
+  Map<String, Map<String, dynamic>> _inventario = {};
   bool _cargando = true;
   String _busqueda = '';
 
@@ -507,6 +513,7 @@ class _PanelDesarrollosState extends State<_PanelDesarrollos> {
           .from('promociones')
           .select()
           .order('vigente_hasta', ascending: false);
+      final inv = await _supabase.from('v_desarrollo_inventario').select();
 
       final porDesarrollo = <String, List<Map<String, dynamic>>>{};
       for (final p in pro as List) {
@@ -516,11 +523,18 @@ class _PanelDesarrollosState extends State<_PanelDesarrollos> {
         (porDesarrollo[clave] ??= []).add(Map<String, dynamic>.from(p));
       }
 
+      final porInventario = <String, Map<String, dynamic>>{};
+      for (final i in inv as List) {
+        porInventario[i['desarrollo_id'].toString()] =
+            Map<String, dynamic>.from(i);
+      }
+
       if (!mounted) return;
       setState(() {
         _desarrollos =
             (des as List).map((e) => Map<String, dynamic>.from(e)).toList();
         _promos = porDesarrollo;
+        _inventario = porInventario;
         _cargando = false;
       });
     } catch (e) {
@@ -707,6 +721,9 @@ class _PanelDesarrollosState extends State<_PanelDesarrollos> {
     final id = d['id'].toString();
     final promos = _promos[id] ?? [];
     final activo = d['is_active'] == true;
+    final inv = _inventario[id];
+    final disponibles = int.tryParse('${inv?['disponibles'] ?? 0}') ?? 0;
+    final hayInv = disponibles > 0;
 
     return Container(
       margin: const EdgeInsets.only(bottom: SiSpace.x4),
@@ -756,6 +773,12 @@ class _PanelDesarrollosState extends State<_PanelDesarrollos> {
                   ],
                 ),
               ),
+              IconButton(
+                onPressed: () => _abrirInventario(d),
+                icon: Icon(Icons.grid_view_outlined, size: 16, color: c.ink3),
+                tooltip: 'Inventario de unidades',
+                visualDensity: VisualDensity.compact,
+              ),
               if (widget.puedeEditar) ...[
                 IconButton(
                   onPressed: () => _formDesarrollo(desarrollo: d),
@@ -784,13 +807,24 @@ class _PanelDesarrollosState extends State<_PanelDesarrollos> {
             spacing: SiSpace.x5,
             runSpacing: SiSpace.x2,
             children: [
-              _dato(c, 'Precio',
-                  '${_dinero(d['precio_desde'])} – ${_dinero(d['precio_hasta'])} ${d['moneda'] ?? ''}'),
+              // El rango sale del inventario cuando hay unidades cargadas, y se dice de donde
+              // salio. `desarrollos.precio_desde` es un numero que alguien teclea y los diez
+              // desarrollos lo tenian en NULL; un rango calculado no puede contradecir a las
+              // unidades que lo produjeron.
+              _dato(
+                  c,
+                  hayInv ? 'Precio (de $disponibles disponibles)' : 'Precio',
+                  '${_dinero(hayInv ? inv!['precio_desde'] : d['precio_desde'])} – '
+                      '${_dinero(hayInv ? inv!['precio_hasta'] : d['precio_hasta'])} '
+                      '${d['moneda'] ?? ''}'),
               if (d['enganche_pct'] != null)
                 _dato(c, 'Enganche', '${d['enganche_pct']}%'),
               if (d['mensualidades'] != null)
                 _dato(c, 'Mensualidades', '${d['mensualidades']}'),
-              if (d['superficie_desde'] != null)
+              if (hayInv)
+                _dato(c, 'Superficie',
+                    '${inv!['m2_desde']} – ${inv['m2_hasta']} m²')
+              else if (d['superficie_desde'] != null)
                 _dato(c, 'Superficie',
                     '${d['superficie_desde']} – ${d['superficie_hasta'] ?? '?'} m²'),
             ],
@@ -1157,6 +1191,18 @@ class _PanelDesarrollosState extends State<_PanelDesarrollos> {
       debugPrint('Error guardando desarrollo: $e');
       _aviso('No se pudo guardar: $e', error: true);
     }
+  }
+
+  Future<void> _abrirInventario(Map<String, dynamic> d) async {
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => InventarioDesarrollo(
+        desarrolloId: d['id'].toString(),
+        nombreDesarrollo: (d['nombre'] ?? '').toString(),
+        puedeEditar: widget.puedeEditar,
+      ),
+    ));
+    // Al volver se recarga: el inventario pudo cambiar y con el los rangos de la tarjeta.
+    if (mounted) await _cargar();
   }
 
   Future<void> _borrarDesarrollo(Map<String, dynamic> d) async {

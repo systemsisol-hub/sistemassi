@@ -126,6 +126,23 @@ export async function runTool(
       });
     }
 
+    // El rango de precios sale del INVENTARIO cuando hay unidades cargadas.
+    //
+    // `desarrollos.precio_desde` y `precio_hasta` son dos numeros que alguien teclea, y los diez
+    // desarrollos los tenian en NULL: por eso SOL no pudo contestar cuando le pidieron la lista de
+    // precios de Zenesis Club. Con unidades, el rango se calcula, y un rango calculado no puede
+    // contradecir a las unidades que lo produjeron.
+    //
+    // La cuenta vive en la vista `v_desarrollo_inventario` y no aqui, para que el panel y SOL usen
+    // la MISMA definicion. Calcularla dos veces es como se acaba dando dos numeros distintos.
+    const { data: invs } = await db.from("v_desarrollo_inventario")
+      .select("desarrollo_id,unidades_totales,disponibles,apartadas,vendidas," +
+              "precio_desde,precio_hasta,m2_desde,m2_hasta,lista_al")
+      .in("desarrollo_id", ids as string[]);
+    const invPorId = new Map(
+      ((invs ?? []) as Record<string, unknown>[]).map((r) => [String(r.desarrollo_id), r]),
+    );
+
     return {
       resultados: filas.map((f) => {
         const nombreD = String(f.nombre ?? "");
@@ -133,9 +150,30 @@ export async function runTool(
           ...(porId.get(String(f.id)) ?? []).map((p) => formatoPromo(p, nombreD)),
           ...generales.map((p) => formatoPromo(p, null)),
         ].filter((p) => p.vigente);
+
+        const inv = invPorId.get(String(f.id));
+        const disponibles = Number(inv?.disponibles ?? 0);
+        const hayInventario = disponibles > 0;
+
         return {
           ...f,
           id: undefined,
+          // Si hay inventario, manda el inventario. Y se dice DE DONDE salio el numero, porque «no
+          // esta capturado» y «lo calculamos de 38 unidades» piden respuestas muy distintas.
+          precio_desde: hayInventario ? inv!.precio_desde : f.precio_desde,
+          precio_hasta: hayInventario ? inv!.precio_hasta : f.precio_hasta,
+          superficie_desde: hayInventario ? inv!.m2_desde : f.superficie_desde,
+          superficie_hasta: hayInventario ? inv!.m2_hasta : f.superficie_hasta,
+          precio_origen: hayInventario
+            ? `calculado de ${disponibles} unidades disponibles`
+            : (f.precio_desde === null ? null : "capturado a mano"),
+          inventario: inv === undefined ? null : {
+            unidades_totales: inv.unidades_totales,
+            disponibles: inv.disponibles,
+            apartadas: inv.apartadas,
+            vendidas: inv.vendidas,
+            lista_al: inv.lista_al,
+          },
           promociones_vigentes: mias,
           documentos: docsPorId.get(String(f.id)) ?? [],
           // Con que fecha se esta contestando. Sin esto, una respuesta correcta hoy parece correcta
@@ -144,6 +182,101 @@ export async function runTool(
         };
       }),
       count: filas.length,
+    };
+  }
+
+  if (nombre === "buscar_unidades") {
+    const CAMPOS_UNIDAD =
+      "numero,depto,torre,nivel,tipo,tipologia,vista," +
+      "m2_interior_techada,m2_exterior_techada,m2_jardin_terraza," +
+      "m2_total_interior,m2_total,precio,precio_m2,moneda,estatus,lista_al," +
+      "desarrollos!inner(nombre)";
+
+    const limite = Math.min(Math.max(Number(input.limite ?? 25) || 25, 1), 60);
+
+    let q = db.from("unidades").select(CAMPOS_UNIDAD)
+      .order("precio", { ascending: true }).limit(limite);
+
+    // Solo las disponibles, salvo que pidan lo contrario. Ofrecerle a un cliente una unidad ya
+    // vendida es el peor error que puede cometer el asistente, asi que el valor por omision es el
+    // seguro y hay que pedir expresamente lo demas.
+    if (input.incluir_no_disponibles !== true) q = (q as any).eq("estatus", "DISPONIBLE");
+
+    if (input.desarrollo) q = (q as any).ilike("desarrollos.nombre", `%${input.desarrollo}%`);
+    if (input.torre)      q = (q as any).ilike("torre", `%${input.torre}%`);
+    if (input.nivel)      q = (q as any).ilike("nivel", `%${input.nivel}%`);
+    if (input.tipologia)  q = (q as any).ilike("tipologia", `%${input.tipologia}%`);
+    if (input.vista)      q = (q as any).ilike("vista", `%${input.vista}%`);
+    if (input.precio_max !== undefined) q = (q as any).lte("precio", input.precio_max);
+    if (input.precio_min !== undefined) q = (q as any).gte("precio", input.precio_min);
+    if (input.m2_min !== undefined)     q = (q as any).gte("m2_total", input.m2_min);
+
+    // El numero puede ser el de la unidad -AG008- o el del departamento -A-103-. El asesor usa uno
+    // o el otro segun de donde venga el dato, y obligarlo a acertar cual seria absurdo.
+    if (input.numero) {
+      const n = String(input.numero);
+      q = (q as any).or(`numero.ilike.%${n}%,depto.ilike.%${n}%`);
+    }
+
+    const { data, error } = await q;
+    if (error) return { error: error.message };
+
+    const filas = ((data ?? []) as Record<string, unknown>[]).map((u) => {
+      const des = u.desarrollos as Record<string, unknown> | null;
+      return { ...u, desarrollos: undefined, desarrollo: des?.nombre ?? null };
+    });
+
+    if (filas.length === 0) {
+      // No se le deja con la negativa. Se le dice QUE SI hay, con datos, en la misma respuesta.
+      //
+      // Es la misma regla que ya rige a buscar_desarrollo y por la misma razon: un asesor con un
+      // cliente enfrente necesita algo con lo que trabajar, no una negativa correcta.
+      let dq = db.from("unidades")
+        .select("precio,torre,tipologia,m2_total,desarrollos!inner(nombre)")
+        .eq("estatus", "DISPONIBLE").order("precio", { ascending: true }).limit(200);
+      if (input.desarrollo) dq = (dq as any).ilike("desarrollos.nombre", `%${input.desarrollo}%`);
+      const { data: hay } = await dq;
+      const otras = (hay ?? []) as Record<string, unknown>[];
+
+      if (otras.length === 0) {
+        const { data: conInv } = await db.from("v_desarrollo_inventario")
+          .select("desarrollo,disponibles").gt("disponibles", 0);
+        return {
+          resultados: [],
+          count: 0,
+          desarrollos_con_inventario: ((conInv ?? []) as Record<string, unknown>[])
+            .map((r) => `${r.desarrollo} (${r.disponibles} disponibles)`),
+          nota: "Ese desarrollo no tiene inventario cargado. Eso NO quiere decir que no haya "
+            + "unidades: quiere decir que todavia no estan en el sistema. Di eso, ofrece los "
+            + "desarrollos que si tienen inventario, y ofrece la lista de precios del Drive con "
+            + "buscar_documento si existe.",
+        };
+      }
+
+      return {
+        resultados: [],
+        count: 0,
+        // Lo que si hay, para poder reencauzar la busqueda.
+        mas_barata_disponible: otras[0].precio,
+        torres_con_disponibles: [...new Set(otras.map((u) => String(u.torre ?? "")))]
+          .filter((t) => t !== "").sort(),
+        tipologias_con_disponibles: [...new Set(otras.map((u) => String(u.tipologia ?? "")))]
+          .filter((t) => t !== "").sort(),
+        total_disponibles: otras.length,
+        nota: "Ninguna unidad cumple ESOS filtros. Hay " + otras.length + " disponibles con otras "
+          + "caracteristicas. Di cuantas hay, desde que precio, y en que torres y tipologias, para "
+          + "que el asesor pueda reencauzar. No contestes solo que no hay.",
+      };
+    }
+
+    return {
+      resultados: filas,
+      count: filas.length,
+      // Si se llego al tope hay que decirlo: «tengo 5» cuando hay 40 es una respuesta falsa.
+      hay_mas: filas.length === limite,
+      nota: filas.length === limite
+        ? `Se devolvieron las ${limite} mas baratas y hay mas. Dilo asi y ofrece acotar la busqueda.`
+        : undefined,
     };
   }
 
