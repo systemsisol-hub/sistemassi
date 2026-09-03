@@ -4,6 +4,13 @@ import {
   CORS, hoy, OLLAMA_BASE, OLLAMA_KEY, SERVICE_KEY, SOL_MODEL, SOL_MODEL_RESPALDO, SUPABASE_URL,
 } from "./config.ts";
 import { ALL_TOOLS, AMBITO, construirPrompt, QUE_HACE } from "./herramientas.ts";
+import {
+  mencionaUbicacion,
+  preguntaUbicacion,
+  desarrolloDelHilo,
+  documentoMencionado,
+  textoUbicacion,
+} from "./directas.ts";
 import { runTool } from "./ejecutar.ts";
 
 // ─── SOL, el asistente comercial ─────────────────────────────────────────────
@@ -123,6 +130,38 @@ Deno.serve(async (req: Request) => {
   if (mensajes.length === 0) return responde({ error: "Sin mensajes." }, 400);
 
   const nombrePila = (prof?.nombre ?? "").toString().split(/\s+/)[0] || "asesor";
+
+  // ── Via directa: donde esta un desarrollo ─────────────────────────────────
+  //
+  // Se contesta SIN modelo. El 03/09/2026, con la direccion completa ya capturada, SOL contesto
+  // dos veces «AG117 se encuentra en CDMX» -recortando el campo- y doce minutos antes «AG117 se
+  // ubica en Tulum», que es otro desarrollo. El dato estaba bien las dos veces.
+  //
+  // Solo contesta cuando TIENE el dato. Si `ubicacion` esta vacia, se deja pasar al modelo, que
+  // sabe ofrecer el brochure o el mapa en su lugar; contestar «no esta capturado» aqui perderia
+  // esa ayuda.
+  const ultimoMensaje = mensajes.at(-1)?.content ?? "";
+  if (mencionaUbicacion(ultimoMensaje)) {
+    const { data: catalogo } = await svc.from("desarrollos")
+      .select("nombre,ubicacion,etapa").eq("is_active", true);
+    const filas = (catalogo ?? []) as Array<Record<string, unknown>>;
+    const nombres = filas.map((d) => String(d.nombre));
+
+    // Aqui SI con el catalogo: es lo que distingue el desarrollo «AG117» de la unidad «AG008»,
+    // que tienen la misma forma. El filtro de arriba solo mira si se pregunta por un donde, para
+    // no consultar la base en cada mensaje.
+    if (preguntaUbicacion(ultimoMensaje, nombres)) {
+      const cual = desarrolloDelHilo(mensajes, nombres);
+      const fila = filas.find((d) => String(d.nombre) === cual);
+      const donde = fila?.ubicacion;
+      if (typeof donde === "string" && donde.trim().length > 0) {
+        const texto = textoUbicacion(String(fila!.nombre), donde, fila!.etapa);
+        await bitacora(svc, user.id, "via-directa", { prompt: 0, respuesta: 0 },
+          ultimoMensaje, texto);
+        return responde({ text: texto, modelo: "via-directa", documentos: [] });
+      }
+    }
+  }
 
   const conversacion: Mensaje[] = [
     { role: "system", content: construirPrompt(nombrePila, hoy) },
@@ -294,12 +333,27 @@ Deno.serve(async (req: Request) => {
       // Va DESPUES del guardia, a proposito: primero se comprueba que no haya enlaces inventados
       // -para eso hay que verlos- y solo despues se recortan.
       const limpio = sinEnlaces(texto);
+
+      // Los botones que vienen A CUENTO, no todos los que se consultaron.
+      //
+      // `buscar_desarrollo` devuelve los documentos del desarrollo junto con sus datos, a proposito:
+      // asi el modelo puede ofrecer la lista de precios cuando el precio no esta capturado. Pero
+      // todos acababan de botones, asi que preguntar «de cuanto es el enganche?» contestaba bien y
+      // ademas pintaba las carpetas del Drive, que ahi no hacen falta.
+      //
+      // La regla: lo que se pidio expresamente -`buscar_documento`- siempre sale; lo que vino de
+      // rebote sale solo si la respuesta lo nombra. Se mira el texto SIN recortar, que son las
+      // palabras del modelo.
+      const paraLaApp = documentos
+        .filter((d) => d.origen === "buscar_documento" || documentoMencionado(texto, d))
+        .map(({ origen: _origen, ...resto }) => resto);
+
       await bitacora(svc, user.id, modeloEnUso, usoTotal, mensajes.at(-1)?.content ?? "", texto);
       return responde({
         text: limpio || "No pude armar una respuesta. Vuelve a preguntarme de otra forma.",
         modelo: modeloEnUso,
         // Los botones que va a pintar la aplicacion. Vienen de las herramientas, no del texto.
-        documentos,
+        documentos: paraLaApp,
       });
     }
 
@@ -341,6 +395,8 @@ Deno.serve(async (req: Request) => {
             url: r.url_folleto,
             es_carpeta: false,
             visibilidad: "COMPARTIBLE",
+            // De que herramienta vino. Ver el filtro de botones mas abajo.
+            origen: c.function.name,
           });
         }
         // Los documentos vienen sueltos -de `buscar_documento`- o anidados dentro de cada
@@ -361,6 +417,7 @@ Deno.serve(async (req: Request) => {
             url,
             es_carpeta: dd.es_carpeta === true,
             visibilidad: dd.visibilidad ?? null,
+            origen: c.function.name,
           });
         }
       }

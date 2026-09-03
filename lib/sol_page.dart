@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'theme/si_theme.dart';
+import 'unidades_panel.dart';
 import 'widgets/texto_con_enlaces.dart';
 
 /// SOL: el asistente comercial.
@@ -488,8 +489,20 @@ class _PanelDesarrollosState extends State<_PanelDesarrollos> {
   final _supabase = Supabase.instance.client;
   List<Map<String, dynamic>> _desarrollos = [];
   Map<String, List<Map<String, dynamic>>> _promos = {};
+  /// El resumen de inventario por desarrollo, de la vista `v_desarrollo_inventario`.
+  ///
+  /// Es la MISMA vista que consulta SOL. Si el panel contara las unidades por su cuenta, un dia el
+  /// panel diria «12 disponibles» y SOL diria otra cosa, y no habria forma de saber cual miente.
+  Map<String, Map<String, dynamic>> _inventario = {};
   bool _cargando = true;
   String _busqueda = '';
+
+  /// El desarrollo que se esta viendo. `null` = ninguno elegido todavia.
+  ///
+  /// En pantalla ancha, si no hay ninguno elegido se muestra el PRIMERO de la lista, pero sin
+  /// escribir aqui: cambiar el estado desde `build` es un error de Flutter y ademas haria que en
+  /// un telefono se abriera el detalle solo, sin que nadie lo pidiera.
+  String? _elegido;
 
   static const etapas = ['PREVENTA', 'VENTA', 'ENTREGA', 'AGOTADO'];
 
@@ -507,6 +520,7 @@ class _PanelDesarrollosState extends State<_PanelDesarrollos> {
           .from('promociones')
           .select()
           .order('vigente_hasta', ascending: false);
+      final inv = await _supabase.from('v_desarrollo_inventario').select();
 
       final porDesarrollo = <String, List<Map<String, dynamic>>>{};
       for (final p in pro as List) {
@@ -516,11 +530,18 @@ class _PanelDesarrollosState extends State<_PanelDesarrollos> {
         (porDesarrollo[clave] ??= []).add(Map<String, dynamic>.from(p));
       }
 
+      final porInventario = <String, Map<String, dynamic>>{};
+      for (final i in inv as List) {
+        porInventario[i['desarrollo_id'].toString()] =
+            Map<String, dynamic>.from(i);
+      }
+
       if (!mounted) return;
       setState(() {
         _desarrollos =
             (des as List).map((e) => Map<String, dynamic>.from(e)).toList();
         _promos = porDesarrollo;
+        _inventario = porInventario;
         _cargando = false;
       });
     } catch (e) {
@@ -579,31 +600,264 @@ class _PanelDesarrollosState extends State<_PanelDesarrollos> {
           .contains(q);
     }).toList();
 
-    return Column(
-      children: [
+    if (_cargando) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_desarrollos.isEmpty) {
+      return Column(children: [_cabecera(c), Expanded(child: _vacio(c))]);
+    }
+
+    // Lista y detalle en la MISMA pantalla.
+    //
+    // Antes cada desarrollo era una tarjeta con sus datos y sus promociones, y el inventario vivia
+    // en una pantalla aparte a la que habia que entrar y salir. Peticion del usuario del
+    // 03/09/2026, y tenia razon: son tres caras del mismo desarrollo y separarlas obliga a navegar
+    // para algo que se consulta junto.
+    //
+    // Las tres secciones van APILADAS y no en pestañas internas. Unas pestañas aqui serian volver
+    // a lo mismo en pequeño: seguir entrando y saliendo para ver algo del mismo desarrollo.
+    return LayoutBuilder(builder: (context, caja) {
+      final ancho = caja.maxWidth >= 900;
+      final elegida = _filaElegida ?? (ancho && vistos.isNotEmpty ? vistos.first : null);
+
+      if (!ancho) {
+        // En un telefono no caben las dos, asi que aqui SI hay un paso: la lista, y al elegir el
+        // detalle con una flecha para volver. Es lo unico que cabe.
+        if (elegida == null) {
+          return Column(children: [_cabecera(c), Expanded(child: _lista(c, vistos))]);
+        }
+        return Column(children: [
+          _barraVolver(c, elegida),
+          Expanded(child: _detalle(c, elegida)),
+        ]);
+      }
+
+      return Column(children: [
         _cabecera(c),
-        if (_cargando)
-          const Expanded(child: Center(child: CircularProgressIndicator()))
-        else if (_desarrollos.isEmpty)
-          Expanded(child: _vacio(c))
-        else
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(SiSpace.x5),
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(width: 300, child: _lista(c, vistos)),
+              Container(width: 1, color: c.line),
+              Expanded(
+                child: elegida == null
+                    ? Center(
+                        child: Text('Sin resultados para "$_busqueda"',
+                            style: TextStyle(color: c.ink3)))
+                    : _detalle(c, elegida),
+              ),
+            ],
+          ),
+        ),
+      ]);
+    });
+  }
+
+  Map<String, dynamic>? get _filaElegida {
+    if (_elegido == null) return null;
+    for (final d in _desarrollos) {
+      if (d['id'].toString() == _elegido) return d;
+    }
+    // El elegido puede haber desaparecido -lo borraron, o el filtro lo escondio-.
+    return null;
+  }
+
+  // ── La lista ───────────────────────────────────────────────────────────────
+
+  Widget _lista(SiColors c, List<Map<String, dynamic>> vistos) {
+    if (vistos.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(SiSpace.x5),
+          child: Text('Sin resultados para "$_busqueda"',
+              textAlign: TextAlign.center, style: TextStyle(color: c.ink3)),
+        ),
+      );
+    }
+    final elegida = _filaElegida ?? vistos.first;
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: SiSpace.x2),
+      itemCount: vistos.length,
+      itemBuilder: (_, i) => _renglonLista(c, vistos[i],
+          activo: vistos[i]['id'].toString() == elegida['id'].toString()),
+    );
+  }
+
+  Widget _renglonLista(SiColors c, Map<String, dynamic> d, {required bool activo}) {
+    final id = d['id'].toString();
+    final inv = _inventario[id];
+    final disponibles = int.tryParse('${inv?['disponibles'] ?? 0}') ?? 0;
+    final promosVigentes = (_promos[id] ?? []).where(_vigente).length;
+
+    return InkWell(
+      onTap: () => setState(() => _elegido = id),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+            horizontal: SiSpace.x4, vertical: SiSpace.x3),
+        decoration: BoxDecoration(
+          color: activo ? c.brandTint : null,
+          border: Border(
+            left: BorderSide(
+                color: activo ? c.brand : Colors.transparent, width: 3),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                if (_promos['TODOS'] != null) _promosGenerales(c),
-                for (final d in vistos) _tarjeta(c, d),
-                if (vistos.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.all(SiSpace.x8),
-                    child: Center(
-                      child: Text('Sin resultados para "$_busqueda"',
-                          style: TextStyle(color: c.ink3)),
+                Expanded(
+                  child: Text(
+                    (d['nombre'] ?? '').toString(),
+                    maxLines: 2,
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: activo ? FontWeight.w700 : FontWeight.w600,
+                      color: d['is_active'] == true ? c.ink : c.ink3,
                     ),
                   ),
+                ),
+                if (d['etapa'] != null)
+                  _etiqueta(c, d['etapa'].toString(), c.brand),
               ],
             ),
+            const SizedBox(height: 3),
+            // Lo que hace falta saber SIN abrir: si tiene inventario y si tiene promocion viva.
+            // Son las dos preguntas que obligaban a entrar a cada uno para responderlas.
+            Row(
+              children: [
+                Icon(Icons.grid_view_outlined, size: 11, color: c.ink4),
+                const SizedBox(width: 3),
+                Text(
+                  disponibles > 0 ? '$disponibles disponibles' : 'sin inventario',
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: disponibles > 0 ? c.ink3 : c.ink4),
+                ),
+                if (promosVigentes > 0) ...[
+                  const SizedBox(width: SiSpace.x3),
+                  Icon(Icons.campaign_outlined, size: 11, color: c.success),
+                  const SizedBox(width: 3),
+                  Text('$promosVigentes',
+                      style: TextStyle(fontSize: 11, color: c.success)),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _barraVolver(SiColors c, Map<String, dynamic> d) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: SiSpace.x2, vertical: SiSpace.x2),
+      decoration: BoxDecoration(
+        color: c.panel,
+        border: Border(bottom: BorderSide(color: c.line)),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: () => setState(() => _elegido = null),
+            icon: const Icon(Icons.arrow_back, size: 18),
+            tooltip: 'Todos los desarrollos',
           ),
+          Expanded(
+            child: Text((d['nombre'] ?? '').toString(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── El detalle: las tres secciones, apiladas ──────────────────────────────
+
+  Widget _detalle(SiColors c, Map<String, dynamic> d) {
+    final id = d['id'].toString();
+    return ListView(
+      // La clave hace que al cambiar de desarrollo la vista vuelva ARRIBA. Sin ella se queda a la
+      // altura a la que estaba, que con una tabla de 38 renglones deja al siguiente desarrollo
+      // abierto por la mitad.
+      key: ValueKey('detalle-$id'),
+      padding: const EdgeInsets.all(SiSpace.x5),
+      children: [
+        _bloqueDatos(c, d),
+        Divider(height: SiSpace.x8, color: c.line),
+        _tituloSeccion(c, 'PROMOCIONES', Icons.campaign_outlined,
+            accion: widget.puedeEditar
+                ? () => _formPromo(
+                    desarrolloId: id, nombreDesarrollo: (d['nombre'] ?? '').toString())
+                : null,
+            comoDice: 'Agregar promoción'),
+        const SizedBox(height: SiSpace.x3),
+        _bloquePromos(c, d, id),
+        Divider(height: SiSpace.x8, color: c.line),
+        _tituloSeccion(c, 'INVENTARIO DE UNIDADES', Icons.grid_view_outlined),
+        const SizedBox(height: SiSpace.x3),
+        // El inventario va AL FINAL a proposito: es lo unico que puede medir decenas de renglones,
+        // y con las promociones debajo habria que pasar toda la tabla para llegar a ellas.
+        InventarioDesarrollo(
+          // Sin la clave, al cambiar de desarrollo Flutter reusa el mismo estado y se queda
+          // mostrando las unidades del anterior hasta que termine de cargar las nuevas.
+          key: ValueKey('inv-$id'),
+          desarrolloId: id,
+          nombreDesarrollo: (d['nombre'] ?? '').toString(),
+          puedeEditar: widget.puedeEditar,
+          // Los contadores de la lista y el rango de precios salen del inventario, asi que cuando
+          // cambia hay que recargar lo de aqui.
+          onCambio: _cargar,
+        ),
+      ],
+    );
+  }
+
+  Widget _tituloSeccion(SiColors c, String texto, IconData icono,
+      {VoidCallback? accion, String? comoDice}) {
+    return Row(
+      children: [
+        Icon(icono, size: 14, color: c.ink3),
+        const SizedBox(width: SiSpace.x2),
+        Text(texto,
+            style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: c.ink3,
+                letterSpacing: .6)),
+        const Spacer(),
+        if (accion != null)
+          TextButton.icon(
+            onPressed: accion,
+            icon: const Icon(Icons.add, size: 14),
+            label: Text(comoDice ?? 'Agregar', style: const TextStyle(fontSize: 12)),
+          ),
+      ],
+    );
+  }
+
+  Widget _bloquePromos(SiColors c, Map<String, dynamic> d, String id) {
+    final propias = _promos[id] ?? [];
+    final generales = _promos['TODOS'] ?? [];
+    if (propias.isEmpty && generales.isEmpty) {
+      return Text('Sin promociones capturadas.',
+          style: TextStyle(fontSize: 12.5, color: c.ink4));
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final p in propias)
+          _renglonPromo(c, p, id, (d['nombre'] ?? '').toString()),
+        if (generales.isNotEmpty) ...[
+          if (propias.isNotEmpty) const SizedBox(height: SiSpace.x3),
+          Text('Aplican a todos los desarrollos',
+              style: TextStyle(fontSize: 11, color: c.ink4, letterSpacing: .3)),
+          const SizedBox(height: SiSpace.x2),
+          for (final p in generales) _renglonPromo(c, p, null),
+        ],
       ],
     );
   }
@@ -669,56 +923,18 @@ class _PanelDesarrollosState extends State<_PanelDesarrollos> {
       ),
     );
   }
-
-  /// Las promociones que aplican a todos los desarrollos, arriba y una sola vez.
-  Widget _promosGenerales(SiColors c) {
-    final lista = _promos['TODOS']!;
-    return Container(
-      margin: const EdgeInsets.only(bottom: SiSpace.x4),
-      padding: const EdgeInsets.all(SiSpace.x4),
-      decoration: BoxDecoration(
-        color: c.panel,
-        border: Border.all(color: c.line),
-        borderRadius: SiRadius.rMd,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.campaign_outlined, size: 16, color: c.brand),
-              const SizedBox(width: SiSpace.x2),
-              Text('Promociones que aplican a todos',
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: c.ink3,
-                      letterSpacing: .4)),
-            ],
-          ),
-          const SizedBox(height: SiSpace.x3),
-          for (final p in lista) _renglonPromo(c, p, null),
-        ],
-      ),
-    );
-  }
-
-  Widget _tarjeta(SiColors c, Map<String, dynamic> d) {
+  /// Los datos del desarrollo. Antes era la tarjeta de la lista; ahora es la primera seccion del
+  /// detalle, sin marco propio: el marco lo pone la pantalla.
+  Widget _bloqueDatos(SiColors c, Map<String, dynamic> d) {
     final id = d['id'].toString();
-    final promos = _promos[id] ?? [];
     final activo = d['is_active'] == true;
+    final inv = _inventario[id];
+    final disponibles = int.tryParse('${inv?['disponibles'] ?? 0}') ?? 0;
+    final hayInv = disponibles > 0;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: SiSpace.x4),
-      padding: const EdgeInsets.all(SiSpace.x4),
-      decoration: BoxDecoration(
-        color: c.panel,
-        border: Border.all(color: c.line),
-        borderRadius: SiRadius.rMd,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -732,7 +948,7 @@ class _PanelDesarrollosState extends State<_PanelDesarrollos> {
                           child: Text(
                             (d['nombre'] ?? '').toString(),
                             style: TextStyle(
-                                fontSize: 16,
+                                fontSize: 18,
                                 fontWeight: FontWeight.w700,
                                 color: activo ? c.ink : c.ink3),
                           ),
@@ -759,22 +975,13 @@ class _PanelDesarrollosState extends State<_PanelDesarrollos> {
               if (widget.puedeEditar) ...[
                 IconButton(
                   onPressed: () => _formDesarrollo(desarrollo: d),
-                  icon: Icon(Icons.edit_outlined, size: 16, color: c.ink3),
-                  tooltip: 'Editar',
-                  visualDensity: VisualDensity.compact,
-                ),
-                IconButton(
-                  onPressed: () => _formPromo(desarrolloId: id,
-                      nombreDesarrollo: (d['nombre'] ?? '').toString()),
-                  icon: Icon(Icons.campaign_outlined, size: 16, color: c.ink3),
-                  tooltip: 'Agregar promoción',
-                  visualDensity: VisualDensity.compact,
+                  icon: Icon(Icons.edit_outlined, size: 17, color: c.ink3),
+                  tooltip: 'Editar los datos',
                 ),
                 IconButton(
                   onPressed: () => _borrarDesarrollo(d),
-                  icon: Icon(Icons.delete_outline, size: 16, color: c.ink3),
-                  tooltip: 'Eliminar',
-                  visualDensity: VisualDensity.compact,
+                  icon: Icon(Icons.delete_outline, size: 17, color: c.ink3),
+                  tooltip: 'Eliminar el desarrollo',
                 ),
               ],
             ],
@@ -784,13 +991,24 @@ class _PanelDesarrollosState extends State<_PanelDesarrollos> {
             spacing: SiSpace.x5,
             runSpacing: SiSpace.x2,
             children: [
-              _dato(c, 'Precio',
-                  '${_dinero(d['precio_desde'])} – ${_dinero(d['precio_hasta'])} ${d['moneda'] ?? ''}'),
+              // El rango sale del inventario cuando hay unidades cargadas, y se dice de donde
+              // salio. `desarrollos.precio_desde` es un numero que alguien teclea y los diez
+              // desarrollos lo tenian en NULL; un rango calculado no puede contradecir a las
+              // unidades que lo produjeron.
+              _dato(
+                  c,
+                  hayInv ? 'Precio (de $disponibles disponibles)' : 'Precio',
+                  '${_dinero(hayInv ? inv!['precio_desde'] : d['precio_desde'])} – '
+                      '${_dinero(hayInv ? inv!['precio_hasta'] : d['precio_hasta'])} '
+                      '${d['moneda'] ?? ''}'),
               if (d['enganche_pct'] != null)
                 _dato(c, 'Enganche', '${d['enganche_pct']}%'),
               if (d['mensualidades'] != null)
                 _dato(c, 'Mensualidades', '${d['mensualidades']}'),
-              if (d['superficie_desde'] != null)
+              if (hayInv)
+                _dato(c, 'Superficie',
+                    '${inv!['m2_desde']} – ${inv['m2_hasta']} m²')
+              else if (d['superficie_desde'] != null)
                 _dato(c, 'Superficie',
                     '${d['superficie_desde']} – ${d['superficie_hasta'] ?? '?'} m²'),
             ],
@@ -799,13 +1017,22 @@ class _PanelDesarrollosState extends State<_PanelDesarrollos> {
             const SizedBox(height: SiSpace.x3),
             _enlaceFolleto(c, d['url_folleto'].toString()),
           ],
-          if (promos.isNotEmpty) ...[
-            Divider(height: SiSpace.x6, color: c.line),
-            for (final p in promos)
-              _renglonPromo(c, p, id, (d['nombre'] ?? '').toString()),
+          if ((d['descripcion'] ?? '').toString().isNotEmpty) ...[
+            const SizedBox(height: SiSpace.x3),
+            Text(d['descripcion'].toString(),
+                style: TextStyle(fontSize: 12.5, color: c.ink2, height: 1.5)),
           ],
-        ],
-      ),
+          if ((d['amenidades'] ?? '').toString().isNotEmpty) ...[
+            const SizedBox(height: SiSpace.x3),
+            Text('AMENIDADES',
+                style: TextStyle(
+                    fontSize: 10.5, fontWeight: FontWeight.w700,
+                    color: c.ink4, letterSpacing: .5)),
+            const SizedBox(height: 2),
+            Text(d['amenidades'].toString(),
+                style: TextStyle(fontSize: 12.5, color: c.ink2, height: 1.5)),
+          ],
+      ],
     );
   }
 

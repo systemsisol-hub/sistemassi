@@ -31,6 +31,36 @@ export const ALL_TOOLS = [
   {
     type: "function",
     function: {
+      name: "buscar_unidades",
+      description: "El INVENTARIO: las unidades concretas de un desarrollo, una por una, con su "
+        + "numero, torre, nivel, tipologia, vista, metros y PRECIO. "
+        + "USALA cuando pregunten por disponibilidad, por una unidad concreta, por «que tienes "
+        + "de menos de X», por un departamento de tantos metros, o por la lista de precios. "
+        + "Por omision devuelve SOLO las DISPONIBLES, que es lo correcto: ofrecerle a un cliente "
+        + "una unidad ya vendida es el peor error posible. "
+        + "buscar_desarrollo te da el RANGO -desde cuanto, hasta cuanto-; esta te da las unidades. "
+        + "Si preguntan por el rango, con buscar_desarrollo basta y es mas barato.",
+      parameters: {
+        type: "object",
+        properties: {
+          desarrollo: { type: "string", description: "Nombre del desarrollo, completo o un trozo. Ej. «AG117»." },
+          numero: { type: "string", description: "La unidad exacta, si la nombran. Ej. «AG008» o «A-103»." },
+          torre: { type: "string", description: "Torre o edificio. Ej. «A»." },
+          nivel: { type: "string", description: "Nivel. Ej. «PB», «1», «3 PH»." },
+          tipologia: { type: "string", description: "Ej. «C1», «B Lock off», «Roof Garden». Parcial vale." },
+          vista: { type: "string", description: "Ej. «Jardin», «Calle», «Colindancia»." },
+          precio_max: { type: "number", description: "Tope de precio, en la moneda del desarrollo." },
+          precio_min: { type: "number", description: "Piso de precio." },
+          m2_min: { type: "number", description: "Metros totales minimos." },
+          incluir_no_disponibles: { type: "boolean", description: "Solo si preguntan por vendidas o apartadas. Por omision NO." },
+          limite: { type: "number", description: "Cuantas devolver. Por omision 25." },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "buscar_promocion",
       description: "Promociones y ofertas especiales. Por omision devuelve SOLO las VIGENTES hoy. "
         + "Una promocion vencida citada a un cliente compromete algo que ya no existe, asi que las "
@@ -78,6 +108,7 @@ export const ALL_TOOLS = [
 /// Lo que hace cada herramienta, en una frase, para la pantalla de configuracion.
 export const QUE_HACE: Record<string, string> = {
   buscar_desarrollo: "Consultar desarrollos: ubicacion, etapa, precios, condiciones y folleto",
+  buscar_unidades: "Consultar el inventario: unidades disponibles con su precio y metros",
   buscar_promocion: "Consultar promociones vigentes, con su fecha de vencimiento",
   buscar_documento: "Entregar el enlace de brochures, planos y formatos del Drive",
 };
@@ -102,6 +133,19 @@ di donde se captura. Un precio inventado que un asesor le pasa a un cliente es u
 perdida o un compromiso que no se puede cumplir.
 
 Si un dato viene en null, eso significa NO CAPTURADO, no cero y no «no tiene».
+
+LOS CAMPOS DE TEXTO SE CITAN COMPLETOS
+La ubicacion, las amenidades, la descripcion y las notas se copian TAL CUAL, enteros. No los
+resumas, no te quedes con la ciudad, no los reescribas «mas bonito».
+
+Si la ubicacion dice «Abraham Gonzalez 117, Colonia Juarez, alcaldia Cuauhtemoc, 06600, CDMX», eso
+es lo que contestas. «Esta en CDMX» es una respuesta PEOR que el dato que tenias: el asesor
+pregunto la direccion porque la necesita completa, y resumirla lo obliga a volver a preguntar.
+
+CADA DATO ES DEL DESARROLLO QUE LO TRAE
+Cuando una herramienta devuelve varios desarrollos, cada renglon es independiente. NUNCA contestes
+de uno con el dato de otro. Si no estas seguro de a cual se refiere la pregunta, pregunta cual antes
+de contestar; equivocarse de desarrollo es peor que pedir que lo aclaren.
 
 COMO CONTESTAS
 - Corto y directo. El asesor esta con un cliente enfrente o en el telefono.
@@ -138,8 +182,24 @@ Las herramientas ya te dan esa informacion junto con la respuesta: documentos_di
 desarrollos_capturados y categorias_disponibles. Usalas. Un asesor con un cliente enfrente
 necesita algo con lo que trabajar, no una negativa correcta.
 
+INVENTARIO
+Cuando pregunten por disponibilidad o por una unidad concreta, usa buscar_unidades. Devuelve solo
+las disponibles, y cada una trae su numero -AG008-, su departamento -A-103-, torre, nivel,
+tipologia, vista, metros y precio.
+
+Di el numero y el departamento juntos la primera vez que menciones una unidad: el asesor busca por
+uno o por otro segun de donde venga.
+
+Cada unidad trae lista_al, la fecha de la lista de la que salio ese precio. Si tiene mas de un mes,
+dilo: «segun la lista del 1 de septiembre». Un precio de hace cinco meses se ve igual que uno de
+ayer si nadie dice de cuando es.
+
+Si no hay ninguna que cumpla lo que piden, la herramienta te devuelve lo que SI hay -la mas
+barata, las torres y tipologias con inventario-. Ofrecelo. No contestes solo que no hay.
+
 QUE NO HACES
-- No prometes disponibilidad de una unidad concreta si no la tienes en los datos.
+- No prometes disponibilidad de una unidad que no venga de buscar_unidades.
+- No cuentas unidades de cabeza ni sumas metros: los totales vienen calculados.
 - No negocias descuentos ni inventas condiciones de pago.
 - No das asesoria legal, fiscal ni de inversion.`;
 }
