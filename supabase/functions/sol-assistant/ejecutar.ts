@@ -5,10 +5,12 @@
 
 import type { Db } from "./config.ts";
 import { hoyISO } from "./config.ts";
+import { dinero } from "./directas.ts";
 import type { ToolInput } from "./herramientas.ts";
 import {
   calificaPara,
   extrasQueCalifica,
+  reglaDelExtra,
   reglaEnPalabras,
   type ReglaExtra,
 } from "./extras.ts";
@@ -196,6 +198,10 @@ export async function runTool(
           precio_hasta: hayInventario ? inv!.precio_hasta : f.precio_hasta,
           superficie_desde: hayInventario ? inv!.m2_desde : f.superficie_desde,
           superficie_hasta: hayInventario ? inv!.m2_hasta : f.superficie_hasta,
+          precio_desde_texto: dinero(
+            hayInventario ? inv!.precio_desde : f.precio_desde, f.moneda),
+          precio_hasta_texto: dinero(
+            hayInventario ? inv!.precio_hasta : f.precio_hasta, f.moneda),
           precio_origen: hayInventario
             ? `calculado de ${disponibles} unidades disponibles`
             : (f.precio_desde === null ? null : "capturado a mano"),
@@ -284,14 +290,39 @@ export async function runTool(
     const filas = crudas.map((u) => {
       const des = u.desarrollos as Record<string, unknown> | null;
       const misReglas = reglas.get(String(u.desarrollo_id ?? "")) ?? [];
+
+      // Si la unidad MISMA es un extra, su condicion de venta viaja con ella.
+      //
+      // Sin esto, los cuatro ROOF de AG117 salian en cualquier busqueda por precio bajo como si se
+      // pudieran comprar sueltos. Paso el 04/09/2026 con «tengo 2 millones, que puedo comprar».
+      const propia = reglaDelExtra(u.tipo, misReglas);
+
       return {
         ...u,
         desarrollo_id: undefined,
         desarrollos: undefined,
         desarrollo: des?.nombre ?? null,
+        // El precio YA ESCRITO. Se copia tal cual; el numero crudo se queda para ordenar y
+        // comparar, no para leerlo en voz alta.
+        precio_texto: dinero(u.precio, u.moneda),
+        precio_m2_texto: dinero(u.precio_m2),
         extras_que_puede_comprar: extrasQueCalifica(u, misReglas),
+        es_extra: propia === null ? undefined : true,
+        condicion_de_venta: propia === null ? undefined : reglaEnPalabras(propia),
       };
     });
+
+    // Y un aviso al NIVEL DEL RESULTADO cuando hay extras en la lista.
+    //
+    // Va aparte de la condicion de cada unidad a proposito: un campo por renglon es facil de pasar
+    // por alto al redactar una tabla, y este aviso habla del conjunto. Es la diferencia entre que el
+    // modelo lo mencione y que no.
+    const cuantosExtras = filas.filter((u) => u.es_extra === true).length;
+    const avisoExtras = cuantosExtras === 0 ? undefined
+      : `OJO: ${cuantosExtras} de estas ${filas.length} unidades son EXTRAS y NO se pueden vender `
+        + `solas. Cada una trae su condicion en condicion_de_venta y tienes que decirla junto al `
+        + `precio, en la misma respuesta. Nunca las presentes como algo que se pueda comprar por si `
+        + `mismo, ni las ofrezcas como opcion para un presupuesto.`;
 
     if (filas.length === 0) {
       // No se le deja con la negativa. Se le dice QUE SI hay, con datos, en la misma respuesta.
@@ -325,6 +356,7 @@ export async function runTool(
         count: 0,
         // Lo que si hay, para poder reencauzar la busqueda.
         mas_barata_disponible: otras[0].precio,
+        mas_barata_disponible_texto: dinero(otras[0].precio),
         torres_con_disponibles: [...new Set(otras.map((u) => String(u.torre ?? "")))]
           .filter((t) => t !== "").sort(),
         tipologias_con_disponibles: [...new Set(otras.map((u) => String(u.tipologia ?? "")))]
@@ -336,14 +368,19 @@ export async function runTool(
       };
     }
 
+    const notas = [
+      avisoExtras,
+      filas.length === limite
+        ? `Se devolvieron las ${limite} mas baratas y hay mas. Dilo asi y ofrece acotar la busqueda.`
+        : undefined,
+    ].filter((x) => x !== undefined);
+
     return {
       resultados: filas,
       count: filas.length,
       // Si se llego al tope hay que decirlo: «tengo 5» cuando hay 40 es una respuesta falsa.
       hay_mas: filas.length === limite,
-      nota: filas.length === limite
-        ? `Se devolvieron las ${limite} mas baratas y hay mas. Dilo asi y ofrece acotar la busqueda.`
-        : undefined,
+      nota: notas.length === 0 ? undefined : notas.join(" "),
     };
   }
 

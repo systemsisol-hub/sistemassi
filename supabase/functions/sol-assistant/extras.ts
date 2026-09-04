@@ -70,6 +70,29 @@ export function extrasQueCalifica(
   return sirve;
 }
 
+/// La regla de la unidad, cuando la unidad MISMA es un extra.
+///
+/// ─── Por que hace falta ────────────────────────────────────────────────────
+///
+/// `extrasQueCalifica` contesta «a que extras da derecho esta unidad». Faltaba la pregunta de al
+/// lado, que es la que se equivoco: «esta unidad ES un extra?».
+///
+/// El 04/09/2026, preguntado «tengo 2 millones, que puedo comprar», SOL listo los cuatro ROOF de
+/// AG117 -1.76 a 1.77 millones- como si se pudieran comprar sueltos, y cerro con «no dan derecho a
+/// extras adicionales». Lo segundo es cierto; lo primero es falso, y un asesor leyendolo le promete
+/// a un cliente de dos millones algo que no existe sin departamento.
+///
+/// El tipo de la unidad se compara contra el NOMBRE del extra: una unidad de tipo ROOF cae bajo la
+/// regla ROOF, y una de tipo Bodega bajo BODEGA.
+export function reglaDelExtra(
+  tipo: unknown,
+  reglas: ReglaExtra[],
+): ReglaExtra | null {
+  const t = String(tipo ?? "").toUpperCase().trim();
+  if (t === "") return null;
+  return reglas.find((r) => r.extra.toUpperCase().trim() === t) ?? null;
+}
+
 /// Si una unidad califica para un extra concreto, para poder FILTRAR por el.
 export function calificaPara(
   unidad: { tipo?: unknown; precio?: unknown },

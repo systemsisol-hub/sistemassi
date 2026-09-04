@@ -96,6 +96,38 @@ comprobar('depto sin precio: solo lo que no pide minimo',
 comprobar('depto con precio ilegible: igual',
   cal({ tipo: 'Depto', precio: 'n/a' }), ['ROOF']);
 
+// ── reglaDelExtra: la unidad que ES un extra ───────────────────────────────
+//
+// El caso que fallo en produccion el 04/09/2026: preguntado «tengo 2 millones, que puedo comprar»,
+// SOL listo los cuatro ROOF -1.76 a 1.77 millones- como si se pudieran comprar sueltos. La
+// condicion de venta no viajaba con la unidad porque nada contestaba «esta unidad ES un extra».
+console.log('reglaDelExtra');
+comprobar('un ROOF cae bajo la regla ROOF',
+  M.reglaDelExtra('ROOF', REGLAS)?.extra, 'ROOF');
+comprobar('sin importar mayusculas ni espacios',
+  M.reglaDelExtra(' roof ', REGLAS)?.extra, 'ROOF');
+comprobar('una Bodega cae bajo BODEGA',
+  M.reglaDelExtra('Bodega', REGLAS)?.extra, 'BODEGA');
+comprobar('un Estacionamiento tambien',
+  M.reglaDelExtra('Estacionamiento', REGLAS)?.extra, 'ESTACIONAMIENTO');
+
+comprobar('un DEPTO no es un extra', M.reglaDelExtra('Depto', REGLAS), null);
+comprobar('ni un Lote', M.reglaDelExtra('Lote', REGLAS), null);
+comprobar('sin tipo, null', M.reglaDelExtra(null, REGLAS), null);
+comprobar('vacio, null', M.reglaDelExtra('   ', REGLAS), null);
+comprobar('sin reglas, null', M.reglaDelExtra('ROOF', []), null);
+
+// Las dos preguntas son DISTINTAS y no hay que confundirlas: una es «a que da derecho» y la otra
+// «que es». Un roof no da derecho a nada Y ademas es un extra.
+const roof = { tipo: 'ROOF', precio: 1770000 };
+comprobar('un roof no da derecho a nada', cal(roof), []);
+comprobar('...y ademas ES un extra', M.reglaDelExtra(roof.tipo, REGLAS)?.extra, 'ROOF');
+
+comprobar('su condicion de venta lo dice',
+  M.reglaEnPalabras(M.reglaDelExtra('ROOF', REGLAS)),
+  'El roof NO se puede comprar solo: hace falta comprar un departamento sin importar el precio '
+  + 'del departamento.');
+
 // ── calificaPara ───────────────────────────────────────────────────────────
 console.log('calificaPara');
 const caro = { tipo: 'Depto', precio: 9310000 };
