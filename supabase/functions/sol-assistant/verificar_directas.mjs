@@ -206,6 +206,30 @@ comprobar('26 -> 26', M.numeroBonito(26), '26');
 comprobar('12.345 -> 12.35', M.numeroBonito('12.345'), '12.35');
 comprobar('basura se devuelve tal cual', M.numeroBonito('n/a'), 'n/a');
 
+// ── dinero ─────────────────────────────────────────────────────────────────
+//
+// Existe porque el modelo no lo escribe igual dos veces: el 04/09/2026 saco «1 763 100 MXN» con
+// espacios en la misma respuesta en que otro precio salio con comas.
+console.log('dinero');
+comprobar('con moneda', M.dinero(4797270, 'MXN'), '$4,797,270 MXN');
+comprobar('sin moneda', M.dinero(4797270), '$4,797,270');
+comprobar('los centavos se van', M.dinero('9310000.00', 'MXN'), '$9,310,000 MXN');
+comprobar('redondea', M.dinero(30362.47), '$30,362');
+comprobar('cifra de tres', M.dinero(500), '$500');
+comprobar('cifra de cuatro', M.dinero(1500), '$1,500');
+comprobar('siete cifras', M.dinero(1763100), '$1,763,100');
+comprobar('ocho cifras', M.dinero(11200000), '$11,200,000');
+comprobar('cero', M.dinero(0), '$0');
+comprobar('moneda con espacios se limpia', M.dinero(100, '  MXN  '), '$100 MXN');
+comprobar('moneda vacia no deja el hueco', M.dinero(100, '   '), '$100');
+
+// Y lo que NO es un numero da null, para que quien lo use pueda decir «no capturado» en lugar de
+// pintar «$NaN».
+comprobar('null', M.dinero(null), null);
+comprobar('vacio', M.dinero(''), null);
+comprobar('texto', M.dinero('por definir'), null);
+comprobar('indefinido', M.dinero(undefined), null);
+
 // ── La lista de campos sensibles a promociones ─────────────────────────────
 console.log('AFECTADOS_POR_PROMOCION');
 comprobar('el enganche lo puede cambiar una promocion',

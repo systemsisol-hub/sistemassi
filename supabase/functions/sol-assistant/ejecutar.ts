@@ -5,6 +5,7 @@
 
 import type { Db } from "./config.ts";
 import { hoyISO } from "./config.ts";
+import { dinero } from "./directas.ts";
 import type { ToolInput } from "./herramientas.ts";
 import {
   calificaPara,
@@ -197,6 +198,10 @@ export async function runTool(
           precio_hasta: hayInventario ? inv!.precio_hasta : f.precio_hasta,
           superficie_desde: hayInventario ? inv!.m2_desde : f.superficie_desde,
           superficie_hasta: hayInventario ? inv!.m2_hasta : f.superficie_hasta,
+          precio_desde_texto: dinero(
+            hayInventario ? inv!.precio_desde : f.precio_desde, f.moneda),
+          precio_hasta_texto: dinero(
+            hayInventario ? inv!.precio_hasta : f.precio_hasta, f.moneda),
           precio_origen: hayInventario
             ? `calculado de ${disponibles} unidades disponibles`
             : (f.precio_desde === null ? null : "capturado a mano"),
@@ -297,6 +302,10 @@ export async function runTool(
         desarrollo_id: undefined,
         desarrollos: undefined,
         desarrollo: des?.nombre ?? null,
+        // El precio YA ESCRITO. Se copia tal cual; el numero crudo se queda para ordenar y
+        // comparar, no para leerlo en voz alta.
+        precio_texto: dinero(u.precio, u.moneda),
+        precio_m2_texto: dinero(u.precio_m2),
         extras_que_puede_comprar: extrasQueCalifica(u, misReglas),
         es_extra: propia === null ? undefined : true,
         condicion_de_venta: propia === null ? undefined : reglaEnPalabras(propia),
@@ -347,6 +356,7 @@ export async function runTool(
         count: 0,
         // Lo que si hay, para poder reencauzar la busqueda.
         mas_barata_disponible: otras[0].precio,
+        mas_barata_disponible_texto: dinero(otras[0].precio),
         torres_con_disponibles: [...new Set(otras.map((u) => String(u.torre ?? "")))]
           .filter((t) => t !== "").sort(),
         tipologias_con_disponibles: [...new Set(otras.map((u) => String(u.tipologia ?? "")))]

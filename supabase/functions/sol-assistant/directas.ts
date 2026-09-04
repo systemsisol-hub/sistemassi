@@ -146,6 +146,37 @@ export function numeroBonito(v: unknown): string {
   return String(Math.round(n * 100) / 100);
 }
 
+/// Un importe como se escribe: «$4,797,270 MXN».
+///
+/// ─── Por que se formatea AQUI ──────────────────────────────────────────────
+///
+/// Porque el modelo no lo hace igual dos veces. El 04/09/2026 escribio «1 763 100 MXN» —con
+/// espacios— en la misma respuesta en que otro precio salio con comas. Un precio mal escrito no es
+/// solo feo: «1 763 100» se lee mal en voz alta y se copia peor a una cotizacion.
+///
+/// Sin centavos a proposito: un precio de lista no los tiene, y arrastrar «.00» en cada cifra de
+/// una tabla de treinta y ocho renglones solo estorba.
+export function dinero(v: unknown, moneda?: unknown): string | null {
+  // `Number(null)` y `Number("")` valen CERO en JavaScript, y los dos son finitos. Sin este
+  // guardia, una unidad sin precio salia como «$0» —diciendole al asesor que cuesta cero— en lugar
+  // de dejar claro que no esta capturado. Lo atrapo el arnes.
+  if (v === null || v === undefined) return null;
+  if (typeof v === "string" && v.trim() === "") return null;
+
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  const entero = Math.round(n).toString();
+  // Los miles se agrupan a mano: `toLocaleString` con un locale depende de que el entorno tenga
+  // los datos de ese idioma, y en Deno desplegado eso no esta garantizado.
+  let conComas = "";
+  for (let i = 0; i < entero.length; i++) {
+    if (i > 0 && (entero.length - i) % 3 === 0) conComas += ",";
+    conComas += entero[i];
+  }
+  const cual = String(moneda ?? "").trim();
+  return cual === "" ? `$${conComas}` : `$${conComas} ${cual}`;
+}
+
 /// La respuesta directa de un campo, o `null` si el dato no esta capturado.
 ///
 /// Devolver `null` es a proposito: se deja pasar al modelo, que sabe ofrecer el brochure o la lista
