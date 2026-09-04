@@ -39,7 +39,9 @@ export const ALL_TOOLS = [
         + "Por omision devuelve SOLO las DISPONIBLES, que es lo correcto: ofrecerle a un cliente "
         + "una unidad ya vendida es el peor error posible. "
         + "buscar_desarrollo te da el RANGO -desde cuanto, hasta cuanto-; esta te da las unidades. "
-        + "Si preguntan por el rango, con buscar_desarrollo basta y es mas barato.",
+        + "Si preguntan por el rango, con buscar_desarrollo basta y es mas barato. "
+        + "Cada unidad viene con `extras_que_puede_comprar` YA CALCULADO: los extras a los que esa "
+        + "unidad da derecho. Usa esa lista tal cual y no la deduzcas del precio.",
       parameters: {
         type: "object",
         properties: {
@@ -52,8 +54,33 @@ export const ALL_TOOLS = [
           precio_max: { type: "number", description: "Tope de precio, en la moneda del desarrollo." },
           precio_min: { type: "number", description: "Piso de precio." },
           m2_min: { type: "number", description: "Metros totales minimos." },
+          para_extra: {
+            type: "string",
+            description: "BODEGA, ESTACIONAMIENTO o ROOF. Devuelve SOLO las unidades que dan "
+              + "derecho a comprar ese extra. Usalo cuando pregunten a quien se le puede vender "
+              + "una bodega o un cajon; NO compares precios tu.",
+          },
           incluir_no_disponibles: { type: "boolean", description: "Solo si preguntan por vendidas o apartadas. Por omision NO." },
           limite: { type: "number", description: "Cuantas devolver. Por omision 25." },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "reglas_de_extras",
+      description: "Las reglas de que EXTRAS se pueden comprar y con que departamento: roof, "
+        + "bodega y estacionamiento. "
+        + "USALA cuando pregunten si se puede comprar un extra suelto, quien tiene derecho a "
+        + "bodega o a estacionamiento, o desde que precio. "
+        + "Cada regla viene YA REDACTADA en el campo `regla`: repitela tal cual. NO deduzcas quien "
+        + "califica comparando precios por tu cuenta —para eso esta `para_extra` en "
+        + "buscar_unidades, y `extras_que_puede_comprar` en cada unidad—.",
+      parameters: {
+        type: "object",
+        properties: {
+          desarrollo: { type: "string", description: "Nombre del desarrollo. Sin esto, todos." },
         },
       },
     },
@@ -109,6 +136,7 @@ export const ALL_TOOLS = [
 export const QUE_HACE: Record<string, string> = {
   buscar_desarrollo: "Consultar desarrollos: ubicacion, etapa, precios, condiciones y folleto",
   buscar_unidades: "Consultar el inventario: unidades disponibles con su precio y metros",
+  reglas_de_extras: "Consultar que extras se pueden comprar y con que departamento",
   buscar_promocion: "Consultar promociones vigentes, con su fecha de vencimiento",
   buscar_documento: "Entregar el enlace de brochures, planos y formatos del Drive",
 };
@@ -197,8 +225,26 @@ ayer si nadie dice de cuando es.
 Si no hay ninguna que cumpla lo que piden, la herramienta te devuelve lo que SI hay -la mas
 barata, las torres y tipologias con inventario-. Ofrecelo. No contestes solo que no hay.
 
+LOS EXTRAS: ROOF, BODEGA Y ESTACIONAMIENTO
+NINGUN extra se puede comprar sin departamento. Y no todos los departamentos dan derecho a todos
+los extras: depende del precio del departamento.
+
+NO hagas esa cuenta tu. Nunca compares el precio de un departamento contra un umbral para decidir
+si califica. Lo tienes resuelto de dos formas:
+
+- reglas_de_extras te da cada regla YA REDACTADA en el campo regla. Repitela tal cual.
+- Cada unidad de buscar_unidades trae extras_que_puede_comprar, la lista de extras a los que ESA
+  unidad da derecho, ya calculada. Usala tal cual.
+- Y si te preguntan a quien se le puede vender una bodega, llama a buscar_unidades con
+  para_extra: devuelve solo las que califican.
+
+Si una unidad trae la lista vacia, es que no da derecho a ningun extra. Dilo asi y di por que
+—porque no es departamento, o porque su precio no llega al minimo— con el numero que te dio la
+herramienta, nunca con uno que recuerdes.
+
 QUE NO HACES
 - No prometes disponibilidad de una unidad que no venga de buscar_unidades.
+- No decides tu quien califica para un extra. Esa cuenta te llega hecha.
 - No cuentas unidades de cabeza ni sumas metros: los totales vienen calculados.
 - No negocias descuentos ni inventas condiciones de pago.
 - No das asesoria legal, fiscal ni de inversion.`;

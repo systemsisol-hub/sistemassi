@@ -6,6 +6,38 @@
 import type { Db } from "./config.ts";
 import { hoyISO } from "./config.ts";
 import type { ToolInput } from "./herramientas.ts";
+import {
+  calificaPara,
+  extrasQueCalifica,
+  reglaEnPalabras,
+  type ReglaExtra,
+} from "./extras.ts";
+
+const CAMPOS_REGLA =
+  "extra,requiere_departamento,precio_minimo_departamento,minimo_inclusivo,notas";
+
+/// Las reglas de extras de unos desarrollos.
+async function reglasDe(db: Db, ids: string[]): Promise<Map<string, ReglaExtra[]>> {
+  if (ids.length === 0) return new Map();
+  const { data } = await db.from("reglas_extras")
+    .select(`desarrollo_id,${CAMPOS_REGLA}`)
+    .in("desarrollo_id", ids).eq("is_active", true).order("extra");
+  const porId = new Map<string, ReglaExtra[]>();
+  for (const r of (data ?? []) as Record<string, unknown>[]) {
+    const k = String(r.desarrollo_id);
+    (porId.get(k) ?? porId.set(k, []).get(k)!).push({
+      extra: String(r.extra),
+      requiere_departamento: r.requiere_departamento === true,
+      precio_minimo_departamento: r.precio_minimo_departamento === null ||
+          r.precio_minimo_departamento === undefined
+        ? null
+        : Number(r.precio_minimo_departamento),
+      minimo_inclusivo: r.minimo_inclusivo === true,
+      notas: (r.notas ?? null) as string | null,
+    });
+  }
+  return porId;
+}
 
 const CAMPOS_DESARROLLO =
   "id,nombre,ubicacion,etapa,descripcion,precio_desde,precio_hasta,moneda," +
@@ -187,15 +219,22 @@ export async function runTool(
 
   if (nombre === "buscar_unidades") {
     const CAMPOS_UNIDAD =
-      "numero,depto,torre,nivel,tipo,tipologia,vista," +
+      "desarrollo_id,numero,depto,torre,nivel,tipo,tipologia,vista," +
       "m2_interior_techada,m2_exterior_techada,m2_jardin_terraza," +
       "m2_total_interior,m2_total,precio,precio_m2,moneda,estatus,lista_al," +
       "desarrollos!inner(nombre)";
 
     const limite = Math.min(Math.max(Number(input.limite ?? 25) || 25, 1), 60);
 
+    // Con `para_extra` hay que traer MAS y recortar despues: quien califica depende del precio
+    // contra el umbral de la regla, y eso se decide en codigo. Aplicar el limite antes del filtro
+    // devolveria menos unidades de las que hay.
+    const filtrarPorExtra = typeof input.para_extra === "string" &&
+      input.para_extra.trim().length > 0;
+    const aTraer = filtrarPorExtra ? 300 : limite;
+
     let q = db.from("unidades").select(CAMPOS_UNIDAD)
-      .order("precio", { ascending: true }).limit(limite);
+      .order("precio", { ascending: true }).limit(aTraer);
 
     // Solo las disponibles, salvo que pidan lo contrario. Ofrecerle a un cliente una unidad ya
     // vendida es el peor error que puede cometer el asistente, asi que el valor por omision es el
@@ -221,9 +260,37 @@ export async function runTool(
     const { data, error } = await q;
     if (error) return { error: error.message };
 
-    const filas = ((data ?? []) as Record<string, unknown>[]).map((u) => {
+    // Las reglas de extras, para poder decir a QUE tiene derecho cada unidad.
+    //
+    // Va calculado y no explicado: si el modelo tuviera que comparar «este cuesta 9,310,000» contra
+    // «arriba de 8,000,000» en cada respuesta, tarde o temprano prometeria una bodega a quien no
+    // puede comprarla, y eso se descubre en la firma.
+    const idsDes = [
+      ...new Set(((data ?? []) as Record<string, unknown>[])
+        .map((u) => String(u.desarrollo_id ?? ""))
+        .filter((x) => x !== "")),
+    ];
+    const reglas = await reglasDe(db, idsDes);
+
+    // El filtro se aplica ANTES de recortar, y con `calificaPara`, que es la función probada.
+    // Escribirlo aquí con un `.some()` sería tener la misma comparación en dos sitios: el día que
+    // el borde cambiara —«arriba de» a «desde»— una de las dos se quedaría vieja.
+    const crudas = ((data ?? []) as Record<string, unknown>[]).filter((u) => {
+      if (!filtrarPorExtra) return true;
+      const misReglas = reglas.get(String(u.desarrollo_id ?? "")) ?? [];
+      return calificaPara(u, String(input.para_extra), misReglas);
+    }).slice(0, limite);
+
+    const filas = crudas.map((u) => {
       const des = u.desarrollos as Record<string, unknown> | null;
-      return { ...u, desarrollos: undefined, desarrollo: des?.nombre ?? null };
+      const misReglas = reglas.get(String(u.desarrollo_id ?? "")) ?? [];
+      return {
+        ...u,
+        desarrollo_id: undefined,
+        desarrollos: undefined,
+        desarrollo: des?.nombre ?? null,
+        extras_que_puede_comprar: extrasQueCalifica(u, misReglas),
+      };
     });
 
     if (filas.length === 0) {
@@ -277,6 +344,41 @@ export async function runTool(
       nota: filas.length === limite
         ? `Se devolvieron las ${limite} mas baratas y hay mas. Dilo asi y ofrece acotar la busqueda.`
         : undefined,
+    };
+  }
+
+  if (nombre === "reglas_de_extras") {
+    let dq = db.from("desarrollos").select("id,nombre").eq("is_active", true);
+    if (input.desarrollo) dq = (dq as any).ilike("nombre", `%${input.desarrollo}%`);
+    const { data: des } = await dq;
+    const filas = (des ?? []) as Record<string, unknown>[];
+    if (filas.length === 0) {
+      return { resultados: [], count: 0, nota: "No hay ningun desarrollo con ese nombre." };
+    }
+
+    const reglas = await reglasDe(db, filas.map((d) => String(d.id)));
+
+    return {
+      resultados: filas.map((d) => {
+        const mias = reglas.get(String(d.id)) ?? [];
+        return {
+          desarrollo: d.nombre,
+          extras: mias.map((r) => ({
+            extra: r.extra,
+            requiere_departamento: r.requiere_departamento,
+            precio_minimo_departamento: r.precio_minimo_departamento,
+            // La regla YA REDACTADA. El modelo la repite; no la deduce del numero.
+            regla: reglaEnPalabras(r),
+            notas: r.notas ?? undefined,
+          })),
+          sin_reglas: mias.length === 0 ? true : undefined,
+        };
+      }),
+      count: filas.length,
+      nota: "Estas reglas son las que manda. Repite la frase de `regla` tal cual; NO deduzcas "
+        + "quien califica comparando precios por tu cuenta. Para saber si UNA unidad concreta "
+        + "califica, usa buscar_unidades: cada unidad viene con `extras_que_puede_comprar` ya "
+        + "calculado.",
     };
   }
 
