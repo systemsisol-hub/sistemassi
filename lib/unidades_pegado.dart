@@ -51,21 +51,20 @@ const columnaDeCampo = <String, String>{
   'm2Superficie': 'm2_superficie',
   'm2Terreno': 'm2_terreno',
   'm2Construccion': 'm2_construccion',
-  'frente': 'frente',
-  'fondo': 'fondo',
   'recamaras': 'recamaras',
   'banos': 'banos',
   'estacionamientos': 'estacionamientos',
-  'niveles': 'niveles',
-  'orientacion': 'orientacion',
-  'amueblado': 'amueblado',
-  'mantenimiento': 'mantenimiento',
-  'entregaEstimada': 'entrega_estimada',
   'precio': 'precio',
   'estatus': 'estatus',
 };
 
 /// El encabezado CANÓNICO de cada campo: el nombre que la plantilla oficial usa.
+///
+/// Sólo están los campos que la base GUARDA de verdad. Llegó a haber siete más —orientación,
+/// niveles de la casa, amueblado, mantenimiento, entrega estimada, frente y fondo— y se quitaron el
+/// 04/09/2026 por decisión del usuario, con una regla que conviene respetar: «lo que veo es lo que
+/// se debe quedar». Una columna en la plantilla que no tiene dónde guardarse es una promesa falsa,
+/// y un campo en la base que nadie llena es algo que hay que explicar para siempre.
 ///
 /// De aquí sale el Excel que se reparte a los desarrollos, y por eso vive junto al reconocedor: si
 /// la plantilla se escribiera aparte, cualquier cambio en un reconocedor la dejaría prometiendo una
@@ -80,22 +79,15 @@ const encabezadoCanonico = <String, String>{
   'tipo': 'TIPO',
   'tipologia': 'TIPOLOGIA',
   'vista': 'VISTA',
-  'orientacion': 'ORIENTACION',
   'm2InteriorTechada': 'M2 INTERIOR TECHADA',
   'm2ExteriorTechada': 'M2 EXTERIOR TECHADA',
   'm2JardinTerraza': 'M2 JARDIN TERRAZA',
   'm2Superficie': 'SUPERFICIE',
   'm2Terreno': 'M2 TERRENO',
   'm2Construccion': 'M2 CONSTRUCCION',
-  'frente': 'FRENTE',
-  'fondo': 'FONDO',
   'recamaras': 'RECAMARAS',
   'banos': 'BANOS',
   'estacionamientos': 'ESTACIONAMIENTOS',
-  'niveles': 'NIVELES',
-  'amueblado': 'AMUEBLADO',
-  'mantenimiento': 'MANTENIMIENTO',
-  'entregaEstimada': 'ENTREGA ESTIMADA',
   'precio': 'PRECIO',
   'estatus': 'ESTATUS',
 };
@@ -134,24 +126,10 @@ class UnidadPegada {
   final double? m2Terreno;
   final double? m2Construccion;
 
-  /// De un lote: frente y fondo. NO se multiplican para sacar el terreno —un lote irregular no es
-  /// un rectángulo—, van como los dos datos que son.
-  final double? frente;
-  final double? fondo;
-
   final int? recamaras;
   /// Con decimal: «2.5 baños» es como se anuncia de verdad.
   final double? banos;
   final int? estacionamientos;
-
-  /// Niveles de la UNIDAD —una casa de dos pisos—, no del edificio.
-  final int? niveles;
-  final String? orientacion;
-  /// «SI», «NO» o «SEMIAMUEBLADO»: texto porque la respuesta real tiene tres estados.
-  final String? amueblado;
-  final double? mantenimiento;
-  /// Como viene en la lista, sin interpretar. La base la valida como fecha.
-  final String? entregaEstimada;
 
   final double? precio;
   final String estatus;
@@ -171,16 +149,9 @@ class UnidadPegada {
     this.m2Superficie,
     this.m2Terreno,
     this.m2Construccion,
-    this.frente,
-    this.fondo,
     this.recamaras,
     this.banos,
     this.estacionamientos,
-    this.niveles,
-    this.orientacion,
-    this.amueblado,
-    this.mantenimiento,
-    this.entregaEstimada,
     this.precio,
     this.estatus = 'DISPONIBLE',
   });
@@ -203,16 +174,9 @@ class UnidadPegada {
         'm2_superficie': m2Superficie,
         'm2_terreno': m2Terreno,
         'm2_construccion': m2Construccion,
-        'frente': frente,
-        'fondo': fondo,
         'recamaras': recamaras,
         'banos': banos,
         'estacionamientos': estacionamientos,
-        'niveles': niveles,
-        'orientacion': orientacion,
-        'amueblado': amueblado,
-        'mantenimiento': mantenimiento,
-        'entrega_estimada': entregaEstimada,
         'precio': precio,
         'estatus': estatus,
         if (listaAl != null)
@@ -321,15 +285,6 @@ String? _campoDe(String encabezado) {
   if (h.contains('interior techada')) return 'm2InteriorTechada';
   if (h.contains('exterior techada')) return 'm2ExteriorTechada';
   if (h.contains('jardin') || h.contains('terraza')) return 'm2JardinTerraza';
-  if (h == 'orientacion') return 'orientacion';
-  if (h == 'amueblado' || h == 'amueblada') return 'amueblado';
-  if (h.contains('mantenimiento') || h == 'cuota') return 'mantenimiento';
-  if (h.contains('entrega')) return 'entregaEstimada';
-  if (h == 'frente') return 'frente';
-  if (h == 'fondo') return 'fondo';
-  // «niveles» en PLURAL es de la unidad; «nivel» en singular es el piso donde esta, y ya se
-  // reconocio arriba. El plural es lo unico que las separa.
-  if (h == 'niveles' || h == 'pisos' || h == 'plantas') return 'niveles';
   if (h.contains('terreno') || h.contains('lote m2')) return 'm2Terreno';
   if (h.contains('construccion') || h.contains('construida')) return 'm2Construccion';
   if (h.startsWith('recamara') || h == 'rec' || h == 'habitaciones' || h == 'dormitorios') {
@@ -377,33 +332,6 @@ double? _numero(String? s) {
   // Dos decimales: el Excel arrastra ruido de coma flotante —113.72999999999999 por 113.73— y sin
   // redondear ese ruido llega tal cual a la base.
   return (v * 100).round() / 100;
-}
-
-/// Una fecha en ISO, o `null`.
-///
-/// Se aceptan las formas en que se escribe de verdad en Mexico: «31/12/2027», «2027-12-31» y
-/// «dic-2027» no —esa se deja pasar como nula, porque adivinar el dia seria inventarlo—. Excel
-/// tambien puede entregarla ya como «2027-12-31 00:00:00».
-String? _fecha(String? s) {
-  final t = s?.trim();
-  if (t == null || t.isEmpty) return null;
-
-  final iso = RegExp(r'^(\d{4})-(\d{1,2})-(\d{1,2})').firstMatch(t);
-  if (iso != null) {
-    final a = iso.group(1)!;
-    final m = iso.group(2)!.padLeft(2, '0');
-    final d = iso.group(3)!.padLeft(2, '0');
-    return '$a-$m-$d';
-  }
-
-  final dmy = RegExp(r'^(\d{1,2})[/-](\d{1,2})[/-](\d{4})').firstMatch(t);
-  if (dmy != null) {
-    // Dia primero: es como se escribe en Mexico. «03/09/2026» es el 3 de septiembre.
-    final d = dmy.group(1)!.padLeft(2, '0');
-    final m = dmy.group(2)!.padLeft(2, '0');
-    return '${dmy.group(3)}-$m-$d';
-  }
-  return null;
 }
 
 int? _entero(String? s) {
@@ -705,16 +633,9 @@ ResultadoPegado leerPegado(String texto) {
       m2Superficie: superficie,
       m2Terreno: _numero(valores['m2Terreno']),
       m2Construccion: _numero(valores['m2Construccion']),
-      frente: _numero(valores['frente']),
-      fondo: _numero(valores['fondo']),
       recamaras: _entero(valores['recamaras']),
       banos: _numero(valores['banos']),
       estacionamientos: _entero(valores['estacionamientos']),
-      niveles: _entero(valores['niveles']),
-      orientacion: _texto(valores['orientacion']),
-      amueblado: _texto(valores['amueblado'])?.toUpperCase(),
-      mantenimiento: _numero(valores['mantenimiento']),
-      entregaEstimada: _fecha(valores['entregaEstimada']),
       precio: precio,
       estatus: estatus,
     ));
@@ -829,13 +750,6 @@ Comparacion compararInventario(
         _entero(actual['recamaras']?.toString()) == p.recamaras &&
         _comoDouble(actual['banos']) == p.banos &&
         _entero(actual['estacionamientos']?.toString()) == p.estacionamientos &&
-        _comoDouble(actual['frente']) == p.frente &&
-        _comoDouble(actual['fondo']) == p.fondo &&
-        _entero(actual['niveles']?.toString()) == p.niveles &&
-        _texto(actual['orientacion']?.toString()) == p.orientacion &&
-        _texto(actual['amueblado']?.toString()) == p.amueblado &&
-        _comoDouble(actual['mantenimiento']) == p.mantenimiento &&
-        _fecha(actual['entrega_estimada']?.toString()) == p.entregaEstimada &&
         (actual['estatus'] ?? 'DISPONIBLE') == p.estatus;
     if (!mismos) {
       cambiosDatos.add(p);
