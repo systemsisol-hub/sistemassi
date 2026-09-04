@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/incidencias_pdf_service.dart';
 import 'services/trash_service.dart';
+import 'incidencias_por_mes.dart';
 import 'theme/si_theme.dart';
 import 'widgets/calendario_incidencias.dart';
 import 'widgets/grafica_vacaciones_mes.dart';
@@ -19,6 +20,16 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
   List<Map<String, dynamic>> _incidencias = [];
   List<Map<String, dynamic>> _allIncidencias =
       []; // all PENDIENTE for admin view
+
+  /// Todas las incidencias, de todos, para el resumen por mes que sólo ven los administradores.
+  ///
+  /// Se traen sólo las cuatro columnas que la cuenta necesita, no la fila entera: son ~700
+  /// registros desde 2015 y el resto de los campos no se usa aquí.
+  ///
+  /// El RLS es el que protege esto de verdad: la política `is_admin()` deja ver todas, y un usuario
+  /// normal sólo ve las suyas. El `if` de la pantalla oculta la tabla; el que la cierra es la base.
+  List<Map<String, dynamic>> _paraResumen = [];
+  int? _anioResumen;
   bool _isLoading = true;
   bool _antiguedadExpanded = false; // manual expand state for mobile card
   String? _userRole;
@@ -1021,6 +1032,26 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
       } catch (e) {
         debugPrint('Error fetching pending incidencias: $e');
       }
+
+      // Y lo mínimo para el resumen por mes.
+      try {
+        final resumenResp = await Supabase.instance.client
+            .from('incidencias')
+            .select('fecha_inicio,status,dias,usuario_id')
+            .order('fecha_inicio', ascending: false);
+        final filas = List<Map<String, dynamic>>.from(resumenResp);
+        if (mounted) {
+          setState(() {
+            _paraResumen = filas;
+            // El año que se abre es el más reciente CON DATOS, no el del reloj: en enero, el año
+            // nuevo casi no tiene registros y la tabla se vería vacía sin razón aparente.
+            final anios = aniosConDatos(filas);
+            _anioResumen ??= anios.isNotEmpty ? anios.first : null;
+          });
+        }
+      } catch (e) {
+        debugPrint('Error fetching resumen por mes: $e');
+      }
     }
   }
 
@@ -1639,6 +1670,162 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
     );
   }
 
+  /// Los registros por mes. **Sólo administradores.**
+  ///
+  /// Va debajo de las solicitudes pendientes porque responde la pregunta de al lado: las pendientes
+  /// dicen qué hay que atender hoy, y esta dice cómo viene el año. En los datos se ve un patrón que
+  /// no se nota mirando registros de uno en uno —diciembre de 2025 tuvo 45 solicitudes y el resto de
+  /// los meses ronda las 15—.
+  ///
+  /// La cuenta NO se hace aquí: vive en `incidencias_por_mes.dart`, con pruebas. Los días los
+  /// consumen APROBADA y PENDIENTE y no las canceladas, que es la misma regla que ya usa el saldo de
+  /// esta página; no es una regla nueva.
+  Widget _buildResumenMensual(SiColors c) {
+    final anios = aniosConDatos(_paraResumen);
+    final anio = _anioResumen;
+    final meses = anio == null
+        ? const <MesResumen>[]
+        : resumirAnio(_paraResumen, anio);
+    final total = anio == null
+        ? const MesResumen(anio: 0, mes: 1)
+        : totalDelAnio(_paraResumen, anio);
+
+    return Card(
+      elevation: 0,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: SiRadius.rLg,
+        side: BorderSide(color: c.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            color: c.hover,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            child: Row(
+              children: [
+                Icon(Icons.calendar_month_outlined, color: c.ink3, size: 22),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Registros por mes',
+                          style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: c.ink)),
+                      Text(
+                          'Por el mes en que EMPIEZA la incidencia, no en el que se capturó. '
+                          'Sólo lo ven los administradores.',
+                          style: TextStyle(fontSize: 11.5, color: c.ink3)),
+                    ],
+                  ),
+                ),
+                if (anios.length > 1)
+                  DropdownButton<int>(
+                    value: anio,
+                    underline: const SizedBox.shrink(),
+                    items: anios
+                        .map((a) => DropdownMenuItem(
+                            value: a,
+                            child: Text('$a',
+                                style: const TextStyle(
+                                    fontSize: 14, fontWeight: FontWeight.w600))))
+                        .toList(),
+                    onChanged: (v) => setState(() => _anioResumen = v),
+                  ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          if (anio == null)
+            Padding(
+              padding: const EdgeInsets.all(32),
+              child: Center(
+                child: Text('Sin incidencias registradas',
+                    style: TextStyle(color: c.ink3)),
+              ),
+            )
+          else
+            // Desborda a lo ancho en un teléfono: rueda en su propio contenedor para que la página
+            // no se mueva de lado.
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                headingRowHeight: 40,
+                dataRowMinHeight: 36,
+                dataRowMaxHeight: 40,
+                columnSpacing: 26,
+                headingTextStyle: TextStyle(
+                    fontSize: 11, fontWeight: FontWeight.w700, color: c.ink3),
+                dataTextStyle: TextStyle(fontSize: 12.5, color: c.ink),
+                columns: const [
+                  DataColumn(label: Text('MES')),
+                  DataColumn(label: Text('REGISTROS'), numeric: true),
+                  DataColumn(label: Text('APROBADAS'), numeric: true),
+                  DataColumn(label: Text('PENDIENTES'), numeric: true),
+                  DataColumn(label: Text('CANCELADAS'), numeric: true),
+                  DataColumn(label: Text('DÍAS'), numeric: true),
+                  DataColumn(label: Text('PERSONAS'), numeric: true),
+                ],
+                rows: [
+                  for (final m in meses) _renglonMes(c, m),
+                  // El total, con las PERSONAS recontadas sobre el año: quien tomó vacaciones en
+                  // marzo y en julio es una sola persona, no dos.
+                  DataRow(
+                    color: WidgetStatePropertyAll(c.hover),
+                    cells: [
+                      DataCell(Text('$anio',
+                          style: const TextStyle(fontWeight: FontWeight.w800))),
+                      _celdaNumero(c, total.registros, fuerte: true),
+                      _celdaNumero(c, total.aprobadas, fuerte: true),
+                      _celdaNumero(c, total.pendientes, fuerte: true),
+                      _celdaNumero(c, total.canceladas, fuerte: true),
+                      _celdaNumero(c, total.dias, fuerte: true),
+                      _celdaNumero(c, total.personas, fuerte: true),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  DataRow _renglonMes(SiColors c, MesResumen m) {
+    // Un mes sin nada se pinta en gris y no se esconde: que febrero esté tranquilo es información,
+    // y saltárselo haría parecer que falta un dato.
+    final apagado = m.vacio;
+    return DataRow(cells: [
+      DataCell(Text(m.nombreMes,
+          style: TextStyle(
+              fontWeight: apagado ? FontWeight.w400 : FontWeight.w600,
+              color: apagado ? c.ink4 : c.ink))),
+      _celdaNumero(c, m.registros),
+      _celdaNumero(c, m.aprobadas),
+      _celdaNumero(c, m.pendientes, color: m.pendientes > 0 ? Colors.orange[800] : null),
+      _celdaNumero(c, m.canceladas),
+      _celdaNumero(c, m.dias),
+      _celdaNumero(c, m.personas),
+    ]);
+  }
+
+  DataCell _celdaNumero(SiColors c, int n, {bool fuerte = false, Color? color}) {
+    // El cero se pinta como raya: una columna de ceros compite por la vista con los números que
+    // sí dicen algo.
+    return DataCell(Text(
+      n == 0 ? '—' : '$n',
+      style: TextStyle(
+        fontWeight: fuerte ? FontWeight.w800 : FontWeight.w400,
+        color: color ?? (n == 0 ? c.ink4 : c.ink),
+        fontFeatures: const [FontFeature.tabularFigures()],
+      ),
+    ));
+  }
+
   Widget _buildDesktopTable(SiColors c) {
     final theme = Theme.of(context);
     final screenWidth = MediaQuery.of(context).size.width;
@@ -1927,6 +2114,8 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                   // Admin Pending Section
                   if (_userRole == 'admin') ...[
                     _buildPendingTable(c),
+                    SizedBox(height: SiSpace.x6),
+                    _buildResumenMensual(c),
                     SizedBox(height: SiSpace.x6),
                   ],
 
