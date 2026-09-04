@@ -11,6 +11,7 @@ import {
   desarrolloDelHilo,
   documentoMencionado,
   preguntaUbicacion,
+  sinTablas,
   textoDe,
 } from "./directas.ts";
 import { runTool } from "./ejecutar.ts";
@@ -226,6 +227,14 @@ Deno.serve(async (req: Request) => {
   const documentos: Array<Record<string, unknown>> = [];
   const vistos = new Set<string>();
 
+  /// Las unidades que devolvio el inventario, para que la APLICACION pinte la tabla.
+  ///
+  /// Misma idea que los documentos: el chat pinta texto plano, asi que una tabla de markdown se ve
+  /// como una reja de barras. Mandando las filas, la tabla la dibuja la pantalla —alineada, con los
+  /// precios ya formateados— y el modelo no la puede romper.
+  const unidades: Array<Record<string, unknown>> = [];
+  const unidadesVistas = new Set<string>();
+
   /// Los enlaces que DE VERDAD salieron de una herramienta.
   ///
   /// Es la lista blanca del guardia de abajo. Se llena con lo que devuelven las herramientas y con
@@ -362,7 +371,11 @@ Deno.serve(async (req: Request) => {
       //
       // Va DESPUES del guardia, a proposito: primero se comprueba que no haya enlaces inventados
       // -para eso hay que verlos- y solo despues se recortan.
-      const limpio = sinEnlaces(texto);
+      // Se quitan las URL y, si hay unidades que pintar, tambien la tabla que el modelo haya
+      // escrito: la de verdad la dibuja la aplicacion. Solo cuando hay unidades, para que una tabla
+      // de otra cosa no desaparezca sin sustituto.
+      let limpio = sinEnlaces(texto);
+      if (unidades.length > 0) limpio = sinTablas(limpio);
 
       // Los botones que vienen A CUENTO, no todos los que se consultaron.
       //
@@ -384,6 +397,8 @@ Deno.serve(async (req: Request) => {
         modelo: modeloEnUso,
         // Los botones que va a pintar la aplicacion. Vienen de las herramientas, no del texto.
         documentos: paraLaApp,
+        // Y la tabla, por lo mismo.
+        unidades,
       });
     }
 
@@ -410,6 +425,16 @@ Deno.serve(async (req: Request) => {
       for (const u of crudo.match(/https?:\/\/[^\s"'<>\\]+/g) ?? []) {
         enlacesLegitimos.add(u);
       }
+      // Las unidades del inventario, tal como salieron.
+      if (c.function.name === "buscar_unidades") {
+        for (const u of (resultado.resultados ?? []) as Array<Record<string, unknown>>) {
+          const clave = `${u.desarrollo ?? ""}|${u.numero ?? ""}`;
+          if (u.numero === undefined || unidadesVistas.has(clave)) continue;
+          unidadesVistas.add(clave);
+          unidades.push(u);
+        }
+      }
+
       // Los documentos se guardan tal como salieron, sin pasar por el modelo.
       for (const r of (resultado.resultados ?? []) as Array<Record<string, unknown>>) {
         // El folleto viaja en la fila del desarrollo y no como documento. Se recoge igual: si no

@@ -137,6 +137,22 @@ class _SolPageState extends State<SolPage> with SingleTickerProviderStateMixin {
 ///
 /// El hilo se guarda sólo en memoria. SOL no tiene puente de WhatsApp, así que no hay una segunda
 /// vía que tenga que compartir la conversación —que es lo que obligó a guardarla en Soli—.
+/// Un mensaje del hilo de SOL.
+///
+/// El texto lo escribe el modelo; los documentos y las unidades los manda la función APARTE, y por
+/// la misma razón: lo que el modelo dibuja, el modelo lo puede romper. Los enlaces del Drive los
+/// inventó hasta que se volvieron botones que salen de los datos, y una tabla de markdown en un
+/// chat que pinta texto plano se ve como una reja de barras.
+///
+/// El tipo vive AQUÍ y no escrito en cada firma: estaba en dos sitios y agregar `unidades` rompió
+/// el segundo. Con un nombre, agregar un campo se hace una vez.
+typedef MensajeSol = ({
+  bool mio,
+  String texto,
+  List<Map<String, dynamic>> docs,
+  List<Map<String, dynamic>> unidades,
+});
+
 class _ChatSol extends StatefulWidget {
   const _ChatSol();
 
@@ -148,7 +164,7 @@ class _ChatSolState extends State<_ChatSol> {
   final _supabase = Supabase.instance.client;
   final _entrada = TextEditingController();
   final _scroll = ScrollController();
-  final _mensajes = <({bool mio, String texto, List<Map<String, dynamic>> docs})>[];
+  final _mensajes = <MensajeSol>[];
   bool _enviando = false;
 
   static const _ejemplos = [
@@ -169,7 +185,8 @@ class _ChatSolState extends State<_ChatSol> {
     if (pregunta.isEmpty || _enviando) return;
 
     setState(() {
-      _mensajes.add((mio: true, texto: pregunta, docs: const []));
+      _mensajes.add((
+          mio: true, texto: pregunta, docs: const [], unidades: const []));
       _entrada.clear();
       _enviando = true;
     });
@@ -191,12 +208,17 @@ class _ChatSolState extends State<_ChatSol> {
       final docs = ((datos?['documentos'] as List?) ?? const [])
           .map((e) => Map<String, dynamic>.from(e as Map))
           .toList();
+      // Las unidades vienen igual de aparte, y con el precio YA formateado por la función.
+      final unidades = ((datos?['unidades'] as List?) ?? const [])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
       if (!mounted) return;
       setState(() {
         _mensajes.add((
           mio: false,
           texto: respuesta.isEmpty ? 'No recibí respuesta.' : respuesta,
           docs: docs,
+          unidades: unidades,
         ));
         _enviando = false;
       });
@@ -206,7 +228,10 @@ class _ChatSolState extends State<_ChatSol> {
         // El error se muestra: si es de permisos o de configuración, el texto lo dice y es lo que
         // hace falta leer.
         _mensajes.add((
-            mio: false, texto: 'No se pudo consultar a SOL: $e', docs: const []));
+            mio: false,
+            texto: 'No se pudo consultar a SOL: $e',
+            docs: const [],
+            unidades: const []));
         _enviando = false;
       });
     }
@@ -294,7 +319,7 @@ class _ChatSolState extends State<_ChatSol> {
   }
 
   Widget _burbuja(
-      SiColors c, ({bool mio, String texto, List<Map<String, dynamic>> docs}) m) {
+      SiColors c, MensajeSol m) {
     return Align(
       alignment: m.mio ? Alignment.centerRight : Alignment.centerLeft,
       child: ConstrainedBox(
@@ -331,6 +356,7 @@ class _ChatSolState extends State<_ChatSol> {
                       m.texto,
                       style: TextStyle(fontSize: 13.5, height: 1.5, color: c.ink),
                     ),
+                    if (m.unidades.isNotEmpty) _tablaUnidades(c, m.unidades),
                     if (m.docs.isNotEmpty) _botonesDocumentos(c, m.docs),
                   ],
                 ),
@@ -347,6 +373,148 @@ class _ChatSolState extends State<_ChatSol> {
   /// Y estos enlaces son auténticos por construcción: los manda la función desde lo que
   /// devolvieron sus herramientas, sin pasar por el texto del modelo. Es la misma razón por la que
   /// las vacaciones de Soli se pintan desde los datos crudos y no desde su prosa.
+  /// La tabla de unidades, pintada de los DATOS y no del texto.
+  ///
+  /// Decisión del usuario del 04/09/2026, sobre pedirle al modelo que escriba HTML. Es lo mismo que
+  /// se hizo con los enlaces del Drive: la función manda las filas, la pantalla las dibuja, y el
+  /// modelo no puede desalinearlas ni inventarse un precio. Los precios llegan ya formateados
+  /// —«\$4,797,270 MXN»— porque tampoco los escribe igual dos veces.
+  Widget _tablaUnidades(SiColors c, List<Map<String, dynamic>> unidades) {
+    final hayExtras = unidades.any((u) => u['es_extra'] == true);
+    // La columna sólo aparece si alguna unidad tiene ese dato: con AG117, «sector» está vacío en
+    // las 38 y una columna de rayas no dice nada.
+    bool hay(String campo) =>
+        unidades.any((u) => (u[campo] ?? '').toString().trim().isNotEmpty);
+    final hayTipologia = hay('tipologia');
+    final hayVista = hay('vista');
+    final hayNivel = hay('nivel');
+
+    String txt(Map<String, dynamic> u, String campo) {
+      final v = (u[campo] ?? '').toString().trim();
+      return v.isEmpty ? '—' : v;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: SiSpace.x3),
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: c.line),
+          borderRadius: SiRadius.rMd,
+          color: c.panel,
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Ocho columnas no caben en un teléfono: ruedan a lo ancho en su propio contenedor
+            // para que el chat no se mueva de lado.
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                headingRowHeight: 34,
+                dataRowMinHeight: 32,
+                dataRowMaxHeight: 38,
+                columnSpacing: 20,
+                horizontalMargin: 14,
+                headingTextStyle: TextStyle(
+                    fontSize: 10.5, fontWeight: FontWeight.w700, color: c.ink3),
+                dataTextStyle: TextStyle(fontSize: 12, color: c.ink),
+                columns: [
+                  const DataColumn(label: Text('UNIDAD')),
+                  if (hayTipologia) const DataColumn(label: Text('TIPOLOGÍA')),
+                  const DataColumn(label: Text('TORRE')),
+                  if (hayNivel) const DataColumn(label: Text('NIVEL')),
+                  if (hayVista) const DataColumn(label: Text('VISTA')),
+                  const DataColumn(label: Text('M²'), numeric: true),
+                  const DataColumn(label: Text('PRECIO'), numeric: true),
+                ],
+                rows: [
+                  for (final u in unidades)
+                    DataRow(cells: [
+                      DataCell(Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(txt(u, 'numero'),
+                              style: const TextStyle(fontWeight: FontWeight.w700)),
+                          if ((u['depto'] ?? '').toString().trim().isNotEmpty &&
+                              u['depto'] != u['numero']) ...[
+                            const SizedBox(width: 5),
+                            Text('· ${u['depto']}',
+                                style: TextStyle(fontSize: 11, color: c.ink3)),
+                          ],
+                          // El aviso va PEGADO a la unidad, no en una nota al pie: es lo que
+                          // impide ofrecerla suelta y tiene que verse en el mismo renglón.
+                          if (u['es_extra'] == true) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 5, vertical: 1),
+                              decoration: BoxDecoration(
+                                  color: c.warnTint, borderRadius: SiRadius.rSm),
+                              child: Text('EXTRA',
+                                  style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w800,
+                                      color: c.warn)),
+                            ),
+                          ],
+                        ],
+                      )),
+                      if (hayTipologia) DataCell(Text(txt(u, 'tipologia'))),
+                      DataCell(Text(txt(u, 'torre'))),
+                      if (hayNivel) DataCell(Text(txt(u, 'nivel'))),
+                      if (hayVista) DataCell(Text(txt(u, 'vista'))),
+                      DataCell(Text(
+                        (u['m2_total'] ?? '').toString().isEmpty
+                            ? '—'
+                            : '${u['m2_total']}',
+                        style: const TextStyle(
+                            fontFeatures: [FontFeature.tabularFigures()]),
+                      )),
+                      DataCell(Text(
+                        (u['precio_texto'] ?? '—').toString(),
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontFeatures: [FontFeature.tabularFigures()]),
+                      )),
+                    ]),
+                ],
+              ),
+            ),
+            if (hayExtras) ...[
+              Divider(height: 1, color: c.line),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: SiSpace.x2),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.info_outline, size: 13, color: c.warn),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      // La condición viene de la función, redactada del dato. No se escribe aquí
+                      // para que no pueda contradecir al umbral guardado.
+                      child: Text(
+                        unidades
+                            .where((u) => u['es_extra'] == true)
+                            .map((u) => (u['condicion_de_venta'] ?? '').toString())
+                            .where((t) => t.isNotEmpty)
+                            .toSet()
+                            .join(' '),
+                        style: TextStyle(
+                            fontSize: 11, color: c.ink3, height: 1.4),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _botonesDocumentos(SiColors c, List<Map<String, dynamic>> docs) {
     return Padding(
       padding: const EdgeInsets.only(top: SiSpace.x3),

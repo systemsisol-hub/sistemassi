@@ -206,6 +206,60 @@ comprobar('26 -> 26', M.numeroBonito(26), '26');
 comprobar('12.345 -> 12.35', M.numeroBonito('12.345'), '12.35');
 comprobar('basura se devuelve tal cual', M.numeroBonito('n/a'), 'n/a');
 
+// ── sinTablas ──────────────────────────────────────────────────────────────
+//
+// El chat pinta texto plano, asi que una tabla de markdown se ve como una reja de barras. La tabla
+// de verdad la pinta la aplicacion con las unidades que la funcion manda aparte, y del texto hay
+// que quitar la que el modelo haya escrito para que no se vea doble.
+console.log('sinTablas');
+
+const conTabla = [
+  'Estas son las unidades disponibles:',
+  '',
+  '| Unidad | Torre | Precio |',
+  '|--------|-------|--------|',
+  '| AG008 | A | $9,310,000 MXN |',
+  '| AG010 | A | $6,200,000 MXN |',
+  '',
+  'Todas estan disponibles segun la lista del 1 de septiembre.',
+].join('\n');
+
+comprobar('quita la tabla y deja el texto',
+  M.sinTablas(conTabla),
+  'Estas son las unidades disponibles:\n\n'
+  + 'Todas estan disponibles segun la lista del 1 de septiembre.');
+
+comprobar('un texto sin tabla no se toca',
+  M.sinTablas('El enganche es del 10% y son 26 mensualidades.'),
+  'El enganche es del 10% y son 26 mensualidades.');
+
+// Una barra SUELTA puede ser parte de una frase; hacen falta dos lineas seguidas para ser tabla.
+comprobar('una sola linea con barra NO es tabla',
+  M.sinTablas('Niveles: | PB | 1 | 2 |'),
+  'Niveles: | PB | 1 | 2 |');
+
+comprobar('dos lineas seguidas SI son tabla',
+  M.sinTablas('Antes\n| a | b |\n| c | d |\nDespues'),
+  'Antes\nDespues');
+
+comprobar('dos tablas separadas se van las dos',
+  M.sinTablas('Uno\n| a |\n| b |\nDos\n| c |\n| d |\nTres'),
+  'Uno\nDos\nTres');
+
+comprobar('una tabla al final no deja huecos',
+  M.sinTablas('Aqui van:\n\n| a | b |\n| c | d |\n'),
+  'Aqui van:');
+
+comprobar('solo una tabla deja cadena vacia',
+  M.sinTablas('| a | b |\n| c | d |'), '');
+
+comprobar('texto vacio no revienta', M.sinTablas(''), '');
+
+// El sangrado no la salva: el modelo a veces indenta la tabla.
+comprobar('una tabla indentada tambien se va',
+  M.sinTablas('Texto\n  | a | b |\n  | c | d |\nMas'),
+  'Texto\nMas');
+
 // ── dinero ─────────────────────────────────────────────────────────────────
 //
 // Existe porque el modelo no lo escribe igual dos veces: el 04/09/2026 saco «1 763 100 MXN» con

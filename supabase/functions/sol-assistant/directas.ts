@@ -177,6 +177,53 @@ export function dinero(v: unknown, moneda?: unknown): string | null {
   return cual === "" ? `$${conComas}` : `$${conComas} ${cual}`;
 }
 
+/// Quita del texto las tablas de markdown.
+///
+/// ─── Por que ───────────────────────────────────────────────────────────────
+///
+/// El chat pinta TEXTO PLANO, asi que una tabla de markdown se ve como una reja de barras y
+/// guiones. Decision del usuario del 04/09/2026: la tabla la pinta la APLICACION, con las unidades
+/// que la funcion manda aparte. Es lo mismo que ya se hizo con los enlaces del Drive, y por la
+/// misma razon: lo que el modelo dibuja, el modelo lo puede romper.
+///
+/// Solo se llama cuando de verdad se van a mandar unidades. Si no, una tabla de otra cosa
+/// desapareceria sin que nada la sustituyera.
+///
+/// Una linea es de tabla si empieza por barra. Se cuenta como tabla un tramo de DOS o mas seguidas:
+/// una sola barra suelta puede ser parte de una frase -«PB | 1 | 2»- y borrarla se llevaria texto
+/// que si dice algo.
+export function sinTablas(texto: string): string {
+  const lineas = texto.split("\n");
+  const fuera = new Set<number>();
+
+  let i = 0;
+  while (i < lineas.length) {
+    if (!lineas[i].trim().startsWith("|")) {
+      i++;
+      continue;
+    }
+    let j = i;
+    while (j < lineas.length && lineas[j].trim().startsWith("|")) j++;
+    if (j - i >= 2) {
+      for (let k = i; k < j; k++) fuera.add(k);
+    }
+    i = j;
+  }
+
+  const salida: string[] = [];
+  for (let n = 0; n < lineas.length; n++) {
+    if (fuera.has(n)) continue;
+    const l = lineas[n];
+    // Los renglones vacios seguidos se colapsan: al quitar la tabla queda un hueco donde estaba.
+    if (l.trim() === "" && (salida.length === 0 || salida[salida.length - 1].trim() === "")) {
+      continue;
+    }
+    salida.push(l);
+  }
+  while (salida.length > 0 && salida[salida.length - 1].trim() === "") salida.pop();
+  return salida.join("\n").trim();
+}
+
 /// La respuesta directa de un campo, o `null` si el dato no esta capturado.
 ///
 /// Devolver `null` es a proposito: se deja pasar al modelo, que sabe ofrecer el brochure o la lista
