@@ -7,6 +7,7 @@ import '../services/incidencias_pdf_service.dart';
 import 'services/file_saver_util.dart';
 import 'services/trash_service.dart';
 import 'incidencias_por_periodo.dart';
+import 'services/quincena.dart';
 import 'theme/si_theme.dart';
 import 'widgets/calendario_incidencias.dart';
 import 'widgets/grafica_vacaciones_mes.dart';
@@ -32,7 +33,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
   /// El RLS es el que protege esto de verdad: la política `is_admin()` deja ver todas, y un usuario
   /// normal sólo ve las suyas. El `if` de la pantalla oculta la tabla; el que la cierra es la base.
   List<Map<String, dynamic>> _paraResumen = [];
-  int? _anioResumen;
+  Quincena? _quincena;
   bool _exportandoResumen = false;
   bool _isLoading = true;
   bool _antiguedadExpanded = false; // manual expand state for mobile card
@@ -1041,16 +1042,18 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
       try {
         final resumenResp = await Supabase.instance.client
             .from('incidencias')
-            .select('fecha_inicio,status,dias,usuario_id')
-            .order('fecha_inicio', ascending: false);
+            .select('created_at,status,nombre_usuario,periodo,dias,'
+                'fecha_inicio,fecha_fin,fecha_regreso,usuario_id')
+            .order('created_at', ascending: false);
         final filas = List<Map<String, dynamic>>.from(resumenResp);
         if (mounted) {
           setState(() {
             _paraResumen = filas;
-            // El año que se abre es el más reciente CON DATOS, no el del reloj: en enero, el año
-            // nuevo casi no tiene registros y la tabla se vería vacía sin razón aparente.
-            final anios = aniosConDatos(filas);
-            _anioResumen ??= anios.isNotEmpty ? anios.first : null;
+            // Se abre en la quincena MÁS RECIENTE CON DATOS, no en la del reloj: el día 2 de un
+            // mes la quincena en curso casi no tiene registros y la tabla se vería vacía sin razón
+            // aparente. Es el mismo criterio del panel de Asistencia.
+            final qs = quincenasConDatos(filas);
+            _quincena ??= qs.isNotEmpty ? qs.first : null;
           });
         }
       } catch (e) {
@@ -1684,15 +1687,21 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
   /// La cuenta NO se hace aquí: vive en `incidencias_por_mes.dart`, con pruebas. Los días los
   /// consumen APROBADA y PENDIENTE y no las canceladas, que es la misma regla que ya usa el saldo de
   /// esta página; no es una regla nueva.
+  /// Los registros de incidencias de una quincena. **Sólo administradores.**
+  ///
+  /// Va debajo de las solicitudes pendientes porque responde la pregunta de al lado: las pendientes
+  /// dicen qué hay que atender hoy, y esta dice qué pasó en el periodo que se está cerrando.
+  ///
+  /// Una incidencia cae en la quincena donde EMPIEZA, aunque termine en otra —hay casos reales, del
+  /// 28 de agosto al 2 de septiembre—. El por qué está en `incidencias_por_periodo.dart`, con sus
+  /// pruebas; aquí sólo se dice en la pantalla para que nadie tenga que deducirlo.
   Widget _buildResumenMensual(SiColors c) {
-    final anios = aniosConDatos(_paraResumen);
-    final anio = _anioResumen;
-    final periodos = anio == null
-        ? const <PeriodoResumen>[]
-        : resumirAnio(_paraResumen, anio);
-    final total = anio == null
-        ? const TotalResumen()
-        : totalDelAnio(_paraResumen, anio);
+    final quincenas = quincenasConDatos(_paraResumen);
+    final q = _quincena;
+    final registros = q == null
+        ? const <Map<String, dynamic>>[]
+        : registrosDe(_paraResumen, q);
+    final totales = totalesDe(registros);
 
     return Card(
       elevation: 0,
@@ -1707,11 +1716,14 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
           Container(
             color: c.hover,
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            child: Row(
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 Icon(Icons.calendar_month_outlined, color: c.ink3, size: 22),
-                const SizedBox(width: 12),
-                Expanded(
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1721,31 +1733,31 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                               fontWeight: FontWeight.w800,
                               color: c.ink)),
                       Text(
-                          'Del 1 al 15 y del 16 al último día del mes, por la fecha en que EMPIEZA '
-                          'la incidencia. Sólo lo ven los administradores.',
+                          'Del 1 al 15 y del 16 al último día del mes. Una incidencia entra en la '
+                          'quincena donde EMPIEZA, aunque termine en otra.',
                           style: TextStyle(fontSize: 11.5, color: c.ink3)),
                     ],
                   ),
                 ),
-                if (anios.length > 1)
-                  DropdownButton<int>(
-                    value: anio,
+                if (quincenas.length > 1)
+                  DropdownButton<String>(
+                    value: q?.clave,
                     underline: const SizedBox.shrink(),
-                    items: anios
-                        .map((a) => DropdownMenuItem(
-                            value: a,
-                            child: Text('$a',
+                    items: quincenas
+                        .map((x) => DropdownMenuItem(
+                            value: x.clave,
+                            child: Text(x.etiqueta,
                                 style: const TextStyle(
-                                    fontSize: 14, fontWeight: FontWeight.w600))))
+                                    fontSize: 13.5, fontWeight: FontWeight.w600))))
                         .toList(),
-                    onChanged: (v) => setState(() => _anioResumen = v),
+                    onChanged: (v) => setState(() => _quincena =
+                        v == null ? null : quincenas.firstWhere((x) => x.clave == v)),
                   ),
-                if (anio != null) ...[
-                  const SizedBox(width: 12),
+                if (q != null)
                   OutlinedButton.icon(
                     onPressed: _exportandoResumen
                         ? null
-                        : () => _exportarResumen(anio, periodos, total),
+                        : () => _exportarResumen(q, registros, totales),
                     icon: _exportandoResumen
                         ? const SizedBox(
                             width: 14,
@@ -1754,12 +1766,11 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                         : const Icon(Icons.file_download_outlined, size: 16),
                     label: const Text('Excel'),
                   ),
-                ],
               ],
             ),
           ),
           const Divider(height: 1),
-          if (anio == null)
+          if (q == null)
             Padding(
               padding: const EdgeInsets.all(32),
               child: Center(
@@ -1767,82 +1778,139 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                     style: TextStyle(color: c.ink3)),
               ),
             )
-          else
-            // Desborda a lo ancho en un teléfono: rueda en su propio contenedor para que la página
-            // no se mueva de lado.
+          else if (registros.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(32),
+              child: Center(
+                child: Text('Sin registros del ${q.etiqueta}',
+                    style: TextStyle(color: c.ink3)),
+              ),
+            )
+          else ...[
+            // Nueve columnas desbordan a lo ancho en un teléfono: ruedan en su propio contenedor
+            // para que la página no se mueva de lado.
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: DataTable(
                 headingRowHeight: 40,
-                dataRowMinHeight: 36,
-                dataRowMaxHeight: 40,
-                columnSpacing: 26,
+                dataRowMinHeight: 38,
+                dataRowMaxHeight: 44,
+                columnSpacing: 22,
                 headingTextStyle: TextStyle(
                     fontSize: 11, fontWeight: FontWeight.w700, color: c.ink3),
                 dataTextStyle: TextStyle(fontSize: 12.5, color: c.ink),
                 columns: const [
+                  DataColumn(label: Text('ELABORACIÓN')),
+                  DataColumn(label: Text('ESTATUS')),
+                  DataColumn(label: Text('COLABORADOR')),
                   DataColumn(label: Text('PERIODO')),
-                  DataColumn(label: Text('REGISTROS'), numeric: true),
-                  DataColumn(label: Text('APROBADAS'), numeric: true),
-                  DataColumn(label: Text('PENDIENTES'), numeric: true),
-                  DataColumn(label: Text('CANCELADAS'), numeric: true),
                   DataColumn(label: Text('DÍAS'), numeric: true),
-                  DataColumn(label: Text('PERSONAS'), numeric: true),
+                  DataColumn(label: Text('INICIO')),
+                  DataColumn(label: Text('FIN')),
+                  DataColumn(label: Text('REGRESO')),
                 ],
-                rows: [
-                  for (final q in periodos) _renglonPeriodo(c, q),
-                  // El total, con las PERSONAS recontadas sobre el año: quien tomó vacaciones en
-                  // marzo y en julio es una sola persona, no dos.
-                  DataRow(
-                    color: WidgetStatePropertyAll(c.hover),
-                    cells: [
-                      DataCell(Text('$anio',
-                          style: const TextStyle(fontWeight: FontWeight.w800))),
-                      _celdaNumero(c, total.registros, fuerte: true),
-                      _celdaNumero(c, total.aprobadas, fuerte: true),
-                      _celdaNumero(c, total.pendientes, fuerte: true),
-                      _celdaNumero(c, total.canceladas, fuerte: true),
-                      _celdaNumero(c, total.dias, fuerte: true),
-                      _celdaNumero(c, total.personas, fuerte: true),
-                    ],
-                  ),
+                rows: [for (final r in registros) _renglonRegistro(c, r)],
+              ),
+            ),
+            const Divider(height: 1),
+            // El pie con lo que suma la quincena. Los días NO cuentan las canceladas, que es la
+            // misma regla del saldo de vacaciones de esta página.
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              child: Wrap(
+                spacing: 20,
+                runSpacing: 6,
+                children: [
+                  _pie(c, '${totales.registros}', 'registros'),
+                  _pie(c, '${totales.dias}', 'días', ayuda: 'sin contar canceladas'),
+                  _pie(c, '${totales.personas}', 'personas'),
+                  if (totales.aprobadas > 0) _pie(c, '${totales.aprobadas}', 'aprobadas'),
+                  if (totales.pendientes > 0)
+                    _pie(c, '${totales.pendientes}', 'pendientes', color: Colors.orange[800]),
+                  if (totales.canceladas > 0)
+                    _pie(c, '${totales.canceladas}', 'canceladas', color: c.ink3),
                 ],
               ),
             ),
+          ],
         ],
       ),
     );
   }
 
-  DataRow _renglonPeriodo(SiColors c, PeriodoResumen q) {
-    // Una quincena sin nada se pinta en gris y NO se esconde: que la primera de febrero esté
-    // tranquila es información, y saltársela haría parecer que falta un dato.
-    final apagado = q.vacio;
+  Widget _pie(SiColors c, String numero, String etiqueta, {String? ayuda, Color? color}) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.baseline,
+      textBaseline: TextBaseline.alphabetic,
+      children: [
+        Text(numero,
+            style: TextStyle(
+                fontSize: 15, fontWeight: FontWeight.w800, color: color ?? c.ink)),
+        const SizedBox(width: 5),
+        Text(ayuda == null ? etiqueta : '$etiqueta ($ayuda)',
+            style: TextStyle(fontSize: 11.5, color: c.ink3)),
+      ],
+    );
+  }
+
+  DataRow _renglonRegistro(SiColors c, Map<String, dynamic> r) {
+    final estatus = (r['status'] ?? '').toString().toUpperCase();
+    final cancelada = estatus == 'CANCELADA';
     return DataRow(cells: [
-      DataCell(Text(q.etiqueta,
-          style: TextStyle(
-              fontWeight: apagado ? FontWeight.w400 : FontWeight.w600,
-              color: apagado ? c.ink4 : c.ink))),
-      _celdaNumero(c, q.registros),
-      _celdaNumero(c, q.aprobadas),
-      _celdaNumero(c, q.pendientes, color: q.pendientes > 0 ? Colors.orange[800] : null),
-      _celdaNumero(c, q.canceladas),
-      _celdaNumero(c, q.dias),
-      _celdaNumero(c, q.personas),
+      DataCell(Text(fechaCorta(r['created_at']))),
+      DataCell(_etiquetaEstatus(c, estatus)),
+      DataCell(ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 240),
+        child: Text((r['nombre_usuario'] ?? '—').toString(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+                fontWeight: FontWeight.w600,
+                // Una cancelada se apaga: sigue siendo un registro, pero no consume dias.
+                color: cancelada ? c.ink3 : c.ink)),
+      )),
+      DataCell(Text((r['periodo'] ?? '—').toString())),
+      DataCell(Text('${r['dias'] ?? '—'}',
+          style: const TextStyle(
+              fontWeight: FontWeight.w600,
+              fontFeatures: [FontFeature.tabularFigures()]))),
+      DataCell(Text(fechaCorta(r['fecha_inicio']))),
+      DataCell(Text(fechaCorta(r['fecha_fin']))),
+      DataCell(Text(fechaCorta(r['fecha_regreso']))),
     ]);
   }
 
-  /// Exporta lo MISMO que se está viendo, sin recalcular nada.
+  Widget _etiquetaEstatus(SiColors c, String estatus) {
+    final color = switch (estatus) {
+      'APROBADA' => c.success,
+      'PENDIENTE' => Colors.orange[800]!,
+      'CANCELADA' => c.danger,
+      _ => c.ink3,
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: SiRadius.rSm,
+      ),
+      child: Text(estatus.isEmpty ? '—' : estatus,
+          style: TextStyle(
+              fontSize: 10.5, fontWeight: FontWeight.w700, color: color)),
+    );
+  }
+
+  /// Exporta los MISMOS registros que se están viendo, sin volver a filtrar.
   ///
-  /// Recibe los periodos y el total ya calculados en lugar de volver a pedirlos: si los recalculara
+  /// Recibe la lista y los totales ya calculados en lugar de recalcularlos: si los recalculara
   /// aquí, el archivo podría no coincidir con la tabla que el usuario tiene delante —y esa es la
   /// clase de discrepancia que nadie encuentra hasta que alguien compara dos hojas en una junta—.
   Future<void> _exportarResumen(
-      int anio, List<PeriodoResumen> periodos, TotalResumen total) async {
+      Quincena q, List<Map<String, dynamic>> registros, TotalesQuincena t) async {
     setState(() => _exportandoResumen = true);
     try {
       final excel = xl.Excel.createExcel();
-      final hoja = excel['Quincenas $anio'];
+      final hoja = excel['Incidencias'];
       excel.delete('Sheet1');
 
       final estiloEncabezado = xl.CellStyle(
@@ -1852,8 +1920,8 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
       );
 
       const encabezados = [
-        'Periodo', 'Desde', 'Hasta', 'Registros', 'Aprobadas', 'Pendientes',
-        'Canceladas', 'Dias', 'Personas',
+        'Elaboracion', 'Estatus', 'Colaborador', 'Periodo', 'Dias',
+        'Fecha inicio', 'Fecha fin', 'Fecha regreso',
       ];
       for (var i = 0; i < encabezados.length; i++) {
         final celda = hoja.cell(
@@ -1862,20 +1930,19 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
         celda.cellStyle = estiloEncabezado;
       }
 
-      // Desde y Hasta van en columnas propias: con ellas la hoja se puede cruzar contra nómina sin
-      // tener que interpretar «16–31 julio».
-      for (var r = 0; r < periodos.length; r++) {
-        final q = periodos[r];
+      for (var r = 0; r < registros.length; r++) {
+        final inc = registros[r];
+        // Las fechas van en ISO y no en dd/mm/aaaa: asi Excel las ordena y las filtra como fechas
+        // en cualquier configuracion regional, que es para lo que se exporta esta hoja.
         final valores = <xl.CellValue>[
-          xl.TextCellValue(q.etiqueta),
-          xl.TextCellValue(q.quincena.desdeIso),
-          xl.TextCellValue(q.quincena.hastaIso),
-          xl.IntCellValue(q.registros),
-          xl.IntCellValue(q.aprobadas),
-          xl.IntCellValue(q.pendientes),
-          xl.IntCellValue(q.canceladas),
-          xl.IntCellValue(q.dias),
-          xl.IntCellValue(q.personas),
+          xl.TextCellValue(_iso10(inc['created_at'])),
+          xl.TextCellValue((inc['status'] ?? '').toString()),
+          xl.TextCellValue((inc['nombre_usuario'] ?? '').toString()),
+          xl.TextCellValue((inc['periodo'] ?? '').toString()),
+          xl.IntCellValue(int.tryParse('${inc['dias'] ?? 0}') ?? 0),
+          xl.TextCellValue(_iso10(inc['fecha_inicio'])),
+          xl.TextCellValue(_iso10(inc['fecha_fin'])),
+          xl.TextCellValue(_iso10(inc['fecha_regreso'])),
         ];
         for (var col = 0; col < valores.length; col++) {
           hoja
@@ -1885,18 +1952,17 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
         }
       }
 
-      final filaTotal = periodos.length + 1;
+      final filaTotal = registros.length + 1;
       final estiloTotal = xl.CellStyle(bold: true);
       final totales = <xl.CellValue>[
-        xl.TextCellValue('TOTAL $anio'),
-        xl.TextCellValue('$anio-01-01'),
-        xl.TextCellValue('$anio-12-31'),
-        xl.IntCellValue(total.registros),
-        xl.IntCellValue(total.aprobadas),
-        xl.IntCellValue(total.pendientes),
-        xl.IntCellValue(total.canceladas),
-        xl.IntCellValue(total.dias),
-        xl.IntCellValue(total.personas),
+        xl.TextCellValue('TOTAL'),
+        xl.TextCellValue('${t.registros} registros'),
+        xl.TextCellValue('${t.personas} personas'),
+        xl.TextCellValue(''),
+        xl.IntCellValue(t.dias),
+        xl.TextCellValue(q.desdeIso),
+        xl.TextCellValue(q.hastaIso),
+        xl.TextCellValue(''),
       ];
       for (var col = 0; col < totales.length; col++) {
         final celda = hoja.cell(
@@ -1905,28 +1971,24 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
         celda.cellStyle = estiloTotal;
       }
 
-      // Las dos reglas, escritas en la hoja. Un archivo que sale de la aplicacion acaba en un
-      // correo sin nadie que lo explique, y «dias» no dice por si solo que las canceladas no
-      // cuentan.
+      // Las reglas, escritas en la hoja. Un archivo que sale de la aplicacion acaba en un correo
+      // sin nadie que lo explique.
       final nota = filaTotal + 2;
-      hoja
-          .cell(xl.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: nota))
-          .value = xl.TextCellValue(
-          'El periodo es el de la fecha de INICIO de la incidencia, no el de captura.');
-      hoja
-          .cell(xl.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: nota + 1))
-          .value = xl.TextCellValue(
-          'Dias y Personas cuentan APROBADAS y PENDIENTES; las CANCELADAS no.');
-      hoja
-          .cell(xl.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: nota + 2))
-          .value = xl.TextCellValue(
-          'Personas del TOTAL no es la suma de las quincenas: quien falto en dos periodos es una '
-          'persona.');
+      final notas = [
+        'Quincena: ${q.etiqueta} (${q.desdeIso} al ${q.hastaIso}).',
+        'Una incidencia entra por su FECHA DE INICIO, aunque termine en otra quincena.',
+        'Los ${t.dias} dias del total NO incluyen las CANCELADAS.',
+      ];
+      for (var i = 0; i < notas.length; i++) {
+        hoja
+            .cell(xl.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: nota + i))
+            .value = xl.TextCellValue(notas[i]);
+      }
 
       final bytes = excel.encode()!;
       await FileSaverUtil.saveAndShare(
         Uint8List.fromList(bytes),
-        'incidencias_por_quincena_$anio.xlsx',
+        'incidencias_${q.clave}.xlsx',
       );
     } catch (e) {
       debugPrint('Error exportando el resumen: $e');
@@ -1940,17 +2002,10 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
     }
   }
 
-  DataCell _celdaNumero(SiColors c, int n, {bool fuerte = false, Color? color}) {
-    // El cero se pinta como raya: una columna de ceros compite por la vista con los números que
-    // sí dicen algo.
-    return DataCell(Text(
-      n == 0 ? '—' : '$n',
-      style: TextStyle(
-        fontWeight: fuerte ? FontWeight.w800 : FontWeight.w400,
-        color: color ?? (n == 0 ? c.ink4 : c.ink),
-        fontFeatures: const [FontFeature.tabularFigures()],
-      ),
-    ));
+  /// Los primeros diez caracteres de una fecha, que en ISO son `AAAA-MM-DD`.
+  String _iso10(dynamic v) {
+    final t = (v ?? '').toString();
+    return t.length >= 10 ? t.substring(0, 10) : '';
   }
 
   Widget _buildDesktopTable(SiColors c) {
