@@ -20,6 +20,13 @@ class IncidenciasPage extends StatefulWidget {
   State<IncidenciasPage> createState() => _IncidenciasPageState();
 }
 
+/// El hueco a la derecha de la columna DÍAS.
+///
+/// Vive aquí y no escrito dos veces porque el encabezado y la celda tienen que llevar EXACTAMENTE
+/// el mismo: con medidas distintas el número deja de estar bajo su título, y es la clase de
+/// descuadre que no se ve leyendo el código.
+const double _huecoDias = 18;
+
 class _IncidenciasPageState extends State<IncidenciasPage> {
   List<Map<String, dynamic>> _incidencias = [];
   List<Map<String, dynamic>> _allIncidencias =
@@ -1717,29 +1724,33 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
           Container(
             color: c.hover,
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            child: Wrap(
-              spacing: 12,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Icon(Icons.calendar_month_outlined, color: c.ink3, size: 22),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 420),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Registros por quincena',
-                          style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                              color: c.ink)),
-                      Text(
-                          'Sólo APROBADAS, del 1 al 15 y del 16 al último día del mes. Una '
-                          'incidencia entra en la quincena donde EMPIEZA, aunque termine en otra.',
-                          style: TextStyle(fontSize: 11.5, color: c.ink3)),
-                    ],
+            child: LayoutBuilder(builder: (context, cajas) {
+              final titulo = Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.calendar_month_outlined, color: c.ink3, size: 22),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Registros por quincena',
+                            style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                                color: c.ink)),
+                        Text(
+                            'Sólo APROBADAS, del 1 al 15 y del 16 al último día del mes. Una '
+                            'incidencia entra en la quincena donde EMPIEZA, aunque termine en '
+                            'otra.',
+                            style: TextStyle(fontSize: 11.5, color: c.ink3)),
+                      ],
+                    ),
                   ),
-                ),
+                ],
+              );
+
+              final controles = <Widget>[
                 if (quincenas.length > 1)
                   DropdownButton<String>(
                     value: q?.clave,
@@ -1754,7 +1765,8 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                     onChanged: (v) => setState(() => _quincena =
                         v == null ? null : quincenas.firstWhere((x) => x.clave == v)),
                   ),
-                if (q != null)
+                if (q != null) ...[
+                  const SizedBox(width: 12),
                   OutlinedButton.icon(
                     onPressed: _exportandoResumen
                         ? null
@@ -1767,8 +1779,26 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                         : const Icon(Icons.file_download_outlined, size: 16),
                     label: const Text('Excel'),
                   ),
-              ],
-            ),
+                ],
+              ];
+
+              // Angosto: el titulo arriba y los controles debajo, alineados a la derecha. Juntos en
+              // una linea no caben —la etiqueta del selector mide media pantalla—.
+              if (cajas.maxWidth < 720) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    titulo,
+                    const SizedBox(height: 8),
+                    Row(mainAxisAlignment: MainAxisAlignment.end, children: controles),
+                  ],
+                );
+              }
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [Expanded(child: titulo), ...controles],
+              );
+            }),
           ),
           const Divider(height: 1),
           if (q == null)
@@ -1800,22 +1830,28 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                 child: ConstrainedBox(
                   constraints: BoxConstraints(minWidth: cajas.maxWidth),
                   child: DataTable(
-                headingRowHeight: 40,
-                dataRowMinHeight: 38,
-                dataRowMaxHeight: 44,
-                columnSpacing: 22,
-                headingTextStyle: TextStyle(
-                    fontSize: 11, fontWeight: FontWeight.w700, color: c.ink3),
-                dataTextStyle: TextStyle(fontSize: 12.5, color: c.ink),
-                columns: const [
-                  DataColumn(label: Text('ELABORACIÓN')),
-                  DataColumn(label: Text('ESTATUS')),
-                  DataColumn(label: Text('COLABORADOR')),
-                  DataColumn(label: Text('DÍAS'), numeric: true),
-                  DataColumn(label: Text('INICIO')),
-                  DataColumn(label: Text('FIN')),
-                  DataColumn(label: Text('REGRESO')),
-                ],
+                    headingRowHeight: 40,
+                    dataRowMinHeight: 38,
+                    dataRowMaxHeight: 44,
+                    columnSpacing: 26,
+                    headingTextStyle: TextStyle(
+                        fontSize: 11, fontWeight: FontWeight.w700, color: c.ink3),
+                    dataTextStyle: TextStyle(fontSize: 12.5, color: c.ink),
+                    columns: const [
+                      DataColumn(label: Text('ELABORACIÓN')),
+                      DataColumn(label: Text('ESTATUS')),
+                      DataColumn(label: Text('COLABORADOR')),
+                      DataColumn(
+                        label: Padding(
+                          padding: EdgeInsets.only(right: _huecoDias),
+                          child: Text('DÍAS'),
+                        ),
+                        numeric: true,
+                      ),
+                      DataColumn(label: Text('INICIO')),
+                      DataColumn(label: Text('FIN')),
+                      DataColumn(label: Text('REGRESO')),
+                    ],
                     rows: [for (final r in registros) _renglonRegistro(c, r)],
                   ),
                 ),
@@ -1876,10 +1912,13 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                 // Una cancelada se apaga: sigue siendo un registro, pero no consume dias.
                 color: cancelada ? c.ink3 : c.ink)),
       )),
-      DataCell(Text('${r['dias'] ?? '—'}',
-          style: const TextStyle(
-              fontWeight: FontWeight.w600,
-              fontFeatures: [FontFeature.tabularFigures()]))),
+      DataCell(Padding(
+        padding: const EdgeInsets.only(right: _huecoDias),
+        child: Text('${r['dias'] ?? '—'}',
+            style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontFeatures: [FontFeature.tabularFigures()])),
+      )),
       DataCell(Text(fechaCorta(r['fecha_inicio']))),
       DataCell(Text(fechaCorta(r['fecha_fin']))),
       DataCell(Text(fechaCorta(r['fecha_regreso']))),
