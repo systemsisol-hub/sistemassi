@@ -2339,8 +2339,6 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                   if (_userRole == 'admin') ...[
                     _buildPendingTable(c),
                     SizedBox(height: SiSpace.x6),
-                    _buildResumenMensual(c),
-                    SizedBox(height: SiSpace.x6),
                   ],
 
                   // Main Content Grid
@@ -2405,6 +2403,18 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                       }
                     },
                   ),
+
+                  // La ultima tabla de la pagina, por peticion del usuario.
+                  //
+                  // Estaba arriba, debajo de las pendientes. Abajo tiene mas sentido de lo que
+                  // parece: las pendientes son lo que hay que atender HOY y van primero, mientras
+                  // que esta se consulta al cerrar la quincena. Y es la mas larga de las tres, asi
+                  // que arriba empujaba el resto de la pagina fuera de la pantalla.
+                  if (_userRole == 'admin') ...[
+                    SizedBox(height: SiSpace.x6),
+                    _buildResumenMensual(c),
+                  ],
+
                   const SizedBox(height: 80),
                 ],
               ),
