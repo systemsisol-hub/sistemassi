@@ -58,6 +58,40 @@ const columnaDeCampo = <String, String>{
   'estatus': 'estatus',
 };
 
+/// El encabezado CANÓNICO de cada campo: el nombre que la plantilla oficial usa.
+///
+/// Sólo están los campos que la base GUARDA de verdad. Llegó a haber siete más —orientación,
+/// niveles de la casa, amueblado, mantenimiento, entrega estimada, frente y fondo— y se quitaron el
+/// 04/09/2026 por decisión del usuario, con una regla que conviene respetar: «lo que veo es lo que
+/// se debe quedar». Una columna en la plantilla que no tiene dónde guardarse es una promesa falsa,
+/// y un campo en la base que nadie llena es algo que hay que explicar para siempre.
+///
+/// De aquí sale el Excel que se reparte a los desarrollos, y por eso vive junto al reconocedor: si
+/// la plantilla se escribiera aparte, cualquier cambio en un reconocedor la dejaría prometiendo una
+/// columna que al pegarse se descarta. Hay una prueba que lo comprueba —genera el encabezado de
+/// aquí, lo lee, y exige cero columnas ignoradas—.
+const encabezadoCanonico = <String, String>{
+  'numero': 'NUMERO',
+  'sector': 'SECTOR',
+  'torre': 'TORRE',
+  'nivel': 'NIVEL',
+  'depto': 'DEPTO',
+  'tipo': 'TIPO',
+  'tipologia': 'TIPOLOGIA',
+  'vista': 'VISTA',
+  'm2InteriorTechada': 'M2 INTERIOR TECHADA',
+  'm2ExteriorTechada': 'M2 EXTERIOR TECHADA',
+  'm2JardinTerraza': 'M2 JARDIN TERRAZA',
+  'm2Superficie': 'SUPERFICIE',
+  'm2Terreno': 'M2 TERRENO',
+  'm2Construccion': 'M2 CONSTRUCCION',
+  'recamaras': 'RECAMARAS',
+  'banos': 'BANOS',
+  'estacionamientos': 'ESTACIONAMIENTOS',
+  'precio': 'PRECIO',
+  'estatus': 'ESTATUS',
+};
+
 /// Una unidad tal como venía en el texto pegado. Sin id: todavía no se sabe si existe.
 class UnidadPegada {
   /// La clave. Es la de la lista si la trae, o una compuesta por el sector, la torre y el depto.
@@ -220,9 +254,16 @@ String? _campoDe(String encabezado) {
   final h = _normaliza(encabezado);
   if (h.isEmpty) return null;
 
-  // `TOTAL INTERIOR M2` se ignora SIEMPRE: es una suma parcial del desglose, nunca la superficie
-  // completa, así que no sirve ni como total.
-  if (h == 'total interior m2') return null;
+  // Las columnas que en la HOJA son una SUMA de otras se ignoran siempre. La base recalcula el
+  // total, y guardar una suma que también se calcula es tener el mismo hecho en dos sitios.
+  //
+  // Es una distinción que costó ver: «M2 TOTAL» de AG117 es una suma de sus tres columnas de
+  // desglose, mientras que «SUP. M2» de Vidamar es la superficie DADA, la única que hay. Las dos
+  // se llaman parecido y no son lo mismo.
+  if (h == 'total interior m2' || h == 'm2 total' || h == 'sup total' ||
+      h == 'superficie total') {
+    return null;
+  }
 
   if (h == 'torre' || h == 'edificio' || h == 'bloque') return 'torre';
   if (h == 'cluster' || h == 'coto' || h == 'sector' || h == 'seccion' ||
@@ -255,10 +296,9 @@ String? _campoDe(String encabezado) {
   }
   if (h.contains('precio')) return 'precio';
 
-  // La superficie de un solo número, al final para que no le gane a las de desglose.
-  if (h == 'm2 total' || h == 'sup m2' || h == 'sup' || h == 'superficie' ||
-      h == 'superficie m2' || h == 'm2' || h == 'sup total' ||
-      h == 'superficie total') {
+  // La superficie DADA, de un solo número. Al final para que no le gane a las de desglose.
+  if (h == 'sup m2' || h == 'sup' || h == 'superficie' || h == 'superficie m2' ||
+      h == 'm2') {
     return 'm2Superficie';
   }
   return null;
@@ -327,19 +367,13 @@ String? estatusDe(String? crudo) {
 }) _mapearEncabezado(List<String> encabezado) {
   final mapa = encabezado.map(_campoDe).toList();
 
-  // La regla que necesita el encabezado entero: si la lista DESGLOSA la superficie, una columna de
-  // total es una suma de las otras y no se guarda —la base la recalcula—. Si no desglosa, esa
-  // columna es la única superficie que hay y sí se guarda.
+  // Antes había aquí una regla que miraba el encabezado completo: si la lista desglosaba, la
+  // columna de superficie se descartaba. Estaba MAL, y lo descubrió la prueba de ida y vuelta de la
+  // plantilla oficial: esa plantilla trae las CUATRO columnas de superficie a la vez —para que cada
+  // desarrollo llene la que le toque—, así que la regla descartaba «SUPERFICIE» para todo el mundo.
   //
-  // Sin esto, `M2 TOTAL` de AG117 se guardaría además del desglose, y entonces el total estaría
-  // escrito y calculado a la vez: dos verdades sobre el mismo hecho.
-  final desglosa = mapa.any((m) =>
-      m == 'm2InteriorTechada' || m == 'm2ExteriorTechada' || m == 'm2JardinTerraza');
-  if (desglosa) {
-    for (var i = 0; i < mapa.length; i++) {
-      if (mapa[i] == 'm2Superficie') mapa[i] = null;
-    }
-  }
+  // Lo que decide no es el encabezado, es la FILA: cuál de las dos llenó. Se comprueba abajo, al
+  // leer cada renglón.
 
   final ignoradas = <String>[];
   final etiquetas = <String, String>{};
@@ -354,8 +388,12 @@ String? estatusDe(String? crudo) {
       continue;
     }
     final h = _normaliza(encabezado[i]);
-    // Las calculadas no son «desconocidas»: se ignoran a propósito y decirlo sólo haría ruido.
-    if (h.isEmpty || h == 'total interior m2' || h == 'm2 total') continue;
+    // Las que son una suma en la hoja no son «desconocidas»: se ignoran a propósito y decirlo sólo
+    // haría ruido en la vista previa.
+    if (h.isEmpty || h == 'total interior m2' || h == 'm2 total' ||
+        h == 'sup total' || h == 'superficie total') {
+      continue;
+    }
     ignoradas.add(encabezado[i]);
   }
   return (mapa: mapa, ignoradas: ignoradas, etiquetas: etiquetas);
@@ -465,7 +503,15 @@ ResultadoPegado leerPegado(String texto) {
   //
   // El `depto` es obligatorio en todas: es la unidad. El sector y la torre sólo dicen DÓNDE está,
   // y una clave hecha sólo con ellos —«A»— chocaría con todas las unidades de esa torre.
-  final hayClavePropia = mapa.contains('numero');
+  // Que la columna EXISTA no significa que esté llena.
+  //
+  // La plantilla oficial trae siempre una columna NUMERO, para quien tenga clave interna propia.
+  // Casi nadie la tiene, así que llega vacía —y mirando sólo el encabezado, la escalera de abajo
+  // no corría y la clave se quedaba en el depto solo. Con una lista tipo Vidamar llenada en la
+  // plantilla, los cuatro «101» habrían chocado. Lo destapó la prueba que lee el encabezado del
+  // XLSX que de verdad se reparte.
+  final hayClavePropia = mapa.contains('numero') &&
+      crudas.every((c) => _texto(c.valores['numero']) != null);
   const escalera = [<String>[], ['torre'], ['sector', 'torre']];
   var calificadores = <String>[];
 
@@ -539,6 +585,32 @@ ResultadoPegado leerPegado(String texto) {
       continue;
     }
 
+    // La superficie: desglose o un solo número, según cuál trajo ESTA fila.
+    //
+    // La plantilla oficial ofrece las dos formas, así que una fila puede traer las dos. Si
+    // coinciden, se conserva sólo el desglose —dice más, y la base suma—. Si NO coinciden, es un
+    // error de esa línea y no se elige por nadie: una de las dos está mal y adivinar cuál sería
+    // guardar un metraje inventado.
+    final interior = _numero(valores['m2InteriorTechada']);
+    final exterior = _numero(valores['m2ExteriorTechada']);
+    final jardin = _numero(valores['m2JardinTerraza']);
+    var superficie = _numero(valores['m2Superficie']);
+    final hayDesglose = interior != null || exterior != null || jardin != null;
+
+    if (hayDesglose && superficie != null) {
+      final suma = (interior ?? 0) + (exterior ?? 0) + (jardin ?? 0);
+      if ((suma - superficie).abs() > 0.011) {
+        errores.add(ErrorDeLinea(
+            i + 1,
+            '$numero: la superficie dice $superficie pero el desglose suma '
+                '${(suma * 100).round() / 100}. Deja una de las dos',
+            linea));
+        continue;
+      }
+      // Coinciden: sobra la de un solo número.
+      superficie = null;
+    }
+
     final estatus = estatusDe(valores['estatus']);
     if (estatus == null) {
       errores.add(ErrorDeLinea(
@@ -555,10 +627,10 @@ ResultadoPegado leerPegado(String texto) {
       tipo: _texto(valores['tipo']),
       tipologia: _texto(valores['tipologia']),
       vista: _texto(valores['vista']),
-      m2InteriorTechada: _numero(valores['m2InteriorTechada']),
-      m2ExteriorTechada: _numero(valores['m2ExteriorTechada']),
-      m2JardinTerraza: _numero(valores['m2JardinTerraza']),
-      m2Superficie: _numero(valores['m2Superficie']),
+      m2InteriorTechada: interior,
+      m2ExteriorTechada: exterior,
+      m2JardinTerraza: jardin,
+      m2Superficie: superficie,
       m2Terreno: _numero(valores['m2Terreno']),
       m2Construccion: _numero(valores['m2Construccion']),
       recamaras: _entero(valores['recamaras']),

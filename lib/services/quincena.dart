@@ -59,6 +59,12 @@ class Quincena {
   /// distinguen.
   String get etiqueta => '$diaInicial al $diaFinal de ${_meses[mes]} $anio';
 
+  /// «1–15 julio», sin el año.
+  ///
+  /// Para tablas donde el año ya está dicho arriba —un selector, un encabezado—: repetirlo en cada
+  /// uno de los veinticuatro renglones sólo ensancha la columna sin decir nada nuevo.
+  String get etiquetaCorta => '$diaInicial–$diaFinal ${_meses[mes]}';
+
   @override
   bool operator ==(Object otro) => otro is Quincena && otro.clave == clave;
 

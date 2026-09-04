@@ -350,6 +350,127 @@ void main() {
     });
   });
 
+  // ── La plantilla oficial ───────────────────────────────────────────────────
+  //
+  // Es LA prueba que hace confiable el Excel que se reparte a los desarrollos. El encabezado de la
+  // plantilla se genera de `encabezadoCanonico`, y aquí se comprueba que el propio lector lo
+  // entiende entero. Sin esto, cualquier cambio en un reconocedor dejaría la plantilla prometiendo
+  // una columna que al pegarse se descarta —y nadie lo notaría hasta que faltara el dato—.
+  group('plantilla', () {
+    test('el lector entiende su PROPIA plantilla, columna por columna', () {
+      final campos = encabezadoCanonico.keys.toList();
+      final enc = campos.map((c) => encabezadoCanonico[c]!).join('\t');
+      // Una fila con un valor plausible en cada columna.
+      final valores = <String, String>{
+        'numero': 'A-101', 'sector': 'COTO 4', 'torre': 'B', 'nivel': 'N2',
+        'depto': '101', 'tipo': 'Casa', 'tipologia': 'Jade 3R', 'vista': 'Jardin',
+        'm2InteriorTechada': '96.91', 'm2ExteriorTechada': '16.82',
+        'm2JardinTerraza': '15.61', 'm2Superficie': '158',
+        'm2Terreno': '160', 'm2Construccion': '142.5',
+        'recamaras': '3', 'banos': '2.5', 'estacionamientos': '2',
+        'precio': r'$3,850,000.00', 'estatus': 'DISPONIBLE',
+      };
+      // DOS filas, una de cada forma de superficie: la plantilla ofrece las cuatro columnas para
+      // que cada desarrollo llene la que le toque, y llenar las dos a la vez con números que no
+      // cuadran es un error —comprobado más abajo—.
+      final conDesglose = campos
+          .map((c) => c == 'm2Superficie' ? '' : (valores[c] ?? ''))
+          .join('\t');
+      final conSuperficie = campos
+          .map((c) => const {
+                'm2InteriorTechada',
+                'm2ExteriorTechada',
+                'm2JardinTerraza'
+              }.contains(c)
+              ? ''
+              : (c == 'depto' ? '102' : (c == 'numero' ? 'A-102' : (valores[c] ?? ''))))
+          .join('\t');
+
+      final r = leerPegado('$enc\n$conDesglose\n$conSuperficie');
+      expect(r.errores, isEmpty);
+      expect(r.columnasIgnoradas, isEmpty,
+          reason: 'la plantilla NO puede traer una columna que el lector descarte');
+      expect(r.unidades, hasLength(2));
+
+      expect(r.unidades.last.m2Superficie, 158,
+          reason: 'la fila que sólo trae SUPERFICIE la guarda');
+      expect(r.unidades.last.m2InteriorTechada, isNull);
+
+      // Y que cada columna aterrice donde debe.
+      final u = r.unidades.first;
+      expect(u.numero, 'A-101', reason: 'con NUMERO propio, manda ese');
+      expect(u.sector, 'COTO 4');
+      expect(u.torre, 'B');
+      expect(u.nivel, 'N2');
+      expect(u.depto, '101');
+      expect(u.tipo, 'Casa');
+      expect(u.tipologia, 'Jade 3R');
+      expect(u.vista, 'Jardin');
+      expect(u.m2InteriorTechada, 96.91);
+      expect(u.m2ExteriorTechada, 16.82);
+      expect(u.m2JardinTerraza, 15.61);
+      expect(u.m2Terreno, 160);
+      expect(u.m2Construccion, 142.5);
+      expect(u.recamaras, 3);
+      expect(u.banos, 2.5);
+      expect(u.estacionamientos, 2);
+      expect(u.precio, 3850000);
+      expect(u.estatus, 'DISPONIBLE');
+    });
+
+    test('con SUPERFICIE y sin desglose, la superficie SÍ se guarda', () {
+      final r = leerPegado('DEPTO\tSUPERFICIE\tPRECIO\n101\t158\t4797270');
+      expect(r.unidades.single.m2Superficie, 158);
+      expect(r.columnasIgnoradas, isEmpty);
+    });
+
+    test('si la fila trae las DOS y no cuadran, es error de esa línea', () {
+      // No se elige por nadie: una de las dos está mal y adivinar cuál sería guardar un metraje
+      // inventado, que es exactamente lo que un asesor le repetiría a un cliente.
+      final r = leerPegado(
+          'DEPTO\tM2 INTERIOR TECHADA\tM2 EXTERIOR TECHADA\tSUPERFICIE\tPRECIO\n'
+          '101\t96.91\t16.82\t158\t100');
+      expect(r.unidades, isEmpty);
+      expect(r.errores.single.motivo, contains('158'));
+      expect(r.errores.single.motivo, contains('113.73'));
+      expect(r.errores.single.motivo, contains('Deja una de las dos'));
+    });
+
+    test('si traen las dos y SÍ cuadran, se conserva el desglose', () {
+      // Es redundante pero no es un error: alguien escribió el total además de las partes.
+      final r = leerPegado(
+          'DEPTO\tM2 INTERIOR TECHADA\tM2 EXTERIOR TECHADA\tSUPERFICIE\tPRECIO\n'
+          '101\t96.91\t16.82\t113.73\t100');
+      expect(r.errores, isEmpty);
+      final u = r.unidades.single;
+      expect(u.m2InteriorTechada, 96.91);
+      expect(u.m2Superficie, isNull, reason: 'el desglose dice más, y la base lo suma');
+    });
+
+    test('«M2 TOTAL» de AG117 sigue ignorándose: en su hoja es una suma', () {
+      // Distinción que costó ver: «M2 TOTAL» es una suma de las tres columnas de la propia hoja,
+      // mientras que «SUP. M2» de Vidamar es la superficie dada, la única que hay.
+      final r = leerPegado('$encabezado\n$filaA01');
+      expect(r.errores, isEmpty);
+      expect(r.columnasIgnoradas, isEmpty, reason: 'ignorada a propósito, no desconocida');
+      expect(r.unidades.single.m2Superficie, isNull);
+      expect(r.unidades.single.m2InteriorTechada, 76);
+    });
+
+    test('cada campo de la plantilla tiene columna en la base', () {
+      // `aFila` es lo que se manda a Postgres: si un campo de la plantilla no aparece ahí, se
+      // captura para nada.
+      const generadas = {'m2_total', 'm2_total_interior', 'precio_m2'};
+      final fila = const UnidadPegada(numero: 'X').aFila('id');
+      for (final campo in encabezadoCanonico.keys) {
+        final columna = columnaDeCampo[campo];
+        expect(columna, isNotNull, reason: '«$campo» no tiene columna declarada');
+        expect(fila.containsKey(columna) || generadas.contains(columna), isTrue,
+            reason: '«$campo» -> «$columna» no se manda a la base: se capturaría para nada');
+      }
+    });
+  });
+
   group('estatusDe', () {
     test('lo que trae la lista se respeta', () {
       expect(estatusDe('DISPONIBLE'), 'DISPONIBLE');
