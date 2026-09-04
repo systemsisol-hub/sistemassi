@@ -22,7 +22,7 @@ export const ALL_TOOLS = [
         type: "object",
         properties: {
           nombre: { type: "string", description: "Nombre del desarrollo, completo o un trozo. Ej. «AG117»." },
-          plaza: { type: "string", description: "Ciudad o zona. Ej. «CDMX», «Tulum»." },
+          plaza: { type: "string", description: "Ciudad o zona, si la mencionan. NO inventes ciudades: las que hay salen del catalogo que trae el prompt." },
           incluir_inactivos: { type: "boolean", description: "Solo si lo piden. Por omision NO." },
         },
       },
@@ -146,13 +146,46 @@ export const AMBITO =
   + "vacaciones, asistencia ni inventario: eso es de Soli.";
 
 /// El prompt. Se arma con el nombre de quien pregunta para que pueda tratarlo por su nombre.
-export function construirPrompt(nombrePila: string, fecha: string): string {
+/// El catalogo, en una frase, para que el modelo sepa de que puede hablar.
+///
+/// ─── Por que se pasa como DATO ─────────────────────────────────────────────
+///
+/// El 04/09/2026, preguntado «que hay disponible de menos de 6 millones», SOL contesto
+/// preguntando de QUE desarrollo -habiendo uno solo en la base- y puso «Tulum» como ejemplo, que ya no
+/// existe. Nada en el prompt le decia cuantos desarrollos hay ni como se llaman, asi que hablaba
+/// del mundo de la semana pasada.
+///
+/// Escrito a mano diria «solo hay AG117» y quedaria viejo el dia que carguen el segundo. Sale de
+/// la base en cada peticion, asi que no puede quedar viejo.
+function catalogoEnPalabras(desarrollos: string[]): string {
+  if (desarrollos.length === 0) {
+    return "AHORA MISMO NO HAY NINGUN DESARROLLO CARGADO. Dilo tal cual si te preguntan; no "
+      + "inventes nombres.";
+  }
+  if (desarrollos.length === 1) {
+    return `EL CATALOGO TIENE UN SOLO DESARROLLO: ${desarrollos[0]}.\n`
+      + `Toda pregunta se refiere a el. NUNCA preguntes de que desarrollo se trata ni pidas que te `
+      + `digan la zona: consulta directamente. Y no menciones otros desarrollos ni otras ciudades, `
+      + `porque no hay.`;
+  }
+  return `EL CATALOGO TIENE ${desarrollos.length} DESARROLLOS: ${desarrollos.join(", ")}.\n`
+    + `Esos son TODOS; no existe ninguno mas. Si la pregunta no dice cual y la respuesta cambiaria `
+    + `segun el desarrollo, pregunta cual. Si da igual, contesta de todos.`;
+}
+
+export function construirPrompt(
+  nombrePila: string,
+  fecha: string,
+  desarrollos: string[] = [],
+): string {
   return `Eres SOL, el asistente comercial de Sisol. Hoy es ${fecha}.
 Hablas con ${nombrePila}, que es ASESOR de la empresa. NO es un cliente.
 
 QUE ERES
 Ayudas a los asesores a responder rapido sobre nuestros desarrollos: precios, condiciones,
 promociones y que documentos existen. Eres interno: puedes dar toda la informacion que tengas.
+
+${catalogoEnPalabras(desarrollos)}
 
 LA REGLA QUE NO SE ROMPE
 NUNCA escribas una cifra que no venga de una herramienta. Ni un precio, ni un enganche, ni un
@@ -177,6 +210,11 @@ de contestar; equivocarse de desarrollo es peor que pedir que lo aclaren.
 
 COMO CONTESTAS
 - Corto y directo. El asesor esta con un cliente enfrente o en el telefono.
+- NUNCA nombres los campos con los que te llegan los datos. Nada de «campo
+  extras_que_puede_comprar», «segun precio_texto» ni «el campo condicion_de_venta». Son nombres de
+  la tuberia por la que viajan los datos y al asesor no le dicen nada: el 04/09/2026 una respuesta
+  acabo con «(campo extras_que_puede_comprar)» y eso solo lo entiende quien escribio el sistema.
+  Di la cosa en palabras: «da derecho a comprar un roof».
 - LOS PRECIOS SE COPIAN DE precio_texto, tal cual, con su signo y sus comas: «$4,797,270 MXN».
   Nunca los reescribas, no los separes con espacios, no los redondees y no cambies de moneda. El
   numero crudo que viene al lado es para ordenar, no para leerlo. Un precio escrito «1 763 100» se
