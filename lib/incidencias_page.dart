@@ -1,9 +1,12 @@
+import 'dart:typed_data';
 import 'dart:ui';
+import 'package:excel/excel.dart' as xl;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/incidencias_pdf_service.dart';
+import 'services/file_saver_util.dart';
 import 'services/trash_service.dart';
-import 'incidencias_por_mes.dart';
+import 'incidencias_por_periodo.dart';
 import 'theme/si_theme.dart';
 import 'widgets/calendario_incidencias.dart';
 import 'widgets/grafica_vacaciones_mes.dart';
@@ -30,6 +33,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
   /// normal sólo ve las suyas. El `if` de la pantalla oculta la tabla; el que la cierra es la base.
   List<Map<String, dynamic>> _paraResumen = [];
   int? _anioResumen;
+  bool _exportandoResumen = false;
   bool _isLoading = true;
   bool _antiguedadExpanded = false; // manual expand state for mobile card
   String? _userRole;
@@ -1683,11 +1687,11 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
   Widget _buildResumenMensual(SiColors c) {
     final anios = aniosConDatos(_paraResumen);
     final anio = _anioResumen;
-    final meses = anio == null
-        ? const <MesResumen>[]
+    final periodos = anio == null
+        ? const <PeriodoResumen>[]
         : resumirAnio(_paraResumen, anio);
     final total = anio == null
-        ? const MesResumen(anio: 0, mes: 1)
+        ? const TotalResumen()
         : totalDelAnio(_paraResumen, anio);
 
     return Card(
@@ -1711,14 +1715,14 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Registros por mes',
+                      Text('Registros por quincena',
                           style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w800,
                               color: c.ink)),
                       Text(
-                          'Por el mes en que EMPIEZA la incidencia, no en el que se capturó. '
-                          'Sólo lo ven los administradores.',
+                          'Del 1 al 15 y del 16 al último día del mes, por la fecha en que EMPIEZA '
+                          'la incidencia. Sólo lo ven los administradores.',
                           style: TextStyle(fontSize: 11.5, color: c.ink3)),
                     ],
                   ),
@@ -1736,6 +1740,21 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                         .toList(),
                     onChanged: (v) => setState(() => _anioResumen = v),
                   ),
+                if (anio != null) ...[
+                  const SizedBox(width: 12),
+                  OutlinedButton.icon(
+                    onPressed: _exportandoResumen
+                        ? null
+                        : () => _exportarResumen(anio, periodos, total),
+                    icon: _exportandoResumen
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.file_download_outlined, size: 16),
+                    label: const Text('Excel'),
+                  ),
+                ],
               ],
             ),
           ),
@@ -1762,7 +1781,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                     fontSize: 11, fontWeight: FontWeight.w700, color: c.ink3),
                 dataTextStyle: TextStyle(fontSize: 12.5, color: c.ink),
                 columns: const [
-                  DataColumn(label: Text('MES')),
+                  DataColumn(label: Text('PERIODO')),
                   DataColumn(label: Text('REGISTROS'), numeric: true),
                   DataColumn(label: Text('APROBADAS'), numeric: true),
                   DataColumn(label: Text('PENDIENTES'), numeric: true),
@@ -1771,7 +1790,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                   DataColumn(label: Text('PERSONAS'), numeric: true),
                 ],
                 rows: [
-                  for (final m in meses) _renglonMes(c, m),
+                  for (final q in periodos) _renglonPeriodo(c, q),
                   // El total, con las PERSONAS recontadas sobre el año: quien tomó vacaciones en
                   // marzo y en julio es una sola persona, no dos.
                   DataRow(
@@ -1795,22 +1814,130 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
     );
   }
 
-  DataRow _renglonMes(SiColors c, MesResumen m) {
-    // Un mes sin nada se pinta en gris y no se esconde: que febrero esté tranquilo es información,
-    // y saltárselo haría parecer que falta un dato.
-    final apagado = m.vacio;
+  DataRow _renglonPeriodo(SiColors c, PeriodoResumen q) {
+    // Una quincena sin nada se pinta en gris y NO se esconde: que la primera de febrero esté
+    // tranquila es información, y saltársela haría parecer que falta un dato.
+    final apagado = q.vacio;
     return DataRow(cells: [
-      DataCell(Text(m.nombreMes,
+      DataCell(Text(q.etiqueta,
           style: TextStyle(
               fontWeight: apagado ? FontWeight.w400 : FontWeight.w600,
               color: apagado ? c.ink4 : c.ink))),
-      _celdaNumero(c, m.registros),
-      _celdaNumero(c, m.aprobadas),
-      _celdaNumero(c, m.pendientes, color: m.pendientes > 0 ? Colors.orange[800] : null),
-      _celdaNumero(c, m.canceladas),
-      _celdaNumero(c, m.dias),
-      _celdaNumero(c, m.personas),
+      _celdaNumero(c, q.registros),
+      _celdaNumero(c, q.aprobadas),
+      _celdaNumero(c, q.pendientes, color: q.pendientes > 0 ? Colors.orange[800] : null),
+      _celdaNumero(c, q.canceladas),
+      _celdaNumero(c, q.dias),
+      _celdaNumero(c, q.personas),
     ]);
+  }
+
+  /// Exporta lo MISMO que se está viendo, sin recalcular nada.
+  ///
+  /// Recibe los periodos y el total ya calculados en lugar de volver a pedirlos: si los recalculara
+  /// aquí, el archivo podría no coincidir con la tabla que el usuario tiene delante —y esa es la
+  /// clase de discrepancia que nadie encuentra hasta que alguien compara dos hojas en una junta—.
+  Future<void> _exportarResumen(
+      int anio, List<PeriodoResumen> periodos, TotalResumen total) async {
+    setState(() => _exportandoResumen = true);
+    try {
+      final excel = xl.Excel.createExcel();
+      final hoja = excel['Quincenas $anio'];
+      excel.delete('Sheet1');
+
+      final estiloEncabezado = xl.CellStyle(
+        bold: true,
+        backgroundColorHex: xl.ExcelColor.fromHexString('#344092'),
+        fontColorHex: xl.ExcelColor.fromHexString('#FFFFFF'),
+      );
+
+      const encabezados = [
+        'Periodo', 'Desde', 'Hasta', 'Registros', 'Aprobadas', 'Pendientes',
+        'Canceladas', 'Dias', 'Personas',
+      ];
+      for (var i = 0; i < encabezados.length; i++) {
+        final celda = hoja.cell(
+            xl.CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0));
+        celda.value = xl.TextCellValue(encabezados[i]);
+        celda.cellStyle = estiloEncabezado;
+      }
+
+      // Desde y Hasta van en columnas propias: con ellas la hoja se puede cruzar contra nómina sin
+      // tener que interpretar «16–31 julio».
+      for (var r = 0; r < periodos.length; r++) {
+        final q = periodos[r];
+        final valores = <xl.CellValue>[
+          xl.TextCellValue(q.etiqueta),
+          xl.TextCellValue(q.quincena.desdeIso),
+          xl.TextCellValue(q.quincena.hastaIso),
+          xl.IntCellValue(q.registros),
+          xl.IntCellValue(q.aprobadas),
+          xl.IntCellValue(q.pendientes),
+          xl.IntCellValue(q.canceladas),
+          xl.IntCellValue(q.dias),
+          xl.IntCellValue(q.personas),
+        ];
+        for (var col = 0; col < valores.length; col++) {
+          hoja
+              .cell(xl.CellIndex.indexByColumnRow(
+                  columnIndex: col, rowIndex: r + 1))
+              .value = valores[col];
+        }
+      }
+
+      final filaTotal = periodos.length + 1;
+      final estiloTotal = xl.CellStyle(bold: true);
+      final totales = <xl.CellValue>[
+        xl.TextCellValue('TOTAL $anio'),
+        xl.TextCellValue('$anio-01-01'),
+        xl.TextCellValue('$anio-12-31'),
+        xl.IntCellValue(total.registros),
+        xl.IntCellValue(total.aprobadas),
+        xl.IntCellValue(total.pendientes),
+        xl.IntCellValue(total.canceladas),
+        xl.IntCellValue(total.dias),
+        xl.IntCellValue(total.personas),
+      ];
+      for (var col = 0; col < totales.length; col++) {
+        final celda = hoja.cell(
+            xl.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: filaTotal));
+        celda.value = totales[col];
+        celda.cellStyle = estiloTotal;
+      }
+
+      // Las dos reglas, escritas en la hoja. Un archivo que sale de la aplicacion acaba en un
+      // correo sin nadie que lo explique, y «dias» no dice por si solo que las canceladas no
+      // cuentan.
+      final nota = filaTotal + 2;
+      hoja
+          .cell(xl.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: nota))
+          .value = xl.TextCellValue(
+          'El periodo es el de la fecha de INICIO de la incidencia, no el de captura.');
+      hoja
+          .cell(xl.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: nota + 1))
+          .value = xl.TextCellValue(
+          'Dias y Personas cuentan APROBADAS y PENDIENTES; las CANCELADAS no.');
+      hoja
+          .cell(xl.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: nota + 2))
+          .value = xl.TextCellValue(
+          'Personas del TOTAL no es la suma de las quincenas: quien falto en dos periodos es una '
+          'persona.');
+
+      final bytes = excel.encode()!;
+      await FileSaverUtil.saveAndShare(
+        Uint8List.fromList(bytes),
+        'incidencias_por_quincena_$anio.xlsx',
+      );
+    } catch (e) {
+      debugPrint('Error exportando el resumen: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo exportar: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _exportandoResumen = false);
+    }
   }
 
   DataCell _celdaNumero(SiColors c, int n, {bool fuerte = false, Color? color}) {
