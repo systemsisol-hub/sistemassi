@@ -152,14 +152,20 @@ Deno.serve(async (req: Request) => {
   //   2. El dato capturado. Si esta vacio pasa al modelo, que sabe ofrecer el brochure o la lista
   //      de precios en su lugar; un «no esta capturado» dicho aqui perderia esa ayuda.
   //   3. Sin promocion vigente que lo cambie, para el enganche y las mensualidades.
+  // El catalogo, UNA sola consulta para dos usos: las vias directas y el prompt.
+  //
+  // El prompt lo necesita porque sin el, el modelo habla del mundo de la semana pasada: el
+  // 04/09/2026 pregunto de QUE desarrollo se trataba habiendo uno solo, y puso Tulum como ejemplo
+  // cuando ese desarrollo ya se habia borrado.
+  const { data: catalogo } = await svc.from("desarrollos")
+    .select("id,nombre,ubicacion,etapa,amenidades,enganche_pct,mensualidades")
+    .eq("is_active", true).order("nombre", { ascending: true });
+  const filas = (catalogo ?? []) as Array<Record<string, unknown>>;
+  const nombres = filas.map((d) => String(d.nombre));
+
   const ultimoMensaje = mensajes.at(-1)?.content ?? "";
   const campo = campoUnico(ultimoMensaje);
   if (campo !== null) {
-    const { data: catalogo } = await svc.from("desarrollos")
-      .select("id,nombre,ubicacion,etapa,amenidades,enganche_pct,mensualidades")
-      .eq("is_active", true);
-    const filas = (catalogo ?? []) as Array<Record<string, unknown>>;
-    const nombres = filas.map((d) => String(d.nombre));
 
     // La ubicacion tiene una trampa propia: el desarrollo «AG117» y la unidad «AG008» tienen la
     // misma forma, y «donde esta el AG008» lo contesta el inventario, no esto. Distinguirlas
@@ -195,7 +201,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const conversacion: Mensaje[] = [
-    { role: "system", content: construirPrompt(nombrePila, hoy) },
+    { role: "system", content: construirPrompt(nombrePila, hoy, nombres) },
     ...mensajes.map((m) => ({ role: m.role, content: m.content })),
   ];
 
