@@ -1042,8 +1042,9 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
       try {
         final resumenResp = await Supabase.instance.client
             .from('incidencias')
-            .select('created_at,status,nombre_usuario,periodo,dias,'
+            .select('created_at,status,nombre_usuario,dias,'
                 'fecha_inicio,fecha_fin,fecha_regreso,usuario_id')
+            .eq('status', 'APROBADA')
             .order('created_at', ascending: false);
         final filas = List<Map<String, dynamic>>.from(resumenResp);
         if (mounted) {
@@ -1733,8 +1734,8 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                               fontWeight: FontWeight.w800,
                               color: c.ink)),
                       Text(
-                          'Del 1 al 15 y del 16 al último día del mes. Una incidencia entra en la '
-                          'quincena donde EMPIEZA, aunque termine en otra.',
+                          'Sólo APROBADAS, del 1 al 15 y del 16 al último día del mes. Una '
+                          'incidencia entra en la quincena donde EMPIEZA, aunque termine en otra.',
                           style: TextStyle(fontSize: 11.5, color: c.ink3)),
                     ],
                   ),
@@ -1787,11 +1788,18 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
               ),
             )
           else ...[
-            // Nueve columnas desbordan a lo ancho en un teléfono: ruedan en su propio contenedor
-            // para que la página no se mueva de lado.
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: DataTable(
+            // Ocupa el ancho de la tarjeta, y rueda sólo si de verdad no cabe.
+            //
+            // `SingleChildScrollView` a secas ajusta la tabla a su CONTENIDO, así que en una
+            // pantalla ancha quedaba encogida a la izquierda con la tarjeta vacía a la derecha. El
+            // `minWidth` la estira hasta el ancho disponible sin quitarle el desplazamiento
+            // horizontal, que en un teléfono sigue haciendo falta.
+            LayoutBuilder(
+              builder: (context, cajas) => SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minWidth: cajas.maxWidth),
+                  child: DataTable(
                 headingRowHeight: 40,
                 dataRowMinHeight: 38,
                 dataRowMaxHeight: 44,
@@ -1803,32 +1811,30 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                   DataColumn(label: Text('ELABORACIÓN')),
                   DataColumn(label: Text('ESTATUS')),
                   DataColumn(label: Text('COLABORADOR')),
-                  DataColumn(label: Text('PERIODO')),
                   DataColumn(label: Text('DÍAS'), numeric: true),
                   DataColumn(label: Text('INICIO')),
                   DataColumn(label: Text('FIN')),
                   DataColumn(label: Text('REGRESO')),
                 ],
-                rows: [for (final r in registros) _renglonRegistro(c, r)],
+                    rows: [for (final r in registros) _renglonRegistro(c, r)],
+                  ),
+                ),
               ),
             ),
             const Divider(height: 1),
-            // El pie con lo que suma la quincena. Los días NO cuentan las canceladas, que es la
-            // misma regla del saldo de vacaciones de esta página.
+            // El pie con lo que suma la quincena.
+            //
+            // Ya no lleva el desglose por estatus: con la tabla filtrada a aprobadas, «8 registros,
+            // 8 aprobadas» diría dos veces lo mismo.
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               child: Wrap(
                 spacing: 20,
                 runSpacing: 6,
                 children: [
-                  _pie(c, '${totales.registros}', 'registros'),
-                  _pie(c, '${totales.dias}', 'días', ayuda: 'sin contar canceladas'),
+                  _pie(c, '${totales.registros}', 'registros aprobados'),
+                  _pie(c, '${totales.dias}', 'días'),
                   _pie(c, '${totales.personas}', 'personas'),
-                  if (totales.aprobadas > 0) _pie(c, '${totales.aprobadas}', 'aprobadas'),
-                  if (totales.pendientes > 0)
-                    _pie(c, '${totales.pendientes}', 'pendientes', color: Colors.orange[800]),
-                  if (totales.canceladas > 0)
-                    _pie(c, '${totales.canceladas}', 'canceladas', color: c.ink3),
                 ],
               ),
             ),
@@ -1861,7 +1867,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
       DataCell(Text(fechaCorta(r['created_at']))),
       DataCell(_etiquetaEstatus(c, estatus)),
       DataCell(ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 240),
+        constraints: const BoxConstraints(maxWidth: 340),
         child: Text((r['nombre_usuario'] ?? '—').toString(),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -1870,7 +1876,6 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                 // Una cancelada se apaga: sigue siendo un registro, pero no consume dias.
                 color: cancelada ? c.ink3 : c.ink)),
       )),
-      DataCell(Text((r['periodo'] ?? '—').toString())),
       DataCell(Text('${r['dias'] ?? '—'}',
           style: const TextStyle(
               fontWeight: FontWeight.w600,
@@ -1920,7 +1925,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
       );
 
       const encabezados = [
-        'Elaboracion', 'Estatus', 'Colaborador', 'Periodo', 'Dias',
+        'Elaboracion', 'Estatus', 'Colaborador', 'Dias',
         'Fecha inicio', 'Fecha fin', 'Fecha regreso',
       ];
       for (var i = 0; i < encabezados.length; i++) {
@@ -1938,7 +1943,6 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
           xl.TextCellValue(_iso10(inc['created_at'])),
           xl.TextCellValue((inc['status'] ?? '').toString()),
           xl.TextCellValue((inc['nombre_usuario'] ?? '').toString()),
-          xl.TextCellValue((inc['periodo'] ?? '').toString()),
           xl.IntCellValue(int.tryParse('${inc['dias'] ?? 0}') ?? 0),
           xl.TextCellValue(_iso10(inc['fecha_inicio'])),
           xl.TextCellValue(_iso10(inc['fecha_fin'])),
@@ -1958,7 +1962,6 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
         xl.TextCellValue('TOTAL'),
         xl.TextCellValue('${t.registros} registros'),
         xl.TextCellValue('${t.personas} personas'),
-        xl.TextCellValue(''),
         xl.IntCellValue(t.dias),
         xl.TextCellValue(q.desdeIso),
         xl.TextCellValue(q.hastaIso),
@@ -1976,8 +1979,8 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
       final nota = filaTotal + 2;
       final notas = [
         'Quincena: ${q.etiqueta} (${q.desdeIso} al ${q.hastaIso}).',
+        'Solo incidencias APROBADAS.',
         'Una incidencia entra por su FECHA DE INICIO, aunque termine en otra quincena.',
-        'Los ${t.dias} dias del total NO incluyen las CANCELADAS.',
       ];
       for (var i = 0; i < notas.length; i++) {
         hoja
