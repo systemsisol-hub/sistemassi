@@ -91,6 +91,7 @@ for (const regla of [
   'NINGUN extra se puede comprar sin departamento',
   'UNA UNIDAD PUEDE SER, ELLA MISMA, UN EXTRA',
   'ENTREGA SIEMPRE el enlace',
+  'NUNCA nombres los campos con los que te llegan los datos',
 ]) {
   comprobar(`sigue diciendo «${regla}»`, uno.includes(regla));
 }
