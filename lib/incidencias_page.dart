@@ -191,6 +191,70 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
     }
   }
 
+  /// Donde esta la tabla de registros, para poder llevar la vista hasta ella.
+  ///
+  /// Se usa una clave y no un `ScrollController` porque el cuerpo de la pagina es un
+  /// `SingleChildScrollView` sin controlador, y ponerle uno obligaria a tocar todo el arbol.
+  final GlobalKey _tablaRegistrosKey = GlobalKey();
+
+  /// Abre una solicitud pendiente en el panel de su dueno, que es donde se aprueba.
+  ///
+  /// ─── Por que ya no se aprueba en la tarjeta ─────────────────────────────────
+  ///
+  /// Hasta hoy la columna de estatus era un menu y se aprobaba ahi mismo. Pedido el 15/09/2026:
+  /// aprobar desde la tarjeta es decidir viendo una sola fila. En el panel de la persona estan su
+  /// historial, sus dias por periodo y sus demas solicitudes, que es lo que hace falta para decidir
+  /// —y de paso es donde se ve el efecto del cambio.
+  ///
+  /// La tarjeta muestra las pendientes de TODOS mientras el resto de la pagina es de UNA persona.
+  /// Por eso esto cambia de persona ANTES de llevar a la tabla: es la misma razon por la que
+  /// aprobar aqui no movia el historial de abajo.
+  void _abrirSolicitud(Map<String, dynamic> inc) {
+    final deQuien = inc['usuario_id']?.toString();
+    final quien = _adminUserList.firstWhere(
+      (u) => u['id'] == deQuien,
+      orElse: () => const {},
+    );
+
+    // Sin ficha no hay panel al que llevar. Pasa de verdad: hay nueve incidencias cuyo
+    // `usuario_id` no existe en `profiles`. Callarlo dejaria el clic sin ninguna respuesta.
+    if (deQuien == null || quien.isEmpty) {
+      final nombre = inc['nombre_usuario']?.toString().trim() ?? '';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(nombre.isEmpty
+            ? 'Esta solicitud no tiene colaborador con ficha, así que no hay panel que abrir.'
+            : 'No encontré a $nombre en la lista de colaboradores, '
+                'así que no hay panel que abrir.'),
+        backgroundColor: Colors.orange[800],
+      ));
+      return;
+    }
+
+    _onUserSelected(deQuien);
+
+    final nombre = '${quien['nombre'] ?? ''} ${quien['paterno'] ?? ''}'.trim();
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(nombre.isEmpty
+          ? 'Abajo está su tabla de registros: desde ahí se aprueba.'
+          : 'Solicitud de $nombre. Abajo está su tabla de registros: desde ahí se aprueba.'),
+    ));
+
+    // Se espera un fotograma: `_onUserSelected` reconstruye la tabla, y antes de eso la clave
+    // todavia apunta a la de la persona anterior.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _tablaRegistrosKey.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(
+          ctx,
+          duration: const Duration(milliseconds: 350),
+          curve: Curves.easeOut,
+          // Un pelo por debajo del borde, para que no quede pegada al filo de la pantalla.
+          alignment: 0.05,
+        );
+      }
+    });
+  }
+
   void _onUserSelected(String? newUserId) {
     if (newUserId == null || newUserId == _selectedUserId) return;
 
@@ -1522,12 +1586,25 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                 Icon(Icons.pending_actions_rounded,
                     color: Colors.orange[700], size: 22),
                 const SizedBox(width: 12),
-                Text(
-                  'Solicitudes Pendientes',
-                  style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.orange[900]),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Solicitudes Pendientes',
+                      style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.orange[900]),
+                    ),
+                    // Que el clic se sepa sin tener que descubrirlo: hasta hoy aqui habia un menu
+                    // para aprobar, y quien lo usaba va a venir a buscarlo.
+                    Text(
+                      'Da clic en una solicitud para abrirla y autorizarla',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.orange[800]!.withOpacity(0.85)),
+                    ),
+                  ],
                 ),
                 const Spacer(),
                 if (_allIncidencias.isNotEmpty)
@@ -1563,6 +1640,9 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                   child: ConstrainedBox(
                     constraints: BoxConstraints(minWidth: constraints.maxWidth),
                     child: DataTable(
+                      // `onSelectChanged` en las filas le añade sola una columna de casillas de
+                      // seleccion. Aqui el clic abre la solicitud; no hay nada que marcar.
+                      showCheckboxColumn: false,
                       headingRowColor: WidgetStateProperty.all(
                           Colors.orange.withOpacity(0.07)),
                       columnSpacing: 20,
@@ -1595,7 +1675,11 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                       rows: _allIncidencias.map((inc) {
                         final nombre =
                             inc['nombre_usuario']?.toString().trim() ?? '---';
-                        return DataRow(cells: [
+                        return DataRow(
+                          // Toda la fila, no solo la columna de estatus: el clic es para ABRIR la
+                          // solicitud, y no hay ninguna parte de la fila donde no signifique eso.
+                          onSelectChanged: (_) => _abrirSolicitud(inc),
+                          cells: [
                           DataCell(Text(nombre.isEmpty ? '---' : nombre)),
                           DataCell(Text(inc['periodo']?.toString() ?? '---')),
                           DataCell(Text(inc['dias']?.toString() ?? '---')),
@@ -1609,118 +1693,31 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                               ? _formatDate(inc['fecha_regreso'])
                               : '---')),
                           DataCell(
-                           PopupMenuButton<String>(
-                              tooltip: 'Cambiar estatus',
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: Colors.orange.withOpacity(0.12),
-                                  borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(
-                                      color: Colors.orange.withOpacity(0.4),
-                                      width: 0.8),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text('PENDIENTE',
-                                        style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.orange[800])),
-                                    const SizedBox(width: 4),
-                                    Icon(Icons.arrow_drop_down,
-                                        size: 14, color: Colors.orange[800]),
-                                  ],
-                                ),
+                            // Un distintivo, ya no un menu: el estatus se cambia en el panel de la
+                            // persona. La flecha dice que la fila lleva a algun sitio.
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                    color: Colors.orange.withOpacity(0.4),
+                                    width: 0.8),
                               ),
-                              onSelected: (val) async {
-                                // Optimistic update: remover el item de la lista
-                                // inmediatamente para que la tabla refleje el
-                                // cambio sin esperar el re-fetch.
-                                final incId = inc['id'];
-                                final deQuien = inc['usuario_id']?.toString();
-                                // Se guarda por si hay que devolverlo: si la escritura falla, la
-                                // fila ya no está y sin esto la tarjeta mentiría hasta recargar.
-                                final copia = Map<String, dynamic>.from(inc);
-                                setState(() {
-                                  _allIncidencias.removeWhere(
-                                      (item) => item['id'] == incId);
-                                });
-                                try {
-                                  await Supabase.instance.client
-                                      .from('incidencias')
-                                      .update({'status': val}).eq('id', incId);
-                                  // El aviso lo manda un disparador de la base -`notificar_cambio_de_estatus`- que avisa a
-                                  // quien pidio las vacaciones y a Desarrollo Humano, por campana y por WhatsApp.
-                                  //
-                                  // Estaba escrito TRES veces, una por cada menu de esta pagina, y aun asi faltaba en el cuarto
-                                  // camino: aprobar por WhatsApp pasa por `actualizar_incidencia` de Soli, que no notificaba. Es
-                                  // justo lo que se reporto -Marco aprobo por WhatsApp y no le llego a nadie-. En la base esta
-                                  // una vez y cubre los cuatro.
-                                } catch (e) {
-                                  // La fila se quitó ANTES de escribir, así que si la escritura
-                                  // falla hay que devolverla: si no, la solicitud desaparece de la
-                                  // tarjeta y sigue pendiente en la base, que es la peor mezcla.
-                                  // Antes este bloque no existía y el error se perdía.
-                                  if (mounted) {
-                                    setState(() => _allIncidencias.add(copia));
-                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                      content: Text('No se pudo cambiar el estatus: $e'),
-                                      backgroundColor: Colors.red[700],
-                                    ));
-                                  }
-                                  return;
-                                }
-
-                                // Y se lleva la página a la persona que se acaba de aprobar.
-                                //
-                                // Es el arreglo de lo que se reportó el 15/09/2026: «desde la
-                                // tarjeta de pendientes no se hace el cambio en el historial de
-                                // vacaciones». Y era cierto, por una razón que no se ve leyendo el
-                                // botón: `_fetchIncidencias` recarga SÓLO las incidencias del
-                                // colaborador seleccionado —así funciona toda la página— mientras
-                                // que esta tarjeta muestra las de TODOS. Aprobabas a alguien que no
-                                // era el de la pantalla, y el historial de abajo, que es de otro, no
-                                // se movía. Desde la tabla de registros siempre funcionó porque
-                                // para llegar ahí ya tenías a esa persona seleccionada.
-                                //
-                                // Cambiar de persona al aprobar no es sólo refrescar: es la
-                                // confirmación de que el cambio entró, con sus días ya descontados.
-                                final estaEnLaLista = deQuien != null &&
-                                    _adminUserList.any((u) => u['id'] == deQuien);
-                                if (estaEnLaLista && deQuien != _selectedUserId) {
-                                  _onUserSelected(deQuien);
-                                  if (mounted) {
-                                    final quien = _adminUserList.firstWhere(
-                                        (u) => u['id'] == deQuien,
-                                        orElse: () => const {});
-                                    final nombre = '${quien['nombre'] ?? ''} '
-                                            '${quien['paterno'] ?? ''}'
-                                        .trim();
-                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                      content: Text(nombre.isEmpty
-                                          ? 'Solicitud $val. Se muestra su historial.'
-                                          : 'Solicitud de $nombre $val. '
-                                              'Abajo está su historial ya actualizado.'),
-                                    ));
-                                  }
-                                } else {
-                                  // Ya era la persona en pantalla, o no está en la lista de
-                                  // colaboradores: se recarga lo que hay.
-                                  _fetchIncidencias();
-                                }
-                              },
-                                // Sin «Descargar PDF»: esta tarjeta muestra SOLO las
-                                // pendientes, y de una pendiente no hay papel que descargar.
-                                itemBuilder: (_) => const [
-                                  PopupMenuItem(
-                                      value: 'APROBADA', child: Text('APROBADA')),
-                                  PopupMenuItem(
-                                      value: 'RECHAZADA',
-                                      child: Text('RECHAZADA')),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text('PENDIENTE',
+                                      style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.orange[800])),
+                                  const SizedBox(width: 4),
+                                  Icon(Icons.arrow_forward_rounded,
+                                      size: 12, color: Colors.orange[800]),
                                 ],
+                              ),
                             ),
                           ),
                         ]);
@@ -2392,7 +2389,13 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                   ],
 
                   // Main Content Grid
-                  LayoutBuilder(
+                  //
+                  // Con la clave puesta aqui y no en la tarjeta de dentro: `_buildDesktopTable` se
+                  // pinta en dos sitios segun si hay solicitudes, y en movil el listado es otro
+                  // widget. Una sola clave arriba vale para los tres caminos.
+                  KeyedSubtree(
+                    key: _tablaRegistrosKey,
+                    child: LayoutBuilder(
                     builder: (context, constraints) {
                       final isDesktop = constraints.maxWidth > 1100;
                       if (isDesktop) {
@@ -2452,6 +2455,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                         );
                       }
                     },
+                  ),
                   ),
 
                   // La ultima tabla de la pagina, por peticion del usuario.
