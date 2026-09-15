@@ -5,7 +5,7 @@
 
 import { ToolInput } from "./herramientas.ts";
 import { ADMIN_COLABORADOR_FIELDS, ADMIN_ONLY_TOOLS, PERMISO_POR_HERRAMIENTA, Permisos, puedeUsarHerramienta, soloCamposPermitidos, USER_COLABORADOR_FIELDS } from "./permisos.ts";
-import { calcYears, CANDIDATOS_APROXIMADO, CANDIDATOS_NOMBRE, conAlgunaPalabra, empataNombre, empataNombreAproximado, esUuid, esVigente, filtroPrefijos, getDaysByYear, numeroEmpleadoVariants, parseLocalDate, resolverPorNombre, sinAcentos, tokenGuia, tokensDeNombre, vigentesPrimero } from "./nombres.ts";
+import { calcYears, CANDIDATOS_APROXIMADO, CANDIDATOS_NOMBRE, conAlgunaPalabra, empataNombre, empataNombreAproximado, esUuid, esVigente, filtroPrefijos, getDaysByYear, nombreCompletoDe, numeroEmpleadoVariants, parseLocalDate, resolverPorNombre, sinAcentos, tokenGuia, tokensDeNombre, vigentesPrimero } from "./nombres.ts";
 import type { Db } from "./config.ts";
 
 /** De quien son los renglones que acaba de devolver una consulta, dicho para que lo lea el modelo.
@@ -563,24 +563,168 @@ export async function runTool(
     return { results: data, count: data?.length || 0, alcance: alcanceDeLaConsulta(deQuien, "incidencias") };
   }
 
+  // ─── De QUIEN es la solicitud ───────────────────────────────────────────────
+  //
+  // El id y el nombre salen de UNA sola resolucion. Antes se calculaban por separado, cada uno con
+  // su propio respaldo:
+  //
+  //     const effectiveUserId   = isAdmin ? (input.usuario_id   || userId)       : userId;
+  //     const effectiveUserName = isAdmin ? (input.nombre_usuario || userFullName) : userFullName;
+  //
+  // Bastaba con que el modelo mandara el NOMBRE y omitiera el ID para que la solicitud saliera con
+  // el nombre de una persona y los dias de otra. Paso el 15/09/2026: Marco Montoya, que es
+  // administrador, pidio por WhatsApp unas vacaciones PARA Dulce Camacho, y la incidencia quedo con
+  // `nombre_usuario` = «Dulce Marisela Camacho Vargas» y `usuario_id` = el de Marco. En el panel se
+  // leia a nombre de Dulce y los dias se le descontaban a Marco.
+  //
+  // Ahora el nombre se DERIVA del perfil que se resolvio, nunca del texto del modelo, asi que no
+  // puede contradecir al id. Y si se nombra a alguien que no se puede resolver, se responde con el
+  // error en vez de caer en quien pregunta: crear la solicitud a nombre de otro es peor que no
+  // crearla.
   if (name === "crear_incidencia") {
-    const effectiveUserId   = isAdmin ? ((input.usuario_id   as string) || userId) : userId;
-    const effectiveUserName = isAdmin ? ((input.nombre_usuario as string) || userFullName) : userFullName;
+    let destinoId = userId;
+    let destinoNombre = userFullName;
+
+    if (isAdmin) {
+      const idPedido = typeof input.usuario_id === "string" ? input.usuario_id.trim() : "";
+      const nombrePedido = typeof input.nombre_usuario === "string"
+        ? input.nombre_usuario.trim()
+        : "";
+
+      if (idPedido !== "" && esUuid(idPedido)) {
+        // Con id, manda el id. Si ademas venia un nombre y no coincide, se ignora: el nombre que se
+        // guarda es el del perfil.
+        const { data: perfil } = await db.from("profiles")
+          .select("id,nombre,paterno,materno").eq("id", idPedido).maybeSingle();
+        if (!perfil) {
+          return { error: `No existe ningun colaborador con el id ${idPedido}. No cree la solicitud.` };
+        }
+        destinoId = String((perfil as Record<string, unknown>).id);
+        destinoNombre = nombreCompletoDe(perfil as Record<string, unknown>);
+      } else if (nombrePedido !== "") {
+        // Solo el nombre: se resuelve con la MISMA busqueda que usa todo lo demas.
+        const r = await resolverPorNombre(
+          db, nombrePedido, "id,nombre,paterno,materno,numero_empleado,status_sys,status_rh");
+        if (r.fila === null) {
+          const comoSeLlaman = r.candidatos.map((c) => nombreCompletoDe(c));
+          return {
+            error: r.candidatos.length === 0
+              ? `No encontre a ningun colaborador que se llame «${nombrePedido}», asi que NO cree `
+                + `la solicitud. Confirma el nombre.`
+              : `«${nombrePedido}» empata con ${r.candidatos.length} personas, asi que NO cree la `
+                + `solicitud. Pregunta a cual de ellas te refieres y vuelve a intentarlo con su id.`,
+            candidatos: comoSeLlaman,
+          };
+        }
+        destinoId = String((r.fila as Record<string, unknown>).id);
+        destinoNombre = nombreCompletoDe(r.fila as Record<string, unknown>);
+      }
+    }
+
+    // ─── Y que el periodo exista y le queden dias ───────────────────────────
+    //
+    // El periodo es obligatorio en el esquema, asi que Soli lo pide. Quien contesta no siempre sabe
+    // cuales tiene: el 15/09/2026 Marco pregunto «que periodos tiene disponibles» tres veces sin
+    // conseguir respuesta. Ahora, si el periodo no encaja, no se crea nada Y se devuelven los que
+    // si tienen saldo, que es justo la lista que hacia falta.
+    //
+    // Las cifras salen de `calcular_vacaciones`, la MISMA herramienta que contesta «cuantos dias
+    // tengo» y la misma que pinta la tarjeta de la aplicacion. Reescribir aqui el calculo seria
+    // tener dos verdades para el mismo numero, que es como ya se separaron una vez el saldo de Soli
+    // y el de la pantalla.
+    const periodoPedido = typeof input.periodo === "string" ? input.periodo.trim() : "";
+    const saldo = await runTool(
+      "calcular_vacaciones",
+      destinoId === userId ? {} : { usuario_id: destinoId },
+      db, isAdmin, userId, userFullName, permisos,
+    ) as Record<string, unknown>;
+
+    // Si no se pudo calcular -sin fecha de ingreso, sin permiso- NO se bloquea la creacion: no
+    // validar es lo que se hacia hasta hoy, y negarle la solicitud a alguien por un dato de su
+    // ficha seria un problema peor que el que se arregla.
+    if (saldo.error) {
+      console.log(`crear_incidencia: sin validar el periodo, ${saldo.error}`);
+    } else {
+      const periodos = Array.isArray(saldo.periodos)
+        ? saldo.periodos as Array<Record<string, unknown>>
+        : [];
+      const conSaldo = periodos.filter((pe) => Number(pe.dias_disponibles) > 0);
+      const comoMenu = conSaldo.map((pe) => ({
+        periodo: pe.periodo,
+        dias_disponibles: pe.dias_disponibles,
+        es_periodo_actual: pe.es_periodo_actual === true,
+      }));
+      // Se comparan solo los digitos: «2024 - 2025», «2024-2025» y «2024 2025» son el mismo periodo
+      // escrito de tres maneras, y es el propio modelo quien elige cual escribe.
+      const digitos = (s: string) => s.replace(/\D/g, "");
+      const elegido = conSaldo.find((pe) => digitos(String(pe.periodo)) === digitos(periodoPedido));
+
+      if (!elegido) {
+        return {
+          error: conSaldo.length === 0
+            ? `${destinoNombre} no tiene dias disponibles en ningun periodo, asi que NO cree la `
+              + `solicitud.`
+            : `El periodo «${periodoPedido}» no tiene dias disponibles, asi que NO cree la `
+              + `solicitud. Muestrale los periodos que si tienen y pregunta de cual tomarlos.`,
+          periodos_disponibles: comoMenu,
+          total_disponible: saldo.total_disponible,
+          a_nombre_de: destinoNombre,
+        };
+      }
+
+      // Y que no pida mas dias de los que hay en ese periodo.
+      const pedidos = Number(input.dias);
+      const hay = Number(elegido.dias_disponibles);
+      if (Number.isFinite(pedidos) && pedidos > hay) {
+        return {
+          error: `En el periodo ${elegido.periodo} solo quedan ${hay} `
+            + `${hay === 1 ? "dia" : "dias"} y se pidieron ${pedidos}, asi que NO cree la `
+            + `solicitud. Muestrale los periodos y pregunta como quiere repartirlos.`,
+          periodos_disponibles: comoMenu,
+          total_disponible: saldo.total_disponible,
+          a_nombre_de: destinoNombre,
+        };
+      }
+    }
+
     const { data, error } = await db.from("incidencias").insert({
       ...soloCamposPermitidos(name, input),
-      usuario_id:     effectiveUserId,
-      nombre_usuario: effectiveUserName,
+      usuario_id:     destinoId,
+      nombre_usuario: destinoNombre,
       status:         "PENDIENTE",
       created_at:     new Date().toISOString(),
     }).select().single();
     if (error) return { error: error.message };
-    return { success: true, incidencia: data };
+    // Se dice DE QUIEN quedo, para que el modelo lo repita y quien pidio lo pueda desmentir en el
+    // acto si se equivoco de persona.
+    return {
+      success: true,
+      incidencia: data,
+      a_nombre_de: destinoNombre,
+      es_para_ti: destinoId === userId,
+    };
   }
 
   if (name === "actualizar_incidencia") {
     const { id } = input;
     const fields = soloCamposPermitidos(name, input);
-    const { data, error } = await db.from("incidencias").update(fields)
+
+    // ─── Quien lo autoriza, para que el aviso lo pueda nombrar ──────────────────
+    //
+    // Soli escribe con la llave de servicio, asi que dentro del disparador que manda el aviso
+    // `auth.uid()` es nulo. Sin esto, aprobar por WhatsApp producia un aviso que decia que la
+    // solicitud se aprobo y no decia por quien.
+    //
+    // NO sale de `input`: lo pone el servidor con quien esta hablando, igual que en
+    // `crear_incidencia`. Si lo mandara el modelo, bastaria con que se equivocara de nombre para
+    // dejar una aprobacion firmada por otra persona —que es exactamente el fallo de Marco y Dulce,
+    // en la version que se lee despues en un aviso.
+    //
+    // Solo cuando cambia el ESTATUS: corregir una fecha no es autorizar, y escribirlo ahi borraria
+    // a quien autorizo de verdad.
+    const cambiaEstatus = typeof fields.status === "string" && fields.status !== "";
+    const { data, error } = await db.from("incidencias")
+      .update(cambiaEstatus ? { ...fields, autorizada_por: userId } : fields)
       .eq("id", id as string).select().single();
     if (error) return { error: error.message };
     return { success: true, updated: data };

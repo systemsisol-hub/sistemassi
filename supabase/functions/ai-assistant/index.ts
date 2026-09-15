@@ -552,6 +552,8 @@ Deno.serve(async (req: Request) => {
 
     /// Cuantas herramientas se llamaron, con o sin exito. Ver `afirmaDatoSinRespaldo`.
     let llamadas = 0;
+    /// Si ya se le exigio una vez que consultara. Solo se hace UNA, para no dar vueltas.
+    let seLeInsistio = false;
 
     /// El modelo con el que se esta trabajando en ESTE turno.
     ///
@@ -659,6 +661,36 @@ Deno.serve(async (req: Request) => {
             `(herramientas con datos: ${[...conDatos].join(",") || "ninguna"}): ` +
             texto.slice(0, 300),
           );
+          // Antes de callar, se le devuelve el turno una vez y se le exige que consulte.
+          //
+          // ─── Por que ────────────────────────────────────────────────────────────
+          //
+          // El mensaje de abajo decia «vuelve a preguntármelo y lo consulto de nuevo», y era
+          // mentira: la misma pregunta con el mismo hilo produce la misma respuesta. El 15/09/2026
+          // Marco pregunto por los periodos disponibles de una colaboradora TRES veces seguidas y
+          // recibio ese texto las tres. El dato estaba a mano —en esa misma conversacion, hora y
+          // media antes, Soli lo habia contestado entero— y lo unico que faltaba era que llamara a
+          // la herramienta en lugar de contestar de memoria.
+          //
+          // Callar es mejor que inventar, pero pedirlo bien es mejor que callar. Esto no afloja el
+          // guardia: lo que no venga de una herramienta sigue sin salir. Solo se le da una
+          // oportunidad de ir a buscarlo, que es lo que el propio mensaje prometia.
+          if (!seLeInsistio) {
+            seLeInsistio = true;
+            console.log("ai-assistant: se le exige consultar antes de callar");
+            msgs.push({ role: "assistant", content: texto });
+            msgs.push({
+              role: "system",
+              content: "Ese dato NO se entrega de memoria ni de lo dicho antes en esta "
+                + "conversacion. Llama a la herramienta que lo consulta y contesta con lo que "
+                + "devuelva: calcular_vacaciones para dias y periodos de vacaciones -devuelve "
+                + "todos los periodos con sus dias disponibles-, buscar_cumpleanos para "
+                + "cumpleanos, buscar_colaborador para datos de ficha. Si ya la llamaste antes en "
+                + "esta conversacion, vuelve a llamarla.",
+            });
+            continue;
+          }
+
           // El mensaje no menciona nombres ni números de empleado: se disparaba también con
           // cumpleaños, y ahí pedir «el nombre con apellidos» no tenía ningún sentido.
           texto = "No pude confirmar ese dato con el sistema, así que prefiero no dártelo. "
@@ -693,6 +725,12 @@ Deno.serve(async (req: Request) => {
         const trajoDatos = !r.error
           && (Array.isArray(r.results) || Array.isArray(r.periodos) || r.success === true);
         if (trajoDatos) conDatos.add(name);
+        // Un rechazo que trae los periodos disponibles SI trae datos, aunque lleve `error`.
+        //
+        // Las cifras salen de `calcular_vacaciones`, consultada dentro de `crear_incidencia`. Se
+        // apunta a nombre de ESA herramienta porque es de donde vienen los numeros: sin esto, el
+        // guardia bloquearia la respuesta que enseña los periodos, que es justo lo que se pidio.
+        if (Array.isArray(r.periodos_disponibles)) conDatos.add("calcular_vacaciones");
         console.log(
           `resultado ${name}: ` +
           (r.error ? `ERROR ${r.error}` :

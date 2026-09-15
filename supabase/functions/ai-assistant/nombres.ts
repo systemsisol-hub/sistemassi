@@ -283,6 +283,14 @@ export async function resolverPorNombre(
   };
 }
 
+/** El nombre completo de un perfil, como se guarda en `incidencias.nombre_usuario`. */
+export function nombreCompletoDe(fila: Record<string, unknown>): string {
+  return [fila.nombre, fila.paterno, fila.materno]
+    .map((x) => String(x ?? "").trim())
+    .filter((x) => x !== "")
+    .join(" ");
+}
+
 /** A quien se refiere cuando dice "mi jefe", "mi gerente" o "mi director".
  *
  * Devuelve el NOMBRE que trae el perfil de quien pregunta, o `null` si no es ese caso. En la base
