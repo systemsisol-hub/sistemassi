@@ -231,6 +231,13 @@ for (const q of [
   'mis dias disponibles',
   'cual es mi saldo de dias',
   'vacaciones que tengo',
+  // Preguntar por los PERIODOS es la misma pregunta. Faltaba: el 15/09/2026 Soli pidio de que
+  // periodo tomar los dias y no supo contestar cuando le preguntaron cuales habia.
+  'que periodos tengo disponibles',
+  'cuales periodos tengo disponibles',
+  'que periodos me quedan',
+  'de que periodo puedo tomar dias',
+  'que periodo tengo disponible',
 ]) {
   ok(`la atiende: "${q}"`, preguntaSusVacaciones(q));
 }
@@ -244,6 +251,13 @@ for (const q of [
   'cuales son las vacaciones de mi jefe',
   'las vacaciones de mi compañero',
   // No son preguntas de saldo.
+  // De OTRA persona, aunque hable de periodos: el modelo es quien sabe resolver el nombre.
+  // Son las dos formas en que se pregunto por Dulce el 15/09/2026.
+  'que periodos tiene dulce disponibles',
+  'de que periodo las tomara',
+  'que periodos tiene vacaciones disponibles',
+  // «periodo» a secas no es una pregunta de saldo.
+  'de que periodo es esta solicitud',
   'quiero crear una solicitud de vacaciones',
   'puedo pedir vacaciones en diciembre?',
   'cuantas laptops tengo asignadas',
@@ -859,6 +873,73 @@ ok('y explica como elegir', /autorizo la 1/.test(dos));
 const sinNada = textoAutorizacion({ estado: 'sin_pendientes' });
 ok('sin pendientes lo dice claro', /No tienes solicitudes PENDIENTES/.test(sinNada));
 ok('y no afirma que no existan', /jefe inmediato/.test(sinNada));
+
+
+// ─── Antes de callar, se le exige que consulte ──────────────────────────────
+//
+// El texto que entregaba el guardia decia «vuelve a preguntármelo y lo consulto de nuevo», y era
+// mentira: la misma pregunta sobre el mismo hilo da la misma respuesta. El 15/09/2026 Marco
+// pregunto tres veces por los periodos disponibles de una colaboradora y recibio ese texto las
+// tres, con el dato a mano —Soli lo habia contestado entero hora y media antes—.
+//
+// Esto se comprueba sobre el CODIGO y no ejecutando el bucle: haria falta un modelo.
+console.log('\nEl guardia pide antes de callar');
+
+// El limite se MIDE, no se adivina: el hueco real son 808 caracteres -la orden que se le manda es
+// larga- y con {0,600} esta comprobacion fallaba teniendo el codigo bien. Ya me paso una vez.
+ok('se le devuelve el turno una vez',
+  /if \(!seLeInsistio\)\s*\{[\s\S]{0,1200}continue;/.test(src),
+  'sin esto el guardia sigue dejando la respuesta en blanco a la primera');
+
+ok('y solo una vez', /seLeInsistio = true;/.test(src),
+  'sin marcarlo, dos respuestas seguidas sin respaldo darian vueltas');
+
+ok('se le dice QUE herramienta llamar',
+  /calcular_vacaciones para dias y periodos/.test(src),
+  'una orden generica -«consulta el sistema»- no le dice cual llamar');
+
+ok('el texto de callar sigue existiendo como ultimo recurso',
+  /No pude confirmar ese dato con el sistema/.test(src),
+  'si insistir tampoco funciona, callar sigue siendo mejor que inventar');
+
+// El orden importa: insistir tiene que ir ANTES de sustituir el texto, o no sirve de nada.
+ok('insistir va antes de callar',
+  src.indexOf('seLeInsistio = true;') < src.indexOf('No pude confirmar ese dato con el sistema'),
+  'si se sustituye el texto primero, el reintento llega tarde');
+
+// ─── Los periodos que se devuelven en un rechazo SI son datos ───────────────
+//
+// El rechazo lleva `error`, asi que no contaba como «trajo datos» y el guardia habria bloqueado la
+// respuesta que enseña los periodos, que es justo lo que se pidio. Las cifras salen de
+// `calcular_vacaciones`, consultada dentro de `crear_incidencia`.
+console.log('\nUn rechazo con periodos cuenta como datos');
+
+ok('`periodos_disponibles` respalda a calcular_vacaciones',
+  /periodos_disponibles\)\)\s*conDatos\.add\("calcular_vacaciones"\)/.test(src),
+  'sin esto el guardia bloquea la lista de periodos que el propio sistema acaba de devolver');
+
+// ─── Y no se crea la solicitud contra un periodo sin dias ───────────────────
+console.log('\nEl periodo se comprueba antes de crear');
+
+const crear = src.slice(src.indexOf('if (name === "crear_incidencia")'));
+const finCrear = crear.indexOf('if (name === "actualizar_incidencia")');
+const bloque = crear.slice(0, finCrear > 0 ? finCrear : 6000);
+
+ok('se devuelven los periodos con saldo al rechazar',
+  /periodos_disponibles:\s*comoMenu/.test(bloque),
+  'rechazar sin decir cuales valen deja a quien pregunta igual de perdido');
+
+ok('el rechazo va ANTES del insert',
+  bloque.indexOf('periodos_disponibles: comoMenu') < bloque.indexOf('.insert({'),
+  'si se comprueba despues, la solicitud ya se creo');
+
+ok('el saldo sale de calcular_vacaciones, no de una cuenta nueva',
+  /runTool\(\s*"calcular_vacaciones"/.test(bloque),
+  'dos verdades para el mismo numero es como ya se separaron Soli y la pantalla');
+
+ok('si no se puede calcular, NO se bloquea la creacion',
+  /if \(saldo\.error\)/.test(bloque),
+  'negarle la solicitud a alguien por un dato de su ficha seria peor que no validar');
 
 console.log(fallos === 0 ? '\nTODO BIEN' : `\n${fallos} FALLAS`);
 process.exit(fallos === 0 ? 0 : 1);

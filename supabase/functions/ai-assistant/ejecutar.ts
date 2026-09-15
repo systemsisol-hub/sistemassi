@@ -621,6 +621,72 @@ export async function runTool(
       }
     }
 
+    // ─── Y que el periodo exista y le queden dias ───────────────────────────
+    //
+    // El periodo es obligatorio en el esquema, asi que Soli lo pide. Quien contesta no siempre sabe
+    // cuales tiene: el 15/09/2026 Marco pregunto «que periodos tiene disponibles» tres veces sin
+    // conseguir respuesta. Ahora, si el periodo no encaja, no se crea nada Y se devuelven los que
+    // si tienen saldo, que es justo la lista que hacia falta.
+    //
+    // Las cifras salen de `calcular_vacaciones`, la MISMA herramienta que contesta «cuantos dias
+    // tengo» y la misma que pinta la tarjeta de la aplicacion. Reescribir aqui el calculo seria
+    // tener dos verdades para el mismo numero, que es como ya se separaron una vez el saldo de Soli
+    // y el de la pantalla.
+    const periodoPedido = typeof input.periodo === "string" ? input.periodo.trim() : "";
+    const saldo = await runTool(
+      "calcular_vacaciones",
+      destinoId === userId ? {} : { usuario_id: destinoId },
+      db, isAdmin, userId, userFullName, permisos,
+    ) as Record<string, unknown>;
+
+    // Si no se pudo calcular -sin fecha de ingreso, sin permiso- NO se bloquea la creacion: no
+    // validar es lo que se hacia hasta hoy, y negarle la solicitud a alguien por un dato de su
+    // ficha seria un problema peor que el que se arregla.
+    if (saldo.error) {
+      console.log(`crear_incidencia: sin validar el periodo, ${saldo.error}`);
+    } else {
+      const periodos = Array.isArray(saldo.periodos)
+        ? saldo.periodos as Array<Record<string, unknown>>
+        : [];
+      const conSaldo = periodos.filter((pe) => Number(pe.dias_disponibles) > 0);
+      const comoMenu = conSaldo.map((pe) => ({
+        periodo: pe.periodo,
+        dias_disponibles: pe.dias_disponibles,
+        es_periodo_actual: pe.es_periodo_actual === true,
+      }));
+      // Se comparan solo los digitos: «2024 - 2025», «2024-2025» y «2024 2025» son el mismo periodo
+      // escrito de tres maneras, y es el propio modelo quien elige cual escribe.
+      const digitos = (s: string) => s.replace(/\D/g, "");
+      const elegido = conSaldo.find((pe) => digitos(String(pe.periodo)) === digitos(periodoPedido));
+
+      if (!elegido) {
+        return {
+          error: conSaldo.length === 0
+            ? `${destinoNombre} no tiene dias disponibles en ningun periodo, asi que NO cree la `
+              + `solicitud.`
+            : `El periodo «${periodoPedido}» no tiene dias disponibles, asi que NO cree la `
+              + `solicitud. Muestrale los periodos que si tienen y pregunta de cual tomarlos.`,
+          periodos_disponibles: comoMenu,
+          total_disponible: saldo.total_disponible,
+          a_nombre_de: destinoNombre,
+        };
+      }
+
+      // Y que no pida mas dias de los que hay en ese periodo.
+      const pedidos = Number(input.dias);
+      const hay = Number(elegido.dias_disponibles);
+      if (Number.isFinite(pedidos) && pedidos > hay) {
+        return {
+          error: `En el periodo ${elegido.periodo} solo quedan ${hay} `
+            + `${hay === 1 ? "dia" : "dias"} y se pidieron ${pedidos}, asi que NO cree la `
+            + `solicitud. Muestrale los periodos y pregunta como quiere repartirlos.`,
+          periodos_disponibles: comoMenu,
+          total_disponible: saldo.total_disponible,
+          a_nombre_de: destinoNombre,
+        };
+      }
+    }
+
     const { data, error } = await db.from("incidencias").insert({
       ...soloCamposPermitidos(name, input),
       usuario_id:     destinoId,

@@ -28,7 +28,22 @@ import { sinAcentos } from "./nombres.ts";
  */
 export function preguntaSusVacaciones(texto: string): boolean {
   const t = sinAcentos(texto).toLowerCase();
-  if (!/vacacion|dias disponibles|dias que me quedan|saldo de dias/.test(t)) return false;
+
+  // Preguntar por los PERIODOS es la misma pregunta que preguntar por los DIAS: la herramienta
+  // devuelve las dos cosas en una llamada, y por WhatsApp la respuesta ya sale con la tabla
+  // «Por periodo:» puesta.
+  //
+  // Faltaba, y se noto el 15/09/2026: Soli le pidio a Marco de que periodo tomar los dias, Marco
+  // contesto preguntando cuales tenia, y como «periodo» no era palabra de esta via se fue al modelo,
+  // que contesto de memoria y acabo bloqueado por el guardia. Tres veces seguidas. Es la pregunta
+  // que el propio Soli acaba de provocar: no puede ser la que no sabe contestar.
+  //
+  // Se exige la segunda palabra -«disponibles», «me quedan»- para no tragarse «de que periodo las
+  // tomara», que habla de otra persona y tiene que seguir yendo al modelo.
+  const porLosDias = /vacacion|dias disponibles|dias que me quedan|saldo de dias/.test(t);
+  const porLosPeriodos = /periodos?\b/.test(t)
+    && /disponibl|me quedan|me toca|puedo tomar|vacacion/.test(t);
+  if (!porLosDias && !porLosPeriodos) return false;
 
   // «de <alguien>» quiere decir que pregunta por otra persona. `de` sola no basta: «cuantos dias de
   // vacaciones tengo» lleva un `de` que no introduce a nadie, y hay que dejarlo pasar.
@@ -37,10 +52,20 @@ export function preguntaSusVacaciones(texto: string): boolean {
   // colarlo por esta via devolveria el saldo de quien pregunta como si fuera el de su jefe. A cambio,
   // «cuantos dias de mis vacaciones quedan» se va al modelo, que es un coste mucho menor que contestar
   // con los datos de alguien equivocado.
-  if (/\bde\s+(?!vacacion|dias|antiguedad|la\s|los\s|las\s|el\s)[a-z]{2,}/.test(t)) {
+  // `que` va en la lista por lo mismo que `la` o `los`: «de que periodo puedo tomar dias» no
+  // nombra a nadie, y sin esto se iba al modelo por culpa de un «de» que no introduce a una persona.
+  if (/\bde\s+(?!vacacion|dias|antiguedad|que\s|la\s|los\s|las\s|el\s)[a-z]{2,}/.test(t)) {
     return false;
   }
-  return /\bmis\b|\bmi\b|\btengo\b|me\s+quedan|me\s+toca|me\s+corresponden/.test(t);
+  if (/\bmis\b|\bmi\b|\btengo\b|me\s+quedan|me\s+toca|me\s+corresponden/.test(t)) return true;
+
+  // «de que periodo puedo tomar dias» habla de quien pregunta aunque no diga «mis»: `puedo` es
+  // primera persona, y es la forma NORMAL de contestar cuando Soli acaba de preguntar el periodo.
+  //
+  // Solo cuenta en la pregunta por PERIODOS. En la general sobraria: «puedo pedir vacaciones en
+  // diciembre» es una duda de politica, no un saldo, y tiene que seguir yendo al modelo. Y si
+  // hubiera un «de <alguien>», ya se habria descartado arriba.
+  return porLosPeriodos && /\bpuedo\b/.test(t);
 }
 
 /** Si la persona pide LAS FALTAS o la ASISTENCIA de alguien, y de quien.
