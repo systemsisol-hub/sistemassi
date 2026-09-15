@@ -13,6 +13,14 @@ import 'widgets/calendario_incidencias.dart';
 import 'widgets/grafica_vacaciones_mes.dart';
 
 
+/// Si se puede descargar el PDF de una incidencia.
+///
+/// Solo de las APROBADAS. El PDF es la solicitud de vacaciones firmada, y de una que todavia esta
+/// pendiente —o que se cancelo— seria un papel que dice que algo se autorizo cuando no.
+///
+/// Se pregunta desde los TRES menus de esta pagina. En uno solo seria media regla.
+bool sePuedeDescargarPdf(Map<String, dynamic> inc) => inc['status'] == 'APROBADA';
+
 class IncidenciasPage extends StatefulWidget {
   const IncidenciasPage({super.key});
 
@@ -1450,12 +1458,13 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                     }
                   },
                   itemBuilder: (ctx) => [
-                    const PopupMenuItem(
-                        value: 'PDF',
-                        child: ListTile(
-                            leading: Icon(Icons.picture_as_pdf_outlined),
-                            title: Text('Descargar PDF'),
-                            dense: true)),
+                    if (sePuedeDescargarPdf(inc))
+                      const PopupMenuItem(
+                          value: 'PDF',
+                          child: ListTile(
+                              leading: Icon(Icons.picture_as_pdf_outlined),
+                              title: Text('Descargar PDF'),
+                              dense: true)),
                     if (_userRole == 'admin' || inc['status'] == 'PENDIENTE')
                       const PopupMenuItem(
                           value: 'EDIT',
@@ -1627,17 +1636,14 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                                 ),
                               ),
                               onSelected: (val) async {
-                                if (val == 'PDF') {
-                                  final uProfile = inc['profiles'] as Map<String, dynamic>? ?? {};
-                                  if (uProfile.isNotEmpty) {
-                                    IncidenciasPdfService.generateVacationRequest(uProfile, inc);
-                                  }
-                                  return;
-                                }
                                 // Optimistic update: remover el item de la lista
                                 // inmediatamente para que la tabla refleje el
                                 // cambio sin esperar el re-fetch.
                                 final incId = inc['id'];
+                                final deQuien = inc['usuario_id']?.toString();
+                                // Se guarda por si hay que devolverlo: si la escritura falla, la
+                                // fila ya no está y sin esto la tarjeta mentiría hasta recargar.
+                                final copia = Map<String, dynamic>.from(inc);
                                 setState(() {
                                   _allIncidencias.removeWhere(
                                       (item) => item['id'] == incId);
@@ -1653,18 +1659,62 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                                   // camino: aprobar por WhatsApp pasa por `actualizar_incidencia` de Soli, que no notificaba. Es
                                   // justo lo que se reporto -Marco aprobo por WhatsApp y no le llego a nadie-. En la base esta
                                   // una vez y cubre los cuatro.
-                                } finally {
-                                  // Siempre refrescar aunque NotificationService falle
+                                } catch (e) {
+                                  // La fila se quitó ANTES de escribir, así que si la escritura
+                                  // falla hay que devolverla: si no, la solicitud desaparece de la
+                                  // tarjeta y sigue pendiente en la base, que es la peor mezcla.
+                                  // Antes este bloque no existía y el error se perdía.
+                                  if (mounted) {
+                                    setState(() => _allIncidencias.add(copia));
+                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                      content: Text('No se pudo cambiar el estatus: $e'),
+                                      backgroundColor: Colors.red[700],
+                                    ));
+                                  }
+                                  return;
+                                }
+
+                                // Y se lleva la página a la persona que se acaba de aprobar.
+                                //
+                                // Es el arreglo de lo que se reportó el 15/09/2026: «desde la
+                                // tarjeta de pendientes no se hace el cambio en el historial de
+                                // vacaciones». Y era cierto, por una razón que no se ve leyendo el
+                                // botón: `_fetchIncidencias` recarga SÓLO las incidencias del
+                                // colaborador seleccionado —así funciona toda la página— mientras
+                                // que esta tarjeta muestra las de TODOS. Aprobabas a alguien que no
+                                // era el de la pantalla, y el historial de abajo, que es de otro, no
+                                // se movía. Desde la tabla de registros siempre funcionó porque
+                                // para llegar ahí ya tenías a esa persona seleccionada.
+                                //
+                                // Cambiar de persona al aprobar no es sólo refrescar: es la
+                                // confirmación de que el cambio entró, con sus días ya descontados.
+                                final estaEnLaLista = deQuien != null &&
+                                    _adminUserList.any((u) => u['id'] == deQuien);
+                                if (estaEnLaLista && deQuien != _selectedUserId) {
+                                  _onUserSelected(deQuien);
+                                  if (mounted) {
+                                    final quien = _adminUserList.firstWhere(
+                                        (u) => u['id'] == deQuien,
+                                        orElse: () => const {});
+                                    final nombre = '${quien['nombre'] ?? ''} '
+                                            '${quien['paterno'] ?? ''}'
+                                        .trim();
+                                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                      content: Text(nombre.isEmpty
+                                          ? 'Solicitud $val. Se muestra su historial.'
+                                          : 'Solicitud de $nombre $val. '
+                                              'Abajo está su historial ya actualizado.'),
+                                    ));
+                                  }
+                                } else {
+                                  // Ya era la persona en pantalla, o no está en la lista de
+                                  // colaboradores: se recarga lo que hay.
                                   _fetchIncidencias();
                                 }
                               },
+                                // Sin «Descargar PDF»: esta tarjeta muestra SOLO las
+                                // pendientes, y de una pendiente no hay papel que descargar.
                                 itemBuilder: (_) => const [
-                                  PopupMenuItem(
-                                      value: 'PDF',
-                                      child: ListTile(
-                                          leading: Icon(Icons.picture_as_pdf_outlined),
-                                          title: Text('Descargar PDF'),
-                                          dense: true)),
                                   PopupMenuItem(
                                       value: 'APROBADA', child: Text('APROBADA')),
                                   PopupMenuItem(
@@ -2559,17 +2609,18 @@ class _IncidenciasDataSource extends DataTableSource {
                 }
               },
             itemBuilder: (ctx) => [
-              PopupMenuItem(
-                value: 'PDF',
-                child: Row(
-                  children: [
-                    Icon(Icons.picture_as_pdf_outlined,
-                        size: 18, color: Colors.red[700]),
-                    const SizedBox(width: 12),
-                    const Text('Descargar PDF', style: TextStyle(fontSize: 13)),
-                  ],
+              if (sePuedeDescargarPdf(inc))
+                PopupMenuItem(
+                  value: 'PDF',
+                  child: Row(
+                    children: [
+                      Icon(Icons.picture_as_pdf_outlined,
+                          size: 18, color: Colors.red[700]),
+                      const SizedBox(width: 12),
+                      const Text('Descargar PDF', style: TextStyle(fontSize: 13)),
+                    ],
+                  ),
                 ),
-              ),
               if (isAdmin || inc['status'] == 'PENDIENTE')
                 PopupMenuItem(
                   value: 'EDIT',
