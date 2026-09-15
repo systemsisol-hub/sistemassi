@@ -5,7 +5,7 @@
 
 import { ToolInput } from "./herramientas.ts";
 import { ADMIN_COLABORADOR_FIELDS, ADMIN_ONLY_TOOLS, PERMISO_POR_HERRAMIENTA, Permisos, puedeUsarHerramienta, soloCamposPermitidos, USER_COLABORADOR_FIELDS } from "./permisos.ts";
-import { calcYears, CANDIDATOS_APROXIMADO, CANDIDATOS_NOMBRE, conAlgunaPalabra, empataNombre, empataNombreAproximado, esUuid, esVigente, filtroPrefijos, getDaysByYear, numeroEmpleadoVariants, parseLocalDate, resolverPorNombre, sinAcentos, tokenGuia, tokensDeNombre, vigentesPrimero } from "./nombres.ts";
+import { calcYears, CANDIDATOS_APROXIMADO, CANDIDATOS_NOMBRE, conAlgunaPalabra, empataNombre, empataNombreAproximado, esUuid, esVigente, filtroPrefijos, getDaysByYear, nombreCompletoDe, numeroEmpleadoVariants, parseLocalDate, resolverPorNombre, sinAcentos, tokenGuia, tokensDeNombre, vigentesPrimero } from "./nombres.ts";
 import type { Db } from "./config.ts";
 
 /** De quien son los renglones que acaba de devolver una consulta, dicho para que lo lea el modelo.
@@ -563,18 +563,80 @@ export async function runTool(
     return { results: data, count: data?.length || 0, alcance: alcanceDeLaConsulta(deQuien, "incidencias") };
   }
 
+  // ─── De QUIEN es la solicitud ───────────────────────────────────────────────
+  //
+  // El id y el nombre salen de UNA sola resolucion. Antes se calculaban por separado, cada uno con
+  // su propio respaldo:
+  //
+  //     const effectiveUserId   = isAdmin ? (input.usuario_id   || userId)       : userId;
+  //     const effectiveUserName = isAdmin ? (input.nombre_usuario || userFullName) : userFullName;
+  //
+  // Bastaba con que el modelo mandara el NOMBRE y omitiera el ID para que la solicitud saliera con
+  // el nombre de una persona y los dias de otra. Paso el 15/09/2026: Marco Montoya, que es
+  // administrador, pidio por WhatsApp unas vacaciones PARA Dulce Camacho, y la incidencia quedo con
+  // `nombre_usuario` = «Dulce Marisela Camacho Vargas» y `usuario_id` = el de Marco. En el panel se
+  // leia a nombre de Dulce y los dias se le descontaban a Marco.
+  //
+  // Ahora el nombre se DERIVA del perfil que se resolvio, nunca del texto del modelo, asi que no
+  // puede contradecir al id. Y si se nombra a alguien que no se puede resolver, se responde con el
+  // error en vez de caer en quien pregunta: crear la solicitud a nombre de otro es peor que no
+  // crearla.
   if (name === "crear_incidencia") {
-    const effectiveUserId   = isAdmin ? ((input.usuario_id   as string) || userId) : userId;
-    const effectiveUserName = isAdmin ? ((input.nombre_usuario as string) || userFullName) : userFullName;
+    let destinoId = userId;
+    let destinoNombre = userFullName;
+
+    if (isAdmin) {
+      const idPedido = typeof input.usuario_id === "string" ? input.usuario_id.trim() : "";
+      const nombrePedido = typeof input.nombre_usuario === "string"
+        ? input.nombre_usuario.trim()
+        : "";
+
+      if (idPedido !== "" && esUuid(idPedido)) {
+        // Con id, manda el id. Si ademas venia un nombre y no coincide, se ignora: el nombre que se
+        // guarda es el del perfil.
+        const { data: perfil } = await db.from("profiles")
+          .select("id,nombre,paterno,materno").eq("id", idPedido).maybeSingle();
+        if (!perfil) {
+          return { error: `No existe ningun colaborador con el id ${idPedido}. No cree la solicitud.` };
+        }
+        destinoId = String((perfil as Record<string, unknown>).id);
+        destinoNombre = nombreCompletoDe(perfil as Record<string, unknown>);
+      } else if (nombrePedido !== "") {
+        // Solo el nombre: se resuelve con la MISMA busqueda que usa todo lo demas.
+        const r = await resolverPorNombre(
+          db, nombrePedido, "id,nombre,paterno,materno,numero_empleado,status_sys,status_rh");
+        if (r.fila === null) {
+          const comoSeLlaman = r.candidatos.map((c) => nombreCompletoDe(c));
+          return {
+            error: r.candidatos.length === 0
+              ? `No encontre a ningun colaborador que se llame «${nombrePedido}», asi que NO cree `
+                + `la solicitud. Confirma el nombre.`
+              : `«${nombrePedido}» empata con ${r.candidatos.length} personas, asi que NO cree la `
+                + `solicitud. Pregunta a cual de ellas te refieres y vuelve a intentarlo con su id.`,
+            candidatos: comoSeLlaman,
+          };
+        }
+        destinoId = String((r.fila as Record<string, unknown>).id);
+        destinoNombre = nombreCompletoDe(r.fila as Record<string, unknown>);
+      }
+    }
+
     const { data, error } = await db.from("incidencias").insert({
       ...soloCamposPermitidos(name, input),
-      usuario_id:     effectiveUserId,
-      nombre_usuario: effectiveUserName,
+      usuario_id:     destinoId,
+      nombre_usuario: destinoNombre,
       status:         "PENDIENTE",
       created_at:     new Date().toISOString(),
     }).select().single();
     if (error) return { error: error.message };
-    return { success: true, incidencia: data };
+    // Se dice DE QUIEN quedo, para que el modelo lo repita y quien pidio lo pueda desmentir en el
+    // acto si se equivoco de persona.
+    return {
+      success: true,
+      incidencia: data,
+      a_nombre_de: destinoNombre,
+      es_para_ti: destinoId === userId,
+    };
   }
 
   if (name === "actualizar_incidencia") {
