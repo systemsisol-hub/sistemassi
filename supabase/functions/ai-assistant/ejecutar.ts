@@ -708,7 +708,23 @@ export async function runTool(
   if (name === "actualizar_incidencia") {
     const { id } = input;
     const fields = soloCamposPermitidos(name, input);
-    const { data, error } = await db.from("incidencias").update(fields)
+
+    // ─── Quien lo autoriza, para que el aviso lo pueda nombrar ──────────────────
+    //
+    // Soli escribe con la llave de servicio, asi que dentro del disparador que manda el aviso
+    // `auth.uid()` es nulo. Sin esto, aprobar por WhatsApp producia un aviso que decia que la
+    // solicitud se aprobo y no decia por quien.
+    //
+    // NO sale de `input`: lo pone el servidor con quien esta hablando, igual que en
+    // `crear_incidencia`. Si lo mandara el modelo, bastaria con que se equivocara de nombre para
+    // dejar una aprobacion firmada por otra persona —que es exactamente el fallo de Marco y Dulce,
+    // en la version que se lee despues en un aviso.
+    //
+    // Solo cuando cambia el ESTATUS: corregir una fecha no es autorizar, y escribirlo ahi borraria
+    // a quien autorizo de verdad.
+    const cambiaEstatus = typeof fields.status === "string" && fields.status !== "";
+    const { data, error } = await db.from("incidencias")
+      .update(cambiaEstatus ? { ...fields, autorizada_por: userId } : fields)
       .eq("id", id as string).select().single();
     if (error) return { error: error.message };
     return { success: true, updated: data };

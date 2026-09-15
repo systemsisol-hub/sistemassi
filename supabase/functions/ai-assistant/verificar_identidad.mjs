@@ -113,6 +113,20 @@ const actualizar = bloqueDe('actualizar_incidencia');
 comprobar('no escribe `usuario_id`', !/usuario_id\s*:/.test(actualizar));
 comprobar('no escribe `nombre_usuario`', !/nombre_usuario\s*:/.test(actualizar));
 
+// ── Y quien autoriza tampoco lo dice el modelo ──────────────────────────────
+//
+// `autorizada_por` acaba en un aviso que lee otra persona: «Autorizada por X». Es el mismo fallo
+// que el de Marco y Dulce en otra forma —una firma a nombre de quien no firmo— asi que sale de
+// quien esta hablando, no del texto del modelo.
+comprobar('`autorizada_por` sale de quien habla, no de `input`',
+  /autorizada_por:\s*userId/.test(actualizar)
+    && !/autorizada_por:\s*[^,\n]*input\./.test(actualizar),
+  'si lo manda el modelo, una aprobacion puede quedar firmada por otra persona');
+
+comprobar('y solo se escribe cuando cambia el estatus',
+  /cambiaEstatus\s*\?/.test(actualizar),
+  'corregir una fecha no es autorizar: escribirlo ahi borra a quien autorizo de verdad');
+
 console.log('');
 if (fallos > 0) {
   console.log(`${fallos} FALLAS`);
