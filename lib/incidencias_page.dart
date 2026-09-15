@@ -13,6 +13,14 @@ import 'widgets/calendario_incidencias.dart';
 import 'widgets/grafica_vacaciones_mes.dart';
 
 
+/// Si se puede descargar el PDF de una incidencia.
+///
+/// Solo de las APROBADAS. El PDF es la solicitud de vacaciones firmada, y de una que todavia esta
+/// pendiente —o que se cancelo— seria un papel que dice que algo se autorizo cuando no.
+///
+/// Se pregunta desde los TRES menus de esta pagina. En uno solo seria media regla.
+bool sePuedeDescargarPdf(Map<String, dynamic> inc) => inc['status'] == 'APROBADA';
+
 class IncidenciasPage extends StatefulWidget {
   const IncidenciasPage({super.key});
 
@@ -1450,12 +1458,13 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                     }
                   },
                   itemBuilder: (ctx) => [
-                    const PopupMenuItem(
-                        value: 'PDF',
-                        child: ListTile(
-                            leading: Icon(Icons.picture_as_pdf_outlined),
-                            title: Text('Descargar PDF'),
-                            dense: true)),
+                    if (sePuedeDescargarPdf(inc))
+                      const PopupMenuItem(
+                          value: 'PDF',
+                          child: ListTile(
+                              leading: Icon(Icons.picture_as_pdf_outlined),
+                              title: Text('Descargar PDF'),
+                              dense: true)),
                     if (_userRole == 'admin' || inc['status'] == 'PENDIENTE')
                       const PopupMenuItem(
                           value: 'EDIT',
@@ -1627,13 +1636,6 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                                 ),
                               ),
                               onSelected: (val) async {
-                                if (val == 'PDF') {
-                                  final uProfile = inc['profiles'] as Map<String, dynamic>? ?? {};
-                                  if (uProfile.isNotEmpty) {
-                                    IncidenciasPdfService.generateVacationRequest(uProfile, inc);
-                                  }
-                                  return;
-                                }
                                 // Optimistic update: remover el item de la lista
                                 // inmediatamente para que la tabla refleje el
                                 // cambio sin esperar el re-fetch.
@@ -1710,13 +1712,9 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                                   _fetchIncidencias();
                                 }
                               },
+                                // Sin «Descargar PDF»: esta tarjeta muestra SOLO las
+                                // pendientes, y de una pendiente no hay papel que descargar.
                                 itemBuilder: (_) => const [
-                                  PopupMenuItem(
-                                      value: 'PDF',
-                                      child: ListTile(
-                                          leading: Icon(Icons.picture_as_pdf_outlined),
-                                          title: Text('Descargar PDF'),
-                                          dense: true)),
                                   PopupMenuItem(
                                       value: 'APROBADA', child: Text('APROBADA')),
                                   PopupMenuItem(
@@ -2611,17 +2609,18 @@ class _IncidenciasDataSource extends DataTableSource {
                 }
               },
             itemBuilder: (ctx) => [
-              PopupMenuItem(
-                value: 'PDF',
-                child: Row(
-                  children: [
-                    Icon(Icons.picture_as_pdf_outlined,
-                        size: 18, color: Colors.red[700]),
-                    const SizedBox(width: 12),
-                    const Text('Descargar PDF', style: TextStyle(fontSize: 13)),
-                  ],
+              if (sePuedeDescargarPdf(inc))
+                PopupMenuItem(
+                  value: 'PDF',
+                  child: Row(
+                    children: [
+                      Icon(Icons.picture_as_pdf_outlined,
+                          size: 18, color: Colors.red[700]),
+                      const SizedBox(width: 12),
+                      const Text('Descargar PDF', style: TextStyle(fontSize: 13)),
+                    ],
+                  ),
                 ),
-              ),
               if (isAdmin || inc['status'] == 'PENDIENTE')
                 PopupMenuItem(
                   value: 'EDIT',
