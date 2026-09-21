@@ -6,6 +6,10 @@
 // cosa menos que atrapar.
 
 import { sinAcentos } from "./nombres.ts";
+// `Rango` va por separado y como `type`: es una interfaz, no existe en tiempo de ejecucion. Escrito
+// junto a `rangoDeFechas` se convierte en una importacion de verdad de algo que no se exporta.
+import { rangoDeFechas } from "./rango.ts";
+import type { Rango } from "./rango.ts";
 
 /** Si la persona pregunta por SUS PROPIAS vacaciones.
  *
@@ -66,6 +70,78 @@ export function preguntaSusVacaciones(texto: string): boolean {
   // diciembre» es una duda de politica, no un saldo, y tiene que seguir yendo al modelo. Y si
   // hubiera un «de <alguien>», ya se habria descartado arriba.
   return porLosPeriodos && /\bpuedo\b/.test(t);
+}
+
+/** Si la pregunta es QUIENES se van de vacaciones, y en que fechas.
+ *
+ * ─── Por que no pasa por el modelo ───────────────────────────────────────────
+ *
+ * Reportado: «quien se va de vacaciones en septiembre o en esta semana» no se podia contestar. Y no
+ * era que el modelo fallara: `buscar_incidencias` no tenia NINGUN filtro por fechas —solo estatus,
+ * periodo y usuario— asi que no habia manera de pedir ese dato. El modelo solo podia callar o
+ * inventar.
+ *
+ * Ya con el filtro puesto, esto sigue sin necesitar al modelo: el rango se calcula con aritmetica
+ * de calendario -ver `rango.ts`- y la consulta es determinista. Pedirle al modelo que convierta
+ * «esta semana» en dos fechas es pedirle que invente los limites con los que luego se filtra.
+ *
+ * Se exige que diga QUIEN -o «quienes», o «que personas»- para no tragarse «cuantos dias de
+ * vacaciones tengo», que es otra pregunta y ya tiene su via.
+ */
+export function preguntaQuienSeVa(texto: string, hoy: Date): Rango | null {
+  const t = sinAcentos(texto).toLowerCase();
+  if (!/vacacion|se van?\s+de\s+descanso|esta(n)?\s+fuera/.test(t)) return null;
+  // `lista(do)s? de` y no `lista` a secas por dos razones. Una: escrito `listado?` la `o` queda
+  // opcional y nunca coincide con «lista», que es como se pide de verdad. Dos: «¿ya esta lista mi
+  // solicitud de vacaciones de septiembre?» lleva «lista» de adjetivo y no pide ningun listado.
+  if (!/\bquien(es)?\b|\bque\s+personas\b|\bque\s+colaboradores\b|\blista(do)?s?\s+de\b/.test(t)) {
+    return null;
+  }
+  // Sin fechas no hay lista que dar: «quien aprueba mis vacaciones» llega hasta aqui y sale.
+  return rangoDeFechas(texto, hoy);
+}
+
+/** La lista de quienes estan fuera, escrita desde los datos.
+ *
+ * Se agrupa por PERSONA y no por solicitud: alguien con dos salidas en el mes sale una vez, con sus
+ * dos tramos. Preguntado «quien se va», lo que se quiere contar son personas.
+ */
+export function textoQuienSeVa(
+  rango: Rango,
+  filas: Array<Record<string, unknown>>,
+): string {
+  const dia = (v: unknown) => {
+    const p = String(v ?? "").slice(0, 10).split("-");
+    return p.length === 3 ? `${p[2]}/${p[1]}` : String(v ?? "");
+  };
+
+  if (filas.length === 0) {
+    return `Nadie tiene vacaciones registradas en ${rango.etiqueta}.`;
+  }
+
+  const porPersona = new Map<string, Array<Record<string, unknown>>>();
+  for (const f of filas) {
+    const quien = String(f.nombre_usuario ?? "").trim() || "(sin nombre)";
+    if (!porPersona.has(quien)) porPersona.set(quien, []);
+    porPersona.get(quien)!.push(f);
+  }
+
+  const lineas: string[] = [];
+  for (const [quien, suyas] of porPersona) {
+    const tramos = suyas.map((f) => {
+      const d = Number(f.dias);
+      const cuantos = Number.isFinite(d) ? ` (${d} ${d === 1 ? "dia" : "dias"})` : "";
+      // El estatus solo se dice cuando NO esta aprobada: una lista donde todo pone «APROBADA» hace
+      // ruido, pero una pendiente colada entre aprobadas cambia lo que se puede planear.
+      const pendiente = f.status === "APROBADA" ? "" : ` [${String(f.status ?? "")}]`;
+      return `${dia(f.fecha_inicio)} al ${dia(f.fecha_fin)}${cuantos}${pendiente}`;
+    });
+    lineas.push(`• ${quien}: ${tramos.join(" y ")}`);
+  }
+
+  const n = porPersona.size;
+  return `Vacaciones en ${rango.etiqueta} — ${n} ${n === 1 ? "persona" : "personas"}:\n`
+    + lineas.join("\n");
 }
 
 /** Si la persona pide LAS FALTAS o la ASISTENCIA de alguien, y de quien.
