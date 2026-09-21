@@ -5,7 +5,7 @@
 
 import type { Db } from "./config.ts";
 import { hoyISO } from "./config.ts";
-import { dinero } from "./directas.ts";
+import { comoSeBusca, dinero } from "./directas.ts";
 import type { ToolInput } from "./herramientas.ts";
 import {
   calificaPara,
@@ -475,7 +475,12 @@ export async function runTool(
       .in("desarrollo_id", ids as string[])
       .eq("is_active", true)
       .order("categoria");
-    if (input.categoria) q = (q as any).ilike("categoria", `%${input.categoria}%`);
+    // Se busca por lo que pidio Y por como se llama en el catalogo. Ver `comoSeBusca`: el asesor
+    // dice «tipologias» y la categoria se llama «Planos».
+    const busqueda = input.categoria ? comoSeBusca(String(input.categoria)) : null;
+    if (busqueda && busqueda.patrones.length > 0) {
+      q = (q as any).or(busqueda.patrones.map((b) => `categoria.ilike.%${b}%`).join(","));
+    }
     if (input.idioma) q = (q as any).ilike("idioma", `%${input.idioma}%`);
     if (input.solo_compartibles === true) q = (q as any).eq("visibilidad", "COMPARTIBLE");
 
@@ -483,25 +488,53 @@ export async function runTool(
     if (error) return { error: error.message };
     const filas = (data ?? []) as Record<string, unknown>[];
 
+    const comoFila = (f: Record<string, unknown>) => ({
+      desarrollo: nombrePorId.get(String(f.desarrollo_id)) ?? null,
+      categoria: f.categoria,
+      idioma: f.idioma ?? null,
+      variante: f.variante ?? null,
+      nombre: f.nombre,
+      enlace: f.url,
+      es_carpeta: f.es_carpeta,
+      visibilidad: f.visibilidad,
+      notas: f.notas ?? null,
+    });
+
+    // ─── Si el criterio no encontro nada, se entrega TODO lo que hay, con enlace ──
+    //
+    // Antes se devolvian solo los NOMBRES de las categorias, y eso deja al modelo en el peor estado
+    // posible: sabe que los planos existen y no tiene como entregarlos. Es exactamente el fallo que
+    // ya se habia corregido en `buscar_desarrollo` -ver el comentario de `docsPorId`, «saber de un
+    // documento que no puedes dar es peor que no saber de el»- y que aqui se habia quedado sin
+    // corregir.
+    //
+    // Se vio el 21/09/2026: preguntado por las tipologias, SOL enumero «Planos, Prototipos...» sin
+    // un solo enlace y cerro con que no existia lo que se pedia. El enlace lo tenia a una consulta
+    // de distancia.
+    if (filas.length === 0) {
+      const { data: todos } = await db.from("documentos")
+        .select("desarrollo_id,categoria,idioma,variante,nombre,url,es_carpeta,visibilidad,notas")
+        .in("desarrollo_id", ids as string[]).eq("is_active", true).order("categoria");
+      const otros = ((todos ?? []) as Record<string, unknown>[]).map(comoFila);
+      return {
+        resultados: [],
+        count: 0,
+        documentos_de_ese_desarrollo: otros,
+        nota: "No hay una categoria con ESE nombre, pero eso NO quiere decir que el archivo no "
+          + "exista: puede estar dentro de otra carpeta. En `documentos_de_ese_desarrollo` tienes "
+          + "TODOS los del desarrollo CON SU ENLACE. Di que no hay una carpeta con ese nombre y "
+          + "ENTREGA los enlaces de las que mas se parezcan -las tipologias y los layouts suelen "
+          + "estar en Planos y en Prototipos- para que el asesor busque dentro. No cierres con un "
+          + "«no existe» a secas.",
+      };
+    }
+
     return {
-      resultados: filas.map((f) => ({
-        desarrollo: nombrePorId.get(String(f.desarrollo_id)) ?? null,
-        categoria: f.categoria,
-        idioma: f.idioma ?? null,
-        variante: f.variante ?? null,
-        nombre: f.nombre,
-        enlace: f.url,
-        es_carpeta: f.es_carpeta,
-        visibilidad: f.visibilidad,
-        notas: f.notas ?? null,
-      })),
+      resultados: filas.map(comoFila),
       count: filas.length,
-      // Igual que arriba: si no hay lo que pidio, se le dice que categorias SI existen en lugar de
-      // dejarlo con la negativa.
-      categorias_disponibles: filas.length === 0 ? await categoriasDe(db, ids as string[]) : undefined,
-      nota: filas.length === 0
-        ? "No hay documentos con ESE criterio. Mira `categorias_disponibles` y ofrece lo que si "
-          + "existe en lugar de dejarlo sin nada."
+      // Que sepa por que le salen Planos cuando pidio tipologias, para poder decirselo.
+      equivalencia: busqueda?.comoSeLlama
+        ? `Lo que pidio se guarda en el catalogo como: ${busqueda.comoSeLlama}. Dilo asi.`
         : undefined,
     };
   }

@@ -363,6 +363,60 @@ comprobar('sin etapa', M.textoUbicacion('KOOX', 'Puerto Morelos'), 'KOOX está e
 comprobar('no duplica el punto final',
   M.textoUbicacion('KOOX', 'Puerto Morelos.'), 'KOOX está en Puerto Morelos.');
 
+// ─── Como lo pide el asesor y como se llama en el catalogo ──────────────────
+//
+// El 21/09/2026 un asesor pidio «el archivo de tipologias de AG117» tres veces y SOL contesto que
+// no existia, enumerando a continuacion Planos y Prototipos, que es donde estan. Insistio -«Claro
+// que si esta en la carpeta de 7. Planos»- y SOL volvio a decir que no.
+console.log('\nlo que pide el asesor y como se llama la categoria');
+
+function busca(titulo, pedido, esperados, comoSeLlama) {
+  const r = M.comoSeBusca(pedido);
+  const faltan = esperados.filter((e) => !r.patrones.includes(e));
+  if (faltan.length > 0) {
+    fallos++;
+    console.log(`  FALLA  ${titulo}`);
+    console.log(`         "${pedido}" no busca en ${faltan.join(', ')}; busca en `
+      + `${r.patrones.join(', ')}`);
+    return;
+  }
+  if (comoSeLlama !== undefined && r.comoSeLlama !== comoSeLlama) {
+    fallos++;
+    console.log(`  FALLA  ${titulo}: el aviso`);
+    console.log(`         esperado ${JSON.stringify(comoSeLlama)}, obtuve `
+      + JSON.stringify(r.comoSeLlama));
+  }
+}
+
+// La que lo origino. Y «topologias», que es como se escribio dos veces en ese mismo hilo.
+busca('tipologias busca en planos Y prototipos', 'tipologias', ['plano', 'prototipo'],
+  'Planos y Prototipos');
+busca('con el dedazo tambien', 'topologias', ['plano', 'prototipo'], 'Planos y Prototipos');
+busca('en singular', 'tipologia', ['plano', 'prototipo']);
+busca('dentro de una frase', 'el archivo de tipologias de AG117', ['plano', 'prototipo']);
+
+busca('layout es un plano', 'layout', ['plano'], 'Planos');
+busca('distribucion tambien', 'distribucion', ['plano'], 'Planos');
+busca('folleto es el brochure', 'folleto', ['brochure'], 'Brochure');
+// Sin aviso a proposito, aunque la categoria se llame «Fotos / Renders»: quien dice «renders» ya
+// uso una palabra del nombre, y explicarle donde esta guardado es ruido. La primera version de esta
+// comprobacion esperaba el aviso; la regla era la buena y la expectativa la equivocada.
+busca('renders', 'renders', ['render', 'foto'], null);
+busca('fotos, misma categoria', 'fotos', ['render', 'foto'], null);
+busca('precios', 'lista de precios', ['precio']);
+busca('mapa es la ubicacion', 'mapa', ['ubicacion'], 'Ubicacion');
+
+// Lo que pidio se busca SIEMPRE tal cual, ademas de la equivalencia: una categoria nueva que nadie
+// haya traducido aqui tiene que seguir encontrandose sola.
+busca('lo pedido se busca tal cual', 'reporte airdna', ['reporte airdna']);
+busca('una categoria que nadie tradujo', 'permisos de construccion',
+  ['permisos de construccion']);
+
+// Y no se avisa de lo obvio: decirle que «los planos estan en Planos» es ruido.
+comprobar('pedir planos no lleva aviso', M.comoSeBusca('planos').comoSeLlama, null);
+comprobar('pedir prototipos tampoco', M.comoSeBusca('prototipos').comoSeLlama, null);
+comprobar('sin nada que buscar', M.comoSeBusca('').patrones, []);
+
 console.log('');
 if (fallos > 0) {
   console.log(`${fallos} FALLAS`);

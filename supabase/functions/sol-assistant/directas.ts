@@ -305,6 +305,80 @@ export function desarrolloDelHilo(
 /// Se empata por palabras y no por la cadena completa para tolerar el plural y el orden: si el
 /// documento se llama «Lista de precios en español» y la respuesta dice «la lista de precios en
 /// español», empata; si dice «el brochure», no.
+// ─── Como lo pide el asesor y como se llama en el catalogo ──────────────────
+//
+// El 21/09/2026 un asesor pidio tres veces «el archivo de tipologias de AG117» y SOL contesto «No
+// existe un documento de tipologias para AG117 en el Drive», enumerando a continuacion las
+// categorias que si hay, entre ellas PLANOS y PROTOTIPOS, que es donde estan. El asesor insistio
+// -«Claro que si esta en la carpeta de 7. Planos»- y SOL volvio a decir que no.
+//
+// No era cosa del modelo. `buscar_documento` filtra con `ilike categoria`, y no hay ninguna
+// categoria que se llame «tipologias»: el catalogo las llama «Planos» y «Prototipos», mientras que
+// «tipologia» es como se llama en el INVENTARIO -«Tipologia C1 PG 01»-. La misma cosa con dos
+// nombres, y nada que los uniera.
+//
+// La tabla va aqui y no en el prompt por lo de siempre: una equivalencia escrita en el prompt es
+// una sugerencia y esta es una regla. Y de paso se aceptan los dedazos que se escriben de verdad
+// -«topologias» salio dos veces en ese mismo hilo-.
+const EQUIVALENCIAS: Array<{ pide: RegExp; busca: string[]; comoSeLlama: string }> = [
+  // Lo que origino esto. Se buscan las DOS: el asesor dijo que estaban en Planos, y la carpeta de
+  // Prototipos se llama «Prototipos en espanol: A, B, C, C1, CE y variantes», que son justamente
+  // los nombres de las tipologias.
+  { pide: /\bt[io]pologias?\b|\bt[io]polog[ií]a\b/, busca: ["plano", "prototipo"],
+    comoSeLlama: "Planos y Prototipos" },
+  { pide: /\bprototipos?\b/, busca: ["prototipo"], comoSeLlama: "Prototipos" },
+  { pide: /\bplanos?\b|\bplantas?\b|\blayouts?\b|\bdistribucion\b|\barquitectonico\b/,
+    busca: ["plano"], comoSeLlama: "Planos" },
+  { pide: /\bfolletos?\b|\bbrochure\b|\bcatalogos?\b/, busca: ["brochure"],
+    comoSeLlama: "Brochure" },
+  { pide: /\brenders?\b|\bfotos?\b|\bimagenes\b|\bimagen\b/, busca: ["render", "foto"],
+    comoSeLlama: "Fotos / Renders" },
+  { pide: /\bprecios?\b|\btarifas?\b|\bcostos?\b/, busca: ["precio"],
+    comoSeLlama: "Lista de precios" },
+  { pide: /\bubicacion\b|\bmapa\b|\bdireccion\b|\bcomo llegar\b/, busca: ["ubicacion"],
+    comoSeLlama: "Ubicacion" },
+  { pide: /\bvideos?\b/, busca: ["video"], comoSeLlama: "Videos" },
+  { pide: /\binfonavit\b|\bcredito\b/, busca: ["infonavit"], comoSeLlama: "Infonavit" },
+  { pide: /\bdeposito\b|\btransferencia\b|\bcuenta\b/, busca: ["deposito"],
+    comoSeLlama: "Cuenta deposito" },
+  { pide: /\bcarta\b|\boferta\b/, busca: ["carta oferta"], comoSeLlama: "Carta oferta" },
+  { pide: /\bestudio\b|\bmercado\b/, busca: ["estudio"], comoSeLlama: "Estudio de Mercado" },
+  { pide: /\bairdna\b|\brentabilidad\b/, busca: ["airdna"], comoSeLlama: "Reporte AirDNA" },
+  { pide: /\bcv\b|\bcurriculum\b|\bdesarrollador\b/, busca: ["desarrollador"],
+    comoSeLlama: "CV Desarrollador" },
+  { pide: /\bchecklist\b|\brequisitos?\b/, busca: ["checklist"], comoSeLlama: "Checklist cliente" },
+];
+
+/** Con que se busca en el catalogo lo que pidio el asesor.
+ *
+ * `patrones` son los fragmentos con los que consultar -siempre incluye lo que pidio tal cual, para
+ * que una categoria nueva que nadie ha traducido aqui siga encontrandose-. `comoSeLlama` es para
+ * decirselo: «las tipologias estan en Planos y Prototipos».
+ *
+ * Fragmentos y no nombres completos a proposito: si alguien renombra una categoria en el panel,
+ * «plano» sigue coincidiendo con «Planos AG117» y la equivalencia no se rompe en silencio.
+ */
+export function comoSeBusca(pedido: string): { patrones: string[]; comoSeLlama: string | null } {
+  const p = sinAcentos(pedido).toLowerCase().trim();
+  if (p === "") return { patrones: [], comoSeLlama: null };
+
+  const patrones = [p];
+  const nombres: string[] = [];
+  for (const e of EQUIVALENCIAS) {
+    if (!e.pide.test(p)) continue;
+    for (const b of e.busca) if (!patrones.includes(b)) patrones.push(b);
+    nombres.push(e.comoSeLlama);
+  }
+  return {
+    patrones,
+    // Solo se avisa cuando lo que pidio NO es ya el nombre de la categoria: decirle que «los planos
+    // estan en Planos» es ruido.
+    comoSeLlama: nombres.length > 0 && !patrones.slice(1).some((b) => p.includes(b))
+      ? nombres.join(" y ")
+      : null,
+  };
+}
+
 export function documentoMencionado(
   respuesta: string,
   doc: { nombre?: unknown; categoria?: unknown },
