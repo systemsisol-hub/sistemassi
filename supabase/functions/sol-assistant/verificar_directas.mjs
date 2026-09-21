@@ -459,6 +459,44 @@ if (!(f('Tipografias enero 2027') > f('Tipografias diciembre 2026'))) {
   console.log('  FALLA  enero del año siguiente va despues de diciembre');
 }
 
+// ─── El aviso de que un archivo puede estar caducado ───────────────────────
+//
+// El archivo de tipologias lo SUSTITUYE un tercero dentro de la carpeta de Planos, y al subir el
+// nuevo el identificador de Drive cambia: el enlace guardado deja de servir. Como quien lo sustituye
+// no es de la casa, puede pasar tiempo hasta que alguien lo note. Esto no impide que caduque —sin
+// acceso a la API de Drive no hay manera— pero deja de ser silencioso.
+console.log('\nel aviso de vigencia');
+
+const v = (n, hoy) => M.avisoDeVigencia(n, hoy);
+
+// En octubre, el archivo de septiembre avisa.
+const enOctubre = v('Tipologias sep 2026', '2026-10-05');
+if (enOctubre === null) {
+  fallos++;
+  console.log('  FALLA  en octubre, el de septiembre tiene que avisar');
+} else {
+  console.log('  ->', enOctubre);
+  if (!enOctubre.includes('septiembre') || !enOctubre.includes('octubre')) {
+    fallos++;
+    console.log('  FALLA  el aviso dice los DOS meses, el del archivo y el de hoy');
+  }
+}
+
+// En septiembre, el de septiembre NO avisa: esta al dia y avisar seria ruido.
+comprobar('el del mes en curso no avisa', v('Tipologias sep 2026', '2026-09-21'), null);
+// Y uno posterior tampoco: si alguien sube el de octubre en septiembre, esta bien.
+comprobar('uno posterior tampoco', v('Tipologias octubre 2026', '2026-09-21'), null);
+// Cruzando el año: diciembre de 2026 visto en enero de 2027 avisa.
+if (v('Tipologias diciembre 2026', '2027-01-04') === null) {
+  fallos++;
+  console.log('  FALLA  diciembre visto en enero del año siguiente tiene que avisar');
+}
+// Sin fecha en el nombre no hay nada que comparar: no se inventa un aviso.
+comprobar('sin fecha no avisa', v('Planos', '2026-10-05'), null);
+comprobar('sin fecha, otro', v('Prototipos en ingles', '2026-10-05'), null);
+// Con año pero sin mes tampoco: «Lista 2026» no dice si esta al dia.
+comprobar('con año y sin mes no avisa', v('Lista 2026', '2026-10-05'), null);
+
 // Y no se avisa de lo obvio: decirle que «los planos estan en Planos» es ruido.
 comprobar('pedir planos no lleva aviso', M.comoSeBusca('planos').comoSeLlama, null);
 comprobar('pedir prototipos tampoco', M.comoSeBusca('prototipos').comoSeLlama, null);

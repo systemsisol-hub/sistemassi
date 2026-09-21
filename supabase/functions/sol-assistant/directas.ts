@@ -444,6 +444,44 @@ export function fechaEnNombre(nombre: string, anioActual: number): number {
   return anio * 100 + mes;
 }
 
+const NOMBRE_DEL_MES = [
+  "", "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+];
+
+/** Si el nombre de un documento apunta a un mes ya pasado, la frase que lo dice. `null` si no.
+ *
+ * ─── Por que hace falta ──────────────────────────────────────────────────────
+ *
+ * El archivo de tipologias lo SUSTITUYE un tercero dentro de la carpeta de Planos, y al subir el
+ * nuevo el identificador de Drive cambia: el enlace guardado deja de servir. Como quien lo sustituye
+ * no es de la casa, puede pasar tiempo antes de que alguien lo note y nos pase el enlace nuevo.
+ *
+ * Mientras tanto, SOL entregaria un enlace muerto con toda la seguridad del mundo, y eso es peor que
+ * no tener enlace: el asesor abre un archivo borrado delante de un cliente y no sabe por que.
+ *
+ * Esto no impide que caduque —sin acceso a la API de Drive no hay manera— pero deja de ser
+ * silencioso: el nombre lleva el mes, asi que se compara con hoy y se dice. Vale para cualquier
+ * documento que se renueve, no solo para este: las listas de precios y los brochures tambien llevan
+ * la fecha en el nombre.
+ */
+export function avisoDeVigencia(nombre: string, hoy: string): string | null {
+  const anioActual = Number(hoy.slice(0, 4));
+  const suya = fechaEnNombre(nombre, anioActual);
+  if (suya === 0) return null;
+
+  const mes = suya % 100;
+  // Con año pero sin mes no se compara: «Lista 2026» no dice nada de si esta al dia.
+  if (mes < 1 || mes > 12) return null;
+
+  const ahora = anioActual * 100 + Number(hoy.slice(5, 7));
+  if (suya >= ahora) return null;
+
+  return `El nombre dice ${NOMBRE_DEL_MES[mes]} de ${Math.floor(suya / 100)} y hoy estamos en `
+    + `${NOMBRE_DEL_MES[Number(hoy.slice(5, 7))]} de ${anioActual}. Puede que lo hayan sustituido `
+    + `por uno mas nuevo y que este enlace ya no abra. Dilo al entregarlo y ofrece la carpeta.`;
+}
+
 export function documentoMencionado(
   respuesta: string,
   doc: { nombre?: unknown; categoria?: unknown },

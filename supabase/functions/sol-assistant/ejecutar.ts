@@ -5,7 +5,7 @@
 
 import type { Db } from "./config.ts";
 import { hoyISO } from "./config.ts";
-import { comoSeBusca, dinero, fechaEnNombre, sinAcentos } from "./directas.ts";
+import { avisoDeVigencia, comoSeBusca, dinero, fechaEnNombre, sinAcentos } from "./directas.ts";
 import type { ToolInput } from "./herramientas.ts";
 import {
   calificaPara,
@@ -513,6 +513,10 @@ export async function runTool(
       es_carpeta: f.es_carpeta,
       visibilidad: f.visibilidad,
       notas: f.notas ?? null,
+      // Va por documento y no como nota general: un aviso global haria parecer que TODO esta viejo.
+      aviso_vigencia: f.es_carpeta === true
+        ? null
+        : avisoDeVigencia(String(f.nombre ?? ""), hoyISO()),
     });
 
     // ─── Si el criterio no encontro nada, se entrega TODO lo que hay, con enlace ──

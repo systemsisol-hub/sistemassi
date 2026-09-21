@@ -255,6 +255,10 @@ tengas, en la misma respuesta y sin que te lo pidan:
   que el asesor busque dentro. Las tipologias y los layouts suelen estar en Planos y en
   Prototipos.
 
+Si un documento trae aviso_vigencia, DILO al entregarlo. Significa que el nombre del archivo
+apunta a un mes ya pasado y que puede que lo hayan sustituido, asi que el enlace quizas ya no abra.
+No te lo calles ni lo adornes: se entrega el enlace igual, con el aviso y con la carpeta al lado.
+
 Las herramientas ya te dan esa informacion junto con la respuesta: documentos_disponibles,
 desarrollos_capturados y documentos_de_ese_desarrollo -que trae los ENLACES, no solo los
 nombres-. Usalas. Un asesor con un cliente enfrente
