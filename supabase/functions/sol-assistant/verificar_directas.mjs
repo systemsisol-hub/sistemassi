@@ -412,6 +412,53 @@ busca('lo pedido se busca tal cual', 'reporte airdna', ['reporte airdna']);
 busca('una categoria que nadie tradujo', 'permisos de construccion',
   ['permisos de construccion']);
 
+// El archivo dentro de la carpeta se llama «Tipografias septiembre 2026»: tipografia es el diseno
+// de las letras y tipologia es el tipo de vivienda, asi que el nombre dice una cosa y quiere decir
+// otra. Las dos formas, y las dos con dedazo, porque las dos se escriben de verdad.
+busca('tipografias, como se llama el archivo', 'tipografias', ['plano', 'prototipo'],
+  'Planos y Prototipos');
+busca('topografias, con dedazo', 'topografias', ['plano', 'prototipo']);
+busca('con acento', 'tipografías', ['plano', 'prototipo']);
+busca('tipologías con acento', 'tipologías', ['plano', 'prototipo']);
+
+// ─── El mes que lleva el nombre ────────────────────────────────────────────
+//
+// «Mandame el ULTIMO archivo de tipologias», preguntado tal cual el 08/09/2026. El orden alfabetico
+// no sirve: octubre va antes que septiembre en el alfabeto y despues en el calendario.
+console.log('\nel mes que lleva el nombre del archivo');
+
+const f = (n) => M.fechaEnNombre(n, 2026);
+comprobar('mes y año', f('Tipografias septiembre 2026'), 202609);
+comprobar('otro mes', f('Tipografias octubre 2026'), 202610);
+comprobar('sin año, se usa el actual', f('Tipografias octubre'), 202610);
+comprobar('abreviado, como los brochures', f('Brochure PC - AG117 - 1 Sept.pdf'), 202609);
+comprobar('año de dos cifras', f('AG117 - Version Movil 01.09.26.pdf'), 202609);
+comprobar('fecha numerica con barras', f('Lista 15/12/2026.xlsx'), 202612);
+comprobar('sin fecha no inventa', f('Planos'), 0);
+comprobar('sin fecha, otro', f('Prototipos en ingles'), 0);
+
+// Las abreviaturas sueltas y NO dentro de una palabra. Mi primera version escribia `\b(mar)[a-z]*\b`
+// y estas cuatro daban mes: «marca» marzo, «mayor» mayo, «junta» junio, «agosto» estaba bien pero
+// «octava» daba octubre. Un nombre de archivo cualquiera se convertia en una fecha.
+comprobar('«marca» no es marzo', f('Brochure marca AG117'), 0);
+comprobar('«mayor» no es mayo', f('Plano mayor detalle'), 0);
+comprobar('«junta» no es junio', f('Acta de junta'), 0);
+comprobar('«octava» no es octubre', f('Octava etapa'), 0);
+// Y las que si son abreviaturas de verdad siguen funcionando.
+comprobar('«dic» suelto si es diciembre', f('Cierre 15 dic'), 202612);
+comprobar('«sept.» con punto', f('Corte 1 sept.'), 202609);
+
+// Es lo que hace que «el ultimo» funcione: octubre DESPUES de septiembre, no antes.
+if (!(f('Tipografias octubre 2026') > f('Tipografias septiembre 2026'))) {
+  fallos++;
+  console.log('  FALLA  octubre tiene que ir despues de septiembre');
+  console.log('         es el caso que el orden alfabetico se equivoca');
+}
+if (!(f('Tipografias enero 2027') > f('Tipografias diciembre 2026'))) {
+  fallos++;
+  console.log('  FALLA  enero del año siguiente va despues de diciembre');
+}
+
 // Y no se avisa de lo obvio: decirle que «los planos estan en Planos» es ruido.
 comprobar('pedir planos no lleva aviso', M.comoSeBusca('planos').comoSeLlama, null);
 comprobar('pedir prototipos tampoco', M.comoSeBusca('prototipos').comoSeLlama, null);

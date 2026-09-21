@@ -324,7 +324,11 @@ const EQUIVALENCIAS: Array<{ pide: RegExp; busca: string[]; comoSeLlama: string 
   // Lo que origino esto. Se buscan las DOS: el asesor dijo que estaban en Planos, y la carpeta de
   // Prototipos se llama «Prototipos en espanol: A, B, C, C1, CE y variantes», que son justamente
   // los nombres de las tipologias.
-  { pide: /\bt[io]pologias?\b|\bt[io]polog[ií]a\b/, busca: ["plano", "prototipo"],
+  // «tipografias» no es un dedazo mio: es como se llama el ARCHIVO dentro de la carpeta de Planos
+  // -«Tipografias septiembre 2026»-. Tipografia es el diseno de las letras y tipologia es el tipo
+  // de vivienda, asi que el nombre del archivo dice una cosa y quiere decir la otra. Se aceptan las
+  // dos formas y las dos con dedazo, porque las dos se escriben de verdad.
+  { pide: /\bt[io]polog[ií]as?\b|\bt[io]pograf[ií]as?\b/, busca: ["plano", "prototipo"],
     comoSeLlama: "Planos y Prototipos" },
   { pide: /\bprototipos?\b/, busca: ["prototipo"], comoSeLlama: "Prototipos" },
   { pide: /\bplanos?\b|\bplantas?\b|\blayouts?\b|\bdistribucion\b|\barquitectonico\b/,
@@ -377,6 +381,67 @@ export function comoSeBusca(pedido: string): { patrones: string[]; comoSeLlama: 
       ? nombres.join(" y ")
       : null,
   };
+}
+
+const MESES_EN_NOMBRE: Record<string, number> = {
+  enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6,
+  julio: 7, agosto: 8, septiembre: 9, setiembre: 9, octubre: 10,
+  noviembre: 11, diciembre: 12,
+};
+
+/** El mes y año que lleva el nombre de un documento, como numero comparable. 0 si no lleva.
+ *
+ * ─── Para que ────────────────────────────────────────────────────────────────
+ *
+ * Los archivos que se renuevan llevan la fecha en el nombre: «Tipografias septiembre 2026»,
+ * «Brochure PC - AG117 - 1 Sept». Preguntado «mandame el ULTIMO archivo de tipologias» -se pregunto
+ * tal cual el 08/09/2026- hay que saber cual es el ultimo, y el orden alfabetico no sirve: octubre
+ * va antes que septiembre en el alfabeto y despues en el calendario.
+ *
+ * Devuelve `anio * 100 + mes` para poder ordenar con una resta. Sin año pero con mes, se usa el año
+ * en curso; asi «Tipografias octubre» sigue quedando despues de «Tipografias septiembre».
+ */
+/// Abreviaturas, que es como vienen los brochures: «1 Sept», «15 dic».
+///
+/// Sin `[a-z]*` detras a proposito. Escrito `\b(mar)[a-z]*\b` -mi primera version- «marca» se leia
+/// como marzo y «mayor» como mayo. Exigiendo el limite de palabra justo despues, «mar» solo coincide
+/// cuando esta suelto. Por eso «sept» va aparte y antes: con «sep» a secas no coincidiria, porque
+/// detras lleva una «t».
+const ABREVIATURAS: Record<string, number> = {
+  ene: 1, feb: 2, mar: 3, abr: 4, may: 5, jun: 6,
+  jul: 7, ago: 8, sep: 9, sept: 9, oct: 10, nov: 11, dic: 12,
+};
+
+export function fechaEnNombre(nombre: string, anioActual: number): number {
+  const n = sinAcentos(nombre).toLowerCase();
+
+  // Una fecha numerica entera -«01.09.26», «15/12/2026»- se lee DD-MM-AA, que es como se escribe
+  // aqui. Va primero porque trae el mes Y el año, sin tener que adivinar ninguno.
+  const numerica = n.match(/\b(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{2,4})\b/);
+  if (numerica) {
+    const m = Number(numerica[2]);
+    const a = Number(numerica[3]);
+    if (m >= 1 && m <= 12) return (a < 100 ? 2000 + a : a) * 100 + m;
+  }
+
+  // Con limite de palabra, no con `includes`: «mayo» es subcadena de «mayor» y de «mayoreo», asi que
+  // «Plano mayor detalle» se leia como mayo de 2026. Lo atrapo la prueba.
+  let mes = 0;
+  for (const [palabra, num] of Object.entries(MESES_EN_NOMBRE)) {
+    if (new RegExp(`\\b${palabra}\\b`).test(n)) { mes = num; break; }
+  }
+  if (mes === 0) {
+    const corto = n.match(/\b(sept|ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)\.?\b/);
+    if (corto) mes = ABREVIATURAS[corto[1]] ?? 0;
+  }
+
+  const cuatro = n.match(/\b(20\d{2})\b/);
+  // Sin año pero con mes, el año en curso: asi «Tipografias octubre» sigue quedando despues de
+  // «Tipografias septiembre».
+  const anio = cuatro ? Number(cuatro[1]) : anioActual;
+
+  if (mes === 0 && !cuatro) return 0;
+  return anio * 100 + mes;
 }
 
 export function documentoMencionado(
