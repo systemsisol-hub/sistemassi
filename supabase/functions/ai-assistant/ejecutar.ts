@@ -557,7 +557,32 @@ export async function runTool(
     }
     if (input.status)  q = (q as any).eq("status", input.status);
     if (input.periodo) q = (q as any).ilike("periodo", `%${input.periodo}%`);
-    q = (q as any).limit((input.limit as number) || 20).order("created_at", { ascending: false });
+
+    // ─── Quien esta fuera en un rango ───────────────────────────────────────
+    //
+    // Se CRUZAN los rangos: entra quien esté fuera en algún momento del periodo pedido, no solo
+    // quien lo empieza dentro.
+    //
+    // La diferencia no es teorica. Preguntado «quien se va de vacaciones en septiembre», comparar
+    // solo `fecha_inicio` deja fuera a quien salio el 28 de agosto y vuelve el 3 de septiembre —que
+    // es justo alguien que NO va a estar—. Para cubrir un puesto, ese es el dato que importa.
+    //
+    //     sale:    |-----------|
+    //     pedido:        |-----------|
+    //              inicio <= hasta  Y  fin >= desde
+    const desde = typeof input.desde === "string" ? input.desde.trim() : "";
+    const hasta = typeof input.hasta === "string" ? input.hasta.trim() : "";
+    const porFechas = desde !== "" || hasta !== "";
+    if (hasta !== "") q = (q as any).lte("fecha_inicio", hasta);
+    if (desde !== "") q = (q as any).gte("fecha_fin", desde);
+
+    // Por fecha de salida cuando se pregunta por un rango: la lista se lee en orden de calendario,
+    // que es como se usa. Sin rango se deja como estaba, por lo mas reciente.
+    q = porFechas
+      ? (q as any).limit((input.limit as number) || 100)
+          .order("fecha_inicio", { ascending: true })
+      : (q as any).limit((input.limit as number) || 20)
+          .order("created_at", { ascending: false });
     const { data, error } = await q;
     if (error) return { error: error.message };
     return { results: data, count: data?.length || 0, alcance: alcanceDeLaConsulta(deQuien, "incidencias") };

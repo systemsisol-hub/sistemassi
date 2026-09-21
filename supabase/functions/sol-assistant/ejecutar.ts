@@ -5,7 +5,7 @@
 
 import type { Db } from "./config.ts";
 import { hoyISO } from "./config.ts";
-import { dinero } from "./directas.ts";
+import { avisoDeVigencia, comoSeBusca, dinero, fechaEnNombre, sinAcentos } from "./directas.ts";
 import type { ToolInput } from "./herramientas.ts";
 import {
   calificaPara,
@@ -462,8 +462,12 @@ export async function runTool(
     if (ids.length === 0) {
       return {
         resultados: [], count: 0,
-        nota: "No encontre ese desarrollo. Los documentos se dan de alta junto al desarrollo, en "
-          + "la pagina de SOL.",
+        // Antes decia «se dan de alta en la pagina de SOL», y no es verdad: no hay ninguna pantalla
+        // para administrar `documentos` -`sol_page.dart` solo los lee-, asi que se cargan por SQL.
+        // Una instruccion falsa en un mensaje que el modelo repite manda al asesor a buscar una
+        // pantalla que no existe.
+        nota: "No encontre ese desarrollo con ese nombre. Di cual no encontraste y ofrece los que "
+          + "si estan, sin explicar como se cargan los datos: eso no le toca al asesor.",
       };
     }
     const nombrePorId = new Map(
@@ -475,7 +479,23 @@ export async function runTool(
       .in("desarrollo_id", ids as string[])
       .eq("is_active", true)
       .order("categoria");
-    if (input.categoria) q = (q as any).ilike("categoria", `%${input.categoria}%`);
+    // ─── Se busca por CATEGORIA y por NOMBRE ────────────────────────────────
+    //
+    // Solo se miraba la categoria, y eso deja fuera los archivos: el de tipologias vive DENTRO de
+    // la carpeta de Planos y se llama «Tipografias septiembre 2026», asi que por categoria nunca
+    // aparecia como archivo propio. Y el nombre cambia cada mes -«Tipografias octubre 2026»-, de
+    // modo que registrarlo con un nombre fijo en el codigo se quedaria viejo en treinta dias.
+    //
+    // Buscando tambien por nombre, basta con que alguien lo suba en el panel bajo la categoria
+    // Planos: a partir de ahi se encuentra solo, se llame como se llame ese mes.
+    const busqueda = input.categoria ? comoSeBusca(String(input.categoria)) : null;
+    if (busqueda && busqueda.patrones.length > 0) {
+      q = (q as any).or(
+        busqueda.patrones
+          .flatMap((b) => [`categoria.ilike.%${b}%`, `nombre.ilike.%${b}%`])
+          .join(","),
+      );
+    }
     if (input.idioma) q = (q as any).ilike("idioma", `%${input.idioma}%`);
     if (input.solo_compartibles === true) q = (q as any).eq("visibilidad", "COMPARTIBLE");
 
@@ -483,40 +503,89 @@ export async function runTool(
     if (error) return { error: error.message };
     const filas = (data ?? []) as Record<string, unknown>[];
 
+    const comoFila = (f: Record<string, unknown>) => ({
+      desarrollo: nombrePorId.get(String(f.desarrollo_id)) ?? null,
+      categoria: f.categoria,
+      idioma: f.idioma ?? null,
+      variante: f.variante ?? null,
+      nombre: f.nombre,
+      enlace: f.url,
+      es_carpeta: f.es_carpeta,
+      visibilidad: f.visibilidad,
+      notas: f.notas ?? null,
+      // Va por documento y no como nota general: un aviso global haria parecer que TODO esta viejo.
+      aviso_vigencia: f.es_carpeta === true
+        ? null
+        : avisoDeVigencia(String(f.nombre ?? ""), hoyISO),
+    });
+
+    // ─── Si el criterio no encontro nada, se entrega TODO lo que hay, con enlace ──
+    //
+    // Antes se devolvian solo los NOMBRES de las categorias, y eso deja al modelo en el peor estado
+    // posible: sabe que los planos existen y no tiene como entregarlos. Es exactamente el fallo que
+    // ya se habia corregido en `buscar_desarrollo` -ver el comentario de `docsPorId`, «saber de un
+    // documento que no puedes dar es peor que no saber de el»- y que aqui se habia quedado sin
+    // corregir.
+    //
+    // Se vio el 21/09/2026: preguntado por las tipologias, SOL enumero «Planos, Prototipos...» sin
+    // un solo enlace y cerro con que no existia lo que se pedia. El enlace lo tenia a una consulta
+    // de distancia.
+    if (filas.length === 0) {
+      const { data: todos } = await db.from("documentos")
+        .select("desarrollo_id,categoria,idioma,variante,nombre,url,es_carpeta,visibilidad,notas")
+        .in("desarrollo_id", ids as string[]).eq("is_active", true).order("categoria");
+      const otros = ((todos ?? []) as Record<string, unknown>[]).map(comoFila);
+      return {
+        resultados: [],
+        count: 0,
+        documentos_de_ese_desarrollo: otros,
+        nota: "No hay una categoria con ESE nombre, pero eso NO quiere decir que el archivo no "
+          + "exista: puede estar dentro de otra carpeta. En `documentos_de_ese_desarrollo` tienes "
+          + "TODOS los del desarrollo CON SU ENLACE. Di que no hay una carpeta con ese nombre y "
+          + "ENTREGA los enlaces de las que mas se parezcan -las tipologias y los layouts suelen "
+          + "estar en Planos y en Prototipos- para que el asesor busque dentro. No cierres con un "
+          + "«no existe» a secas.",
+      };
+    }
+
+    // ─── Que sale primero ───────────────────────────────────────────────────
+    //
+    // Pedido: que el archivo de tipologias salga «como archivo principal». Tiene sentido mas alla
+    // de la preferencia: entre una carpeta y el archivo concreto, el archivo es la respuesta y la
+    // carpeta es el sitio donde buscarlo.
+    //
+    // Tres criterios, en orden:
+    //   1. Lo que coincide por NOMBRE antes que lo que solo coincide por categoria.
+    //   2. Los archivos antes que las carpetas.
+    //   3. Y entre archivos, el mas reciente segun el mes que lleva el nombre. Se pregunto «mandame
+    //      el ULTIMO archivo de tipologias», y ordenar por nombre no vale: octubre va antes que
+    //      septiembre en el alfabeto y despues en el calendario.
+    const anioActual = Number(hoyISO.slice(0, 4));
+    const porNombre = (f: Record<string, unknown>) =>
+      busqueda !== null
+        && busqueda.patrones.some((b) => sinAcentos(String(f.nombre ?? "")).toLowerCase()
+          .includes(b));
+
+    const ordenadas = [...filas].sort((a, b) => {
+      const na = porNombre(a) ? 0 : 1;
+      const nb = porNombre(b) ? 0 : 1;
+      if (na !== nb) return na - nb;
+      const ca = a.es_carpeta === true ? 1 : 0;
+      const cb = b.es_carpeta === true ? 1 : 0;
+      if (ca !== cb) return ca - cb;
+      return fechaEnNombre(String(b.nombre ?? ""), anioActual)
+        - fechaEnNombre(String(a.nombre ?? ""), anioActual);
+    });
+
     return {
-      resultados: filas.map((f) => ({
-        desarrollo: nombrePorId.get(String(f.desarrollo_id)) ?? null,
-        categoria: f.categoria,
-        idioma: f.idioma ?? null,
-        variante: f.variante ?? null,
-        nombre: f.nombre,
-        enlace: f.url,
-        es_carpeta: f.es_carpeta,
-        visibilidad: f.visibilidad,
-        notas: f.notas ?? null,
-      })),
+      resultados: ordenadas.map(comoFila),
       count: filas.length,
-      // Igual que arriba: si no hay lo que pidio, se le dice que categorias SI existen en lugar de
-      // dejarlo con la negativa.
-      categorias_disponibles: filas.length === 0 ? await categoriasDe(db, ids as string[]) : undefined,
-      nota: filas.length === 0
-        ? "No hay documentos con ESE criterio. Mira `categorias_disponibles` y ofrece lo que si "
-          + "existe en lugar de dejarlo sin nada."
+      // Que sepa por que le salen Planos cuando pidio tipologias, para poder decirselo.
+      equivalencia: busqueda?.comoSeLlama
+        ? `Lo que pidio se guarda en el catalogo como: ${busqueda.comoSeLlama}. Dilo asi.`
         : undefined,
     };
   }
 
   return { error: `Herramienta desconocida: ${nombre}` };
-}
-
-/// Las categorias de documentos que existen para esos desarrollos.
-///
-/// Sirve para no dejar al asesor con un «no hay»: si pidio el brochure y no esta, pero si estan los
-/// planos y los prototipos, eso es lo que necesita saber.
-async function categoriasDe(db: Db, ids: string[]): Promise<string[]> {
-  if (ids.length === 0) return [];
-  const { data } = await db.from("documentos")
-    .select("categoria").in("desarrollo_id", ids).eq("is_active", true);
-  return [...new Set(((data ?? []) as Record<string, unknown>[])
-    .map((r) => String(r.categoria)))].sort();
 }

@@ -305,6 +305,183 @@ export function desarrolloDelHilo(
 /// Se empata por palabras y no por la cadena completa para tolerar el plural y el orden: si el
 /// documento se llama «Lista de precios en español» y la respuesta dice «la lista de precios en
 /// español», empata; si dice «el brochure», no.
+// ─── Como lo pide el asesor y como se llama en el catalogo ──────────────────
+//
+// El 21/09/2026 un asesor pidio tres veces «el archivo de tipologias de AG117» y SOL contesto «No
+// existe un documento de tipologias para AG117 en el Drive», enumerando a continuacion las
+// categorias que si hay, entre ellas PLANOS y PROTOTIPOS, que es donde estan. El asesor insistio
+// -«Claro que si esta en la carpeta de 7. Planos»- y SOL volvio a decir que no.
+//
+// No era cosa del modelo. `buscar_documento` filtra con `ilike categoria`, y no hay ninguna
+// categoria que se llame «tipologias»: el catalogo las llama «Planos» y «Prototipos», mientras que
+// «tipologia» es como se llama en el INVENTARIO -«Tipologia C1 PG 01»-. La misma cosa con dos
+// nombres, y nada que los uniera.
+//
+// La tabla va aqui y no en el prompt por lo de siempre: una equivalencia escrita en el prompt es
+// una sugerencia y esta es una regla. Y de paso se aceptan los dedazos que se escriben de verdad
+// -«topologias» salio dos veces en ese mismo hilo-.
+const EQUIVALENCIAS: Array<{ pide: RegExp; busca: string[]; comoSeLlama: string }> = [
+  // Lo que origino esto. Se buscan las DOS: el asesor dijo que estaban en Planos, y la carpeta de
+  // Prototipos se llama «Prototipos en espanol: A, B, C, C1, CE y variantes», que son justamente
+  // los nombres de las tipologias.
+  // «tipografias» no es un dedazo mio: es como se llama el ARCHIVO dentro de la carpeta de Planos
+  // -«Tipografias septiembre 2026»-. Tipografia es el diseno de las letras y tipologia es el tipo
+  // de vivienda, asi que el nombre del archivo dice una cosa y quiere decir la otra. Se aceptan las
+  // dos formas y las dos con dedazo, porque las dos se escriben de verdad.
+  { pide: /\bt[io]polog[ií]as?\b|\bt[io]pograf[ií]as?\b/, busca: ["plano", "prototipo"],
+    comoSeLlama: "Planos y Prototipos" },
+  { pide: /\bprototipos?\b/, busca: ["prototipo"], comoSeLlama: "Prototipos" },
+  { pide: /\bplanos?\b|\bplantas?\b|\blayouts?\b|\bdistribucion\b|\barquitectonico\b/,
+    busca: ["plano"], comoSeLlama: "Planos" },
+  { pide: /\bfolletos?\b|\bbrochure\b|\bcatalogos?\b/, busca: ["brochure"],
+    comoSeLlama: "Brochure" },
+  { pide: /\brenders?\b|\bfotos?\b|\bimagenes\b|\bimagen\b/, busca: ["render", "foto"],
+    comoSeLlama: "Fotos / Renders" },
+  { pide: /\bprecios?\b|\btarifas?\b|\bcostos?\b/, busca: ["precio"],
+    comoSeLlama: "Lista de precios" },
+  { pide: /\bubicacion\b|\bmapa\b|\bdireccion\b|\bcomo llegar\b/, busca: ["ubicacion"],
+    comoSeLlama: "Ubicacion" },
+  { pide: /\bvideos?\b/, busca: ["video"], comoSeLlama: "Videos" },
+  { pide: /\binfonavit\b|\bcredito\b/, busca: ["infonavit"], comoSeLlama: "Infonavit" },
+  { pide: /\bdeposito\b|\btransferencia\b|\bcuenta\b/, busca: ["deposito"],
+    comoSeLlama: "Cuenta deposito" },
+  { pide: /\bcarta\b|\boferta\b/, busca: ["carta oferta"], comoSeLlama: "Carta oferta" },
+  { pide: /\bestudio\b|\bmercado\b/, busca: ["estudio"], comoSeLlama: "Estudio de Mercado" },
+  { pide: /\bairdna\b|\brentabilidad\b/, busca: ["airdna"], comoSeLlama: "Reporte AirDNA" },
+  { pide: /\bcv\b|\bcurriculum\b|\bdesarrollador\b/, busca: ["desarrollador"],
+    comoSeLlama: "CV Desarrollador" },
+  { pide: /\bchecklist\b|\brequisitos?\b/, busca: ["checklist"], comoSeLlama: "Checklist cliente" },
+];
+
+/** Con que se busca en el catalogo lo que pidio el asesor.
+ *
+ * `patrones` son los fragmentos con los que consultar -siempre incluye lo que pidio tal cual, para
+ * que una categoria nueva que nadie ha traducido aqui siga encontrandose-. `comoSeLlama` es para
+ * decirselo: «las tipologias estan en Planos y Prototipos».
+ *
+ * Fragmentos y no nombres completos a proposito: si alguien renombra una categoria en el panel,
+ * «plano» sigue coincidiendo con «Planos AG117» y la equivalencia no se rompe en silencio.
+ */
+export function comoSeBusca(pedido: string): { patrones: string[]; comoSeLlama: string | null } {
+  const p = sinAcentos(pedido).toLowerCase().trim();
+  if (p === "") return { patrones: [], comoSeLlama: null };
+
+  const patrones = [p];
+  const nombres: string[] = [];
+  for (const e of EQUIVALENCIAS) {
+    if (!e.pide.test(p)) continue;
+    for (const b of e.busca) if (!patrones.includes(b)) patrones.push(b);
+    nombres.push(e.comoSeLlama);
+  }
+  return {
+    patrones,
+    // Solo se avisa cuando lo que pidio NO es ya el nombre de la categoria: decirle que «los planos
+    // estan en Planos» es ruido.
+    comoSeLlama: nombres.length > 0 && !patrones.slice(1).some((b) => p.includes(b))
+      ? nombres.join(" y ")
+      : null,
+  };
+}
+
+const MESES_EN_NOMBRE: Record<string, number> = {
+  enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6,
+  julio: 7, agosto: 8, septiembre: 9, setiembre: 9, octubre: 10,
+  noviembre: 11, diciembre: 12,
+};
+
+/** El mes y año que lleva el nombre de un documento, como numero comparable. 0 si no lleva.
+ *
+ * ─── Para que ────────────────────────────────────────────────────────────────
+ *
+ * Los archivos que se renuevan llevan la fecha en el nombre: «Tipografias septiembre 2026»,
+ * «Brochure PC - AG117 - 1 Sept». Preguntado «mandame el ULTIMO archivo de tipologias» -se pregunto
+ * tal cual el 08/09/2026- hay que saber cual es el ultimo, y el orden alfabetico no sirve: octubre
+ * va antes que septiembre en el alfabeto y despues en el calendario.
+ *
+ * Devuelve `anio * 100 + mes` para poder ordenar con una resta. Sin año pero con mes, se usa el año
+ * en curso; asi «Tipografias octubre» sigue quedando despues de «Tipografias septiembre».
+ */
+/// Abreviaturas, que es como vienen los brochures: «1 Sept», «15 dic».
+///
+/// Sin `[a-z]*` detras a proposito. Escrito `\b(mar)[a-z]*\b` -mi primera version- «marca» se leia
+/// como marzo y «mayor» como mayo. Exigiendo el limite de palabra justo despues, «mar» solo coincide
+/// cuando esta suelto. Por eso «sept» va aparte y antes: con «sep» a secas no coincidiria, porque
+/// detras lleva una «t».
+const ABREVIATURAS: Record<string, number> = {
+  ene: 1, feb: 2, mar: 3, abr: 4, may: 5, jun: 6,
+  jul: 7, ago: 8, sep: 9, sept: 9, oct: 10, nov: 11, dic: 12,
+};
+
+export function fechaEnNombre(nombre: string, anioActual: number): number {
+  const n = sinAcentos(nombre).toLowerCase();
+
+  // Una fecha numerica entera -«01.09.26», «15/12/2026»- se lee DD-MM-AA, que es como se escribe
+  // aqui. Va primero porque trae el mes Y el año, sin tener que adivinar ninguno.
+  const numerica = n.match(/\b(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{2,4})\b/);
+  if (numerica) {
+    const m = Number(numerica[2]);
+    const a = Number(numerica[3]);
+    if (m >= 1 && m <= 12) return (a < 100 ? 2000 + a : a) * 100 + m;
+  }
+
+  // Con limite de palabra, no con `includes`: «mayo» es subcadena de «mayor» y de «mayoreo», asi que
+  // «Plano mayor detalle» se leia como mayo de 2026. Lo atrapo la prueba.
+  let mes = 0;
+  for (const [palabra, num] of Object.entries(MESES_EN_NOMBRE)) {
+    if (new RegExp(`\\b${palabra}\\b`).test(n)) { mes = num; break; }
+  }
+  if (mes === 0) {
+    const corto = n.match(/\b(sept|ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic)\.?\b/);
+    if (corto) mes = ABREVIATURAS[corto[1]] ?? 0;
+  }
+
+  const cuatro = n.match(/\b(20\d{2})\b/);
+  // Sin año pero con mes, el año en curso: asi «Tipografias octubre» sigue quedando despues de
+  // «Tipografias septiembre».
+  const anio = cuatro ? Number(cuatro[1]) : anioActual;
+
+  if (mes === 0 && !cuatro) return 0;
+  return anio * 100 + mes;
+}
+
+const NOMBRE_DEL_MES = [
+  "", "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+];
+
+/** Si el nombre de un documento apunta a un mes ya pasado, la frase que lo dice. `null` si no.
+ *
+ * ─── Por que hace falta ──────────────────────────────────────────────────────
+ *
+ * El archivo de tipologias lo SUSTITUYE un tercero dentro de la carpeta de Planos, y al subir el
+ * nuevo el identificador de Drive cambia: el enlace guardado deja de servir. Como quien lo sustituye
+ * no es de la casa, puede pasar tiempo antes de que alguien lo note y nos pase el enlace nuevo.
+ *
+ * Mientras tanto, SOL entregaria un enlace muerto con toda la seguridad del mundo, y eso es peor que
+ * no tener enlace: el asesor abre un archivo borrado delante de un cliente y no sabe por que.
+ *
+ * Esto no impide que caduque —sin acceso a la API de Drive no hay manera— pero deja de ser
+ * silencioso: el nombre lleva el mes, asi que se compara con hoy y se dice. Vale para cualquier
+ * documento que se renueve, no solo para este: las listas de precios y los brochures tambien llevan
+ * la fecha en el nombre.
+ */
+export function avisoDeVigencia(nombre: string, hoy: string): string | null {
+  const anioActual = Number(hoy.slice(0, 4));
+  const suya = fechaEnNombre(nombre, anioActual);
+  if (suya === 0) return null;
+
+  const mes = suya % 100;
+  // Con año pero sin mes no se compara: «Lista 2026» no dice nada de si esta al dia.
+  if (mes < 1 || mes > 12) return null;
+
+  const ahora = anioActual * 100 + Number(hoy.slice(5, 7));
+  if (suya >= ahora) return null;
+
+  return `El nombre dice ${NOMBRE_DEL_MES[mes]} de ${Math.floor(suya / 100)} y hoy estamos en `
+    + `${NOMBRE_DEL_MES[Number(hoy.slice(5, 7))]} de ${anioActual}. Puede que lo hayan sustituido `
+    + `por uno mas nuevo y que este enlace ya no abra. Dilo al entregarlo y ofrece la carpeta.`;
+}
+
 export function documentoMencionado(
   respuesta: string,
   doc: { nombre?: unknown; categoria?: unknown },

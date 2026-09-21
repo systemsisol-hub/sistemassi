@@ -17,7 +17,7 @@ import { ALL_TOOLS, ToolInput } from "./herramientas.ts";
 import { CORS, igualesEnTiempoConstante, INTERNAL_SECRET, OLLAMA_BASE, OLLAMA_KEY, OLLAMA_MODEL, OLLAMA_MODEL_RESPALDO, SERVICE_KEY, SUPABASE_URL } from "./config.ts";
 import { ADMIN_ONLY_TOOLS, Identidad, PERMISO_POR_HERRAMIENTA, Permisos, puedeUsarHerramienta, QUE_HACE, VIAS_DIRECTAS } from "./permisos.ts";
 import { construirPrompt } from "./prompt.ts";
-import { afirmaDatoSinRespaldo, preguntaAutorizacion, textoAutorizacion, preguntaContactoEmergencia, preguntaCumpleanos, preguntaFaltasDe, preguntaIncidenciasDe, preguntaSuEquipo, preguntaSuHorario, preguntaSusVacaciones, soloUnIdentificador, textoAsistencia, textoContactoEmergencia, textoCumpleanos, textoIncidencias, textoEquipoPropio, textoHorario, textoUltimaSolicitud, textoVacacionesPropias } from "./respuestas.ts";
+import { afirmaDatoSinRespaldo, preguntaAutorizacion, textoAutorizacion, preguntaContactoEmergencia, preguntaCumpleanos, preguntaFaltasDe, preguntaIncidenciasDe, preguntaSuEquipo, preguntaSuHorario, preguntaQuienSeVa, preguntaSusVacaciones, soloUnIdentificador, textoAsistencia, textoContactoEmergencia, textoCumpleanos, textoIncidencias, textoEquipoPropio, textoHorario, textoQuienSeVa, textoUltimaSolicitud, textoVacacionesPropias } from "./respuestas.ts";
 import { decidirIncidencias, pendientesACargoDe, runTool } from "./ejecutar.ts";
 import { jefeAlQueSeRefiere, sinAcentos, tokensDeNombre } from "./nombres.ts";
 
@@ -237,6 +237,45 @@ Deno.serve(async (req: Request) => {
         }),
         { headers: { ...CORS, "Content-Type": "application/json" } },
       );
+    }
+
+    // ── Via directa: quienes se van de vacaciones en un rango ──────────────
+    //
+    // Reportado: «quien se va de vacaciones en septiembre o en esta semana» no se podia contestar.
+    // Y no era cosa del modelo: `buscar_incidencias` no tenia ningun filtro por fechas, asi que ese
+    // dato no se podia pedir. Ahora si, y esta via lo resuelve sin gastar una llamada al modelo.
+    //
+    // Solo para administradores, como el resto de lo que mira a OTRAS personas. Un usuario normal
+    // cae al modelo, que usara la misma herramienta limitada a lo suyo: no se le abre nada.
+    const cuando = isAdmin ? preguntaQuienSeVa(ultimoUsuario, new Date()) : null;
+    if (cuando && puedeUsarHerramienta("buscar_incidencias", isAdmin, permisos)) {
+      // Solo APROBADA y PENDIENTE. Es la MISMA regla que usa el saldo de la pagina de Incidencias
+      // -ver `_buildHistorialTable`-: una cancelada no ocupa a nadie, y una pendiente si hay que
+      // tenerla en cuenta para planear, marcada como lo que es.
+      const fuera = await runTool(
+        "buscar_incidencias",
+        { desde: cuando.desde, hasta: cuando.hasta, limit: 200 },
+        svc, isAdmin, actorId, userFullName, permisos,
+      ) as Record<string, unknown>;
+
+      if (!fuera.error && Array.isArray(fuera.results)) {
+        const filas = (fuera.results as Array<Record<string, unknown>>)
+          .filter((f) => f.status === "APROBADA" || f.status === "PENDIENTE");
+        console.log(
+          `via directa: vacaciones ${cuando.desde}..${cuando.hasta}, ${filas.length} de `
+          + `${(fuera.results as unknown[]).length} filas`,
+        );
+        return new Response(
+          JSON.stringify({
+            text: textoQuienSeVa(cuando, filas),
+            // Los datos crudos van tambien, para que la pantalla los pueda pintar si algun dia
+            // quiere, y para que quede en la bitacora de que salio la lista.
+            structured: { type: "vacaciones_rango", data: { ...cuando, results: filas } },
+          }),
+          { headers: { ...CORS, "Content-Type": "application/json" } },
+        );
+      }
+      console.log(`via directa de rango fallo, sigue el modelo: ${fuera.error}`);
     }
 
     // ── Via directa: sus propias vacaciones ────────────────────────────────
@@ -643,7 +682,11 @@ Deno.serve(async (req: Request) => {
 
     while (iterations++ < 15) {
       const intento = await pedirAlModelo();
-      if (!intento.ok) return intento.respuesta;
+      // `=== false` y no `!intento.ok`, que dice lo mismo pero TypeScript no lo afina igual: con
+      // `strict` apagado -ver `../tsconfig.json`- la negacion no reduce la union y `respuesta` sale
+      // como inexistente. Era el unico error de la comprobacion de tipos, y con el dentro la
+      // comprobacion no sirve de barrera: un error nuevo se perderia entre el ruido.
+      if (intento.ok === false) return intento.respuesta;
       const ollama = intento.ollama;
 
       const msg = ollama.message;

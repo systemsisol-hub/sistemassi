@@ -135,7 +135,9 @@ export const ALL_TOOLS = [
     type: "function",
     function: {
       name: "buscar_incidencias",
-      description: "Busca incidencias. Usuarios no-admin solo ven las propias. "
+      description: "Busca incidencias (solicitudes de vacaciones). Usa desde/hasta para saber "
+        + "QUIEN SE VA DE VACACIONES en un rango: quien cumpleanos es de otra herramienta. "
+        + "Usuarios no-admin solo ven las propias. "
         + "SI ERES ADMIN Y NO PASAS usuario_id, DEVUELVE LAS DE TODA LA EMPRESA: "
         + "no son de quien pregunta. La respuesta trae un campo `alcance` que dice de quién son.",
       parameters: {
@@ -144,6 +146,8 @@ export const ALL_TOOLS = [
           status:     { type: "string", enum: ["PENDIENTE","APROBADA","RECHAZADA","CANCELADA"] },
           periodo:    { type: "string" }, limit: { type: "number" },
           usuario_id: { type: "string", description: "[Solo admin] UUID del colaborador" },
+          desde: { type: "string", description: "AAAA-MM-DD. Devuelve quien esta fuera EN ALGUN momento del rango, no solo quien empieza dentro" },
+          hasta: { type: "string", description: "AAAA-MM-DD" },
         },
       },
     },

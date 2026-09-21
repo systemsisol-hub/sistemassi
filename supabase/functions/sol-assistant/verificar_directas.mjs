@@ -363,6 +363,145 @@ comprobar('sin etapa', M.textoUbicacion('KOOX', 'Puerto Morelos'), 'KOOX está e
 comprobar('no duplica el punto final',
   M.textoUbicacion('KOOX', 'Puerto Morelos.'), 'KOOX está en Puerto Morelos.');
 
+// ─── Como lo pide el asesor y como se llama en el catalogo ──────────────────
+//
+// El 21/09/2026 un asesor pidio «el archivo de tipologias de AG117» tres veces y SOL contesto que
+// no existia, enumerando a continuacion Planos y Prototipos, que es donde estan. Insistio -«Claro
+// que si esta en la carpeta de 7. Planos»- y SOL volvio a decir que no.
+console.log('\nlo que pide el asesor y como se llama la categoria');
+
+function busca(titulo, pedido, esperados, comoSeLlama) {
+  const r = M.comoSeBusca(pedido);
+  const faltan = esperados.filter((e) => !r.patrones.includes(e));
+  if (faltan.length > 0) {
+    fallos++;
+    console.log(`  FALLA  ${titulo}`);
+    console.log(`         "${pedido}" no busca en ${faltan.join(', ')}; busca en `
+      + `${r.patrones.join(', ')}`);
+    return;
+  }
+  if (comoSeLlama !== undefined && r.comoSeLlama !== comoSeLlama) {
+    fallos++;
+    console.log(`  FALLA  ${titulo}: el aviso`);
+    console.log(`         esperado ${JSON.stringify(comoSeLlama)}, obtuve `
+      + JSON.stringify(r.comoSeLlama));
+  }
+}
+
+// La que lo origino. Y «topologias», que es como se escribio dos veces en ese mismo hilo.
+busca('tipologias busca en planos Y prototipos', 'tipologias', ['plano', 'prototipo'],
+  'Planos y Prototipos');
+busca('con el dedazo tambien', 'topologias', ['plano', 'prototipo'], 'Planos y Prototipos');
+busca('en singular', 'tipologia', ['plano', 'prototipo']);
+busca('dentro de una frase', 'el archivo de tipologias de AG117', ['plano', 'prototipo']);
+
+busca('layout es un plano', 'layout', ['plano'], 'Planos');
+busca('distribucion tambien', 'distribucion', ['plano'], 'Planos');
+busca('folleto es el brochure', 'folleto', ['brochure'], 'Brochure');
+// Sin aviso a proposito, aunque la categoria se llame «Fotos / Renders»: quien dice «renders» ya
+// uso una palabra del nombre, y explicarle donde esta guardado es ruido. La primera version de esta
+// comprobacion esperaba el aviso; la regla era la buena y la expectativa la equivocada.
+busca('renders', 'renders', ['render', 'foto'], null);
+busca('fotos, misma categoria', 'fotos', ['render', 'foto'], null);
+busca('precios', 'lista de precios', ['precio']);
+busca('mapa es la ubicacion', 'mapa', ['ubicacion'], 'Ubicacion');
+
+// Lo que pidio se busca SIEMPRE tal cual, ademas de la equivalencia: una categoria nueva que nadie
+// haya traducido aqui tiene que seguir encontrandose sola.
+busca('lo pedido se busca tal cual', 'reporte airdna', ['reporte airdna']);
+busca('una categoria que nadie tradujo', 'permisos de construccion',
+  ['permisos de construccion']);
+
+// El archivo dentro de la carpeta se llama «Tipografias septiembre 2026»: tipografia es el diseno
+// de las letras y tipologia es el tipo de vivienda, asi que el nombre dice una cosa y quiere decir
+// otra. Las dos formas, y las dos con dedazo, porque las dos se escriben de verdad.
+busca('tipografias, como se llama el archivo', 'tipografias', ['plano', 'prototipo'],
+  'Planos y Prototipos');
+busca('topografias, con dedazo', 'topografias', ['plano', 'prototipo']);
+busca('con acento', 'tipografías', ['plano', 'prototipo']);
+busca('tipologías con acento', 'tipologías', ['plano', 'prototipo']);
+
+// ─── El mes que lleva el nombre ────────────────────────────────────────────
+//
+// «Mandame el ULTIMO archivo de tipologias», preguntado tal cual el 08/09/2026. El orden alfabetico
+// no sirve: octubre va antes que septiembre en el alfabeto y despues en el calendario.
+console.log('\nel mes que lleva el nombre del archivo');
+
+const f = (n) => M.fechaEnNombre(n, 2026);
+comprobar('mes y año', f('Tipografias septiembre 2026'), 202609);
+comprobar('otro mes', f('Tipografias octubre 2026'), 202610);
+comprobar('sin año, se usa el actual', f('Tipografias octubre'), 202610);
+comprobar('abreviado, como los brochures', f('Brochure PC - AG117 - 1 Sept.pdf'), 202609);
+comprobar('año de dos cifras', f('AG117 - Version Movil 01.09.26.pdf'), 202609);
+comprobar('fecha numerica con barras', f('Lista 15/12/2026.xlsx'), 202612);
+comprobar('sin fecha no inventa', f('Planos'), 0);
+comprobar('sin fecha, otro', f('Prototipos en ingles'), 0);
+
+// Las abreviaturas sueltas y NO dentro de una palabra. Mi primera version escribia `\b(mar)[a-z]*\b`
+// y estas cuatro daban mes: «marca» marzo, «mayor» mayo, «junta» junio, «agosto» estaba bien pero
+// «octava» daba octubre. Un nombre de archivo cualquiera se convertia en una fecha.
+comprobar('«marca» no es marzo', f('Brochure marca AG117'), 0);
+comprobar('«mayor» no es mayo', f('Plano mayor detalle'), 0);
+comprobar('«junta» no es junio', f('Acta de junta'), 0);
+comprobar('«octava» no es octubre', f('Octava etapa'), 0);
+// Y las que si son abreviaturas de verdad siguen funcionando.
+comprobar('«dic» suelto si es diciembre', f('Cierre 15 dic'), 202612);
+comprobar('«sept.» con punto', f('Corte 1 sept.'), 202609);
+
+// Es lo que hace que «el ultimo» funcione: octubre DESPUES de septiembre, no antes.
+if (!(f('Tipografias octubre 2026') > f('Tipografias septiembre 2026'))) {
+  fallos++;
+  console.log('  FALLA  octubre tiene que ir despues de septiembre');
+  console.log('         es el caso que el orden alfabetico se equivoca');
+}
+if (!(f('Tipografias enero 2027') > f('Tipografias diciembre 2026'))) {
+  fallos++;
+  console.log('  FALLA  enero del año siguiente va despues de diciembre');
+}
+
+// ─── El aviso de que un archivo puede estar caducado ───────────────────────
+//
+// El archivo de tipologias lo SUSTITUYE un tercero dentro de la carpeta de Planos, y al subir el
+// nuevo el identificador de Drive cambia: el enlace guardado deja de servir. Como quien lo sustituye
+// no es de la casa, puede pasar tiempo hasta que alguien lo note. Esto no impide que caduque —sin
+// acceso a la API de Drive no hay manera— pero deja de ser silencioso.
+console.log('\nel aviso de vigencia');
+
+const v = (n, hoy) => M.avisoDeVigencia(n, hoy);
+
+// En octubre, el archivo de septiembre avisa.
+const enOctubre = v('Tipologias sep 2026', '2026-10-05');
+if (enOctubre === null) {
+  fallos++;
+  console.log('  FALLA  en octubre, el de septiembre tiene que avisar');
+} else {
+  console.log('  ->', enOctubre);
+  if (!enOctubre.includes('septiembre') || !enOctubre.includes('octubre')) {
+    fallos++;
+    console.log('  FALLA  el aviso dice los DOS meses, el del archivo y el de hoy');
+  }
+}
+
+// En septiembre, el de septiembre NO avisa: esta al dia y avisar seria ruido.
+comprobar('el del mes en curso no avisa', v('Tipologias sep 2026', '2026-09-21'), null);
+// Y uno posterior tampoco: si alguien sube el de octubre en septiembre, esta bien.
+comprobar('uno posterior tampoco', v('Tipologias octubre 2026', '2026-09-21'), null);
+// Cruzando el año: diciembre de 2026 visto en enero de 2027 avisa.
+if (v('Tipologias diciembre 2026', '2027-01-04') === null) {
+  fallos++;
+  console.log('  FALLA  diciembre visto en enero del año siguiente tiene que avisar');
+}
+// Sin fecha en el nombre no hay nada que comparar: no se inventa un aviso.
+comprobar('sin fecha no avisa', v('Planos', '2026-10-05'), null);
+comprobar('sin fecha, otro', v('Prototipos en ingles', '2026-10-05'), null);
+// Con año pero sin mes tampoco: «Lista 2026» no dice si esta al dia.
+comprobar('con año y sin mes no avisa', v('Lista 2026', '2026-10-05'), null);
+
+// Y no se avisa de lo obvio: decirle que «los planos estan en Planos» es ruido.
+comprobar('pedir planos no lleva aviso', M.comoSeBusca('planos').comoSeLlama, null);
+comprobar('pedir prototipos tampoco', M.comoSeBusca('prototipos').comoSeLlama, null);
+comprobar('sin nada que buscar', M.comoSeBusca('').patrones, []);
+
 console.log('');
 if (fallos > 0) {
   console.log(`${fallos} FALLAS`);
