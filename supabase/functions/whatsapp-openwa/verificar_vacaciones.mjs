@@ -15,13 +15,20 @@
 //   3. Guarde una nota en vez de la ficha, y copio la nota. La causa de fondo era que en la memoria
 //      del hilo iba texto MIO y no el del modelo, al contrario que en la aplicacion: ver el upsert de
 //      `whatsapp_conversaciones`. Lo que queda aqui es la red de seguridad, no el arreglo.
-import { readFileSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { leer } from '../ai-assistant/leer.mjs';
 
 const aqui = dirname(fileURLToPath(import.meta.url));
-const src = readFileSync(join(aqui, 'index.ts'), 'utf8');
+// Con `leer` y no con `readFileSync`: normaliza CRLF.
+//
+// Esta prueba llevaba tiempo REVENTANDO en silencio por esto. El extractor busca la llave que
+// abre el cuerpo como `{ seguido de salto de linea`, y en disco los saltos son CRLF, asi que
+// nunca la encontraba: fallaba con «no se encontro el cuerpo de sinAcentos» antes de comprobar
+// nada. Los otros ocho arneses ya usaban `leer` por esta misma razon; este se quedo atras.
+const src = leer(join(aqui, 'index.ts'));
 
 function extraerFuncion(nombre) {
   const i = src.indexOf(`function ${nombre}(`);

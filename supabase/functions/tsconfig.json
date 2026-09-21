@@ -1,0 +1,30 @@
+{
+  "//": [
+    "Comprobacion de TIPOS de las Edge Functions:  npx tsc -p supabase/functions",
+    "",
+    "Por que existe: esbuild QUITA los tipos, no los comprueba. El 21/09/2026 desplegue",
+    "`hoyISO()` sobre una constante -no es una funcion- y esbuild dijo SINTAXIS OK. Estuvo una",
+    "hora en produccion tirando «TypeError: hoyISO is not a function» en cada consulta de",
+    "documentos, y lo reporto el usuario, no una comprobacion mia.",
+    "",
+    "`strict` va en false a proposito: el codigo usa `(q as any)` en muchos sitios para el cliente",
+    "de Supabase, y encender todo llenaria la salida de ruido que taparia lo que si importa. Aun",
+    "asi esto atrapa la clase de fallo que se colo: llamar a lo que no es funcion, un nombre que no",
+    "existe, argumentos que no encajan.",
+    "",
+    "Este archivo no se despliega: esta en `supabase/functions/`, no dentro de una funcion."
+  ],
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "lib": ["esnext", "dom"],
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "skipLibCheck": true,
+    "strict": false,
+    "noImplicitAny": false,
+    "types": []
+  },
+  "include": ["tipos_externos.d.ts", "*/*.ts"]
+}

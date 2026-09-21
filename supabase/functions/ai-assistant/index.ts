@@ -682,7 +682,11 @@ Deno.serve(async (req: Request) => {
 
     while (iterations++ < 15) {
       const intento = await pedirAlModelo();
-      if (!intento.ok) return intento.respuesta;
+      // `=== false` y no `!intento.ok`, que dice lo mismo pero TypeScript no lo afina igual: con
+      // `strict` apagado -ver `../tsconfig.json`- la negacion no reduce la union y `respuesta` sale
+      // como inexistente. Era el unico error de la comprobacion de tipos, y con el dentro la
+      // comprobacion no sirve de barrera: un error nuevo se perderia entre el ruido.
+      if (intento.ok === false) return intento.respuesta;
       const ollama = intento.ollama;
 
       const msg = ollama.message;

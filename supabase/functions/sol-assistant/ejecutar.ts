@@ -516,7 +516,7 @@ export async function runTool(
       // Va por documento y no como nota general: un aviso global haria parecer que TODO esta viejo.
       aviso_vigencia: f.es_carpeta === true
         ? null
-        : avisoDeVigencia(String(f.nombre ?? ""), hoyISO()),
+        : avisoDeVigencia(String(f.nombre ?? ""), hoyISO),
     });
 
     // ─── Si el criterio no encontro nada, se entrega TODO lo que hay, con enlace ──
@@ -560,7 +560,7 @@ export async function runTool(
     //   3. Y entre archivos, el mas reciente segun el mes que lleva el nombre. Se pregunto «mandame
     //      el ULTIMO archivo de tipologias», y ordenar por nombre no vale: octubre va antes que
     //      septiembre en el alfabeto y despues en el calendario.
-    const anioActual = Number(hoyISO().slice(0, 4));
+    const anioActual = Number(hoyISO.slice(0, 4));
     const porNombre = (f: Record<string, unknown>) =>
       busqueda !== null
         && busqueda.patrones.some((b) => sinAcentos(String(f.nombre ?? "")).toLowerCase()
