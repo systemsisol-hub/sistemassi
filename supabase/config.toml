@@ -59,6 +59,18 @@ verify_jwt = false
 [functions.bi-assistant]
 verify_jwt = true
 
+# Faltaba, y se noto al redesplegarla el 21/09/2026: al no estar declarada aqui, el valor dependia
+# de si quien desplegaba se acordaba de NO pasar `--no-verify-jwt`, y pasarla por costumbre la dejo
+# en `false`. Es justo el riesgo que advierte la cabecera de este archivo, en el otro sentido.
+#
+# `true` es el valor correcto: la llama solo `lib/sol_page.dart` con la sesion del usuario, y la
+# funcion NO tiene via interna -a diferencia de `ai-assistant`, que si la tiene para el puente de
+# WhatsApp-. Ella misma exige `Authorization` y responde 401 sin el, asi que `false` no exponia
+# nada; la diferencia es que una llamada sin sesion llegaba a ejecutarse en vez de pararse en la
+# puerta.
+[functions.sol-assistant]
+verify_jwt = true
+
 # La llama `bi-assistant`, no la aplicación, reenviando el JWT del usuario para que el permiso del
 # reporte se compruebe en un solo lugar. Por eso no aparece en el código Dart: buscarla sólo ahí
 # hace parecer que nadie la usa.

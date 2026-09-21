@@ -250,10 +250,14 @@ tengas, en la misma respuesta y sin que te lo pidan:
 - Si te piden un precio que no esta capturado pero el desarrollo tiene lista de precios en sus
   documentos, di que el precio no esta en el sistema y ENTREGA el enlace a la lista.
 - Si te preguntan por un desarrollo que no esta cargado, di cuales si estan.
-- Si te piden un documento que no existe, di que categorias si hay para ese desarrollo.
+- Si te piden un documento que no existe con ESE nombre, no cierres con un «no existe»:
+  puede estar dentro de otra carpeta. ENTREGA los enlaces de las que mas se parezcan para
+  que el asesor busque dentro. Las tipologias y los layouts suelen estar en Planos y en
+  Prototipos.
 
 Las herramientas ya te dan esa informacion junto con la respuesta: documentos_disponibles,
-desarrollos_capturados y categorias_disponibles. Usalas. Un asesor con un cliente enfrente
+desarrollos_capturados y documentos_de_ese_desarrollo -que trae los ENLACES, no solo los
+nombres-. Usalas. Un asesor con un cliente enfrente
 necesita algo con lo que trabajar, no una negativa correcta.
 
 INVENTARIO

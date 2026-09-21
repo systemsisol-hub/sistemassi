@@ -541,15 +541,3 @@ export async function runTool(
 
   return { error: `Herramienta desconocida: ${nombre}` };
 }
-
-/// Las categorias de documentos que existen para esos desarrollos.
-///
-/// Sirve para no dejar al asesor con un «no hay»: si pidio el brochure y no esta, pero si estan los
-/// planos y los prototipos, eso es lo que necesita saber.
-async function categoriasDe(db: Db, ids: string[]): Promise<string[]> {
-  if (ids.length === 0) return [];
-  const { data } = await db.from("documentos")
-    .select("categoria").in("desarrollo_id", ids).eq("is_active", true);
-  return [...new Set(((data ?? []) as Record<string, unknown>[])
-    .map((r) => String(r.categoria)))].sort();
-}
