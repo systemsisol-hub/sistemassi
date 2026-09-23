@@ -15,7 +15,7 @@ const List<String> _kCategories = [
   'General',
   'Recursos Humanos',
   'Tecnología',
-  'Procedimientos',
+  'Manuales y Procedimientos',
   'Aplicaciones',
   'Soporte',
 ];
@@ -24,7 +24,8 @@ const Map<String, (IconData, Color)> _kCatMeta = {
   'General':          (Icons.home_work_outlined,    Color(0xFF6366F1)),
   'Recursos Humanos': (Icons.people_outline,         Color(0xFF10B981)),
   'Tecnología':       (Icons.computer_outlined,      Color(0xFF3B82F6)),
-  'Procedimientos':   (Icons.assignment_outlined,    Color(0xFFF59E0B)),
+  'Manuales y Procedimientos':
+                      (Icons.assignment_outlined,    Color(0xFFF59E0B)),
   'Aplicaciones':     (Icons.apps_outlined,          Color(0xFF8B5CF6)),
   'Soporte':          (Icons.support_agent_outlined, Color(0xFFEF4444)),
 };
@@ -1403,9 +1404,13 @@ class _ArticleFormSheetState extends State<_ArticleFormSheet> {
                                       Icon(meta.$1,
                                           size: 14, color: meta.$2),
                                       const SizedBox(width: 8),
-                                      Text(cat,
-                                          style: TextStyle(
-                                              fontSize: 13, color: c.ink)),
+                                      // «Manuales y Procedimientos» no cabe en media fila de un teléfono.
+                                      Flexible(
+                                        child: Text(cat,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                                fontSize: 13, color: c.ink)),
+                                      ),
                                     ]),
                                   );
                                 }).toList(),
