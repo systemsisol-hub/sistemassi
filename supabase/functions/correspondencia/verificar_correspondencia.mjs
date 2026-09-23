@@ -1,0 +1,143 @@
+// Ejercita lo que decide si un correo se puede mandar.
+//
+//   node --experimental-strip-types supabase/functions/correspondencia/verificar_correspondencia.mjs
+//
+// `validar.ts` no importa nada, asi que se carga tal cual: la prueba no puede quedar verificando una
+// copia vieja.
+//
+// La tabla de CORREOS esta repetida, igual, en `test/correspondencia_test.dart`. La aplicacion valida
+// para avisar pronto y el servidor valida para mandar; si las dos expresiones se separan, alguien ve
+// «direccion valida» en pantalla y un rechazo al enviar. Las dos tablas iguales son lo que lo detecta.
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const aqui = dirname(fileURLToPath(import.meta.url));
+const M = await import(`file://${join(aqui, 'validar.ts').replace(/\\/g, '/')}`);
+
+let fallos = 0;
+function ok(titulo, cond, detalle) {
+  if (cond) return;
+  fallos++;
+  console.log(`  FALLA  ${titulo}`);
+  if (detalle) console.log(`         ${detalle}`);
+}
+
+// ─── La tabla compartida con la prueba de Dart ─────────────────────────────
+console.log('que es una direccion de correo');
+const SI_SON = [
+  'ana@sisol.com.mx',
+  'a.b+c@x.co',
+  'nombre.apellido@bonanzaprisma.com',
+  'ANA@SISOL.COM.MX',
+];
+const NO_SON = [
+  '',
+  'ana',
+  'ana@',
+  '@sisol.com',
+  'ana@@sisol.com',
+  'ana sisol@x.com',
+  'ana@sisol',
+  'ana@sisol.c',
+  '"ana"@x.com',
+  'ana<@x.com',
+  'a,b@x.com',
+];
+for (const c of SI_SON) ok(`«${c}» es correo`, M.esCorreo(c));
+for (const c of NO_SON) ok(`«${c}» NO es correo`, !M.esCorreo(c));
+
+// ─── Como se pegan de otro lado ────────────────────────────────────────────
+console.log('\nlistas pegadas');
+{
+  const r = M.normalizarDestinatarios(['Ana@Sisol.com.mx, beto@x.com; ana@sisol.com.mx\ncarla@y.org']);
+  ok('separa por coma, punto y coma y salto de linea',
+    JSON.stringify(r.validos) === JSON.stringify(['ana@sisol.com.mx', 'beto@x.com', 'carla@y.org']),
+    `obtuve ${JSON.stringify(r.validos)}`);
+  ok('pasa a minusculas y no repite', r.validos.filter((d) => d === 'ana@sisol.com.mx').length === 1);
+  ok('sin rechazos', r.rechazados.length === 0);
+}
+{
+  const r = M.normalizarDestinatarios(['ana@x.com, no-es-correo', 'beto@y.com']);
+  ok('aparta la que no es', JSON.stringify(r.rechazados) === JSON.stringify(['no-es-correo']),
+    `obtuve ${JSON.stringify(r.rechazados)}`);
+  ok('y conserva las buenas', r.validos.length === 2);
+}
+ok('algo que no es lista no revienta', M.normalizarDestinatarios('ana@x.com').validos.length === 0);
+
+// ─── El mensaje entero ─────────────────────────────────────────────────────
+console.log('\nvalidar el mensaje');
+const bueno = { asunto: 'Junta', cuerpo: 'Hola', destinatarios: ['ana@sisol.com.mx'] };
+
+ok('uno bien formado pasa', M.validarMensaje(bueno).ok === true);
+ok('sin asunto no', M.validarMensaje({ ...bueno, asunto: '  ' }).ok === false);
+ok('sin cuerpo no', M.validarMensaje({ ...bueno, cuerpo: '' }).ok === false);
+ok('sin destinatarios no', M.validarMensaje({ ...bueno, destinatarios: [] }).ok === false);
+ok('asunto demasiado largo no',
+  M.validarMensaje({ ...bueno, asunto: 'x'.repeat(M.MAX_ASUNTO + 1) }).ok === false);
+ok('cuerpo demasiado largo no',
+  M.validarMensaje({ ...bueno, cuerpo: 'x'.repeat(M.MAX_CUERPO + 1) }).ok === false);
+
+// La forma clasica de colar cabeceras: un salto de linea en el asunto con un «Bcc:» detras.
+ok('un asunto con salto de linea NO pasa',
+  M.validarMensaje({ ...bueno, asunto: 'Hola\r\nBcc: todos@fuera.com' }).ok === false,
+  'por aqui se cuela una cabecera Bcc');
+
+// Una mala tumba el envio ENTERO: si se mandara a las buenas, la mala no recibe y nadie se entera.
+{
+  const r = M.validarMensaje({ ...bueno, destinatarios: ['ana@sisol.com.mx', 'mal'] });
+  ok('una direccion mala detiene todo el envio', r.ok === false);
+  ok('y dice cual', r.ok === false && JSON.stringify(r.rechazados) === JSON.stringify(['mal']));
+}
+{
+  const muchos = Array.from({ length: M.MAX_DESTINATARIOS + 1 }, (_, i) => `p${i}@x.com`);
+  ok(`mas de ${M.MAX_DESTINATARIOS} destinatarios no`,
+    M.validarMensaje({ ...bueno, destinatarios: muchos }).ok === false);
+  const justo = muchos.slice(0, M.MAX_DESTINATARIOS);
+  ok(`exactamente ${M.MAX_DESTINATARIOS} si`,
+    M.validarMensaje({ ...bueno, destinatarios: justo }).ok === true);
+}
+{
+  const r = M.validarMensaje({ asunto: '  Junta  ', cuerpo: '  Hola  ', destinatarios: ['ANA@x.com'] });
+  ok('recorta y normaliza',
+    r.ok && r.mensaje.asunto === 'Junta' && r.mensaje.cuerpo === 'Hola'
+      && r.mensaje.destinatarios[0] === 'ana@x.com');
+}
+
+// ─── Lo que va dentro de las cabeceras y del cuerpo ────────────────────────
+console.log('\ncabeceras y cuerpo');
+{
+  const n = M.nombreRemitente('Ana "Hack" <x@y>\r\nBcc: z@w');
+  ok('el nombre no lleva comillas, angulos ni saltos', !/["<>\r\n]/.test(n), `quedo «${n}»`);
+  ok('y dice de donde sale', n.endsWith('(via SISOL)'));
+}
+ok('sin nombre, uno generico', M.nombreRemitente('   ') === 'Sistema SISOL');
+
+{
+  const h = M.cuerpoHtml('<script>alert(1)</script>\n<a href="x">clic</a>', 'Ana', 'ana@x.com');
+  ok('el cuerpo se escapa: no hay etiquetas del usuario', !h.includes('<script>') && !h.includes('<a href'),
+    'un correo con marcado del usuario, desde la cuenta de la empresa, es una puerta al engaño');
+  ok('los saltos de linea se conservan', h.includes('<br>'));
+  ok('lleva el pie con a quien contestar', h.includes('ana@x.com'));
+}
+ok('el texto plano tambien lleva el pie',
+  M.cuerpoTexto('Hola', 'Ana', 'ana@x.com').includes('escribe a ana@x.com'));
+ok('sin correo propio el pie no inventa uno',
+  !M.cuerpoTexto('Hola', 'Ana', null).includes('escribe a'));
+
+// ─── Los puertos que Supabase deja usar ────────────────────────────────────
+console.log('\npuertos');
+ok('465 si', M.puertoPermitido(465).ok === true);
+ok('587 NO: Supabase lo bloquea', M.puertoPermitido(587).ok === false);
+ok('25 NO: Supabase lo bloquea', M.puertoPermitido(25).ok === false);
+ok('el motivo dice que use el 465', M.puertoPermitido(587).motivo?.includes('465'));
+ok('0 no es puerto', M.puertoPermitido(0).ok === false);
+ok('70000 no es puerto', M.puertoPermitido(70000).ok === false);
+ok('NaN no es puerto', M.puertoPermitido(Number('abc')).ok === false);
+ok('otro puerto cualquiera se deja intentar', M.puertoPermitido(2525).ok === true);
+
+console.log('');
+if (fallos > 0) {
+  console.log(`${fallos} FALLAS`);
+  process.exit(1);
+}
+console.log('TODO BIEN');

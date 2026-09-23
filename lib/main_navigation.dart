@@ -12,6 +12,7 @@ import 'social_page.dart';
 import 'external_contacts_page.dart';
 import 'directorio_page.dart';
 import 'avisos_page.dart';
+import 'correspondencia_page.dart';
 import 'convertidor_page.dart';
 import 'herramientas_page.dart';
 import 'whatsapp_page.dart';
@@ -46,7 +47,7 @@ class _OpenSearchIntent extends Intent {
 final _navGroups = <(String, List<String>)>[
   // Los dos asistentes van en GENERAL y JUNTOS, arriba: son de uso diario y se preguntan entre
   // ellos. Estaban en ADMINISTRACIÓN, que es donde se configura el sistema, no donde se trabaja.
-  ('GENERAL',        ['Mi Perfil', 'IA', 'SOL', 'Social', 'Avisos', 'Directorio', 'Conocimientos', 'Contraseñas', 'Contactos Ext.', 'Firmas', 'Convertidor', 'Herramientas', 'Calendario']),
+  ('GENERAL',        ['Mi Perfil', 'IA', 'SOL', 'Social', 'Avisos', 'Correspondencia', 'Directorio', 'Conocimientos', 'Contraseñas', 'Contactos Ext.', 'Firmas', 'Convertidor', 'Herramientas', 'Calendario']),
   ('OPERACIÓN',      ['Incidencias', 'Inventario', 'Colaborador', 'Asistencia']),
   // Logs sale de ANÁLISIS: no se analiza el negocio con ellos, se revisa el sistema.
   ('ANÁLISIS',       ['BI', 'Tablas']),
@@ -170,6 +171,16 @@ class _MainNavigationState extends State<MainNavigation> {
         'icon': Icons.campaign_outlined,
         'activeIcon': Icons.campaign,
         'widget': const AvisosPage(),
+      });
+    }
+    // La MISMA condicion que usa la funcion `correspondencia`: administrador o el permiso. Si la
+    // pagina pidiera otra cosa, habria quien la ve y al enviar recibe «no tienes acceso».
+    if (widget.role == 'admin' || widget.permissions['show_correspondencia'] == true) {
+      pages.add({
+        'title': 'Correspondencia',
+        'icon': Icons.mail_outline,
+        'activeIcon': Icons.mail,
+        'widget': CorrespondenciaPage(role: widget.role),
       });
     }
     if (widget.permissions['show_directorio'] == true) {

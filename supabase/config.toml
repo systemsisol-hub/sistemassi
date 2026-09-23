@@ -71,6 +71,12 @@ verify_jwt = true
 [functions.sol-assistant]
 verify_jwt = true
 
+# La llama solo `lib/correspondencia_page.dart`, con la sesion del usuario, y no tiene via interna.
+# Declarada desde el primer dia para que no dependa de acordarse de la bandera al desplegar, que es
+# justo lo que le paso a `sol-assistant`.
+[functions.correspondencia]
+verify_jwt = true
+
 # La llama `bi-assistant`, no la aplicación, reenviando el JWT del usuario para que el permiso del
 # reporte se compruebe en un solo lugar. Por eso no aparece en el código Dart: buscarla sólo ahí
 # hace parecer que nadie la usa.
