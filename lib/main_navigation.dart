@@ -173,14 +173,16 @@ class _MainNavigationState extends State<MainNavigation> {
         'widget': const AvisosPage(),
       });
     }
-    // La MISMA condicion que usa la funcion `correspondencia`: administrador o el permiso. Si la
-    // pagina pidiera otra cosa, habria quien la ve y al enviar recibe «no tienes acceso».
-    if (widget.role == 'admin' || widget.permissions['show_correspondencia'] == true) {
+    // SOLO con el permiso: ser administrador no basta, a proposito. Pedido el 23/09/2026: «no todos
+    // los administradores lo pueden ver»; lo usan tres personas para mandar comunicados. Es la MISMA
+    // condicion que usa la funcion `correspondencia`, para que no haya quien vea la pagina y al enviar
+    // reciba «no tienes acceso».
+    if (widget.permissions['show_correspondencia'] == true) {
       pages.add({
         'title': 'Correspondencia',
         'icon': Icons.mail_outline,
         'activeIcon': Icons.mail,
-        'widget': CorrespondenciaPage(role: widget.role),
+        'widget': const CorrespondenciaPage(),
       });
     }
     if (widget.permissions['show_directorio'] == true) {

@@ -5,18 +5,21 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'services/correspondencia.dart';
 import 'theme/si_theme.dart';
 
-/// Correspondencia: redactar un correo y mandarlo a compañeros —o a cualquier dirección— desde la
-/// cuenta del sistema, y ver lo enviado.
+/// Correspondencia: comunicados de la empresa a los empleados.
+///
+/// Lo usan tres personas —decisión del usuario el 23/09/2026—, y el correo sale como «Comunicación
+/// SI SOL»: sin el nombre de quien lo escribe, sin pie, y con los destinatarios en copia oculta. Quién
+/// lo envió SÍ queda registrado, y se ve aquí en el historial.
 ///
 /// La pantalla NO manda nada por sí misma: llama a la función `correspondencia`, que es la única que
 /// tiene los datos del servidor de correo y la que decide si el mensaje sale. Lo que se valida aquí
 /// es sólo para avisar pronto; ver `services/correspondencia.dart`.
 ///
-/// El historial se lee directo de la tabla `correspondencia`: cada quien ve lo suyo y un
-/// administrador todo, y eso lo decide RLS, no esta pantalla.
+/// El historial se lee directo de la tabla `correspondencia`, y quién puede leerlo lo decide RLS: los
+/// que tienen el permiso ven TODOS los comunicados, no sólo los suyos. Con un único remitente para
+/// todos, los tres necesitan ver qué salió ya, o acabarán mandando dos veces el mismo aviso.
 class CorrespondenciaPage extends StatefulWidget {
-  final String role;
-  const CorrespondenciaPage({super.key, required this.role});
+  const CorrespondenciaPage({super.key});
 
   @override
   State<CorrespondenciaPage> createState() => _CorrespondenciaPageState();
@@ -40,17 +43,16 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
   bool _enviando = false;
   String? _avisoDest;
 
-  /// Sólo para administradores: si el envío está configurado en el servidor.
+  /// Si el envío está configurado en el servidor. Lo ven quienes envían, que son los que tienen que
+  /// saberlo antes de escribir un comunicado entero.
   Map<String, dynamic>? _config;
-
-  bool get _esAdmin => widget.role == 'admin';
 
   @override
   void initState() {
     super.initState();
     _cargarColaboradores();
     _cargarEnviados();
-    if (_esAdmin) _cargarConfig();
+    _cargarConfig();
   }
 
   @override
@@ -89,8 +91,7 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
     try {
       final filas = await _supabase
           .from('correspondencia')
-          .select('id, remitente_id, remitente_nombre, asunto, destinatarios, estado, error, '
-              'creado_en')
+          .select('id, remitente_nombre, asunto, destinatarios, estado, error, creado_en')
           .order('creado_en', ascending: false)
           .limit(50);
       if (mounted) setState(() => _enviados = List<Map<String, dynamic>>.from(filas));
@@ -292,12 +293,12 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
   Widget _tarjetaRedactar(SiColors c) {
     return _tarjeta(
       c,
-      titulo: 'Nuevo correo',
+      titulo: 'Nuevo comunicado',
       icono: Icons.edit_outlined,
       cuerpo: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (_esAdmin) _avisoConfiguracion(c),
+          _avisoConfiguracion(c),
           _campoDestinatarios(c),
           SizedBox(height: SiSpace.x4),
           TextField(
@@ -323,7 +324,8 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
           ),
           SizedBox(height: SiSpace.x2),
           Text(
-            'Sale desde la cuenta del sistema con tu nombre. Las respuestas te llegan a tu correo.',
+            'Sale como «Comunicación SI SOL», sin tu nombre. Cada destinatario lo recibe sin ver a '
+            'los demás. Queda registrado que lo enviaste tú.',
             style: TextStyle(fontSize: 12, color: c.ink3),
           ),
           SizedBox(height: SiSpace.x4),
@@ -343,8 +345,8 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
     );
   }
 
-  /// Sólo administradores: avisa si el servidor de correo no está listo, antes de que alguien
-  /// escriba un mensaje entero y descubra al enviar que no puede salir.
+  /// Avisa si el servidor de correo no está listo, antes de que alguien escriba un comunicado entero
+  /// y descubra al enviar que no puede salir.
   Widget _avisoConfiguracion(SiColors c) {
     final cfg = _config;
     if (cfg == null) return const SizedBox.shrink();
@@ -467,10 +469,9 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
   }
 
   Widget _tarjetaEnviados(SiColors c) {
-    final miId = _supabase.auth.currentUser?.id;
     return _tarjeta(
       c,
-      titulo: _esAdmin ? 'Enviados (todos)' : 'Mis enviados',
+      titulo: 'Comunicados enviados',
       icono: Icons.outbox_outlined,
       accion: IconButton(
         tooltip: 'Actualizar',
@@ -491,13 +492,13 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
                 )
               : Column(
                   children: [
-                    for (final m in _enviados) _filaEnviado(c, m, esMio: m['remitente_id'] == miId),
+                    for (final m in _enviados) _filaEnviado(c, m),
                   ],
                 ),
     );
   }
 
-  Widget _filaEnviado(SiColors c, Map<String, dynamic> m, {required bool esMio}) {
+  Widget _filaEnviado(SiColors c, Map<String, dynamic> m) {
     final estado = (m['estado'] ?? '').toString();
     final (color, fondo) = switch (estado) {
       'ENVIADO' => (c.success, c.successTint),
@@ -509,8 +510,8 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
     final detalle = [
       dest.length == 1 ? _nombreDeCorreo(dest.first) : '${dest.length} destinatarios',
       if (fecha != null) DateFormat('dd/MM/yyyy HH:mm').format(fecha),
-      // Un administrador ve los de todos: se dice de quién es cada uno.
-      if (!esMio) 'de ${m['remitente_nombre'] ?? '—'}',
+      // El registro de quién lo mandó, que el correo ya no lleva: aquí es donde se ve.
+      'por ${m['remitente_nombre'] ?? '—'}',
     ].join(' · ');
 
     return Container(

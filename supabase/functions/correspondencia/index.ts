@@ -1,11 +1,12 @@
-// Correspondencia: manda correos a compañeros -o a cualquier direccion- desde la cuenta del sistema.
+// Correspondencia: comunicados de la empresa a los empleados, desde la cuenta del sistema.
 //
 // ─── Como esta armado ────────────────────────────────────────────────────────
 //
-// Sale por SMTP desde UNA cuenta compartida, no desde la de cada quien. El correo muestra el nombre
-// de quien escribe -«Ana Lopez (via SISOL)»- y lleva su direccion en `Reply-To`, asi que al contestar
-// la respuesta le llega a su propio buzon. La alternativa, mandar desde la cuenta de cada empleado,
-// obligaria a usar sus contraseñas, y esas hoy estan en texto plano en `profiles.mail_pass`.
+// Lo usan tres personas para mandar comunicados -decision del usuario el 23/09/2026-, asi que el
+// correo sale como «Comunicación SI SOL» y no dice quien lo escribio: ni en el nombre, ni en un
+// `Reply-To`, ni en un pie. Los destinatarios van en copia oculta. Quien lo mando SI queda
+// registrado, en la tabla `correspondencia`. Ver `armarCorreo` en validar.ts, que es donde se
+// prueba todo esto.
 //
 // La configuracion del servidor vive SOLO en los secretos de esta funcion -SMTP_HOST, SMTP_PORT,
 // SMTP_USER, SMTP_PASS, SMTP_FROM-, que se pegan en el panel de Supabase. No hay ninguna pantalla para
@@ -17,10 +18,8 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import nodemailer from "npm:nodemailer@6.9.16";
 import {
-  cuerpoHtml,
-  cuerpoTexto,
+  armarCorreo,
   MAX_POR_HORA,
-  nombreRemitente,
   puertoPermitido,
   revisarRemitente,
   validarMensaje,
@@ -72,19 +71,19 @@ Deno.serve(async (req: Request) => {
 
   // `mail_pass` NO se pide, a proposito: esta funcion no la necesita y no tiene por que tenerla.
   const { data: prof } = await svc.from("profiles")
-    .select("nombre,paterno,materno,role,permissions,mail_user,email")
+    .select("nombre,paterno,materno,permissions")
     .eq("id", user.id).maybeSingle();
   if (!prof) return responde({ error: "No se encontro tu perfil." }, 403);
 
-  const esAdmin = prof.role === "admin";
   const permisos = (prof.permissions ?? {}) as Record<string, unknown>;
 
-  // El MISMO permiso que abre la pagina. Si aqui bastara con tener sesion, la pagina seria una
-  // sugerencia y no un control.
+  // SOLO el permiso: ser administrador NO basta, a proposito. Pedido el 23/09/2026: «no todos los
+  // administradores lo pueden ver». Es el MISMO criterio que abre la pagina, para que no haya quien
+  // la vea y luego reciba «no tienes acceso».
   //
-  // OJO: este control es tan fuerte como `profiles`, y hoy cada usuario puede escribirse su propio
-  // `role` y sus `permissions`. Cerrar eso es una tarea aparte, ya identificada el 23/09/2026.
-  if (!esAdmin && permisos.show_correspondencia !== true) {
+  // OJO: este control es tan fuerte como `profiles`, y hoy cada usuario puede escribirse sus propios
+  // `permissions`. Cerrar eso es una tarea aparte, ya identificada el 23/09/2026.
+  if (permisos.show_correspondencia !== true) {
     return responde({ error: "No tienes acceso a Correspondencia." }, 403);
   }
 
@@ -99,12 +98,12 @@ Deno.serve(async (req: Request) => {
   const configurado = SMTP_HOST !== "" && SMTP_USER !== "" && SMTP_PASS !== "";
   const puerto = puertoPermitido(SMTP_PORT);
 
-  // ── La configuracion, para que un administrador sepa si esta lista ─────────
+  // ── La configuracion, para que quien usa el modulo sepa si esta lista ──────
   //
-  // Se contesta desde aqui y no desde una copia en la aplicacion: la unica fuente es lo que de
-  // verdad corre. Y NUNCA incluye la contraseña, solo si esta puesta.
+  // Para quien tenga el permiso, que son quienes van a enviar: son ellos los que tienen que saber
+  // si el correo esta listo antes de escribir un comunicado entero. Se contesta desde aqui y no
+  // desde una copia en la aplicacion, y NUNCA incluye la contraseña, solo si esta puesta.
   if (entrada.configuracion === true) {
-    if (!esAdmin) return responde({ error: "Solo para administradores." }, 403);
     return responde({
       configurado,
       servidor: SMTP_HOST || null,
@@ -151,10 +150,9 @@ Deno.serve(async (req: Request) => {
     }, 429);
   }
 
+  // El nombre se usa SOLO para el registro. El correo no lo lleva: ver `armarCorreo`.
   const nombre = [prof.nombre, prof.paterno, prof.materno]
     .map((x) => String(x ?? "").trim()).filter((x) => x !== "").join(" ");
-  // Como el Directorio: el buzon de trabajo si lo hay, y si no el correo de la cuenta.
-  const suCorreo = String(prof.mail_user ?? "").trim() || String(prof.email ?? "").trim() || null;
 
   // Se registra ANTES de enviar. Si la funcion se cae a medio envio, queda un PENDIENTE que lo
   // delata, en vez de un correo que salio -o no- sin rastro.
@@ -184,14 +182,7 @@ Deno.serve(async (req: Request) => {
       socketTimeout: 20000,
     });
 
-    const info = await transporte.sendMail({
-      from: { name: nombreRemitente(nombre), address: remitente.direccion },
-      to: v.mensaje.destinatarios,
-      replyTo: suCorreo ?? undefined,
-      subject: v.mensaje.asunto,
-      text: cuerpoTexto(v.mensaje.cuerpo, nombre || "un colaborador", suCorreo),
-      html: cuerpoHtml(v.mensaje.cuerpo, nombre || "un colaborador", suCorreo),
-    });
+    const info = await transporte.sendMail(armarCorreo(v.mensaje, remitente.direccion));
 
     // Lo que el servidor NO acepto, aunque el envio en conjunto no fallara.
     const noAceptados = Array.isArray(info?.rejected) ? info.rejected.map(String) : [];

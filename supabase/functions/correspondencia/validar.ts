@@ -115,14 +115,12 @@ export function validarMensaje(entrada: unknown): Validacion {
   return { ok: true, mensaje: { asunto, cuerpo, destinatarios: validos } };
 }
 
-/// El nombre que se muestra como remitente: «Ana Lopez (via SISOL)».
+/// El nombre con el que sale TODO comunicado, sea quien sea quien lo escribio.
 ///
-/// Se limpian comillas, angulos y saltos de linea: ese texto va dentro de la cabecera `From`, y un
-/// nombre con `">` o un salto de linea la romperia o permitiria colar otra direccion.
-export function nombreRemitente(nombre: string): string {
-  const limpio = nombre.replace(/[\r\n"<>\\]/g, " ").replace(/\s+/g, " ").trim().slice(0, 80);
-  return limpio === "" ? "Sistema SISOL" : `${limpio} (via SISOL)`;
-}
+/// Decision del usuario el 23/09/2026: el modulo lo usan tres personas para mandar comunicados a
+/// los empleados, y quien recibe tiene que ver a la empresa, no a la persona. Quien lo mando SI
+/// queda registrado, pero en la tabla `correspondencia`, no en el correo.
+export const NOMBRE_REMITENTE = "Comunicación SI SOL";
 
 export function escaparHtml(s: string): string {
   return s
@@ -133,31 +131,56 @@ export function escaparHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
-/// El pie que dice de donde salio el correo. Va en los dos formatos.
-///
-/// Importa por la cuenta compartida: el correo sale de una direccion que no es la de quien escribe,
-/// y sin esto quien lo recibe no sabe a quien contestarle si su cliente de correo ignora el
-/// `Reply-To`.
-function pie(remitente: string, responderA: string | null): string {
-  return responderA
-    ? `Enviado por ${remitente} desde el Sistema SISOL. Para contestar, escribe a ${responderA}.`
-    : `Enviado por ${remitente} desde el Sistema SISOL.`;
-}
-
-export function cuerpoTexto(cuerpo: string, remitente: string, responderA: string | null): string {
-  return `${cuerpo}\n\n--\n${pie(remitente, responderA)}`;
+/// El cuerpo en texto, tal cual lo escribieron. Sin pie: lo pidio el usuario, y el pie decia quien
+/// lo habia mandado.
+export function cuerpoTexto(cuerpo: string): string {
+  return cuerpo;
 }
 
 /// El cuerpo en HTML. TODO lo que escribio el usuario se escapa: el mensaje se pinta como texto,
 /// nunca como marcado. Si no, cualquiera con el permiso podria mandar, desde la cuenta de la
 /// empresa, un correo con enlaces o formularios disfrazados.
-export function cuerpoHtml(cuerpo: string, remitente: string, responderA: string | null): string {
+export function cuerpoHtml(cuerpo: string): string {
   const texto = escaparHtml(cuerpo).replace(/\r?\n/g, "<br>");
   return `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#1f2330">`
-    + `${texto}`
-    + `<hr style="border:none;border-top:1px solid #dde0e8;margin:24px 0 12px">`
-    + `<div style="font-size:12px;color:#6b7080">${escaparHtml(pie(remitente, responderA))}</div>`
-    + `</div>`;
+    + `${texto}</div>`;
+}
+
+/// El correo tal como sale, listo para la libreria.
+///
+/// ─── Por que es una funcion aparte ──────────────────────────────────────────
+///
+/// Para poder PROBAR lo que pidio el usuario, y no solo leerlo en el codigo:
+///
+///   * Que salga como «Comunicación SI SOL» y NO con el nombre de quien lo escribio. Esta funcion
+///     ni siquiera recibe ese nombre, asi que no hay forma de que se cuele.
+///   * Que NO lleve `Reply-To`. Antes llevaba el correo de quien lo mando, y eso descubria quien
+///     habia sido en cuanto alguien pulsaba «Responder»: cambiar solo el nombre visible no bastaba.
+///     Sin `Reply-To` las respuestas van a la cuenta compartida.
+///   * Que los destinatarios NO se vean entre si: van en copia oculta (`bcc`).
+///
+/// En `to` va la propia cuenta compartida. Un correo sin ningun destinatario visible es de los que
+/// los filtros marcan como spam; poniendo la cuenta como destinataria es el patron clasico de
+/// «destinatarios ocultos», y de paso la cuenta se queda con una copia de cada comunicado.
+export function armarCorreo(
+  mensaje: Mensaje,
+  cuenta: string,
+): {
+  from: { name: string; address: string };
+  to: string;
+  bcc: string[];
+  subject: string;
+  text: string;
+  html: string;
+} {
+  return {
+    from: { name: NOMBRE_REMITENTE, address: cuenta },
+    to: cuenta,
+    bcc: mensaje.destinatarios,
+    subject: mensaje.asunto,
+    text: cuerpoTexto(mensaje.cuerpo),
+    html: cuerpoHtml(mensaje.cuerpo),
+  };
 }
 
 /// La direccion que va en el `MAIL FROM`, o por que no sirve.

@@ -103,26 +103,76 @@ ok('un asunto con salto de linea NO pasa',
       && r.mensaje.destinatarios[0] === 'ana@x.com');
 }
 
-// ─── Lo que va dentro de las cabeceras y del cuerpo ────────────────────────
-console.log('\ncabeceras y cuerpo');
+// ─── El comunicado tal como sale ───────────────────────────────────────────
+//
+// Lo que pidio el usuario el 23/09/2026, comprobado sobre el correo que de verdad se entrega a la
+// libreria: que salga como «Comunicación SI SOL», que no diga quien lo escribio por NINGUN lado, que
+// los destinatarios no se vean entre si, y sin pie.
+console.log('\nel comunicado tal como sale');
 {
-  const n = M.nombreRemitente('Ana "Hack" <x@y>\r\nBcc: z@w');
-  ok('el nombre no lleva comillas, angulos ni saltos', !/["<>\r\n]/.test(n), `quedo «${n}»`);
-  ok('y dice de donde sale', n.endsWith('(via SISOL)'));
-}
-ok('sin nombre, uno generico', M.nombreRemitente('   ') === 'Sistema SISOL');
+  const mensaje = {
+    asunto: 'Aviso de vacaciones',
+    cuerpo: 'Estimados colaboradores:\n<b>Se recuerda</b> que el lunes es festivo.',
+    destinatarios: ['ana@sisol.com.mx', 'beto@bonanzaprisma.com', 'carla@externo.com'],
+  };
+  const cuenta = 'comunicacion@sisol.com.mx';
+  const c = M.armarCorreo(mensaje, cuenta);
 
-{
-  const h = M.cuerpoHtml('<script>alert(1)</script>\n<a href="x">clic</a>', 'Ana', 'ana@x.com');
-  ok('el cuerpo se escapa: no hay etiquetas del usuario', !h.includes('<script>') && !h.includes('<a href'),
-    'un correo con marcado del usuario, desde la cuenta de la empresa, es una puerta al engaño');
-  ok('los saltos de linea se conservan', h.includes('<br>'));
-  ok('lleva el pie con a quien contestar', h.includes('ana@x.com'));
+  ok('sale como «Comunicación SI SOL»', c.from.name === 'Comunicación SI SOL',
+    `sale como «${c.from.name}»`);
+  ok('desde la cuenta compartida', c.from.address === cuenta);
+
+  // Cambiar solo el nombre visible no bastaba: el Reply-To llevaba el correo de quien lo mando y lo
+  // descubria en cuanto alguien pulsaba «Responder».
+  ok('NO lleva Reply-To', !('replyTo' in c) && !('reply_to' in c) && !('replyto' in c),
+    'con Reply-To se sabe quien lo mando al contestar');
+
+  // Los destinatarios no se ven entre si.
+  ok('los destinatarios van en copia oculta',
+    JSON.stringify(c.bcc) === JSON.stringify(mensaje.destinatarios));
+  ok('y NINGUNO va a la vista', !mensaje.destinatarios.some((d) => String(c.to).includes(d)),
+    `en «to» va ${c.to}`);
+  ok('a la vista solo va la propia cuenta', c.to === cuenta);
+  ok('no hay campo cc que los descubra', !('cc' in c));
+
+  // Sin pie: ni en texto ni en HTML.
+  ok('el texto va tal cual, sin pie', c.text === mensaje.cuerpo);
+  ok('el HTML no lleva pie', !/Enviado por|Para contestar|SISOL\./.test(c.html),
+    'el pie decia quien lo habia mandado');
+  ok('ni una linea separadora de pie', !c.html.includes('<hr'));
+
+  // Y el cuerpo sigue escapado: sigue siendo la cuenta de la empresa.
+  ok('el marcado del usuario se escapa', !c.html.includes('<b>') && c.html.includes('&lt;b&gt;'));
+  ok('los saltos de linea se conservan', c.html.includes('<br>'));
+  ok('el asunto va tal cual', c.subject === 'Aviso de vacaciones');
 }
-ok('el texto plano tambien lleva el pie',
-  M.cuerpoTexto('Hola', 'Ana', 'ana@x.com').includes('escribe a ana@x.com'));
-ok('sin correo propio el pie no inventa uno',
-  !M.cuerpoTexto('Hola', 'Ana', null).includes('escribe a'));
+{
+  // La prueba fuerte: el nombre de quien lo escribio no esta en NINGUNA parte del correo. La
+  // funcion ni siquiera lo recibe, pero si un dia alguien se lo pasa, esto lo delata.
+  const quien = 'Marco Antonio Montoya Lopez';
+  const c = M.armarCorreo({ asunto: 'Junta', cuerpo: 'Hola', destinatarios: ['a@x.com'] },
+    'comunicacion@sisol.com.mx');
+  const todo = JSON.stringify(c);
+  ok('el nombre de quien lo escribio no aparece en ningun campo',
+    !todo.includes('Marco') && !todo.includes(quien));
+  ok('ni la palabra «Enviado»', !todo.includes('Enviado'));
+}
+{
+  // Lo de arriba pasa por construccion: `armarCorreo` nunca recibe el nombre. Lo que SI se puede
+  // romper mañana es que alguien, al enviar, añada un `replyTo` o arme el correo a mano en index.ts.
+  // Eso se comprueba sobre el FUENTE de la funcion.
+  const { readFileSync } = await import('node:fs');
+  const idx = readFileSync(join(aqui, 'index.ts'), 'utf8').replace(/\r\n/g, '\n');
+  // Solo codigo, sin comentarios: el comentario de cabecera NOMBRA el Reply-To para explicar por que
+  // no esta, y un guardia que se dispara con su propia explicacion no sirve.
+  const codigo = idx.split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+  ok('la funcion envia SOLO lo que arma `armarCorreo`',
+    /sendMail\(armarCorreo\(v\.mensaje, remitente\.direccion\)\)/.test(codigo),
+    'si el correo se arma a mano en index.ts, estas pruebas dejan de cubrirlo');
+  ok('y no añade un replyTo por su cuenta', !/replyTo|reply_to/i.test(codigo),
+    'con Reply-To se sabe quien lo mando al contestar');
+  ok('ni un pie', !/Enviado por/.test(codigo));
+}
 
 // ─── El remitente ──────────────────────────────────────────────────────────
 //
