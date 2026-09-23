@@ -142,6 +142,46 @@ for (const malo of ['red;background:url(javascript:x)', 'red', 'expression(alert
     html(d));
 }
 
+// ─── Imagenes ──────────────────────────────────────────────────────────────
+//
+// Van incrustadas (cid:), y el documento solo trae el NOMBRE del archivo en el cubo privado. Lo que
+// importa probar es que la funcion no se deje pedir otra cosa: el nombre decide que se descarga.
+console.log('\nimagenes');
+const buena = 'a3f1'.repeat(8) + '.png';
+{
+  const d = [{ insert: 'Mira:\n' }, { insert: { image: buena } }, { insert: '\n' }];
+  const h = html(d);
+  ok('una imagen del editor se incrusta por cid',
+    h.includes(`<img src="cid:${buena}@correspondencia.sisol"`), h);
+  ok('con ancho maximo para telefono', h.includes('max-width:100%'));
+  ok('en el texto plano dice [imagen]', texto(d).includes('[imagen]'), JSON.stringify(texto(d)));
+}
+{
+  // Un comunicado que es SOLO una imagen -un cartel- no esta vacio.
+  const d = [{ insert: { image: buena } }, { insert: '\n' }];
+  ok('un comunicado que es solo una imagen no queda vacio', texto(d) === '[imagen]', JSON.stringify(texto(d)));
+}
+for (const mala of ['../secreto.png', `../${buena}`, 'https://x.com/a.png', 'x.png',
+  'A3F1'.repeat(8) + '.png', 'a3f1'.repeat(8) + '.svg', 'a3f1'.repeat(8) + '.png?x=1',
+  'a3f1'.repeat(8) + '.png/../../otro', 'data:image/png;base64,AAAA', 123, null]) {
+  const h = html([{ insert: { image: mala } }, { insert: 'x\n' }]);
+  ok(`una imagen «${String(mala).slice(0, 40)}» NO se incrusta`, !h.includes('<img'), h);
+}
+{
+  const otra = 'b2c4'.repeat(8) + '.jpg';
+  const d = [
+    { insert: { image: buena } }, { insert: '\n' },
+    { insert: { image: 'https://fuera.com/x.png' } }, { insert: '\n' },
+    { insert: { image: otra } }, { insert: '\n' },
+    { insert: { image: buena } }, { insert: '\n' },
+  ];
+  const r = M.imagenesDe(d);
+  ok('imagenesDe: solo las validas, sin repetir y en orden',
+    JSON.stringify(r) === JSON.stringify([buena, otra]), JSON.stringify(r));
+}
+ok('imagenesDe de algo que no es documento', M.imagenesDe('x').length === 0);
+ok('el cid sale del nombre', M.cidDe(buena) === `${buena}@correspondencia.sisol`);
+
 // ─── Documentos que no son documentos ──────────────────────────────────────
 console.log('\ndocumentos que no son documentos');
 ok('algo que no es lista', M.deltaAHtml('hola') === null);

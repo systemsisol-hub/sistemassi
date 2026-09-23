@@ -14,9 +14,11 @@
 //
 //   en linea:  negrita, cursiva, subrayado, tachado, color, color de fondo, enlace
 //   bloque:    titulos 1-3, lista con viñetas, lista numerada, cita, alineacion
+//   imagenes:  SOLO las subidas desde el boton del editor al cubo `correspondencia-imagenes`
 //
 // Cualquier otro formato -tamaños de letra, codigo, sangrias, lo que venga al PEGAR desde Word o una
-// pagina- se ignora y el texto sale sin el. Los elementos incrustados -imagenes, videos- se omiten.
+// pagina- se ignora y el texto sale sin el. Una imagen que no sea de ese cubo -una pegada, un enlace
+// a otra pagina- se omite: ver `esRutaImagen`.
 //
 // Sin imports y sin efectos, a proposito: asi el arnes lo ejercita tal cual.
 
@@ -33,6 +35,41 @@ const ESTILO_TITULO: Record<number, string> = {
 const ESTILO_CITA = "border-left:3px solid #c9ccd6;margin:0 0 12px;padding:0 0 0 12px;color:#555a66";
 const ESTILO_LISTA = "margin:0 0 12px;padding:0 0 0 24px";
 
+// ─── Imagenes ───────────────────────────────────────────────────────────────
+//
+// Van INCRUSTADAS en el correo -como adjunto con `Content-ID`, referenciado con `cid:`- y no como
+// enlace a una direccion de internet. Con un enlace, Outlook y muchos servidores de empresa las
+// bloquean por defecto y el comunicado llega con recuadros vacios hasta que alguien pulsa «mostrar
+// imagenes». Incrustada viaja con el mensaje y se ve directamente.
+//
+// Por eso el documento no trae la imagen ni una URL: trae el NOMBRE del archivo que la pantalla
+// subio al cubo privado. La funcion lo descarga con su llave y lo adjunta. Y solo acepta nombres con
+// la forma exacta que genera la pantalla, asi que no hay manera de pedirle a la funcion que descargue
+// otra cosa -otro cubo, una ruta con «../», una direccion de fuera-.
+
+/// Si es el nombre de una imagen subida por el editor: 32 hexadecimales y una extension conocida.
+export function esRutaImagen(v: unknown): v is string {
+  return typeof v === "string" && /^[0-9a-f]{32}\.(png|jpg|gif)$/.test(v);
+}
+
+/// El `Content-ID` con que se referencia una imagen dentro del correo. Sale del nombre, que ya es
+/// unico, para que el HTML y el adjunto no se puedan desencontrar.
+export function cidDe(ruta: string): string {
+  return `${ruta}@correspondencia.sisol`;
+}
+
+/// Las imagenes del documento que se van a adjuntar: validas, sin repetir, en orden de aparicion.
+export function imagenesDe(ops: unknown): string[] {
+  if (!Array.isArray(ops)) return [];
+  const salida: string[] = [];
+  for (const op of ops) {
+    const ins = op && typeof op === "object" ? (op as Record<string, unknown>).insert : null;
+    const ruta = ins && typeof ins === "object" ? (ins as Record<string, unknown>).image : null;
+    if (esRutaImagen(ruta) && !salida.includes(ruta)) salida.push(ruta);
+  }
+  return salida;
+}
+
 /// Un trozo de texto con sus formatos EN LINEA ya revisados.
 interface Trozo {
   texto: string;
@@ -45,9 +82,14 @@ interface Trozo {
   enlace: string | null;
 }
 
+/// Una imagen dentro de una linea.
+interface Imagen {
+  imagen: string;
+}
+
 /// Una linea con sus formatos de BLOQUE, que en Quill viajan en el salto de linea que la cierra.
 interface Linea {
-  trozos: Trozo[];
+  trozos: (Trozo | Imagen)[];
   titulo: 1 | 2 | 3 | null;
   lista: "bullet" | "ordered" | null;
   cita: boolean;
@@ -138,8 +180,14 @@ function aLineas(ops: unknown): Linea[] | null {
     const attrs = (o.attributes && typeof o.attributes === "object"
       ? o.attributes : {}) as Record<string, unknown>;
 
-    // Elementos incrustados -imagen, video, formula-: se omiten, no rompen el documento.
-    if (typeof o.insert !== "string") continue;
+    // Elementos incrustados: la imagen subida desde el editor entra; cualquier otro -una imagen
+    // pegada, un video, una formula- se omite sin romper el documento.
+    if (typeof o.insert !== "string") {
+      const ruta = o.insert && typeof o.insert === "object"
+        ? (o.insert as Record<string, unknown>).image : null;
+      if (esRutaImagen(ruta)) actual.trozos.push({ imagen: ruta });
+      continue;
+    }
 
     // Un mismo trozo puede traer varios saltos de linea: cada uno cierra una linea.
     const partes = o.insert.split("\n");
@@ -156,7 +204,16 @@ function aLineas(ops: unknown): Linea[] | null {
   return lineas;
 }
 
-function trozoHtml(t: Trozo): string {
+/// Una imagen incrustada. `max-width:100%` para que no se salga en un telefono; la pantalla ya la
+/// reduce a un ancho de correo antes de subirla, que es lo que la contiene en Outlook de escritorio,
+/// que ignora `max-width`.
+function imagenHtml(i: Imagen): string {
+  return `<img src="cid:${escaparHtml(cidDe(i.imagen))}" alt="" `
+    + `style="display:block;max-width:100%;height:auto;border:0;margin:0 0 12px">`;
+}
+
+function trozoHtml(t: Trozo | Imagen): string {
+  if ("imagen" in t) return imagenHtml(t);
   let h = escaparHtml(t.texto);
   if (t.negrita) h = `<strong>${h}</strong>`;
   if (t.cursiva) h = `<em>${h}</em>`;
@@ -184,9 +241,9 @@ function conAlineacion(estilo: string, l: Linea): string {
 
 /// El texto plano del mismo documento, para la parte de texto del correo y para el registro.
 function lineaTexto(l: Linea, numero: number): string {
-  const t = l.trozos.map((x) => x.enlace && x.enlace !== x.texto
-    ? `${x.texto} (${x.enlace})`
-    : x.texto).join("");
+  const t = l.trozos.map((x) => "imagen" in x
+    ? "[imagen]"
+    : x.enlace && x.enlace !== x.texto ? `${x.texto} (${x.enlace})` : x.texto).join("");
   if (l.lista === "bullet") return `• ${t}`;
   if (l.lista === "ordered") return `${numero}. ${t}`;
   return t;

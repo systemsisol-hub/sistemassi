@@ -1,3 +1,4 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:intl/intl.dart';
@@ -31,6 +32,10 @@ class CorrespondenciaPage extends StatefulWidget {
 /// Algo que se puede elegir en «Para»: un compañero o una lista.
 typedef _Opcion = ({bool esLista, String clave, String titulo, String detalle});
 
+/// El cubo PRIVADO de las imágenes del editor. La función `correspondencia` las descarga de aquí y
+/// las incrusta en el correo; la pantalla sólo las ve con URLs firmadas mientras se redacta.
+const _cuboImagenes = 'correspondencia-imagenes';
+
 class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
   final _supabase = Supabase.instance.client;
   final _asuntoCtrl = TextEditingController();
@@ -52,6 +57,12 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
   bool _cargandoEnviados = true;
   bool _cargandoListas = true;
   bool _enviando = false;
+  bool _subiendoImagen = false;
+
+  /// Las URLs firmadas de las imágenes del editor, por nombre. Se guarda el FUTURO y no la URL: así
+  /// cada reconstrucción del editor no vuelve a pedir la firma, que es lo que haría el `FutureBuilder`
+  /// con un futuro nuevo cada vez.
+  final Map<String, Future<String?>> _urlsImagenes = {};
   String? _avisoDest;
 
   /// Si el envío está configurado en el servidor. Lo ven quienes envían, que son los que tienen que
@@ -281,6 +292,60 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
     }
   }
 
+  Future<String?> _urlDeImagen(String ruta) => _urlsImagenes.putIfAbsent(
+        ruta,
+        () => _supabase.storage
+            .from(_cuboImagenes)
+            .createSignedUrl(ruta, 60 * 60)
+            .then<String?>((u) => u)
+            .catchError((Object _) => null),
+      );
+
+  /// Elige una imagen, la deja lista para el correo, la sube y la mete donde está el cursor.
+  ///
+  /// Se sube en el momento y no al enviar: así el editor la puede mostrar mientras se redacta, que es
+  /// lo que permite ver cómo va a quedar el comunicado.
+  Future<void> _insertarImagen() async {
+    final r = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: extensionesImagen,
+      withData: true,
+    );
+    final archivo = r?.files.firstOrNull;
+    if (archivo == null || archivo.bytes == null) return;
+
+    setState(() => _subiendoImagen = true);
+    // Un fotograma para que se pinte el indicador: reducir una foto grande tarda un par de segundos
+    // en la web, y sin esto la pantalla parece colgada.
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    try {
+      final lista = prepararImagen(archivo.bytes!, archivo.name);
+      if (lista == null) {
+        _aviso('No se pudo leer «${archivo.name}» como imagen.', error: true);
+        return;
+      }
+      // El mismo tope que impone el cubo. Tras reducirla casi nunca se alcanza, pero un GIF se sube
+      // tal cual y ese sí puede pasarse.
+      if (lista.bytes.length > 5 * 1024 * 1024) {
+        final mb = (lista.bytes.length / 1024 / 1024).toStringAsFixed(1);
+        _aviso('La imagen pesa $mb MB y el máximo es 5 MB.', error: true);
+        return;
+      }
+      final ruta = nombreImagen(lista.extension);
+      await _supabase.storage.from(_cuboImagenes).uploadBinary(
+            ruta,
+            lista.bytes,
+            fileOptions: FileOptions(contentType: lista.tipo, upsert: false),
+          );
+      final i = _editor.selection.baseOffset < 0 ? 0 : _editor.selection.baseOffset;
+      _editor.replaceText(i, 0, BlockEmbed.image(ruta), TextSelection.collapsed(offset: i + 1));
+    } catch (e) {
+      _aviso('No se pudo subir la imagen: $e', error: true);
+    } finally {
+      if (mounted) setState(() => _subiendoImagen = false);
+    }
+  }
+
   void _aviso(String texto, {bool error = false}) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(texto),
@@ -407,6 +472,18 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
               // versión de flutter_quill, así que nombrarlos sólo da avisos.
               showAlignmentButtons: true,
               showJustifyAlignment: false,
+              // Las imágenes entran SÓLO por aquí: suben al cubo privado con un nombre que la
+              // función reconoce. Una imagen pegada no pasa por aquí, y por eso no va en el correo.
+              customButtons: [
+                QuillToolbarCustomButtonOptions(
+                  icon: _subiendoImagen
+                      ? const SizedBox(
+                          width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.image_outlined),
+                  tooltip: 'Insertar imagen',
+                  onPressed: _subiendoImagen ? null : _insertarImagen,
+                ),
+              ],
               buttonOptions: QuillSimpleToolbarButtonOptions(
                 // Títulos 1 a 3 y normal: los que convierte la función. Del 4 al 6 no existen allí.
                 selectHeaderStyleDropdownButton: QuillToolbarSelectHeaderStyleDropdownButtonOptions(
@@ -420,12 +497,13 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
             height: 340,
             child: QuillEditor.basic(
               controller: _editor,
-              config: const QuillEditorConfig(
+              config: QuillEditorConfig(
                 placeholder: 'Escribe el comunicado…',
-                padding: EdgeInsets.all(12),
-                // Sin esto, PEGAR algo con una imagen revienta el editor: flutter_quill lanza
-                // UnimplementedError con cualquier elemento incrustado que no sepa pintar.
-                unknownEmbedBuilder: _IncrustadoNoIncluido(),
+                padding: const EdgeInsets.all(12),
+                embedBuilders: [_ImagenDelCorreo(_urlDeImagen)],
+                // Sin esto, PEGAR algo con un video u otro elemento revienta el editor: flutter_quill
+                // lanza UnimplementedError con cualquier incrustado que no sepa pintar.
+                unknownEmbedBuilder: const _IncrustadoNoIncluido(),
               ),
             ),
           ),
@@ -660,10 +738,55 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
   }
 }
 
-/// Lo que se pinta en el editor en lugar de un elemento incrustado —una imagen pegada—.
+/// Una imagen dentro del editor.
 ///
-/// El correo no lleva imágenes todavía: la función las omite. Aquí se dice en el propio editor, en
-/// vez de dejar que alguien crea que su imagen va a salir.
+/// Sólo se pinta como imagen la subida con el botón —un nombre del cubo privado—, porque es la única
+/// que el correo va a llevar. Una imagen PEGADA trae otra cosa —una dirección de internet, o la
+/// imagen entera en texto— y la función la omite; aquí se dice, en vez de mostrarla como si fuera a
+/// salir.
+class _ImagenDelCorreo extends EmbedBuilder {
+  const _ImagenDelCorreo(this.urlDe);
+
+  final Future<String?> Function(String ruta) urlDe;
+
+  @override
+  String get key => BlockEmbed.imageType;
+
+  @override
+  bool get expanded => false;
+
+  @override
+  Widget build(BuildContext context, EmbedContext embedContext) {
+    final ruta = embedContext.node.value.data.toString();
+    if (!esRutaImagen(ruta)) return const _IncrustadoNoIncluido().build(context, embedContext);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: FutureBuilder<String?>(
+        future: urlDe(ruta),
+        builder: (context, s) {
+          if (s.connectionState != ConnectionState.done) {
+            return const SizedBox(
+                height: 80, child: Center(child: CircularProgressIndicator(strokeWidth: 2)));
+          }
+          final url = s.data;
+          if (url == null) return const Text('[no se pudo mostrar la imagen]');
+          return ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 320),
+            child: Image.network(
+              url,
+              fit: BoxFit.contain,
+              alignment: Alignment.centerLeft,
+              errorBuilder: (_, __, ___) => const Text('[no se pudo mostrar la imagen]'),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Lo que se pinta en el editor en lugar de un elemento que el correo no va a llevar —una imagen
+/// pegada, un video—: se dice en el propio editor, en vez de dejar que alguien crea que va a salir.
 class _IncrustadoNoIncluido extends EmbedBuilder {
   const _IncrustadoNoIncluido();
 
@@ -681,7 +804,7 @@ class _IncrustadoNoIncluido extends EmbedBuilder {
         color: Colors.orange.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(6),
       ),
-      child: const Text('[imagen: no se incluye en el correo]',
+      child: const Text('[esto no se incluye en el correo: usa el botón de imagen]',
           style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
     );
   }

@@ -22,6 +22,12 @@ declare module "npm:nodemailer@6.9.16" {
   export default nodemailer;
 }
 
+// Para pasarle a nodemailer las imagenes incrustadas: espera un Buffer de Node, y el entorno de las
+// funciones lo da por su compatibilidad con Node.
+declare module "node:buffer" {
+  export const Buffer: { from(datos: Uint8Array): unknown };
+}
+
 declare const Deno: {
   env: { get(nombre: string): string | undefined };
   serve(manejador: (req: Request) => Response | Promise<Response>): void;

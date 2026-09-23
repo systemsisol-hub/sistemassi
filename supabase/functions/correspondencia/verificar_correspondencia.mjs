@@ -193,6 +193,26 @@ console.log('\nel comunicado tal como sale');
   ok('no hay campo cc que los descubra', !('cc' in c));
   ok('el HTML y el texto van tal cual los dejo el conversor', c.html === contenido.html && c.text === 'Hola');
   ok('el asunto va tal cual', c.subject === 'Aviso');
+  ok('sin imagenes, sin adjuntos', Array.isArray(c.attachments) && c.attachments.length === 0);
+}
+{
+  // Las imagenes incrustadas van como adjuntos con el MISMO cid que pide el HTML.
+  const adj = [{ filename: 'x.png', content: 'bytes', cid: 'x.png@correspondencia.sisol', contentType: 'image/png' }];
+  const c = M.armarCorreo({ asunto: 'A', html: '<img src="cid:x.png@correspondencia.sisol">', texto: '[imagen]', imagenes: ['x.png'] },
+    'comunicacion@sisol.com.mx', ['a@x.com'], adj);
+  ok('los adjuntos pasan tal cual', c.attachments === adj);
+  ok('y el cid del adjunto es el que pide el HTML', c.html.includes(`cid:${adj[0].cid}`));
+}
+{
+  // El tope de imagenes por comunicado.
+  const img = (i) => [{ insert: { image: String(i).padStart(32, '0') + '.png' } }, { insert: '\n' }];
+  const muchas = Array.from({ length: M.MAX_IMAGENES + 1 }, (_, i) => img(i)).flat();
+  ok(`mas de ${M.MAX_IMAGENES} imagenes no`,
+    M.validarContenido({ asunto: 'x', contenido: [{ insert: 'hola\n' }, ...muchas] }).ok === false);
+  const justas = Array.from({ length: M.MAX_IMAGENES }, (_, i) => img(i)).flat();
+  const r = M.validarContenido({ asunto: 'x', contenido: [{ insert: 'hola\n' }, ...justas] });
+  ok(`exactamente ${M.MAX_IMAGENES} si, y las devuelve para adjuntarlas`,
+    r.ok && r.contenido.imagenes.length === M.MAX_IMAGENES);
 }
 {
   // Lo de arriba pasa por construccion: `armarCorreo` nunca recibe el nombre. Lo que SI se puede
@@ -203,7 +223,7 @@ console.log('\nel comunicado tal como sale');
   // no esta, y un guardia que se dispara con su propia explicacion no sirve.
   const codigo = idx.split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
   ok('la funcion envia SOLO lo que arma `armarCorreo`',
-    /sendMail\(armarCorreo\(c\.contenido, remitente\.direccion, lote\)\)/.test(codigo),
+    /sendMail\(\s*armarCorreo\(c\.contenido, remitente\.direccion, lote, adjuntos\)\)/.test(codigo),
     'si el correo se arma a mano en index.ts, estas pruebas dejan de cubrirlo');
   ok('y no añade un replyTo por su cuenta', !/replyTo|reply_to/i.test(codigo),
     'con Reply-To se sabe quien lo mando al contestar');

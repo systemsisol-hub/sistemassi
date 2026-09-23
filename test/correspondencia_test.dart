@@ -1,6 +1,8 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:sistemassi/services/correspondencia.dart';
 
 /// La validación de la pantalla de Correspondencia.
@@ -137,6 +139,92 @@ void main() {
     test('completo', () => expect(nombreDe({'nombre': 'Ana', 'paterno': 'López', 'materno': 'R'}), 'Ana López R'));
     test('sin materno', () => expect(nombreDe({'nombre': 'Ana', 'paterno': 'López'}), 'Ana López'));
     test('sin nada', () => expect(nombreDe({'nombre': ' ', 'paterno': null}), isNull));
+  });
+
+  // ─── Las imágenes del editor ──────────────────────────────────────────────
+  group('la imagen que se sube', () {
+    Uint8List jpg(int ancho, int alto) => img.encodeJpg(img.Image(width: ancho, height: alto));
+
+    test('una foto ancha se reduce al ancho de correo, sin deformarse', () {
+      final r = prepararImagen(jpg(4000, 2000), 'foto.jpg')!;
+      final leida = img.decodeImage(r.bytes)!;
+      expect(leida.width, anchoMaximoImagen);
+      expect(leida.height, anchoMaximoImagen ~/ 2);
+      expect(r.extension, 'jpg');
+    });
+
+    test('pesa mucho menos que la original', () {
+      final original = jpg(4000, 3000);
+      final r = prepararImagen(original, 'foto.jpg')!;
+      expect(r.bytes.length, lessThan(original.length));
+    });
+
+    test('una estrecha no se agranda', () {
+      final r = prepararImagen(jpg(300, 200), 'chica.jpg')!;
+      expect(img.decodeImage(r.bytes)!.width, 300);
+    });
+
+    test('se gira según sus metadatos (las fotos de celular salían de lado)', () {
+      // Orientación EXIF 6: «gira 90°». La imagen guardada es ancha, pero se debe VER alta.
+      final ancha = img.Image(width: 200, height: 100);
+      ancha.exif.imageIfd.orientation = 6;
+      final r = prepararImagen(img.encodeJpg(ancha), 'celular.jpg')!;
+      final leida = img.decodeImage(r.bytes)!;
+      expect(leida.width, 100, reason: 'sin bakeOrientation la foto sale de lado');
+      expect(leida.height, 200);
+    });
+
+    test('con transparencia sale en PNG, para no ponerle fondo negro a un logotipo', () {
+      final logo = img.Image(width: 50, height: 50, numChannels: 4);
+      final r = prepararImagen(img.encodePng(logo), 'logo.png')!;
+      expect(r.extension, 'png');
+      expect(r.tipo, 'image/png');
+    });
+
+    test('un WebP se convierte: muchos clientes de correo no lo muestran', () {
+      // No hay codificador WebP en la librería, así que se usa un PNG sin transparencia con nombre
+      // .webp: lo que se prueba es que la salida nunca es webp.
+      final r = prepararImagen(img.encodePng(img.Image(width: 40, height: 40)), 'x.webp')!;
+      expect(r.extension, isNot('webp'));
+    });
+
+    test('un GIF se deja tal cual, para no romper la animación', () {
+      final gif = img.encodeGif(img.Image(width: 30, height: 30));
+      final r = prepararImagen(gif, 'anim.gif')!;
+      expect(r.bytes, same(gif));
+      expect(r.extension, 'gif');
+    });
+
+    test('algo que no es imagen no revienta: devuelve null', () {
+      expect(prepararImagen(Uint8List.fromList([1, 2, 3, 4]), 'x.jpg'), isNull);
+    });
+  });
+
+  // El nombre decide qué descarga la función: tiene que salir con la forma EXACTA que acepta.
+  group('el nombre de la imagen', () {
+    test('32 hexadecimales y su extensión, como exige el servidor', () {
+      for (final ext in ['jpg', 'png', 'gif']) {
+        expect(esRutaImagen(nombreImagen(ext)), isTrue, reason: nombreImagen(ext));
+      }
+    });
+    test('cada vez uno distinto', () {
+      final nombres = {for (var i = 0; i < 200; i++) nombreImagen('jpg')};
+      expect(nombres.length, 200);
+    });
+    // Los mismos casos que `verificar_contenido.mjs`: la pantalla sólo pinta como imagen lo que el
+    // correo va a llevar como imagen.
+    for (final mala in [
+      '../secreto.png',
+      'https://x.com/a.png',
+      'x.png',
+      '${'A3F1' * 8}.png',
+      '${'a3f1' * 8}.svg',
+      '${'a3f1' * 8}.png?x=1',
+      'data:image/png;base64,AAAA',
+    ]) {
+      test('«${mala.length > 30 ? '${mala.substring(0, 30)}…' : mala}» no es una imagen del editor',
+          () => expect(esRutaImagen(mala), isFalse));
+    }
   });
 
   // ─── El editor sólo ofrece lo que el servidor sabe convertir ──────────────

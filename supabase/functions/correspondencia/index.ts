@@ -19,12 +19,16 @@
 // Todo intento queda en la tabla `correspondencia`, que SOLO escribe esta funcion. Por eso el limite
 // por hora se cuenta ahi: si la aplicacion pudiera insertar, tambien podria no insertar.
 
+import { Buffer } from "node:buffer";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import nodemailer from "npm:nodemailer@6.9.16";
+import { cidDe } from "./contenido.ts";
 import {
+  type Adjunto,
   armarCorreo,
   esUuid,
   lotes,
+  MAX_BYTES_IMAGENES,
   MAX_POR_HORA,
   type Miembro,
   type PerfilCorreo,
@@ -46,6 +50,10 @@ const SMTP_PASS = Deno.env.get("SMTP_PASS") ?? "";
 /// que dice claro cuando ninguna de las dos sirve en lugar de dejar que el servidor conteste
 /// «501 Bad sender address syntax», que fue lo que paso en el primer envio real.
 const remitente = revisarRemitente(Deno.env.get("SMTP_FROM") ?? "", SMTP_USER);
+
+/// El cubo PRIVADO donde la pantalla sube las imagenes del editor. Privado porque nadie de fuera
+/// necesita leerlas: esta funcion las descarga con su llave y las incrusta en el correo.
+const CUBO_IMAGENES = "correspondencia-imagenes";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -144,6 +152,39 @@ Deno.serve(async (req: Request) => {
 
   const c = validarContenido(entrada);
   if (c.ok === false) return responde({ error: c.error }, 400);
+
+  // ── Las imagenes incrustadas ───────────────────────────────────────────────
+  //
+  // Se descargan ANTES de registrar nada: una imagen que ya no esta es un problema del borrador, no un
+  // envio fallido, y no tiene por que gastarle a nadie un intento del limite por hora.
+  //
+  // Solo se piden nombres que `validarContenido` ya dio por buenos -32 hexadecimales y una extension-,
+  // y solo de este cubo. No hay manera de hacer que la funcion descargue otra cosa.
+  const adjuntos: Adjunto[] = [];
+  let pesoImagenes = 0;
+  for (const ruta of c.contenido.imagenes) {
+    const { data: archivo, error: errImg } = await svc.storage.from(CUBO_IMAGENES).download(ruta);
+    if (errImg || !archivo) {
+      return responde({
+        error: "Una de las imagenes del mensaje ya no esta en el sistema. Quitala y vuelve a insertarla.",
+      }, 400);
+    }
+    const bytes = new Uint8Array(await archivo.arrayBuffer());
+    pesoImagenes += bytes.length;
+    if (pesoImagenes > MAX_BYTES_IMAGENES) {
+      return responde({
+        error: `Las imagenes pesan mas de ${MAX_BYTES_IMAGENES / 1024 / 1024} MB entre todas. Quita `
+          + `alguna: un correo tan pesado lo rechazan muchos servidores.`,
+      }, 400);
+    }
+    adjuntos.push({
+      filename: ruta,
+      content: Buffer.from(bytes),
+      cid: cidDe(ruta),
+      contentType: ruta.endsWith(".png") ? "image/png"
+        : ruta.endsWith(".gif") ? "image/gif" : "image/jpeg",
+    });
+  }
 
   // ── Las listas de distribucion ─────────────────────────────────────────────
   //
@@ -257,7 +298,8 @@ Deno.serve(async (req: Request) => {
   for (let i = 0; i < tandas.length; i++) {
     const lote = tandas[i];
     try {
-      const info = await transporte.sendMail(armarCorreo(c.contenido, remitente.direccion, lote));
+      const info = await transporte.sendMail(
+        armarCorreo(c.contenido, remitente.direccion, lote, adjuntos));
       // Lo que el servidor NO acepto de esta tanda, aunque la tanda en conjunto no fallara.
       const rechazados = Array.isArray(info?.rejected) ? info.rejected.map(String) : [];
       noAceptados.push(...rechazados);

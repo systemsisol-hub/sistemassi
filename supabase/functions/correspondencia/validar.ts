@@ -11,7 +11,7 @@
 // tabla de casos en sus pruebas -ver `test/correspondencia_test.dart`- para que no se separen sin que
 // nadie lo note.
 
-import { deltaAHtml } from "./contenido.ts";
+import { deltaAHtml, imagenesDe } from "./contenido.ts";
 
 /// Tope de destinatarios por COMUNICADO, contando los que salen de las listas.
 ///
@@ -37,6 +37,15 @@ export const MAX_CUERPO = 20000;
 /// Tope del HTML ya convertido. Con estilos en linea -que es como hay que escribirlos para el correo-
 /// el HTML ocupa varias veces el texto.
 export const MAX_HTML = 200000;
+
+/// Imagenes por comunicado, y lo que pueden pesar entre todas.
+///
+/// Las imagenes van INCRUSTADAS, asi que viajan dentro de cada mensaje. Los servidores de correo
+/// suelen rechazar los mensajes de mas de 10 a 25 MB, y un comunicado pesado es lento de abrir en un
+/// telefono. La pantalla ya reduce cada imagen a un ancho de correo antes de subirla -una foto de
+/// 4 MB queda en unos cientos de KB-, asi que estos topes solo se alcanzan a proposito.
+export const MAX_IMAGENES = 10;
+export const MAX_BYTES_IMAGENES = 10 * 1024 * 1024;
 
 /// Una direccion de correo razonable. No pretende cubrir todo el RFC 5322: pretende rechazar lo que
 /// seguro esta mal -espacios, dos arrobas, sin dominio, caracteres que partirian una cabecera- y
@@ -83,6 +92,16 @@ export interface Contenido {
   asunto: string;
   html: string;
   texto: string;
+  /// Los nombres de las imagenes a adjuntar, ya validados. Ver `esRutaImagen` en contenido.ts.
+  imagenes: string[];
+}
+
+/// Una imagen incrustada, en la forma que espera la libreria de correo.
+export interface Adjunto {
+  filename: string;
+  content: unknown;
+  cid: string;
+  contentType: string;
 }
 
 /// Si el asunto y el cuerpo se pueden mandar.
@@ -117,7 +136,17 @@ export function validarContenido(
   if (convertido.html.length > MAX_HTML) {
     return { ok: false, error: "El mensaje tiene demasiado formato. Simplificalo un poco." };
   }
-  return { ok: true, contenido: { asunto, html: convertido.html, texto: convertido.texto } };
+  const imagenes = imagenesDe(e.contenido);
+  if (imagenes.length > MAX_IMAGENES) {
+    return {
+      ok: false,
+      error: `El mensaje lleva ${imagenes.length} imagenes y el maximo es ${MAX_IMAGENES}.`,
+    };
+  }
+  return {
+    ok: true,
+    contenido: { asunto, html: convertido.html, texto: convertido.texto, imagenes },
+  };
 }
 
 /// Si la lista final de destinatarios -los escritos a mano MAS los de las listas- se puede mandar.
@@ -231,6 +260,7 @@ export function armarCorreo(
   contenido: Contenido,
   cuenta: string,
   lote: string[],
+  adjuntos: Adjunto[] = [],
 ): {
   from: { name: string; address: string };
   to: string;
@@ -238,6 +268,7 @@ export function armarCorreo(
   subject: string;
   text: string;
   html: string;
+  attachments: Adjunto[];
 } {
   return {
     from: { name: NOMBRE_REMITENTE, address: cuenta },
@@ -246,6 +277,8 @@ export function armarCorreo(
     subject: contenido.asunto,
     text: contenido.texto,
     html: contenido.html,
+    // Las imagenes incrustadas: el HTML las pide por `cid:` y aqui van con ese mismo identificador.
+    attachments: adjuntos,
   };
 }
 
