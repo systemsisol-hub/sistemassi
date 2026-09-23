@@ -77,6 +77,12 @@ verify_jwt = true
 [functions.correspondencia]
 verify_jwt = true
 
+# La llama la Configuracion de SOL con la sesion de un administrador, y ELLA MISMA con la llave de
+# servicio para encadenar la lectura de los PDF. Las dos son JWT, asi que `true` no estorba a
+# ninguna y para en la puerta a quien no trae ninguna.
+[functions.drive-sync]
+verify_jwt = true
+
 # La llama `bi-assistant`, no la aplicación, reenviando el JWT del usuario para que el permiso del
 # reporte se compruebe en un solo lugar. Por eso no aparece en el código Dart: buscarla sólo ahí
 # hace parecer que nadie la usa.

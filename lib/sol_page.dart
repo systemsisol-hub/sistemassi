@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'theme/si_theme.dart';
 import 'campos_globales.dart';
+import 'sol_drive_panel.dart';
 import 'unidades_panel.dart';
 import 'widgets/texto_con_enlaces.dart';
 
@@ -1914,6 +1915,13 @@ class _ConfiguracionSolState extends State<_ConfiguracionSol> {
                 for (final h in herramientas)
                   _fila(c, (h['nombre'] ?? '').toString(),
                       (h['que_hace'] ?? '').toString()),
+              ]),
+              const SizedBox(height: SiSpace.x4),
+
+              // Lo que SOL leyó del Drive, para revisarlo. Pedido del usuario el 23/09/2026.
+              _tarjeta(c, 'El Drive', [
+                const SizedBox(height: SiSpace.x1),
+                const SolDrivePanel(),
               ]),
               const SizedBox(height: SiSpace.x4),
 

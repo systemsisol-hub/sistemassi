@@ -92,9 +92,30 @@ for (const regla of [
   'UNA UNIDAD PUEDE SER, ELLA MISMA, UN EXTRA',
   'ENTREGA SIEMPRE el enlace',
   'NUNCA nombres los campos con los que te llegan los datos',
+  'RECAMARAS Y BAÑOS',
+  'NUNCA digas que ninguna unidad cumple',
 ]) {
   comprobar(`sigue diciendo «${regla}»`, uno.includes(regla));
 }
+
+// ── Recamaras y baños ───────────────────────────────────────────────────────
+// El 23/09/2026 «2 recamaras y 2 baños» volvio vacio y SOL dijo que ninguna cumplia: no habia
+// parametro para eso y el modelo lo metio en otro filtro.
+console.log('recamaras y baños');
+const unidadesTool = M.ALL_TOOLS.find((t) => t.function.name === 'buscar_unidades');
+const props = unidadesTool?.function.parameters.properties ?? {};
+comprobar('buscar_unidades acepta recamaras', props.recamaras?.type === 'number');
+comprobar('buscar_unidades acepta banos', props.banos?.type === 'number');
+comprobar('la tipologia dice que ahi no van', /Nunca pongas aqui recamaras/.test(props.tipologia?.description ?? ''));
+
+// ── El Drive ────────────────────────────────────────────────────────────────
+console.log('el drive');
+const driveTool = M.ALL_TOOLS.find((t) => t.function.name === 'buscar_en_drive');
+comprobar('existe buscar_en_drive', !!driveTool);
+comprobar('acepta archivo_id para el texto completo', !!driveTool?.function.parameters.properties.archivo_id);
+comprobar('se ve en Configuracion con su frase', typeof M.QUE_HACE.buscar_en_drive === 'string');
+comprobar('el prompt dice que el plano es lectura, no inventario', uno.includes('lectura del plano'));
+comprobar('y que los precios no salen del Drive', uno.includes('nunca del Drive'));
 
 console.log('');
 if (fallos > 0) {

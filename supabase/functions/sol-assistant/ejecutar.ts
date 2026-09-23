@@ -228,7 +228,7 @@ export async function runTool(
       "desarrollo_id,numero,depto,torre,nivel,tipo,tipologia,vista," +
       "m2_interior_techada,m2_exterior_techada,m2_jardin_terraza," +
       "m2_total_interior,m2_total,precio,precio_m2,moneda,estatus,lista_al," +
-      "desarrollos!inner(nombre)";
+      "recamaras,banos,desarrollos!inner(nombre)";
 
     const limite = Math.min(Math.max(Number(input.limite ?? 25) || 25, 1), 60);
 
@@ -250,7 +250,13 @@ export async function runTool(
     if (input.desarrollo) q = (q as any).ilike("desarrollos.nombre", `%${input.desarrollo}%`);
     if (input.torre)      q = (q as any).ilike("torre", `%${input.torre}%`);
     if (input.nivel)      q = (q as any).ilike("nivel", `%${input.nivel}%`);
-    if (input.tipologia)  q = (q as any).ilike("tipologia", `%${input.tipologia}%`);
+    // Si llegan recamaras o baños DENTRO de la tipologia —«2 recamaras»—, eso no es una tipologia:
+    // filtrar por ahi vaciaria la busqueda igual. Se ignora y se trata como abajo.
+    const tipologiaEsOtraCosa = typeof input.tipologia === "string"
+      && /rec[aá]mara|habitaci|ba[ñn]o/i.test(input.tipologia);
+    if (input.tipologia && !tipologiaEsOtraCosa) {
+      q = (q as any).ilike("tipologia", `%${input.tipologia}%`);
+    }
     if (input.vista)      q = (q as any).ilike("vista", `%${input.vista}%`);
     if (input.precio_max !== undefined) q = (q as any).lte("precio", input.precio_max);
     if (input.precio_min !== undefined) q = (q as any).gte("precio", input.precio_min);
@@ -262,6 +268,35 @@ export async function runTool(
       const n = String(input.numero);
       q = (q as any).or(`numero.ilike.%${n}%,depto.ilike.%${n}%`);
     }
+
+    // ── Recamaras y baños ──
+    //
+    // El 23/09/2026 un asesor pidio «2 recamaras y 2 baños, 30 millones». La busqueda volvio VACIA
+    // —con 38 disponibles, todas debajo de 30 millones— y SOL contesto que ninguna cumplia. No habia
+    // con que filtrar por recamaras, y el modelo lo metio en otro filtro. Y aunque lo hubiera habido,
+    // las columnas estan VACIAS en todo AG117: la lista mensual no trae ese dato.
+    //
+    // Por eso se mira primero si el desarrollo TIENE el dato. Si no lo tiene, filtrar daria cero, y
+    // cero se lee como «no hay», que es falso: se deja de filtrar por eso y se avisa.
+    const sinDato: string[] = [];
+    for (const [campo, etiqueta] of [["recamaras", "cuantas recamaras"], ["banos", "cuantos baños"]] as const) {
+      const minimo = Number(input[campo]);
+      if (input[campo] === undefined || input[campo] === null || !Number.isFinite(minimo)) continue;
+      let cq = db.from("unidades").select("id, desarrollos!inner(nombre)", { count: "exact", head: true })
+        .not(campo, "is", null);
+      if (input.desarrollo) cq = (cq as any).ilike("desarrollos.nombre", `%${input.desarrollo}%`);
+      const { count } = await cq;
+      if ((count ?? 0) === 0) sinDato.push(etiqueta);
+      else q = (q as any).gte(campo, minimo);
+    }
+
+    if (tipologiaEsOtraCosa && sinDato.length === 0) sinDato.push("cuantas recamaras ni cuantos baños");
+
+    const avisoSinDato = sinDato.length === 0 ? undefined
+      : `El inventario NO dice ${sinDato.join(" ni ")} tiene cada unidad, asi que `
+        + `NO se filtro por eso. No digas que ninguna cumple ni que alguna cumple: no se sabe. Di que `
+        + `ese dato no esta en el inventario, muestra estas unidades por lo demas que pidieron, y `
+        + `busca con buscar_en_drive el plano de esas tipologias, que dice lo que tiene cada una.`;
 
     const { data, error } = await q;
     if (error) return { error: error.message };
@@ -362,6 +397,7 @@ export async function runTool(
         tipologias_con_disponibles: [...new Set(otras.map((u) => String(u.tipologia ?? "")))]
           .filter((t) => t !== "").sort(),
         total_disponibles: otras.length,
+        aviso_sin_dato: avisoSinDato,
         nota: "Ninguna unidad cumple ESOS filtros. Hay " + otras.length + " disponibles con otras "
           + "caracteristicas. Di cuantas hay, desde que precio, y en que torres y tipologias, para "
           + "que el asesor pueda reencauzar. No contestes solo que no hay.",
@@ -369,6 +405,7 @@ export async function runTool(
     }
 
     const notas = [
+      avisoSinDato,
       avisoExtras,
       filas.length === limite
         ? `Se devolvieron las ${limite} mas baratas y hay mas. Dilo asi y ofrece acotar la busqueda.`
@@ -584,6 +621,69 @@ export async function runTool(
       equivalencia: busqueda?.comoSeLlama
         ? `Lo que pidio se guarda en el catalogo como: ${busqueda.comoSeLlama}. Dilo asi.`
         : undefined,
+    };
+  }
+
+  // ── EL DRIVE ──
+  //
+  // Lo que `drive-sync` leyo de la carpeta publica de cada desarrollo: los nombres de todo y el texto
+  // de los PDF. La busqueda la hace `buscar_en_drive` en la base -sin acentos, con todas las
+  // palabras y si no con cualquiera- y aqui solo se le da forma.
+  if (nombre === "buscar_en_drive") {
+    if (input.archivo_id) {
+      const id = String(input.archivo_id).trim();
+      const { data, error } = await (db.from("drive_archivos") as any)
+        .select("id,ruta,nombre,es_carpeta,enlace,modificado,estado,paginas,texto,desarrollos!inner(nombre)")
+        .eq("id", id).maybeSingle();
+      if (error) return { error: error.message };
+      if (!data) return { error: `No hay ningun archivo del Drive con el id «${id}». Busca primero por texto.` };
+      const TOPE = 15000;
+      const texto = typeof data.texto === "string" ? data.texto : "";
+      return {
+        resultados: [{
+          id: data.id, desarrollo: data.desarrollos?.nombre ?? null, ruta: data.ruta,
+          categoria: data.ruta || "Drive", nombre: data.nombre, es_carpeta: data.es_carpeta,
+          enlace: data.enlace, modificado: data.modificado, estado: data.estado, paginas: data.paginas,
+        }],
+        texto: texto.slice(0, TOPE),
+        texto_recortado: texto.length > TOPE,
+        nota: data.estado === "LEIDO" ? undefined
+          : `Este archivo esta en ${data.estado}: no hay texto leido. Di que solo conoces el nombre y entrega el enlace.`,
+      };
+    }
+
+    const consulta = String(input.texto ?? "").trim();
+    if (!consulta) return { error: "Falta `texto`: que buscar en el Drive." };
+    const { data, error } = await (db as any).rpc("buscar_en_drive", {
+      consulta,
+      en_desarrollo: input.desarrollo ? String(input.desarrollo) : null,
+      limite: Math.min(Math.max(Number(input.limite ?? 6) || 6, 1), 12),
+    });
+    if (error) return { error: error.message };
+    const filas = (data ?? []) as Record<string, unknown>[];
+
+    if (filas.length === 0) {
+      const { count } = await (db.from("drive_archivos") as any).select("id", { count: "exact", head: true });
+      return {
+        resultados: [],
+        count: 0,
+        nota: (count ?? 0) === 0
+          ? "El Drive todavia no se ha leido. Usa buscar_documento, que tiene los enlaces del catalogo."
+          : "Nada en el Drive con esas palabras. Prueba con otras -el nombre de la carpeta, una palabra "
+            + "del documento- o con buscar_documento, y no contestes que no existe.",
+      };
+    }
+
+    return {
+      resultados: filas.map((f) => ({
+        id: f.id, desarrollo: f.desarrollo, ruta: f.ruta, categoria: f.ruta || "Drive",
+        nombre: f.nombre, es_carpeta: f.es_carpeta, enlace: f.enlace, modificado: f.modificado,
+        estado: f.es_carpeta ? undefined : f.estado, paginas: f.paginas ?? undefined,
+        fragmento: f.fragmento ?? undefined,
+      })),
+      count: filas.length,
+      nota: "El fragmento es texto del archivo: citalo como tal y entrega el enlace. En los planos "
+        + "son etiquetas y medidas sueltas; lo que cuentes ahi es lectura del plano.",
     };
   }
 
