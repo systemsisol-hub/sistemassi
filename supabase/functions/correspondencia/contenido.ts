@@ -87,8 +87,11 @@ export function enlaceSeguro(v: unknown): string | null {
   if (typeof v !== "string") return null;
   const u = v.trim();
   if (u === "" || u.length > 2000) return null;
-  // Sin caracteres de control ni espacios: «java\tscript:» engaña a algunos analizadores.
-  if (/[\u0000- \u007f]/.test(u)) return null;
+  // Sin caracteres de control ni espacios de ningun tipo: «java\tscript:» engaña a algunos
+  // analizadores. Se escribe con `\s` y no con un rango que acabe en el espacio (0x20): la primera
+  // version escribia el espacio como escape unicode, y al guardarse quedo como un espacio literal
+  // dentro de los corchetes, que funciona igual pero parece un error y cualquiera lo borraria.
+  if (/[\u0000-\u001f\u007f\s]/.test(u)) return null;
   return /^(https?:\/\/|mailto:)/i.test(u) ? u : null;
 }
 
