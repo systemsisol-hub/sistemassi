@@ -350,14 +350,20 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
     if (cfg == null) return const SizedBox.shrink();
     final configurado = cfg['configurado'] == true;
     final puertoOk = cfg['puerto_ok'] != false;
-    if (configurado && puertoOk) return const SizedBox.shrink();
+    // `!= false` y no `== true`: una función desplegada antes de que existiera este campo no lo
+    // manda, y eso no debe pintar un aviso falso.
+    final remitenteOk = cfg['remitente_ok'] != false;
+    if (configurado && puertoOk && remitenteOk) return const SizedBox.shrink();
 
     final texto = cfg['error'] != null
         ? 'No se pudo consultar la configuración del correo: ${cfg['error']}'
         : !configurado
             ? 'El envío todavía no está configurado. Faltan los datos del servidor SMTP en los '
                 'secretos de la función «correspondencia».'
-            : (cfg['motivo_puerto'] ?? 'El puerto configurado no se puede usar.').toString();
+            : !puertoOk
+                ? (cfg['motivo_puerto'] ?? 'El puerto configurado no se puede usar.').toString()
+                : (cfg['motivo_remitente'] ?? 'La dirección del remitente no es válida.')
+                    .toString();
     return Container(
       margin: EdgeInsets.only(bottom: SiSpace.x4),
       padding: EdgeInsets.all(SiSpace.x3),

@@ -124,6 +124,47 @@ ok('el texto plano tambien lleva el pie',
 ok('sin correo propio el pie no inventa uno',
   !M.cuerpoTexto('Hola', 'Ana', null).includes('escribe a'));
 
+// ─── El remitente ──────────────────────────────────────────────────────────
+//
+// El primer envio real fallo con «501 5.1.7 Bad sender address syntax», que no dice QUE esta mal.
+// Tres causas tipicas, y cada una tiene que dar un motivo distinto que diga que arreglar.
+console.log('\nel remitente');
+{
+  const r = M.revisarRemitente('correspondencia@sisol.com.mx', 'correspondencia');
+  ok('con SMTP_FROM bien puesto, se usa', r.ok && r.direccion === 'correspondencia@sisol.com.mx');
+}
+{
+  const r = M.revisarRemitente('', 'correspondencia@sisol.com.mx');
+  ok('sin SMTP_FROM, vale SMTP_USER si es un correo', r.ok && r.direccion === 'correspondencia@sisol.com.mx');
+}
+{
+  // Causa 1: SMTP_USER es un nombre de usuario y no hay SMTP_FROM.
+  const r = M.revisarRemitente('', 'correspondencia');
+  ok('usuario sin arroba y sin SMTP_FROM: NO', r.ok === false);
+  ok('y el motivo pide poner SMTP_FROM', r.ok === false && r.motivo.includes('Agrega SMTP_FROM'));
+  ok('sin repetir el usuario, que es parte de las credenciales',
+    r.ok === false && !r.motivo.includes('«correspondencia»'));
+}
+{
+  // Causa 2: se pego con nombre.
+  const r = M.revisarRemitente('Sistema <correspondencia@sisol.com.mx>', 'x');
+  ok('con nombre y angulos: NO', r.ok === false);
+  ok('y el motivo pide solo la direccion', r.ok === false && r.motivo.includes('SOLO la direccion'));
+  ok('entre comillas tampoco', M.revisarRemitente('"correspondencia@sisol.com.mx"', 'x').ok === false);
+}
+{
+  // Causa 3: un espacio de ancho cero, que `trim()` no quita y `\s` no reconoce.
+  const invisible = 'correspondencia​@sisol.com.mx';
+  ok('esCorreo por si solo lo dejaria pasar (por eso hace falta la otra regla)',
+    M.esCorreo(invisible) === true,
+    'si esto cambia, la regla de ASCII sigue haciendo falta igual');
+  const r = M.revisarRemitente(invisible, 'x');
+  ok('un caracter invisible: NO', r.ok === false);
+  ok('y el motivo dice que se escriba a mano', r.ok === false && r.motivo.includes('a mano'));
+}
+ok('espacios alrededor se toleran', M.revisarRemitente('  correo@sisol.com.mx  ', '').ok === true);
+ok('sin nada de nada, lo dice', M.revisarRemitente('', '').ok === false);
+
 // ─── Los puertos que Supabase deja usar ────────────────────────────────────
 console.log('\npuertos');
 ok('465 si', M.puertoPermitido(465).ok === true);

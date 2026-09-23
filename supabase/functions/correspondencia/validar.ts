@@ -160,6 +160,59 @@ export function cuerpoHtml(cuerpo: string, remitente: string, responderA: string
     + `</div>`;
 }
 
+/// La direccion que va en el `MAIL FROM`, o por que no sirve.
+///
+/// ─── Por que se revisa aqui ─────────────────────────────────────────────────
+///
+/// El primer envio real, el 23/09/2026, fallo con «501 5.1.7 Bad sender address syntax». El servidor
+/// no dice QUE esta mal, y hay tres causas tipicas que se ven igual desde fuera:
+///
+///   1. No se puso SMTP_FROM y SMTP_USER es un nombre de usuario, no un correo. Muchos servidores
+///      autentican con el usuario a secas, pero el remitente tiene que ser una direccion completa.
+///   2. SMTP_FROM lleva un nombre o signos: «Sistema <correo@...>», o entre comillas.
+///   3. Un caracter invisible pegado de un documento. `trim()` no quita todos: un espacio de ancho cero
+///      (U+200B) sobrevive, y `\s` tampoco lo reconoce, asi que `esCorreo` lo dejaria pasar.
+///
+/// Por eso ademas de `esCorreo` se exige ASCII visible. Un remitente con acentos existe en teoria
+/// (SMTPUTF8), pero ningun servidor corriente lo acepta y no vale la pena el riesgo.
+///
+/// No se repite el valor de SMTP_USER en el motivo: es parte de las credenciales.
+export function revisarRemitente(
+  desde: string,
+  usuario: string,
+): { ok: true; direccion: string } | { ok: false; motivo: string } {
+  const deFrom = desde.trim() !== "";
+  const d = (deFrom ? desde : usuario).trim();
+  const origen = deFrom ? "SMTP_FROM" : "SMTP_USER (porque SMTP_FROM no esta puesto)";
+
+  if (d === "") return { ok: false, motivo: "Falta la direccion del remitente: pon SMTP_FROM." };
+
+  if (/[<>"]/.test(d)) {
+    return {
+      ok: false,
+      motivo: `${origen} lleva un nombre o signos (< > o comillas). Pon SOLO la direccion, del tipo `
+        + `nombre@dominio.com: el nombre que ve quien recibe ya lo pone el sistema.`,
+    };
+  }
+  if (!/^[\x21-\x7E]+$/.test(d)) {
+    return {
+      ok: false,
+      motivo: `${origen} lleva espacios, acentos o caracteres invisibles, casi siempre por haberla `
+        + `pegado de un documento. Borrala y escribela a mano.`,
+    };
+  }
+  if (!esCorreo(d.toLowerCase())) {
+    return {
+      ok: false,
+      motivo: deFrom
+        ? `SMTP_FROM no es una direccion de correo valida: tiene que ser del tipo nombre@dominio.com.`
+        : `SMTP_FROM no esta puesto, y SMTP_USER no es una direccion de correo (es un nombre de `
+          + `usuario). Agrega SMTP_FROM con la direccion completa de la cuenta.`,
+    };
+  }
+  return { ok: true, direccion: d };
+}
+
 /// Si el puerto sirve desde una Edge Function de Supabase.
 ///
 /// Supabase NO deja salir por el 25 ni por el 587 -«Outgoing connections to ports 25 and 587 are not

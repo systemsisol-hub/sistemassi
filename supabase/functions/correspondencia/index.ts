@@ -22,6 +22,7 @@ import {
   MAX_POR_HORA,
   nombreRemitente,
   puertoPermitido,
+  revisarRemitente,
   validarMensaje,
 } from "./validar.ts";
 
@@ -32,8 +33,10 @@ const SMTP_HOST = (Deno.env.get("SMTP_HOST") ?? "").trim();
 const SMTP_PORT = Number(Deno.env.get("SMTP_PORT") ?? "465");
 const SMTP_USER = (Deno.env.get("SMTP_USER") ?? "").trim();
 const SMTP_PASS = Deno.env.get("SMTP_PASS") ?? "";
-/// La direccion que aparece como remitente. Si no se da, la del usuario SMTP, que es lo habitual.
-const SMTP_FROM = (Deno.env.get("SMTP_FROM") ?? "").trim() || SMTP_USER;
+/// La direccion que va de remitente. Si no se da, se intenta con SMTP_USER; ver `revisarRemitente`,
+/// que dice claro cuando ninguna de las dos sirve en lugar de dejar que el servidor conteste
+/// «501 Bad sender address syntax», que fue lo que paso en el primer envio real.
+const remitente = revisarRemitente(Deno.env.get("SMTP_FROM") ?? "", SMTP_USER);
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -92,7 +95,8 @@ Deno.serve(async (req: Request) => {
     return responde({ error: "Cuerpo ilegible." }, 400);
   }
 
-  const configurado = SMTP_HOST !== "" && SMTP_USER !== "" && SMTP_PASS !== "" && SMTP_FROM !== "";
+  // El remitente se revisa aparte: puede estar todo puesto y la direccion ser mala.
+  const configurado = SMTP_HOST !== "" && SMTP_USER !== "" && SMTP_PASS !== "";
   const puerto = puertoPermitido(SMTP_PORT);
 
   // ── La configuracion, para que un administrador sepa si esta lista ─────────
@@ -107,7 +111,9 @@ Deno.serve(async (req: Request) => {
       puerto: SMTP_PORT,
       puerto_ok: puerto.ok,
       motivo_puerto: puerto.ok === false ? puerto.motivo : null,
-      remitente: SMTP_FROM || null,
+      remitente: remitente.ok === false ? null : remitente.direccion,
+      remitente_ok: remitente.ok,
+      motivo_remitente: remitente.ok === false ? remitente.motivo : null,
       contrasena_puesta: SMTP_PASS !== "",
       max_por_hora: MAX_POR_HORA,
     });
@@ -123,6 +129,9 @@ Deno.serve(async (req: Request) => {
   // `=== false` y no `!puerto.ok`: con `strict` apagado la negacion no reduce la union. Ver
   // ../tsconfig.json y el mismo caso en ai-assistant/index.ts.
   if (puerto.ok === false) return responde({ error: puerto.motivo }, 503);
+  // Antes de conectar, y antes de registrar: un remitente mal puesto es un error de configuracion,
+  // no un envio fallido, y no tiene por que gastarle a nadie un intento del limite por hora.
+  if (remitente.ok === false) return responde({ error: remitente.motivo }, 503);
 
   const v = validarMensaje(entrada);
   if (v.ok === false) return responde({ error: v.error, rechazados: v.rechazados ?? [] }, 400);
@@ -176,7 +185,7 @@ Deno.serve(async (req: Request) => {
     });
 
     const info = await transporte.sendMail({
-      from: { name: nombreRemitente(nombre), address: SMTP_FROM },
+      from: { name: nombreRemitente(nombre), address: remitente.direccion },
       to: v.mensaje.destinatarios,
       replyTo: suCorreo ?? undefined,
       subject: v.mensaje.asunto,
