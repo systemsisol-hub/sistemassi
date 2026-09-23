@@ -296,7 +296,7 @@ export async function runTool(
       : `El inventario NO dice ${sinDato.join(" ni ")} tiene cada unidad, asi que `
         + `NO se filtro por eso. No digas que ninguna cumple ni que alguna cumple: no se sabe. Di que `
         + `ese dato no esta en el inventario, muestra estas unidades por lo demas que pidieron, y `
-        + `entrega el documento de tipologias con buscar_documento, que dice lo que tiene cada una.`;
+        + `busca con buscar_en_drive el plano de esas tipologias, que dice lo que tiene cada una.`;
 
     const { data, error } = await q;
     if (error) return { error: error.message };
@@ -621,6 +621,69 @@ export async function runTool(
       equivalencia: busqueda?.comoSeLlama
         ? `Lo que pidio se guarda en el catalogo como: ${busqueda.comoSeLlama}. Dilo asi.`
         : undefined,
+    };
+  }
+
+  // ── EL DRIVE ──
+  //
+  // Lo que `drive-sync` leyo de la carpeta publica de cada desarrollo: los nombres de todo y el texto
+  // de los PDF. La busqueda la hace `buscar_en_drive` en la base -sin acentos, con todas las
+  // palabras y si no con cualquiera- y aqui solo se le da forma.
+  if (nombre === "buscar_en_drive") {
+    if (input.archivo_id) {
+      const id = String(input.archivo_id).trim();
+      const { data, error } = await (db.from("drive_archivos") as any)
+        .select("id,ruta,nombre,es_carpeta,enlace,modificado,estado,paginas,texto,desarrollos!inner(nombre)")
+        .eq("id", id).maybeSingle();
+      if (error) return { error: error.message };
+      if (!data) return { error: `No hay ningun archivo del Drive con el id «${id}». Busca primero por texto.` };
+      const TOPE = 15000;
+      const texto = typeof data.texto === "string" ? data.texto : "";
+      return {
+        resultados: [{
+          id: data.id, desarrollo: data.desarrollos?.nombre ?? null, ruta: data.ruta,
+          categoria: data.ruta || "Drive", nombre: data.nombre, es_carpeta: data.es_carpeta,
+          enlace: data.enlace, modificado: data.modificado, estado: data.estado, paginas: data.paginas,
+        }],
+        texto: texto.slice(0, TOPE),
+        texto_recortado: texto.length > TOPE,
+        nota: data.estado === "LEIDO" ? undefined
+          : `Este archivo esta en ${data.estado}: no hay texto leido. Di que solo conoces el nombre y entrega el enlace.`,
+      };
+    }
+
+    const consulta = String(input.texto ?? "").trim();
+    if (!consulta) return { error: "Falta `texto`: que buscar en el Drive." };
+    const { data, error } = await (db as any).rpc("buscar_en_drive", {
+      consulta,
+      en_desarrollo: input.desarrollo ? String(input.desarrollo) : null,
+      limite: Math.min(Math.max(Number(input.limite ?? 6) || 6, 1), 12),
+    });
+    if (error) return { error: error.message };
+    const filas = (data ?? []) as Record<string, unknown>[];
+
+    if (filas.length === 0) {
+      const { count } = await (db.from("drive_archivos") as any).select("id", { count: "exact", head: true });
+      return {
+        resultados: [],
+        count: 0,
+        nota: (count ?? 0) === 0
+          ? "El Drive todavia no se ha leido. Usa buscar_documento, que tiene los enlaces del catalogo."
+          : "Nada en el Drive con esas palabras. Prueba con otras -el nombre de la carpeta, una palabra "
+            + "del documento- o con buscar_documento, y no contestes que no existe.",
+      };
+    }
+
+    return {
+      resultados: filas.map((f) => ({
+        id: f.id, desarrollo: f.desarrollo, ruta: f.ruta, categoria: f.ruta || "Drive",
+        nombre: f.nombre, es_carpeta: f.es_carpeta, enlace: f.enlace, modificado: f.modificado,
+        estado: f.es_carpeta ? undefined : f.estado, paginas: f.paginas ?? undefined,
+        fragmento: f.fragmento ?? undefined,
+      })),
+      count: filas.length,
+      nota: "El fragmento es texto del archivo: citalo como tal y entrega el enlace. En los planos "
+        + "son etiquetas y medidas sueltas; lo que cuentes ahi es lectura del plano.",
     };
   }
 

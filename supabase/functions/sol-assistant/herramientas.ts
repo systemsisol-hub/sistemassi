@@ -136,6 +136,27 @@ export const ALL_TOOLS = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "buscar_en_drive",
+      description: "Busca DENTRO de la carpeta del Drive del desarrollo: el nombre de cada archivo y "
+        + "carpeta, y el TEXTO de sus PDF. Devuelve de cada uno un fragmento de lo que dice y su "
+        + "ENLACE. USALA cuando pregunten que dice un documento, cuando buscar_documento no tenga lo "
+        + "que piden, para encontrar la version mas reciente de un archivo, y para lo que traen los "
+        + "planos -recamaras, baños, metros de una tipologia-. Con `archivo_id` devuelve el texto "
+        + "completo de ese archivo.",
+      parameters: {
+        type: "object",
+        properties: {
+          texto: { type: "string", description: "Que buscar. Ej. «tipologia C», «checklist cliente», «amenidades»." },
+          desarrollo: { type: "string", description: "Para acotar a un desarrollo. Ej. «AG117»." },
+          archivo_id: { type: "string", description: "El id de un resultado, para leer su texto completo." },
+          limite: { type: "number", description: "Cuantos resultados. Por omision 6." },
+        },
+      },
+    },
+  },
 ];
 
 /// Lo que hace cada herramienta, en una frase, para la pantalla de configuracion.
@@ -145,6 +166,7 @@ export const QUE_HACE: Record<string, string> = {
   reglas_de_extras: "Consultar que extras se pueden comprar y con que departamento",
   buscar_promocion: "Consultar promociones vigentes, con su fecha de vencimiento",
   buscar_documento: "Entregar el enlace de brochures, planos y formatos del Drive",
+  buscar_en_drive: "Buscar dentro de la carpeta del Drive: nombres y el texto de los PDF",
 };
 
 export const AMBITO =
@@ -290,8 +312,21 @@ Si piden recamaras o baños, pasalos en recamaras y banos, nunca dentro de tipol
 de un desarrollo puede no traer ese dato; entonces la herramienta NO filtra por eso y te lo dice en
 aviso_sin_dato. En ese caso NUNCA digas que ninguna unidad cumple, ni que alguna cumple: no lo
 sabes. Di que el inventario no dice cuantas recamaras ni baños tiene cada unidad, muestra las
-opciones que cumplen lo demas -el presupuesto, la torre-, y entrega el documento de tipologias con
-buscar_documento, que es donde viene lo que tiene cada tipologia.
+opciones que cumplen lo demas -el presupuesto, la torre-, y busca con buscar_en_drive el plano de
+esas tipologias -«tipologia C1»-, que es donde viene lo que tiene cada una. Lo que saques de ahi
+es lectura del plano: dilo asi y entrega el enlace.
+
+EL DRIVE
+buscar_en_drive busca en la carpeta del Drive: el nombre de cada archivo y el TEXTO de sus PDF.
+Cada resultado trae un fragmento y su enlace; si necesitas el texto completo de uno, vuelve a
+llamarla con su archivo_id.
+- Lo que viene en el texto es lo que dice el archivo. Citalo como tal -«segun el brochure», «segun
+  el plano de la tipologia C»- y ENTREGA el enlace para que el asesor lo revise.
+- En los planos el texto son etiquetas y medidas sueltas: «RECAMARA 01», «BAÑO», «3.04». Puedes
+  contar recamaras y baños por sus etiquetas, pero dilo como lectura del plano y no como dato del
+  inventario. Si no es claro, dilo.
+- Si un archivo trae estado PENDIENTE o LEYENDO, todavia no se ha leido: de el solo sabes el nombre.
+- El inventario y los precios salen de buscar_unidades, nunca del Drive: un PDF puede ser viejo.
 
 LOS EXTRAS: ROOF, BODEGA Y ESTACIONAMIENTO
 NINGUN extra se puede comprar sin departamento. Y no todos los departamentos dan derecho a todos

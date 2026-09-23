@@ -28,6 +28,12 @@ declare module "node:buffer" {
   export const Buffer: { from(datos: Uint8Array): unknown };
 }
 
+// El que saca el texto de los PDF del Drive en `drive-sync`. Es pdf.js empaquetado para correr sin
+// navegador. La version va fija aqui y en el import.
+declare module "npm:unpdf@1.8.1" {
+  export function getDocumentProxy(datos: Uint8Array): Promise<any>;
+}
+
 declare const Deno: {
   env: { get(nombre: string): string | undefined };
   serve(manejador: (req: Request) => Response | Promise<Response>): void;
