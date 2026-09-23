@@ -1099,7 +1099,15 @@ export async function runTool(
   // para Soli.
   if (name === "buscar_conocimiento") {
     const CAMPOS_KB = "id,title,description,content,category,audience,tags," +
-      "file_name,file_url,pinned,updated_at";
+      "file_name,file_url,file_type,pinned,updated_at";
+
+    // Un archivo HTML NO tiene enlace que dar. Su `file_url` es la ruta dentro de un bucket PRIVADO
+    // -la pagina firma la direccion al abrirlo y lo muestra en su visor-, y entregada como enlace no
+    // abriria nada. Se quita y se dice donde verlo.
+    const sinRutaInterna = (a: Record<string, unknown>) =>
+      a.file_type === "text/html"
+        ? { ...a, file_url: null, archivo_html: "Se ve dentro del sistema, en la pagina de Conocimientos." }
+        : a;
 
     // Un articulo concreto, con su contenido COMPLETO.
     if (input.articulo_id) {
@@ -1116,7 +1124,7 @@ export async function runTool(
           error: "No existe ese articulo, o es de la pestaña de Administradores y no tienes acceso.",
         };
       }
-      return { articulo: data, contenido_completo: true };
+      return { articulo: sinRutaInterna(data), contenido_completo: true };
     }
 
     let q = db.from("knowledge_articles").select(CAMPOS_KB);
@@ -1155,7 +1163,7 @@ export async function runTool(
         const texto = typeof a.content === "string" ? a.content : "";
         const recortado = texto.length > TOPE_TEXTO;
         return {
-          ...a,
+          ...sinRutaInterna(a),
           content: recortado ? texto.slice(0, TOPE_TEXTO) : texto,
           contenido_recortado: recortado,
         };
