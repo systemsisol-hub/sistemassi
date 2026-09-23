@@ -482,7 +482,9 @@ Deno.serve(async (req: Request) => {
           });
         }
       }
-      console.log(`SOL: ${c.function.name} -> ${crudo.slice(0, 160)}`);
+      // Con los ARGUMENTOS. El 23/09/2026 una busqueda de unidades volvio vacia con 38 disponibles y
+      // el registro solo decia el resultado: no habia forma de saber con que filtro la vacio.
+      console.log(`SOL: ${c.function.name}(${JSON.stringify(args).slice(0, 200)}) -> ${crudo.slice(0, 160)}`);
       conversacion.push({ role: "tool", content: JSON.stringify(resultado) });
     }
   }

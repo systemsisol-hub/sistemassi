@@ -49,7 +49,13 @@ export const ALL_TOOLS = [
           numero: { type: "string", description: "La unidad exacta, si la nombran. Ej. «AG008» o «A-103»." },
           torre: { type: "string", description: "Torre o edificio. Ej. «A»." },
           nivel: { type: "string", description: "Nivel. Ej. «PB», «1», «3 PH»." },
-          tipologia: { type: "string", description: "Ej. «C1», «B Lock off», «Roof Garden». Parcial vale." },
+          tipologia: {
+            type: "string",
+            description: "El NOMBRE de la tipologia. Ej. «C1», «B Lock off», «Roof Garden». Parcial vale. "
+              + "Nunca pongas aqui recamaras ni baños: para eso estan `recamaras` y `banos`.",
+          },
+          recamaras: { type: "number", description: "Minimo de recamaras que piden. Ej. 2." },
+          banos: { type: "number", description: "Minimo de baños que piden. Ej. 2." },
           vista: { type: "string", description: "Ej. «Jardin», «Calle», «Colindancia»." },
           precio_max: { type: "number", description: "Tope de precio, en la moneda del desarrollo." },
           precio_min: { type: "number", description: "Piso de precio." },
@@ -278,6 +284,14 @@ ayer si nadie dice de cuando es.
 
 Si no hay ninguna que cumpla lo que piden, la herramienta te devuelve lo que SI hay -la mas
 barata, las torres y tipologias con inventario-. Ofrecelo. No contestes solo que no hay.
+
+RECAMARAS Y BAÑOS
+Si piden recamaras o baños, pasalos en recamaras y banos, nunca dentro de tipologia. El inventario
+de un desarrollo puede no traer ese dato; entonces la herramienta NO filtra por eso y te lo dice en
+aviso_sin_dato. En ese caso NUNCA digas que ninguna unidad cumple, ni que alguna cumple: no lo
+sabes. Di que el inventario no dice cuantas recamaras ni baños tiene cada unidad, muestra las
+opciones que cumplen lo demas -el presupuesto, la torre-, y entrega el documento de tipologias con
+buscar_documento, que es donde viene lo que tiene cada tipologia.
 
 LOS EXTRAS: ROOF, BODEGA Y ESTACIONAMIENTO
 NINGUN extra se puede comprar sin departamento. Y no todos los departamentos dan derecho a todos
