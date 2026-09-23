@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'services/clave_almacenamiento.dart';
 import 'theme/si_theme.dart';
+import 'widgets/visor_html.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants & helpers
@@ -60,6 +61,8 @@ String _mimeFromExt(String ext) {
     case 'xlsx': return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     case 'zip':  return 'application/zip';
     case 'mp4':  return 'video/mp4';
+    case 'html':
+    case 'htm':  return 'text/html';
     default:     return 'application/octet-stream';
   }
 }
@@ -67,6 +70,7 @@ String _mimeFromExt(String ext) {
 IconData _fileIcon(String? type) {
   if (type == null) return Icons.attach_file_outlined;
   if (type.contains('pdf'))   return Icons.picture_as_pdf_outlined;
+  if (type.contains('html'))  return Icons.web_outlined;
   if (type.contains('image')) return Icons.image_outlined;
   if (type.contains('word') || type.contains('document')) return Icons.article_outlined;
   if (type.contains('excel') || type.contains('sheet'))   return Icons.table_chart_outlined;
@@ -79,6 +83,83 @@ Future<void> _openUrl(String url) async {
   final uri = Uri.tryParse(url);
   if (uri != null && await canLaunchUrl(uri)) {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+}
+
+// ── Archivos HTML ────────────────────────────────────────────────────────────
+//
+// Un HTML NO va al bucket público de los demás adjuntos. Va a `conocimientos-html`, que es privado y
+// que sólo deja leer el archivo a quien puede leer el artículo. Y no se abre por su dirección de
+// Storage —Supabase lo entregaría como texto—, sino por la Pages Function `functions/c/`, en otro
+// origen para que el HTML subido no pueda tocar la sesión. El detalle está en `widgets/visor_html.dart`
+// y en la migración `20260923230000_conocimientos_html.sql`.
+//
+// Por eso en un HTML `file_url` NO es una dirección: es la RUTA dentro del bucket, y la dirección se
+// firma al abrirlo.
+
+const _bucketArchivos = 'knowledge-files';
+const _bucketHtml = 'conocimientos-html';
+
+bool _esHtml(String? type) => type == 'text/html';
+
+/// Ocho horas, como las herramientas: una URL nueva en cada apertura sería una URL distinta para el
+/// navegador, y volvería a descargar el archivo entero cada vez.
+const _vigenciaHtml = Duration(hours: 8);
+const _margenHtml = Duration(minutes: 15);
+final Map<String, (String, DateTime)> _urlsHtml = {};
+
+Future<String> _urlHtml(String ruta) async {
+  final guardada = _urlsHtml[ruta];
+  if (guardada != null &&
+      guardada.$2.isAfter(DateTime.now().add(_margenHtml))) {
+    return guardada.$1;
+  }
+  final firmada = await Supabase.instance.client.storage
+      .from(_bucketHtml)
+      .createSignedUrl(ruta, _vigenciaHtml.inSeconds);
+  final url = urlHtmlAislado(firmada, 'c', ruta);
+  _urlsHtml[ruta] = (url, DateTime.now().add(_vigenciaHtml));
+  return url;
+}
+
+Future<void> _abrirArchivo(BuildContext context, _Article a) async {
+  if (a.fileUrl == null) return;
+  if (!_esHtml(a.fileType)) {
+    await _openUrl(a.fileUrl!);
+    return;
+  }
+  try {
+    final url = await _urlHtml(a.fileUrl!);
+    if (!context.mounted) return;
+    await abrirVisorHtml(context, url: url, titulo: a.fileName ?? a.title);
+  } catch (e) {
+    debugPrint('Error al abrir el HTML: $e');
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('No se pudo abrir el archivo: $e'),
+        backgroundColor: SiColors.of(context).danger,
+      ));
+    }
+  }
+}
+
+/// Bucket y ruta del archivo de un artículo, para poder borrarlo. `null` si no se reconoce.
+(String, String)? _ubicacionDe(String? fileUrl, String? fileType) {
+  if (fileUrl == null || fileUrl.isEmpty) return null;
+  if (_esHtml(fileType)) return (_bucketHtml, fileUrl);
+  final segs = Uri.tryParse(fileUrl)?.pathSegments ?? const <String>[];
+  final idx = segs.indexOf(_bucketArchivos);
+  if (idx == -1 || idx >= segs.length - 1) return null;
+  return (_bucketArchivos, segs.sublist(idx + 1).join('/'));
+}
+
+Future<void> _borrarArchivo(String? fileUrl, String? fileType) async {
+  final donde = _ubicacionDe(fileUrl, fileType);
+  if (donde == null) return;
+  try {
+    await Supabase.instance.client.storage.from(donde.$1).remove([donde.$2]);
+  } catch (e) {
+    debugPrint('No se pudo borrar el archivo anterior: $e');
   }
 }
 
@@ -536,21 +617,7 @@ class _KnowledgePageState extends State<KnowledgePage>
           .delete()
           .eq('id', article.id);
 
-      if (article.fileUrl != null) {
-        try {
-          final uri = Uri.tryParse(article.fileUrl!);
-          if (uri != null) {
-            final segs = uri.pathSegments;
-            final idx = segs.indexOf('knowledge-files');
-            if (idx != -1 && idx < segs.length - 1) {
-              final path = segs.sublist(idx + 1).join('/');
-              await Supabase.instance.client.storage
-                  .from('knowledge-files')
-                  .remove([path]);
-            }
-          }
-        } catch (_) {}
-      }
+      await _borrarArchivo(article.fileUrl, article.fileType);
 
       _load();
     } catch (e) {
@@ -890,7 +957,7 @@ class _ArticleDetailSheet extends StatelessWidget {
                 if (article.fileUrl != null) ...[
                   const SizedBox(height: 16),
                   GestureDetector(
-                    onTap: () => _openUrl(article.fileUrl!),
+                    onTap: () => _abrirArchivo(context, article),
                     child: Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
@@ -1118,7 +1185,7 @@ class _ArticleFormSheetState extends State<_ArticleFormSheet> {
       type: FileType.custom,
       allowedExtensions: [
         'pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp',
-        'doc', 'docx', 'xls', 'xlsx', 'zip', 'mp4', 'txt'
+        'doc', 'docx', 'xls', 'xlsx', 'zip', 'mp4', 'txt', 'html', 'htm'
       ],
       withData: true,
     );
@@ -1186,15 +1253,24 @@ class _ArticleFormSheetState extends State<_ArticleFormSheet> {
         // fuera de ASCII, y las tildes de «CÓDIGO» y «ÉTICA» invalidaban la ruta. Es la única subida
         // del proyecto que usa el nombre original en la clave —las demás la arman con marca de tiempo
         // o id más extensión— y por eso era la única que podía fallar así.
-        final path =
-            '$articleId/${DateTime.now().millisecondsSinceEpoch}_${claveDeArchivo(_fileName!)}';
+        //
+        // El HTML lleva además una ruta FIJA, `<id>/<milisegundos>.html`: es la única forma que acepta la
+        // Pages Function que lo entrega, y el nombre original ya queda en `file_name`.
+        final esHtml = _esHtml(mime);
+        final bucket = esHtml ? _bucketHtml : _bucketArchivos;
+        final marca = DateTime.now().millisecondsSinceEpoch;
+        final path = esHtml
+            ? '$articleId/$marca.html'
+            : '$articleId/${marca}_${claveDeArchivo(_fileName!)}';
 
+        // Sin `upsert` en el HTML: su bucket no tiene política de UPDATE, y el nombre es nuevo cada vez.
         await db.storage
-            .from('knowledge-files')
+            .from(bucket)
             .uploadBinary(path, _fileBytes!,
-                fileOptions: FileOptions(contentType: mime, upsert: true));
+                fileOptions: FileOptions(contentType: mime, upsert: !esHtml));
 
-        final url = db.storage.from('knowledge-files').getPublicUrl(path);
+        final url =
+            esHtml ? path : db.storage.from(bucket).getPublicUrl(path);
 
         await db.from('knowledge_articles').update({
           'file_url':  url,
@@ -1202,6 +1278,12 @@ class _ArticleFormSheetState extends State<_ArticleFormSheet> {
           'file_type': mime,
           'file_size': _fileBytes!.length,
         }).eq('id', articleId);
+
+        // El archivo que se sustituyó ya no lo apunta nadie. Se borra DESPUÉS de guardar el nuevo, para
+        // que un fallo a medias deje el artículo con el anterior y no sin ninguno.
+        if (_existingFileUrl != null && _existingFileUrl != url) {
+          await _borrarArchivo(_existingFileUrl, _existingFileType);
+        }
       }
 
       if (mounted) {

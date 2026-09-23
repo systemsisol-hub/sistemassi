@@ -1,17 +1,10 @@
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'services/trash_service.dart';
 import 'theme/si_theme.dart';
-
-// El visor reusa el iframe de BI en lugar de duplicar el código de plataforma. Es el mismo widget:
-// una URL dentro de un `HtmlElementView`. Importante para lo que aloja esta página: el iframe se crea
-// SIN atributo `sandbox`, y por eso las herramientas pueden descargar archivos y abrir ventanas
-// nuevas —que es justo lo que un visor con sandbox bloquea en silencio—.
-import 'bi_web_iframe_stub.dart' if (dart.library.html) 'bi_web_iframe_web.dart';
+import 'widgets/visor_html.dart';
 
 /// Catálogo de herramientas HTML alojadas dentro del sistema.
 ///
@@ -41,31 +34,8 @@ class _HerramientasPageState extends State<HerramientasPage> {
 
   static const _bucket = 'herramientas';
 
-  /// Hosts desde los que se entrega el HTML de las herramientas. Los dos son del MISMO proyecto de
-  /// Pages, así que la función viaja en el mismo `git push` que la aplicación.
-  ///
-  /// Siempre es un host DISTINTO del que sirve la aplicación, y eso es lo importante: un host
-  /// distinto es un origen distinto, y es lo que impide que el HTML del proveedor lea el
-  /// `localStorage` donde `supabase_flutter` guarda el token de sesión.
-  static const _hostProduccion = 'herramientas.sistemassi.com';
-
-  /// Alias de rama de Pages. El subdominio de producción sirve el despliegue de `main`, así que
-  /// apuntar ahí desde una previsualización pide el archivo a una versión que todavía no tiene la
-  /// función: el iframe acabó mostrando la pantalla de acceso de sistemassi.
-  ///
-  /// Sirve además para poder PROBAR un cambio en la función antes de que llegue a producción, que de
-  /// otro modo sería imposible.
-  static const _hostPruebas = 'develop.sistemassi.pages.dev';
-
-  /// El host de producción sólo cuando la aplicación se está sirviendo desde producción. Fuera de la
-  /// web no hay `Uri.base` útil, y ahí la aplicación es la compilada, así que va a producción.
-  static String get _hostHerramientas {
-    if (!kIsWeb) return _hostProduccion;
-    final propio = Uri.base.host;
-    return (propio == 'sistemassi.com' || propio == 'www.sistemassi.com')
-        ? _hostProduccion
-        : _hostPruebas;
-  }
+  // El host aislado desde el que se entrega el HTML vive en `widgets/visor_html.dart`, que
+  // comparte con Conocimientos.
 
   /// Cuánto vive la URL firmada con la que se abre una herramienta.
   ///
@@ -207,10 +177,7 @@ class _HerramientasPageState extends State<HerramientasPage> {
     // de esta firma. Y lo hace en OTRO nombre de host para que quede en otro origen: así el HTML del
     // proveedor no puede leer el `localStorage` donde vive el token de sesión. El detalle está en el
     // encabezado de esa función.
-    final token = Uri.parse(firmada).queryParameters['token'];
-    final url = token == null
-        ? firmada
-        : Uri.https(_hostHerramientas, '/h/$archivo', {'token': token}).toString();
+    final url = urlHtmlAislado(firmada, 'h', archivo);
 
     _urlCache[id] = url;
     _urlVence[id] = DateTime.now().add(_vigenciaUrl);
@@ -232,36 +199,12 @@ class _HerramientasPageState extends State<HerramientasPage> {
     }
     if (url == null || !mounted) return;
 
-    // Fuera de la web no hay iframe, así que se abre en el navegador del sistema. Ahí la descarga
-    // del PDF y el enlace de WhatsApp funcionan igual que embebidos.
-    if (!kIsWeb) {
-      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-      return;
-    }
-
-    if (!mounted) return;
-    final titulo = (h['titulo'] ?? 'Herramienta').toString();
-    showGeneralDialog(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: 'Cerrar',
-      barrierColor: Colors.black54,
-      transitionDuration: SiMotion.normal,
-      pageBuilder: (ctx, _, __) => Align(
-        alignment: Alignment.bottomCenter,
-        child: Material(
-          color: Colors.transparent,
-          child: SizedBox(
-            width: MediaQuery.of(context).size.width,
-            height: MediaQuery.of(context).size.height,
-            child: _VisorHerramienta(
-              url: url!,
-              titulo: titulo,
-              onClose: () => Navigator.pop(ctx),
-            ),
-          ),
-        ),
-      ),
+    // Fuera de la web no hay iframe y se abre en el navegador del sistema. Ahí la descarga del PDF y
+    // el enlace de WhatsApp funcionan igual que embebidos.
+    await abrirVisorHtml(
+      context,
+      url: url,
+      titulo: (h['titulo'] ?? 'Herramienta').toString(),
     );
   }
 
@@ -780,82 +723,9 @@ class _HerramientasPageState extends State<HerramientasPage> {
   }
 }
 
-// ── Visor ────────────────────────────────────────────────────────────────────
-
-/// Pantalla completa con la herramienta dentro de un iframe.
-///
-/// El iframe no lleva `sandbox`, así que la herramienta conserva lo que un visor sandboxeado
-/// bloquea sin decir nada: la descarga del PDF que arma con jsPDF y el `target="_blank"` con el que
-/// abre WhatsApp Web.
-class _VisorHerramienta extends StatelessWidget {
-  final String url;
-  final String titulo;
-  final VoidCallback onClose;
-
-  const _VisorHerramienta({
-    required this.url,
-    required this.titulo,
-    required this.onClose,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = SiColors.of(context);
-    final mq = MediaQuery.of(context);
-    final height = mq.size.height - mq.padding.top - mq.padding.bottom;
-    const headerH = 56.0;
-
-    return Container(
-      height: height,
-      color: c.panel,
-      child: Column(
-        children: [
-          Container(
-            height: headerH,
-            padding: const EdgeInsets.symmetric(horizontal: SiSpace.x4),
-            decoration: BoxDecoration(
-              color: c.panel,
-              border: Border(bottom: BorderSide(color: c.line, width: 1)),
-            ),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: Icon(Icons.close, size: 18, color: c.ink2),
-                  onPressed: onClose,
-                ),
-                Expanded(
-                  child: Text(
-                    titulo,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: c.ink),
-                  ),
-                ),
-                IconButton(
-                  icon: Icon(Icons.open_in_new, size: 18, color: c.ink2),
-                  tooltip: 'Abrir en una pestaña nueva',
-                  onPressed: () => launchUrl(Uri.parse(url),
-                      mode: LaunchMode.externalApplication),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: LayoutBuilder(
-              builder: (_, box) => WebIframe(
-                url: url,
-                height: height - headerH,
-                width: box.maxWidth,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
+// El visor —pantalla completa con la herramienta en un iframe sin `sandbox`, para que conserve la
+// descarga del PDF que arma con jsPDF y el `target="_blank"` con el que abre WhatsApp Web— vive en
+// `widgets/visor_html.dart`.
 
 // ── Alta y edición ───────────────────────────────────────────────────────────
 
