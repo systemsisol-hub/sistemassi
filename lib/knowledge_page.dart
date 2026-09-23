@@ -15,7 +15,7 @@ const List<String> _kCategories = [
   'General',
   'Recursos Humanos',
   'Tecnología',
-  'Procedimientos',
+  'Manuales y Procedimientos',
   'Aplicaciones',
   'Soporte',
 ];
@@ -24,7 +24,8 @@ const Map<String, (IconData, Color)> _kCatMeta = {
   'General':          (Icons.home_work_outlined,    Color(0xFF6366F1)),
   'Recursos Humanos': (Icons.people_outline,         Color(0xFF10B981)),
   'Tecnología':       (Icons.computer_outlined,      Color(0xFF3B82F6)),
-  'Procedimientos':   (Icons.assignment_outlined,    Color(0xFFF59E0B)),
+  'Manuales y Procedimientos':
+                      (Icons.assignment_outlined,    Color(0xFFF59E0B)),
   'Aplicaciones':     (Icons.apps_outlined,          Color(0xFF8B5CF6)),
   'Soporte':          (Icons.support_agent_outlined, Color(0xFFEF4444)),
 };
@@ -219,6 +220,24 @@ class _Article {
         createdByName: j['created_by_name'] as String?,
         createdAt: DateTime.tryParse(j['created_at'] as String? ?? '') ?? DateTime.now(),
       );
+
+  _Article conVistas(int v) => _Article(
+        id: id,
+        title: title,
+        description: description,
+        content: content,
+        category: category,
+        audience: audience,
+        fileUrl: fileUrl,
+        fileName: fileName,
+        fileType: fileType,
+        fileSize: fileSize,
+        tags: tags,
+        views: v,
+        pinned: pinned,
+        createdByName: createdByName,
+        createdAt: createdAt,
+      );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -309,13 +328,6 @@ class _KnowledgePageState extends State<KnowledgePage>
           Expanded(child: _buildContent(c)),
         ],
       ),
-      floatingActionButton: _isAdmin
-          ? FloatingActionButton(
-              onPressed: () => _openForm(context, c),
-              backgroundColor: c.brand,
-              child: const Icon(Icons.add, color: Colors.white),
-            )
-          : null,
     );
   }
 
@@ -378,6 +390,25 @@ class _KnowledgePageState extends State<KnowledgePage>
                   icon: Icon(Icons.search, color: c.ink3),
                   onPressed: () => setState(() => _showSearch = true),
                 ),
+          // El mismo botón que Herramientas y BI, en lugar del botón flotante.
+          if (_isAdmin) ...[
+            const SizedBox(width: SiSpace.x2),
+            ElevatedButton.icon(
+              onPressed: () => _openForm(context, c),
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('Nuevo',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: c.brand,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                minimumSize: const Size(0, 36),
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                shape: const RoundedRectangleBorder(borderRadius: SiRadius.rMd),
+              ),
+            ),
+            const SizedBox(width: SiSpace.x2),
+          ],
         ],
       ),
     );
@@ -543,12 +574,19 @@ class _KnowledgePageState extends State<KnowledgePage>
 
   // ── Navigation to detail / form ───────────────────────────────────────────
 
-  void _openDetail(BuildContext context, _Article article, SiColors c) {
-    // Fire-and-forget views increment
+  void _openDetail(BuildContext context, _Article original, SiColors c) {
+    // La visita se cuenta sin esperar, pero con `.then`. Antes era la llamada suelta, y el contador de
+    // TODOS los artículos seguía en 0: el cliente de Supabase no manda la petición hasta que alguien
+    // la espera —`await` o `.then`—, así que una llamada que nadie espera nunca sale.
     Supabase.instance.client.rpc(
       'increment_knowledge_views',
-      params: {'article_id': article.id},
-    );
+      params: {'article_id': original.id},
+    ).then((_) {}, onError: (e) => debugPrint('No se contó la visita: $e'));
+
+    // Y se suma aquí mismo, para que la tarjeta y el detalle la muestren sin recargar la lista.
+    final article = original.conVistas(original.views + 1);
+    final i = _articles.indexWhere((a) => a.id == article.id);
+    if (i != -1) setState(() => _articles[i] = article);
 
     showModalBottomSheet(
       context: context,
@@ -751,29 +789,41 @@ class _ArticleCard extends StatelessWidget {
               ],
               // ── Footer: file + views + date ──────────────────────────────
               const SizedBox(height: 10),
+              // Archivo y vistas a la izquierda, dentro de un `Expanded`; autor y fecha, siempre al final.
+              //
+              // Antes el nombre del archivo era un `Flexible` y detrás venía un `Spacer`: se repartían el
+              // espacio libre a MITADES, y el archivo no usaba toda su mitad. En las tarjetas con archivo
+              // el autor quedaba a media tarjeta, y en las que no tienen, al final.
               Row(
                 children: [
-                  if (article.fileUrl != null) ...[
-                    Icon(_fileIcon(article.fileType), size: 13, color: c.brand),
-                    const SizedBox(width: 4),
-                    Flexible(
-                      child: Text(
-                        article.fileName ?? 'Archivo adjunto',
-                        style: TextStyle(
-                            fontSize: 11,
-                            color: c.brand,
-                            fontWeight: FontWeight.w500),
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        if (article.fileUrl != null) ...[
+                          Icon(_fileIcon(article.fileType),
+                              size: 13, color: c.brand),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              article.fileName ?? 'Archivo adjunto',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: c.brand,
+                                  fontWeight: FontWeight.w500),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                        ],
+                        Icon(Icons.remove_red_eye_outlined,
+                            size: 13, color: c.ink4),
+                        const SizedBox(width: 4),
+                        Text('${article.views}',
+                            style: TextStyle(fontSize: 11, color: c.ink4)),
+                      ],
                     ),
-                    const SizedBox(width: 12),
-                  ],
-                  Icon(Icons.remove_red_eye_outlined,
-                      size: 13, color: c.ink4),
-                  const SizedBox(width: 4),
-                  Text('${article.views}',
-                      style: TextStyle(fontSize: 11, color: c.ink4)),
-                  const Spacer(),
+                  ),
+                  const SizedBox(width: 12),
                   if (article.createdByName != null) ...[
                     Text(article.createdByName!,
                         style: TextStyle(fontSize: 11, color: c.ink4)),
@@ -1403,9 +1453,13 @@ class _ArticleFormSheetState extends State<_ArticleFormSheet> {
                                       Icon(meta.$1,
                                           size: 14, color: meta.$2),
                                       const SizedBox(width: 8),
-                                      Text(cat,
-                                          style: TextStyle(
-                                              fontSize: 13, color: c.ink)),
+                                      // «Manuales y Procedimientos» no cabe en media fila de un teléfono.
+                                      Flexible(
+                                        child: Text(cat,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                                fontSize: 13, color: c.ink)),
+                                      ),
                                     ]),
                                   );
                                 }).toList(),
