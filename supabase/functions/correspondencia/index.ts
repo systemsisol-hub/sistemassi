@@ -8,6 +8,10 @@
 // registrado, en la tabla `correspondencia`. Ver `armarCorreo` en validar.ts, que es donde se
 // prueba todo esto.
 //
+// El cuerpo llega como documento del editor, no como HTML, y el HTML lo escribe `contenido.ts` con
+// una lista cerrada de formatos. Las listas de distribucion se expanden AQUI, en el momento de enviar:
+// asi una lista siempre llega a quien esta en ella hoy.
+//
 // La configuracion del servidor vive SOLO en los secretos de esta funcion -SMTP_HOST, SMTP_PORT,
 // SMTP_USER, SMTP_PASS, SMTP_FROM-, que se pegan en el panel de Supabase. No hay ninguna pantalla para
 // verla ni cambiarla, y la contraseña nunca sale de aqui: ni en respuestas ni en el registro.
@@ -19,10 +23,16 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import nodemailer from "npm:nodemailer@6.9.16";
 import {
   armarCorreo,
+  esUuid,
+  lotes,
   MAX_POR_HORA,
+  type Miembro,
+  type PerfilCorreo,
   puertoPermitido,
+  resolverMiembros,
   revisarRemitente,
-  validarMensaje,
+  validarContenido,
+  validarDestinatarios,
 } from "./validar.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -132,13 +142,58 @@ Deno.serve(async (req: Request) => {
   // no un envio fallido, y no tiene por que gastarle a nadie un intento del limite por hora.
   if (remitente.ok === false) return responde({ error: remitente.motivo }, 503);
 
-  const v = validarMensaje(entrada);
-  if (v.ok === false) return responde({ error: v.error, rechazados: v.rechazados ?? [] }, 400);
+  const c = validarContenido(entrada);
+  if (c.ok === false) return responde({ error: c.error }, 400);
+
+  // ── Las listas de distribucion ─────────────────────────────────────────────
+  //
+  // Se expanden aqui y no en la pantalla, en el momento de enviar: asi la lista llega a quien esta
+  // en ella HOY -un compañero que cambio de correo, o que se dio de baja- y no a la foto que tenia la
+  // pantalla cuando se cargo.
+  const idsListas = Array.isArray(entrada.listas) ? entrada.listas : [];
+  if (idsListas.some((x) => typeof x !== "string" || !esUuid(x))) {
+    return responde({ error: "Una de las listas no es valida. Recarga la pagina." }, 400);
+  }
+  const ids = [...new Set(idsListas as string[])];
+
+  let nombresListas: string[] = [];
+  let deListas: string[] = [];
+  let omitidos = 0;
+  if (ids.length > 0) {
+    const { data: listas } = await svc.from("listas_distribucion").select("id,nombre").in("id", ids);
+    // Una lista que se borro mientras alguien redactaba: se dice, en vez de mandar sin ella.
+    if (!listas || listas.length !== ids.length) {
+      return responde({
+        error: "Una de las listas elegidas ya no existe. Recarga la pagina y vuelve a elegirlas.",
+      }, 400);
+    }
+    nombresListas = (listas as Record<string, unknown>[]).map((l) => String(l.nombre));
+
+    const { data: miembros } = await svc.from("lista_miembros")
+      .select("profile_id,correo").in("lista_id", ids);
+    const lista = (miembros ?? []) as Miembro[];
+    const pids = [...new Set(lista.map((m) => m.profile_id).filter((x): x is string => !!x))];
+    const perfiles = new Map<string, PerfilCorreo>();
+    if (pids.length > 0) {
+      const { data: ps } = await svc.from("profiles")
+        .select("id,mail_user,email,status_sys").in("id", pids);
+      for (const p of (ps ?? []) as Record<string, unknown>[]) {
+        perfiles.set(String(p.id), p as unknown as PerfilCorreo);
+      }
+    }
+    const r = resolverMiembros(lista, perfiles);
+    deListas = r.correos;
+    omitidos = r.omitidos;
+  }
+
+  const sueltos = Array.isArray(entrada.destinatarios) ? entrada.destinatarios : [];
+  const d = validarDestinatarios([...sueltos, ...deListas]);
+  if (d.ok === false) return responde({ error: d.error, rechazados: d.rechazados ?? [] }, 400);
 
   // ── El limite por hora ─────────────────────────────────────────────────────
   //
   // Cuentan los intentos, no solo los enviados: si contaran solo los buenos, un servidor que falla
-  // dejaria reintentar sin tope contra el.
+  // dejaria reintentar sin tope contra el. Y cuentan COMUNICADOS, no tandas.
   const haceUnaHora = new Date(Date.now() - 60 * 60 * 1000).toISOString();
   const { count } = await svc.from("correspondencia")
     .select("id", { count: "exact", head: true })
@@ -146,7 +201,7 @@ Deno.serve(async (req: Request) => {
     .gte("creado_en", haceUnaHora);
   if ((count ?? 0) >= MAX_POR_HORA) {
     return responde({
-      error: `Llegaste al limite de ${MAX_POR_HORA} mensajes por hora. Intenta mas tarde.`,
+      error: `Llegaste al limite de ${MAX_POR_HORA} comunicados por hora. Intenta mas tarde.`,
     }, 429);
   }
 
@@ -159,17 +214,20 @@ Deno.serve(async (req: Request) => {
   const { data: fila, error: errFila } = await svc.from("correspondencia").insert({
     remitente_id: user.id,
     remitente_nombre: nombre || "(sin nombre)",
-    asunto: v.mensaje.asunto,
-    cuerpo: v.mensaje.cuerpo,
-    destinatarios: v.mensaje.destinatarios,
+    asunto: c.contenido.asunto,
+    cuerpo: c.contenido.texto,
+    cuerpo_html: c.contenido.html,
+    destinatarios: d.destinatarios,
+    listas: nombresListas,
     estado: "PENDIENTE",
   }).select("id").single();
   if (errFila || !fila) {
     return responde({ error: `No se pudo registrar el mensaje: ${errFila?.message ?? "sin id"}` }, 500);
   }
 
+  let transporte;
   try {
-    const transporte = nodemailer.createTransport({
+    transporte = nodemailer.createTransport({
       host: SMTP_HOST,
       port: SMTP_PORT,
       // 465 es TLS desde el primer byte. Cualquier otro puerto permitido se intenta con STARTTLS.
@@ -181,31 +239,64 @@ Deno.serve(async (req: Request) => {
       greetingTimeout: 10000,
       socketTimeout: 20000,
     });
-
-    const info = await transporte.sendMail(armarCorreo(v.mensaje, remitente.direccion));
-
-    // Lo que el servidor NO acepto, aunque el envio en conjunto no fallara.
-    const noAceptados = Array.isArray(info?.rejected) ? info.rejected.map(String) : [];
-
-    await svc.from("correspondencia").update({
-      estado: noAceptados.length === 0 ? "ENVIADO" : "FALLIDO",
-      enviado_en: new Date().toISOString(),
-      error: noAceptados.length === 0
-        ? null
-        : `El servidor no acepto: ${noAceptados.join(", ")}`,
-    }).eq("id", fila.id);
-
-    return responde({
-      ok: noAceptados.length === 0,
-      id: fila.id,
-      enviados: v.mensaje.destinatarios.length - noAceptados.length,
-      no_aceptados: noAceptados,
-    });
   } catch (e) {
     const detalle = errorLimpio(e);
-    console.error(`correspondencia ${fila.id}: ${detalle}`);
-    await svc.from("correspondencia").update({ estado: "FALLIDO", error: detalle })
-      .eq("id", fila.id);
+    await svc.from("correspondencia").update({ estado: "FALLIDO", error: detalle }).eq("id", fila.id);
     return responde({ error: `No se pudo enviar: ${detalle}`, id: fila.id }, 502);
   }
+
+  // ── El envio, por tandas ───────────────────────────────────────────────────
+  //
+  // Una tanda que falla no detiene las demas: si la segunda tanda de dos falla, la primera ya salio y
+  // eso no se puede deshacer. Lo honesto es seguir, y registrar exactamente a cuantos llego. De ahi
+  // el estado PARCIAL: ni ENVIADO -que diria que llego a todos- ni FALLIDO -que diria que a nadie-.
+  const tandas = lotes(d.destinatarios);
+  let enviados = 0;
+  const noAceptados: string[] = [];
+  const fallas: string[] = [];
+  for (let i = 0; i < tandas.length; i++) {
+    const lote = tandas[i];
+    try {
+      const info = await transporte.sendMail(armarCorreo(c.contenido, remitente.direccion, lote));
+      // Lo que el servidor NO acepto de esta tanda, aunque la tanda en conjunto no fallara.
+      const rechazados = Array.isArray(info?.rejected) ? info.rejected.map(String) : [];
+      noAceptados.push(...rechazados);
+      enviados += lote.length - rechazados.length;
+    } catch (e) {
+      const detalle = errorLimpio(e);
+      console.error(`correspondencia ${fila.id}, tanda ${i + 1}/${tandas.length}: ${detalle}`);
+      fallas.push(tandas.length > 1
+        ? `Tanda ${i + 1} de ${tandas.length} (${lote.length} destinatarios): ${detalle}`
+        : detalle);
+    }
+  }
+
+  const total = d.destinatarios.length;
+  const estado = enviados === total ? "ENVIADO" : enviados === 0 ? "FALLIDO" : "PARCIAL";
+  const error = [
+    ...fallas,
+    ...(noAceptados.length > 0 ? [`El servidor no acepto: ${noAceptados.join(", ")}`] : []),
+  ].join(" · ").slice(0, 2000) || null;
+
+  await svc.from("correspondencia").update({
+    estado,
+    enviado_en: enviados > 0 ? new Date().toISOString() : null,
+    error,
+  }).eq("id", fila.id);
+
+  if (estado === "FALLIDO") {
+    return responde({ error: `No se pudo enviar: ${error ?? "sin detalle"}`, id: fila.id }, 502);
+  }
+  return responde({
+    ok: estado === "ENVIADO",
+    estado,
+    id: fila.id,
+    total,
+    enviados,
+    no_aceptados: noAceptados,
+    error,
+    // Gente de las listas que ya no alcanza: dados de baja o sin correo. Se dice para que se limpie
+    // la lista, no para detener el envio.
+    omitidos,
+  });
 });

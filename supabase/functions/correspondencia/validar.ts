@@ -1,27 +1,42 @@
-// Lo que decide si un mensaje se puede mandar, y como se escribe.
+// Lo que decide si un comunicado se puede mandar, a quien, y como sale.
 //
-// Sin imports y sin efectos, a proposito: asi el arnes lo ejercita tal cual, sin copiar nada.
+// Sin efectos, a proposito: asi el arnes lo ejercita tal cual. Solo importa `contenido.ts`, que
+// tampoco tiene efectos.
 //
 // ─── Por que la validacion vive en el servidor ───────────────────────────────
 //
 // La pantalla tambien valida, pero SOLO para avisar pronto. La que manda es esta: la funcion es la
 // unica puerta hacia el servidor de correo, y una validacion que vive solo en la aplicacion la salta
-// cualquiera que llame a la funcion directamente. Las dos usan la misma expresion y la misma tabla de
-// casos en sus pruebas -ver `test/correspondencia_test.dart`- para que no se separen sin que nadie lo
-// note.
+// cualquiera que llame a la funcion directamente. Las dos usan la misma expresion de correo y la misma
+// tabla de casos en sus pruebas -ver `test/correspondencia_test.dart`- para que no se separen sin que
+// nadie lo note.
 
-/// Tope de destinatarios por mensaje.
+import { deltaAHtml } from "./contenido.ts";
+
+/// Tope de destinatarios por COMUNICADO, contando los que salen de las listas.
 ///
-/// El modulo puede escribir a CUALQUIER direccion, tambien externa -decision del usuario el
-/// 23/09/2026-, asi que esto y el limite por hora son lo que impide que una cuenta con el permiso se
-/// convierta en una fuente de envios masivos desde la cuenta de la empresa.
-export const MAX_DESTINATARIOS = 50;
+/// Era 50 por mensaje, y con las listas de distribucion eso no alcanzaba: hay 74 empleados activos
+/// con correo, asi que una lista de «todos» ya no se podia mandar. Ahora el tope es por comunicado y
+/// el envio se parte en tandas de `TAMANO_LOTE` -ver `lotes`-. 500 deja margen de sobra sobre la
+/// plantilla y sigue impidiendo que el modulo se use para envios masivos desde la cuenta de la
+/// empresa, que es para lo que existia el tope.
+export const MAX_DESTINATARIOS = 500;
 
-/// Mensajes por usuario en la ultima hora.
+/// Destinatarios por MENSAJE al servidor de correo.
+///
+/// Los servidores limitan cuantos destinatarios acepta un solo mensaje, y el limite varia -100, 250,
+/// 500-. 50 cabe en casi todos, y un comunicado a toda la plantilla sale en dos tandas.
+export const TAMANO_LOTE = 50;
+
+/// Comunicados por usuario en la ultima hora. Cuenta comunicados, no tandas.
 export const MAX_POR_HORA = 20;
 
 export const MAX_ASUNTO = 200;
+/// Tope del texto, sin formato.
 export const MAX_CUERPO = 20000;
+/// Tope del HTML ya convertido. Con estilos en linea -que es como hay que escribirlos para el correo-
+/// el HTML ocupa varias veces el texto.
+export const MAX_HTML = 200000;
 
 /// Una direccion de correo razonable. No pretende cubrir todo el RFC 5322: pretende rechazar lo que
 /// seguro esta mal -espacios, dos arrobas, sin dominio, caracteres que partirian una cabecera- y
@@ -32,6 +47,10 @@ const CORREO = /^[^\s@<>(),;:"\[\]\\]+@[^\s@<>(),;:"\[\]\\]+\.[A-Za-z]{2,}$/;
 
 export function esCorreo(s: string): boolean {
   return CORREO.test(s);
+}
+
+export function esUuid(s: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
 }
 
 /// De una lista de textos -cada uno puede traer varias direcciones separadas por coma, punto y coma,
@@ -59,21 +78,22 @@ export function normalizarDestinatarios(
   return { validos, rechazados };
 }
 
-export interface Mensaje {
+/// El asunto y el cuerpo, ya en los dos formatos en que sale el correo.
+export interface Contenido {
   asunto: string;
-  cuerpo: string;
-  destinatarios: string[];
+  html: string;
+  texto: string;
 }
 
-export type Validacion =
-  | { ok: true; mensaje: Mensaje }
-  | { ok: false; error: string; rechazados?: string[] };
-
-/** Si el mensaje se puede mandar tal como viene. */
-export function validarMensaje(entrada: unknown): Validacion {
+/// Si el asunto y el cuerpo se pueden mandar.
+///
+/// El cuerpo llega como documento del editor en `contenido`, NUNCA como HTML: el HTML lo escribe
+/// `deltaAHtml` con una lista cerrada de formatos. Ver `contenido.ts`.
+export function validarContenido(
+  entrada: unknown,
+): { ok: true; contenido: Contenido } | { ok: false; error: string } {
   const e = (entrada ?? {}) as Record<string, unknown>;
   const asunto = typeof e.asunto === "string" ? e.asunto.trim() : "";
-  const cuerpo = typeof e.cuerpo === "string" ? e.cuerpo.trim() : "";
 
   if (asunto === "") return { ok: false, error: "Falta el asunto." };
   if (asunto.length > MAX_ASUNTO) {
@@ -85,16 +105,29 @@ export function validarMensaje(entrada: unknown): Validacion {
   if (/[\r\n]/.test(asunto)) {
     return { ok: false, error: "El asunto no puede llevar saltos de linea." };
   }
-  if (cuerpo === "") return { ok: false, error: "Falta el mensaje." };
-  if (cuerpo.length > MAX_CUERPO) {
+
+  const convertido = deltaAHtml(e.contenido);
+  if (convertido === null) {
+    return { ok: false, error: "El mensaje no tiene un formato valido. Recarga la pagina e intenta de nuevo." };
+  }
+  if (convertido.texto.trim() === "") return { ok: false, error: "Falta el mensaje." };
+  if (convertido.texto.length > MAX_CUERPO) {
     return { ok: false, error: `El mensaje pasa de ${MAX_CUERPO} caracteres.` };
   }
+  if (convertido.html.length > MAX_HTML) {
+    return { ok: false, error: "El mensaje tiene demasiado formato. Simplificalo un poco." };
+  }
+  return { ok: true, contenido: { asunto, html: convertido.html, texto: convertido.texto } };
+}
 
-  const { validos, rechazados } = normalizarDestinatarios(e.destinatarios);
-
-  // Se rechaza el envio ENTERO si alguna direccion esta mal, en lugar de mandar a las buenas y
-  // callarse las malas. Si no, alguien no recibe el correo y nadie se entera: quien lo mando cree
-  // que salio a todos.
+/// Si la lista final de destinatarios -los escritos a mano MAS los de las listas- se puede mandar.
+///
+/// Se rechaza el envio ENTERO si alguna direccion esta mal, en lugar de mandar a las buenas y
+/// callarse las malas: si no, alguien no recibe el correo y nadie se entera.
+export function validarDestinatarios(
+  lista: unknown,
+): { ok: true; destinatarios: string[] } | { ok: false; error: string; rechazados?: string[] } {
+  const { validos, rechazados } = normalizarDestinatarios(lista);
   if (rechazados.length > 0) {
     return {
       ok: false,
@@ -108,11 +141,68 @@ export function validarMensaje(entrada: unknown): Validacion {
   if (validos.length > MAX_DESTINATARIOS) {
     return {
       ok: false,
-      error: `Son ${validos.length} destinatarios y el maximo por mensaje es ${MAX_DESTINATARIOS}.`,
+      error: `Son ${validos.length} destinatarios y el maximo por comunicado es ${MAX_DESTINATARIOS}.`,
     };
   }
+  return { ok: true, destinatarios: validos };
+}
 
-  return { ok: true, mensaje: { asunto, cuerpo, destinatarios: validos } };
+/// La lista partida en tandas de `tamano`, en el mismo orden.
+export function lotes<T>(lista: T[], tamano = TAMANO_LOTE): T[][] {
+  const t = Math.max(1, Math.floor(tamano));
+  const salida: T[][] = [];
+  for (let i = 0; i < lista.length; i += t) salida.push(lista.slice(i, i + t));
+  return salida;
+}
+
+/// Un miembro de una lista: un compañero O un correo tecleado. Nunca los dos.
+export interface Miembro {
+  profile_id: string | null;
+  correo: string | null;
+}
+
+export interface PerfilCorreo {
+  mail_user: string | null;
+  email: string | null;
+  status_sys: string | null;
+}
+
+/// Los correos a los que llega una lista HOY.
+///
+/// Los compañeros se guardan por PERSONA, no por correo, y el correo se busca en el momento de
+/// enviar. Asi, si alguien cambia de correo la lista no se queda vieja, y quien se da de baja deja de
+/// recibir sin que nadie tenga que acordarse de sacarlo. Esos casos no se callan: se cuentan en
+/// `omitidos` para que quien envia sepa que la lista tiene gente que ya no alcanza.
+///
+/// El correo de un compañero es su buzon de trabajo si lo tiene, y si no el de su cuenta: el MISMO
+/// criterio que el Directorio y que la pantalla.
+export function resolverMiembros(
+  miembros: Miembro[],
+  perfiles: Map<string, PerfilCorreo>,
+): { correos: string[]; omitidos: number } {
+  const correos: string[] = [];
+  let omitidos = 0;
+  const agregar = (c: string) => {
+    if (!correos.includes(c)) correos.push(c);
+  };
+
+  for (const m of miembros) {
+    if (m.correo) {
+      agregar(m.correo.trim().toLowerCase());
+      continue;
+    }
+    const p = m.profile_id ? perfiles.get(m.profile_id) : undefined;
+    if (!p || p.status_sys !== "ACTIVO") {
+      omitidos++;
+      continue;
+    }
+    const suyo = [p.mail_user, p.email]
+      .map((x) => String(x ?? "").trim().toLowerCase())
+      .find((x) => x !== "" && esCorreo(x));
+    if (suyo) agregar(suyo);
+    else omitidos++;
+  }
+  return { correos, omitidos };
 }
 
 /// El nombre con el que sale TODO comunicado, sea quien sea quien lo escribio.
@@ -122,31 +212,7 @@ export function validarMensaje(entrada: unknown): Validacion {
 /// queda registrado, pero en la tabla `correspondencia`, no en el correo.
 export const NOMBRE_REMITENTE = "Comunicación SI SOL";
 
-export function escaparHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-/// El cuerpo en texto, tal cual lo escribieron. Sin pie: lo pidio el usuario, y el pie decia quien
-/// lo habia mandado.
-export function cuerpoTexto(cuerpo: string): string {
-  return cuerpo;
-}
-
-/// El cuerpo en HTML. TODO lo que escribio el usuario se escapa: el mensaje se pinta como texto,
-/// nunca como marcado. Si no, cualquiera con el permiso podria mandar, desde la cuenta de la
-/// empresa, un correo con enlaces o formularios disfrazados.
-export function cuerpoHtml(cuerpo: string): string {
-  const texto = escaparHtml(cuerpo).replace(/\r?\n/g, "<br>");
-  return `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#1f2330">`
-    + `${texto}</div>`;
-}
-
-/// El correo tal como sale, listo para la libreria.
+/// Una tanda del comunicado, tal como sale, lista para la libreria.
 ///
 /// ─── Por que es una funcion aparte ──────────────────────────────────────────
 ///
@@ -154,17 +220,17 @@ export function cuerpoHtml(cuerpo: string): string {
 ///
 ///   * Que salga como «Comunicación SI SOL» y NO con el nombre de quien lo escribio. Esta funcion
 ///     ni siquiera recibe ese nombre, asi que no hay forma de que se cuele.
-///   * Que NO lleve `Reply-To`. Antes llevaba el correo de quien lo mando, y eso descubria quien
-///     habia sido en cuanto alguien pulsaba «Responder»: cambiar solo el nombre visible no bastaba.
-///     Sin `Reply-To` las respuestas van a la cuenta compartida.
+///   * Que NO lleve `Reply-To`. Llevaba el correo de quien lo mando, y eso descubria quien habia
+///     sido en cuanto alguien pulsaba «Responder»: cambiar solo el nombre visible no bastaba.
 ///   * Que los destinatarios NO se vean entre si: van en copia oculta (`bcc`).
 ///
 /// En `to` va la propia cuenta compartida. Un correo sin ningun destinatario visible es de los que
 /// los filtros marcan como spam; poniendo la cuenta como destinataria es el patron clasico de
-/// «destinatarios ocultos», y de paso la cuenta se queda con una copia de cada comunicado.
+/// «destinatarios ocultos», y de paso la cuenta se queda con una copia.
 export function armarCorreo(
-  mensaje: Mensaje,
+  contenido: Contenido,
   cuenta: string,
+  lote: string[],
 ): {
   from: { name: string; address: string };
   to: string;
@@ -176,10 +242,10 @@ export function armarCorreo(
   return {
     from: { name: NOMBRE_REMITENTE, address: cuenta },
     to: cuenta,
-    bcc: mensaje.destinatarios,
-    subject: mensaje.asunto,
-    text: cuerpoTexto(mensaje.cuerpo),
-    html: cuerpoHtml(mensaje.cuerpo),
+    bcc: lote,
+    subject: contenido.asunto,
+    text: contenido.texto,
+    html: contenido.html,
   };
 }
 

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sistemassi/services/correspondencia.dart';
 
@@ -98,5 +100,91 @@ void main() {
     test('sin mensaje', () {
       expect(queFalta(asunto: 'a', cuerpo: '  ', destinatarios: 1), 'Falta el mensaje.');
     });
+    test('el tope alcanza para toda la plantilla (74 empleados)', () {
+      // Con el tope de 50 de antes, una lista de «todos» ya no se podía mandar.
+      expect(maxDestinatarios, greaterThanOrEqualTo(74));
+    });
+  });
+
+  // El MISMO criterio que `resolverMiembros` del servidor, con los mismos casos: la pantalla lo usa
+  // para decir a cuántos llega, y si contara distinto que el servidor, mentiría antes de enviar.
+  group('a quién llega una lista hoy', () {
+    final r = correosDeLista([
+      {'profiles': {'mail_user': 'Ana@Sisol.com.mx', 'email': 'ana.cuenta@x.com', 'status_sys': 'ACTIVO'}},
+      {'profiles': {'mail_user': '', 'email': 'beto@x.com', 'status_sys': 'ACTIVO'}},
+      {'profiles': {'mail_user': 'carla@sisol.com.mx', 'email': null, 'status_sys': 'BAJA'}},
+      {'profiles': {'mail_user': 'no-es-correo', 'email': '', 'status_sys': 'ACTIVO'}},
+      {'profiles': null},
+      {'correo': 'Externo@Cliente.com'},
+      {'correo': 'ana@sisol.com.mx'},
+    ]);
+
+    test('del compañero, el buzón de trabajo antes que el de la cuenta', () {
+      expect(r.correos, contains('ana@sisol.com.mx'));
+    });
+    test('sin buzón de trabajo, el de la cuenta', () => expect(r.correos, contains('beto@x.com')));
+    test('el correo tecleado va en minúsculas', () => expect(r.correos, contains('externo@cliente.com')));
+    test('quien se dio de BAJA ya no recibe', () {
+      expect(r.correos, isNot(contains('carla@sisol.com.mx')));
+    });
+    test('se cuentan los que ya no alcanza (baja, sin correo, borrado)', () => expect(r.omitidos, 3));
+    test('y no se repite quien está dos veces', () {
+      expect(r.correos.where((c) => c == 'ana@sisol.com.mx').length, 1);
+    });
+  });
+
+  group('el nombre de un perfil', () {
+    test('completo', () => expect(nombreDe({'nombre': 'Ana', 'paterno': 'López', 'materno': 'R'}), 'Ana López R'));
+    test('sin materno', () => expect(nombreDe({'nombre': 'Ana', 'paterno': 'López'}), 'Ana López'));
+    test('sin nada', () => expect(nombreDe({'nombre': ' ', 'paterno': null}), isNull));
+  });
+
+  // ─── El editor sólo ofrece lo que el servidor sabe convertir ──────────────
+  //
+  // La barra de herramientas está en `correspondencia_page.dart` y el conversor a HTML en
+  // `supabase/functions/correspondencia/contenido.ts`. Un botón encendido aquí que el conversor no
+  // conozca aparecería en pantalla y DESAPARECERÍA en el correo sin avisar. Se lee el fuente, como
+  // `menu_agrupado_test.dart`, para que la prueba no pueda quedar mirando una copia vieja.
+  group('la barra del editor y el conversor dicen lo mismo', () {
+    final pagina = File('lib/correspondencia_page.dart').readAsStringSync();
+    final conversor = File('supabase/functions/correspondencia/contenido.ts').readAsStringSync();
+
+    // Los formatos que el conversor NO tiene y que por eso tienen que estar apagados en la barra.
+    const apagados = [
+      'showFontFamily', 'showFontSize', 'showSmallButton', 'showLineHeightButton',
+      'showInlineCode', 'showCodeBlock', 'showListCheck', 'showIndent',
+      'showSubscript', 'showSuperscript', 'showDirection', 'showJustifyAlignment',
+    ];
+    for (final b in apagados) {
+      test('«$b» está apagado', () {
+        expect(RegExp('$b:\\s*false').hasMatch(pagina), isTrue,
+            reason: 'Encendido, ofrecería un formato que el correo no lleva.');
+      });
+    }
+
+    test('los títulos se limitan a 1, 2 y 3', () {
+      expect(pagina, contains('attributes: [Attribute.h1, Attribute.h2, Attribute.h3, Attribute.header]'));
+    });
+
+    // Y del otro lado, que el conversor sí maneja cada formato que la barra deja encendido.
+    const conversorManeja = {
+      'negrita': 'attrs.bold',
+      'cursiva': 'attrs.italic',
+      'subrayado': 'attrs.underline',
+      'tachado': 'attrs.strike',
+      'color': 'attrs.color',
+      'color de fondo': 'attrs.background',
+      'enlace': 'attrs.link',
+      'títulos': 'attrs.header',
+      'listas': 'attrs.list',
+      'cita': 'attrs.blockquote',
+      'alineación': 'attrs.align',
+    };
+    for (final e in conversorManeja.entries) {
+      test('el conversor maneja «${e.key}»', () {
+        expect(conversor, contains(e.value),
+            reason: 'La barra lo ofrece y el conversor lo ignoraría: saldría como texto normal.');
+      });
+    }
   });
 }

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_quill/flutter_quill.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'correspondencia_listas.dart';
 import 'services/correspondencia.dart';
 import 'theme/si_theme.dart';
 
@@ -9,15 +11,16 @@ import 'theme/si_theme.dart';
 ///
 /// Lo usan tres personas —decisión del usuario el 23/09/2026—, y el correo sale como «Comunicación
 /// SI SOL»: sin el nombre de quien lo escribe, sin pie, y con los destinatarios en copia oculta. Quién
-/// lo envió SÍ queda registrado, y se ve aquí en el historial.
+/// lo envió SÍ queda registrado, y se ve en el historial.
 ///
-/// La pantalla NO manda nada por sí misma: llama a la función `correspondencia`, que es la única que
-/// tiene los datos del servidor de correo y la que decide si el mensaje sale. Lo que se valida aquí
-/// es sólo para avisar pronto; ver `services/correspondencia.dart`.
+/// Tres pestañas: redactar, listas de distribución, y lo enviado.
 ///
-/// El historial se lee directo de la tabla `correspondencia`, y quién puede leerlo lo decide RLS: los
-/// que tienen el permiso ven TODOS los comunicados, no sólo los suyos. Con un único remitente para
-/// todos, los tres necesitan ver qué salió ya, o acabarán mandando dos veces el mismo aviso.
+/// La pantalla NO manda nada por sí misma ni escribe HTML: manda el DOCUMENTO del editor a la función
+/// `correspondencia`, que es la que lo convierte a HTML con una lista cerrada de formatos, expande las
+/// listas y decide si el comunicado sale. Lo que se valida aquí es sólo para avisar pronto.
+///
+/// El historial y las listas se leen directo de sus tablas, y quién puede lo decide RLS: los que
+/// tienen el permiso ven TODO, no sólo lo suyo.
 class CorrespondenciaPage extends StatefulWidget {
   const CorrespondenciaPage({super.key});
 
@@ -25,21 +28,29 @@ class CorrespondenciaPage extends StatefulWidget {
   State<CorrespondenciaPage> createState() => _CorrespondenciaPageState();
 }
 
-typedef _Colaborador = ({String nombre, String correo});
+/// Algo que se puede elegir en «Para»: un compañero o una lista.
+typedef _Opcion = ({bool esLista, String clave, String titulo, String detalle});
 
 class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
   final _supabase = Supabase.instance.client;
   final _asuntoCtrl = TextEditingController();
-  final _cuerpoCtrl = TextEditingController();
+  final _editor = QuillController.basic();
 
   /// El campo de destinatarios lo crea el `Autocomplete`; se guarda para poder vaciarlo al elegir.
   TextEditingController? _campoDest;
 
+  /// Correos sueltos, tecleados o de compañeros elegidos uno por uno.
   final List<String> _destinatarios = [];
-  List<_Colaborador> _colaboradores = [];
+
+  /// Ids de las listas elegidas. Se mandan como ids: la función las expande al enviar.
+  final List<String> _listasElegidas = [];
+
+  List<Colaborador> _colaboradores = [];
+  List<Map<String, dynamic>> _listas = [];
   List<Map<String, dynamic>> _enviados = [];
 
   bool _cargandoEnviados = true;
+  bool _cargandoListas = true;
   bool _enviando = false;
   String? _avisoDest;
 
@@ -51,6 +62,7 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
   void initState() {
     super.initState();
     _cargarColaboradores();
+    _cargarListas();
     _cargarEnviados();
     _cargarConfig();
   }
@@ -58,7 +70,7 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
   @override
   void dispose() {
     _asuntoCtrl.dispose();
-    _cuerpoCtrl.dispose();
+    _editor.dispose();
     super.dispose();
   }
 
@@ -67,22 +79,42 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
       // `mail_pass` NO se pide, a propósito: esta pantalla no la necesita.
       final filas = await _supabase
           .from('profiles')
-          .select('nombre, paterno, materno, mail_user, email')
+          .select('id, nombre, paterno, materno, mail_user, email')
           .eq('status_sys', 'ACTIVO')
           .order('nombre', ascending: true);
-      final lista = <_Colaborador>[];
+      final lista = <Colaborador>[];
       for (final f in filas) {
         final correo = correoDe(f);
         if (correo == null) continue;
-        final nombre = [f['nombre'], f['paterno'], f['materno']]
-            .map((x) => (x ?? '').toString().trim())
-            .where((x) => x.isNotEmpty)
-            .join(' ');
-        lista.add((nombre: nombre.isEmpty ? correo : nombre, correo: correo));
+        lista.add((id: f['id'].toString(), nombre: nombreDe(f) ?? correo, correo: correo));
       }
       if (mounted) setState(() => _colaboradores = lista);
     } catch (e) {
       debugPrint('Correspondencia: no se cargaron los colaboradores: $e');
+    }
+  }
+
+  /// Las listas CON su gente, en una sola consulta: cada miembro trae su perfil embebido, que es lo
+  /// que hace falta para saber a cuántos llega hoy.
+  Future<void> _cargarListas() async {
+    setState(() => _cargandoListas = true);
+    try {
+      final filas = await _supabase
+          .from('listas_distribucion')
+          .select('id, nombre, descripcion, actualizado_en, '
+              'lista_miembros(id, correo, profile_id, '
+              'profiles(nombre, paterno, materno, mail_user, email, status_sys))')
+          .order('nombre', ascending: true);
+      if (!mounted) return;
+      setState(() {
+        _listas = List<Map<String, dynamic>>.from(filas);
+        // Una lista elegida que ya no existe —la borró otra persona— se quita del mensaje.
+        _listasElegidas.removeWhere((id) => !_listas.any((l) => l['id'] == id));
+      });
+    } catch (e) {
+      debugPrint('Correspondencia: no se cargaron las listas: $e');
+    } finally {
+      if (mounted) setState(() => _cargandoListas = false);
     }
   }
 
@@ -91,7 +123,7 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
     try {
       final filas = await _supabase
           .from('correspondencia')
-          .select('id, remitente_nombre, asunto, destinatarios, estado, error, creado_en')
+          .select('id, remitente_nombre, asunto, destinatarios, listas, estado, error, creado_en')
           .order('creado_en', ascending: false)
           .limit(50);
       if (mounted) setState(() => _enviados = List<Map<String, dynamic>>.from(filas));
@@ -108,7 +140,6 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
           .invoke('correspondencia', body: {'configuracion': true});
       if (mounted) setState(() => _config = Map<String, dynamic>.from(r.data as Map));
     } catch (e) {
-      // Si la función todavía no está desplegada, se dice igual que si no estuviera configurada.
       if (mounted) {
         setState(() => _config = {'configurado': false, 'error': _mensajeDe(e)});
       }
@@ -116,9 +147,6 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
   }
 
   /// El texto que se le enseña a la persona, no el volcado técnico del error.
-  ///
-  /// La función contesta `{error: "..."}` con un motivo escrito para leerse —«Llegaste al límite de
-  /// 20 mensajes por hora»—, y eso es lo que hay que mostrar, no `FunctionException(status: 429...)`.
   String _mensajeDe(Object e) {
     if (e is FunctionException) {
       final d = e.details;
@@ -131,6 +159,21 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
       return 'El servidor respondió con el error ${e.status}.';
     }
     return e.toString();
+  }
+
+  Map<String, dynamic>? _lista(String id) => _listas.where((l) => l['id'] == id).firstOrNull;
+
+  /// A quiénes va a llegar, contando las listas y sin repetir. Es una estimación para la pantalla: la
+  /// cuenta de verdad la hace la función al enviar.
+  List<String> get _todos {
+    final todos = <String>{..._destinatarios};
+    for (final id in _listasElegidas) {
+      final l = _lista(id);
+      if (l == null) continue;
+      todos.addAll(correosDeLista(List<Map<String, dynamic>>.from(l['lista_miembros'] ?? const []))
+          .correos);
+    }
+    return todos.toList();
   }
 
   void _agregarTexto(String texto) {
@@ -147,20 +190,20 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
     _campoDest?.text = r.rechazados.join(', ');
   }
 
-  void _agregarColaborador(_Colaborador c) {
+  void _elegir(_Opcion o) {
     setState(() {
-      if (!_destinatarios.contains(c.correo)) _destinatarios.add(c.correo);
+      if (o.esLista) {
+        if (!_listasElegidas.contains(o.clave)) _listasElegidas.add(o.clave);
+      } else if (!_destinatarios.contains(o.clave)) {
+        _destinatarios.add(o.clave);
+      }
       _avisoDest = null;
     });
     _campoDest?.clear();
   }
 
-  String _nombreDeCorreo(String correo) {
-    for (final c in _colaboradores) {
-      if (c.correo == correo) return c.nombre;
-    }
-    return correo;
-  }
+  String _nombreDeCorreo(String correo) =>
+      _colaboradores.where((c) => c.correo == correo).firstOrNull?.nombre ?? correo;
 
   Future<void> _enviar() async {
     // Lo que quede escrito en el campo cuenta: quien teclea una dirección y pulsa «Enviar» sin darle
@@ -171,25 +214,27 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
       if (_avisoDest != null) return;
     }
 
+    final todos = _todos;
     final falta = queFalta(
       asunto: _asuntoCtrl.text,
-      cuerpo: _cuerpoCtrl.text,
-      destinatarios: _destinatarios.length,
+      cuerpo: _editor.document.toPlainText(),
+      destinatarios: todos.length,
     );
     if (falta != null) {
       _aviso(falta, error: true);
       return;
     }
 
-    // Se confirma porque no se puede deshacer: un correo que salió, salió.
-    final n = _destinatarios.length;
+    // Se confirma porque no se puede deshacer: un comunicado que salió, salió.
+    final n = todos.length;
     final seguro = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Enviar correo'),
-        content: Text(n == 1
-            ? '¿Enviar «${_asuntoCtrl.text.trim()}» a ${_nombreDeCorreo(_destinatarios.first)}?'
-            : '¿Enviar «${_asuntoCtrl.text.trim()}» a $n destinatarios?'),
+        title: const Text('Enviar comunicado'),
+        content: Text('¿Enviar «${_asuntoCtrl.text.trim()}» a '
+            '${n == 1 ? _nombreDeCorreo(todos.first) : '$n destinatarios'}?'
+            '${_listasElegidas.isNotEmpty ? '\n\nLas listas se revisan al enviar: si alguien entró '
+                'o salió, la cuenta final puede cambiar un poco.' : ''}'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Enviar')),
@@ -202,22 +247,30 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
     try {
       final r = await _supabase.functions.invoke('correspondencia', body: {
         'asunto': _asuntoCtrl.text.trim(),
-        'cuerpo': _cuerpoCtrl.text.trim(),
+        // El DOCUMENTO del editor, no HTML: el HTML lo escribe la función. Ver contenido.ts.
+        'contenido': _editor.document.toDelta().toJson(),
         'destinatarios': _destinatarios,
+        'listas': _listasElegidas,
       });
       final datos = Map<String, dynamic>.from(r.data as Map);
-      final noAceptados = (datos['no_aceptados'] as List?)?.cast<String>() ?? const [];
       if (!mounted) return;
-      if (noAceptados.isEmpty) {
-        _aviso(n == 1 ? 'Correo enviado.' : 'Correo enviado a $n destinatarios.');
+      final enviados = datos['enviados'] ?? 0;
+      final total = datos['total'] ?? 0;
+      final omitidos = (datos['omitidos'] as num?)?.toInt() ?? 0;
+      final nota = omitidos > 0
+          ? ' $omitidos de las listas ya no están activos o no tienen correo, y se saltaron.'
+          : '';
+      if (datos['estado'] == 'ENVIADO') {
+        _aviso('Comunicado enviado a $enviados ${enviados == 1 ? 'destinatario' : 'destinatarios'}.$nota');
         setState(() {
           _destinatarios.clear();
+          _listasElegidas.clear();
           _asuntoCtrl.clear();
-          _cuerpoCtrl.clear();
+          _editor.clear();
         });
       } else {
-        // Salió, pero no a todos: se dice a quién no, y se deja el borrador para reintentar.
-        _aviso('El servidor no aceptó: ${noAceptados.join(', ')}.', error: true);
+        // Salió, pero no a todos: se dice a cuántos, y se deja el borrador para revisar.
+        _aviso('Salió a $enviados de $total. ${datos['error'] ?? ''}$nota', error: true);
       }
     } catch (e) {
       // Si falla, el borrador se queda intacto para poder reintentar sin volver a escribirlo.
@@ -232,112 +285,148 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(texto),
       backgroundColor: error ? Colors.red[700] : null,
+      duration: Duration(seconds: error ? 8 : 4),
     ));
   }
 
   @override
   Widget build(BuildContext context) {
     final c = SiColors.of(context);
-    return Scaffold(
-      backgroundColor: c.bg,
-      body: LayoutBuilder(builder: (context, constraints) {
-        final ancho = constraints.maxWidth > 1100;
-        final redactar = _tarjetaRedactar(c);
-        final enviados = _tarjetaEnviados(c);
-        return SingleChildScrollView(
-          padding: EdgeInsets.symmetric(horizontal: SiSpace.x6, vertical: SiSpace.x4),
-          child: ancho
-              ? Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(flex: 3, child: redactar),
-                    SizedBox(width: SiSpace.x6),
-                    Expanded(flex: 2, child: enviados),
-                  ],
-                )
-              : Column(children: [redactar, SizedBox(height: SiSpace.x6), enviados]),
-        );
-      }),
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        backgroundColor: c.bg,
+        appBar: PreferredSize(
+          preferredSize: const Size.fromHeight(48),
+          child: Material(
+            color: c.bg,
+            child: TabBar(
+              isScrollable: true,
+              tabAlignment: TabAlignment.start,
+              tabs: [
+                const Tab(icon: Icon(Icons.edit_outlined, size: 18), text: 'Nuevo comunicado'),
+                Tab(
+                  icon: const Icon(Icons.groups_outlined, size: 18),
+                  text: 'Listas${_listas.isEmpty ? '' : ' (${_listas.length})'}',
+                ),
+                const Tab(icon: Icon(Icons.outbox_outlined, size: 18), text: 'Enviados'),
+              ],
+            ),
+          ),
+        ),
+        body: TabBarView(children: [
+          _pestanaRedactar(c),
+          ListasDistribucionTab(
+            listas: _listas,
+            colaboradores: _colaboradores,
+            cargando: _cargandoListas,
+            alCambiar: _cargarListas,
+          ),
+          _pestanaEnviados(c),
+        ]),
+      ),
     );
   }
 
-  Widget _tarjeta(SiColors c, {required String titulo, required IconData icono,
-      Widget? accion, required Widget cuerpo}) {
-    return Card(
-      elevation: 0,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(
-          borderRadius: SiRadius.rLg, side: BorderSide(color: c.line)),
-      child: Padding(
-        padding: EdgeInsets.all(SiSpace.x5),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(children: [
-              Icon(icono, size: 20, color: c.brand),
-              SizedBox(width: SiSpace.x2),
-              Expanded(
-                child: Text(titulo,
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+  Widget _pestanaRedactar(SiColors c) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.symmetric(horizontal: SiSpace.x6, vertical: SiSpace.x4),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 900),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _avisoConfiguracion(c),
+              _campoDestinatarios(c),
+              SizedBox(height: SiSpace.x4),
+              TextField(
+                controller: _asuntoCtrl,
+                maxLength: maxAsunto,
+                decoration: const InputDecoration(labelText: 'Asunto', border: OutlineInputBorder()),
               ),
-              if (accion != null) accion,
-            ]),
-            SizedBox(height: SiSpace.x4),
-            cuerpo,
-          ],
+              SizedBox(height: SiSpace.x2),
+              _editorConBarra(c),
+              SizedBox(height: SiSpace.x2),
+              Text(
+                'Sale como «Comunicación SI SOL», sin tu nombre. Cada destinatario lo recibe sin ver a '
+                'los demás. Queda registrado que lo enviaste tú.',
+                style: TextStyle(fontSize: 12, color: c.ink3),
+              ),
+              SizedBox(height: SiSpace.x4),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.icon(
+                  onPressed: _enviando ? null : _enviar,
+                  icon: _enviando
+                      ? const SizedBox(
+                          width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.send, size: 18),
+                  label: Text(_enviando ? 'Enviando…' : 'Enviar'),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _tarjetaRedactar(SiColors c) {
-    return _tarjeta(
-      c,
-      titulo: 'Nuevo comunicado',
-      icono: Icons.edit_outlined,
-      cuerpo: Column(
+  /// El editor con SÓLO los botones de formato que la función sabe convertir a HTML.
+  ///
+  /// Cada botón encendido aquí tiene que existir en `contenido.ts`, y viceversa. Uno de más —tamaño de
+  /// letra, código, sangría— aparecería en pantalla y desaparecería en el correo sin avisar, que es de
+  /// las cosas que peor se entienden. Lo que llegue por PEGAR con otros formatos, el servidor lo manda
+  /// como texto normal.
+  Widget _editorConBarra(SiColors c) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: c.line),
+        borderRadius: SiRadius.rMd,
+      ),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _avisoConfiguracion(c),
-          _campoDestinatarios(c),
-          SizedBox(height: SiSpace.x4),
-          TextField(
-            controller: _asuntoCtrl,
-            maxLength: maxAsunto,
-            decoration: const InputDecoration(
-              labelText: 'Asunto',
-              border: OutlineInputBorder(),
+          QuillSimpleToolbar(
+            controller: _editor,
+            config: QuillSimpleToolbarConfig(
+              multiRowsDisplay: true,
+              showFontFamily: false,
+              showFontSize: false,
+              showSmallButton: false,
+              showLineHeightButton: false,
+              showInlineCode: false,
+              showCodeBlock: false,
+              showListCheck: false,
+              showIndent: false,
+              showSearchButton: false,
+              showSubscript: false,
+              showSuperscript: false,
+              showDirection: false,
+              // Los de portapapeles no se tocan: ya vienen apagados, y son «experimentales» en esta
+              // versión de flutter_quill, así que nombrarlos sólo da avisos.
+              showAlignmentButtons: true,
+              showJustifyAlignment: false,
+              buttonOptions: QuillSimpleToolbarButtonOptions(
+                // Títulos 1 a 3 y normal: los que convierte la función. Del 4 al 6 no existen allí.
+                selectHeaderStyleDropdownButton: QuillToolbarSelectHeaderStyleDropdownButtonOptions(
+                  attributes: [Attribute.h1, Attribute.h2, Attribute.h3, Attribute.header],
+                ),
+              ),
             ),
           ),
-          SizedBox(height: SiSpace.x2),
-          TextField(
-            controller: _cuerpoCtrl,
-            minLines: 8,
-            maxLines: 16,
-            maxLength: maxCuerpo,
-            keyboardType: TextInputType.multiline,
-            decoration: const InputDecoration(
-              labelText: 'Mensaje',
-              alignLabelWithHint: true,
-              border: OutlineInputBorder(),
-            ),
-          ),
-          SizedBox(height: SiSpace.x2),
-          Text(
-            'Sale como «Comunicación SI SOL», sin tu nombre. Cada destinatario lo recibe sin ver a '
-            'los demás. Queda registrado que lo enviaste tú.',
-            style: TextStyle(fontSize: 12, color: c.ink3),
-          ),
-          SizedBox(height: SiSpace.x4),
-          Align(
-            alignment: Alignment.centerRight,
-            child: FilledButton.icon(
-              onPressed: _enviando ? null : _enviar,
-              icon: _enviando
-                  ? const SizedBox(
-                      width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.send, size: 18),
-              label: Text(_enviando ? 'Enviando…' : 'Enviar'),
+          Divider(height: 1, color: c.line),
+          SizedBox(
+            height: 340,
+            child: QuillEditor.basic(
+              controller: _editor,
+              config: const QuillEditorConfig(
+                placeholder: 'Escribe el comunicado…',
+                padding: EdgeInsets.all(12),
+                // Sin esto, PEGAR algo con una imagen revienta el editor: flutter_quill lanza
+                // UnimplementedError con cualquier elemento incrustado que no sepa pintar.
+                unknownEmbedBuilder: _IncrustadoNoIncluido(),
+              ),
             ),
           ),
         ],
@@ -352,8 +441,6 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
     if (cfg == null) return const SizedBox.shrink();
     final configurado = cfg['configurado'] == true;
     final puertoOk = cfg['puerto_ok'] != false;
-    // `!= false` y no `== true`: una función desplegada antes de que existiera este campo no lo
-    // manda, y eso no debe pintar un aviso falso.
     final remitenteOk = cfg['remitente_ok'] != false;
     if (configurado && puertoOk && remitenteOk) return const SizedBox.shrink();
 
@@ -364,8 +451,7 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
                 'secretos de la función «correspondencia».'
             : !puertoOk
                 ? (cfg['motivo_puerto'] ?? 'El puerto configurado no se puede usar.').toString()
-                : (cfg['motivo_remitente'] ?? 'La dirección del remitente no es válida.')
-                    .toString();
+                : (cfg['motivo_remitente'] ?? 'La dirección del remitente no es válida.').toString();
     return Container(
       margin: EdgeInsets.only(bottom: SiSpace.x4),
       padding: EdgeInsets.all(SiSpace.x3),
@@ -383,14 +469,28 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
   }
 
   Widget _campoDestinatarios(SiColors c) {
+    final total = _todos.length;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (_destinatarios.isNotEmpty) ...[
+        if (_listasElegidas.isNotEmpty || _destinatarios.isNotEmpty) ...[
           Wrap(
             spacing: SiSpace.x2,
             runSpacing: SiSpace.x2,
             children: [
+              for (final id in _listasElegidas)
+                InputChip(
+                  avatar: Icon(Icons.groups_outlined, size: 16, color: c.brand),
+                  label: Text(() {
+                    final l = _lista(id);
+                    final n = correosDeLista(
+                            List<Map<String, dynamic>>.from(l?['lista_miembros'] ?? const []))
+                        .correos
+                        .length;
+                    return '${l?['nombre'] ?? 'Lista'} ($n)';
+                  }()),
+                  onDeleted: () => setState(() => _listasElegidas.remove(id)),
+                ),
               for (final d in _destinatarios)
                 InputChip(
                   label: Text(_nombreDeCorreo(d)),
@@ -401,24 +501,37 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
           ),
           SizedBox(height: SiSpace.x2),
         ],
-        Autocomplete<_Colaborador>(
-          displayStringForOption: (o) => o.correo,
+        Autocomplete<_Opcion>(
+          displayStringForOption: (o) => o.titulo,
           optionsBuilder: (valor) {
             final q = valor.text.trim().toLowerCase();
-            if (q.length < 2) return const Iterable<_Colaborador>.empty();
-            return _colaboradores
+            if (q.length < 2) return const Iterable<_Opcion>.empty();
+            // Las listas primero: si alguien escribe «cdmx» casi seguro busca la lista, no a una
+            // persona que viva ahí.
+            final listas = _listas
+                .where((l) => !_listasElegidas.contains(l['id']))
+                .where((l) => (l['nombre'] ?? '').toString().toLowerCase().contains(q))
+                .map<_Opcion>((l) => (
+                      esLista: true,
+                      clave: l['id'].toString(),
+                      titulo: l['nombre'].toString(),
+                      detalle: 'Lista · ${correosDeLista(List<Map<String, dynamic>>.from(
+                          l['lista_miembros'] ?? const [])).correos.length} destinatarios',
+                    ));
+            final personas = _colaboradores
                 .where((o) => !_destinatarios.contains(o.correo))
                 .where((o) => o.nombre.toLowerCase().contains(q) || o.correo.contains(q))
-                .take(8);
+                .map<_Opcion>((o) => (esLista: false, clave: o.correo, titulo: o.nombre, detalle: o.correo));
+            return [...listas, ...personas].take(10);
           },
-          onSelected: _agregarColaborador,
+          onSelected: _elegir,
           optionsViewBuilder: (context, onSelected, opciones) => Align(
             alignment: Alignment.topLeft,
             child: Material(
               elevation: 4,
               borderRadius: SiRadius.rMd,
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 280, maxWidth: 480),
+                constraints: const BoxConstraints(maxHeight: 300, maxWidth: 480),
                 child: ListView(
                   padding: EdgeInsets.zero,
                   shrinkWrap: true,
@@ -426,9 +539,10 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
                     for (final o in opciones)
                       ListTile(
                         dense: true,
-                        leading: const Icon(Icons.person_outline, size: 18),
-                        title: Text(o.nombre),
-                        subtitle: Text(o.correo),
+                        leading: Icon(o.esLista ? Icons.groups_outlined : Icons.person_outline,
+                            size: 18),
+                        title: Text(o.titulo),
+                        subtitle: Text(o.detalle),
                         onTap: () => onSelected(o),
                       ),
                   ],
@@ -443,10 +557,10 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
               focusNode: foco,
               decoration: InputDecoration(
                 labelText: 'Para',
-                hintText: 'Busca un compañero o escribe un correo y pulsa Enter',
+                hintText: 'Busca una lista o un compañero, o escribe un correo y pulsa Enter',
                 border: const OutlineInputBorder(),
                 errorText: _avisoDest,
-                helperText: '${_destinatarios.length} de $maxDestinatarios destinatarios',
+                helperText: '$total de $maxDestinatarios destinatarios',
               ),
               onSubmitted: (t) {
                 // Si lo escrito ya es un correo completo, gana lo escrito. Si no, Enter elige la
@@ -468,33 +582,27 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
     );
   }
 
-  Widget _tarjetaEnviados(SiColors c) {
-    return _tarjeta(
-      c,
-      titulo: 'Comunicados enviados',
-      icono: Icons.outbox_outlined,
-      accion: IconButton(
-        tooltip: 'Actualizar',
-        icon: const Icon(Icons.refresh, size: 20),
-        onPressed: _cargandoEnviados ? null : _cargarEnviados,
-      ),
-      cuerpo: _cargandoEnviados
-          ? const Padding(
-              padding: EdgeInsets.all(24),
+  Widget _pestanaEnviados(SiColors c) {
+    return RefreshIndicator(
+      onRefresh: _cargarEnviados,
+      child: ListView(
+        padding: EdgeInsets.symmetric(horizontal: SiSpace.x6, vertical: SiSpace.x4),
+        children: [
+          if (_cargandoEnviados)
+            const Padding(
+              padding: EdgeInsets.all(32),
               child: Center(child: CircularProgressIndicator()),
             )
-          : _enviados.isEmpty
-              ? Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Center(
-                      child: Text('Todavía no hay correos enviados.',
-                          style: TextStyle(color: c.ink3))),
-                )
-              : Column(
-                  children: [
-                    for (final m in _enviados) _filaEnviado(c, m),
-                  ],
-                ),
+          else if (_enviados.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(32),
+              child: Center(
+                  child: Text('Todavía no hay comunicados enviados.', style: TextStyle(color: c.ink3))),
+            )
+          else
+            for (final m in _enviados) _filaEnviado(c, m),
+        ],
+      ),
     );
   }
 
@@ -506,8 +614,10 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
       _ => (c.warn, c.warnTint),
     };
     final dest = (m['destinatarios'] as List?)?.cast<String>() ?? const [];
+    final listas = (m['listas'] as List?)?.cast<String>() ?? const [];
     final fecha = DateTime.tryParse((m['creado_en'] ?? '').toString())?.toLocal();
     final detalle = [
+      if (listas.isNotEmpty) listas.map((l) => '«$l»').join(', '),
       dest.length == 1 ? _nombreDeCorreo(dest.first) : '${dest.length} destinatarios',
       if (fecha != null) DateFormat('dd/MM/yyyy HH:mm').format(fecha),
       // El registro de quién lo mandó, que el correo ya no lleva: aquí es donde se ve.
@@ -530,10 +640,9 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
                     style: const TextStyle(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 2),
                 Text(detalle, style: TextStyle(fontSize: 12, color: c.ink3)),
-                if (estado == 'FALLIDO' && m['error'] != null) ...[
+                if ((estado == 'FALLIDO' || estado == 'PARCIAL') && m['error'] != null) ...[
                   const SizedBox(height: 4),
-                  Text(m['error'].toString(),
-                      style: TextStyle(fontSize: 12, color: c.danger)),
+                  Text(m['error'].toString(), style: TextStyle(fontSize: 12, color: c.danger)),
                 ],
               ],
             ),
@@ -547,6 +656,33 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Lo que se pinta en el editor en lugar de un elemento incrustado —una imagen pegada—.
+///
+/// El correo no lleva imágenes todavía: la función las omite. Aquí se dice en el propio editor, en
+/// vez de dejar que alguien crea que su imagen va a salir.
+class _IncrustadoNoIncluido extends EmbedBuilder {
+  const _IncrustadoNoIncluido();
+
+  @override
+  String get key => 'no-incluido';
+
+  @override
+  bool get expanded => false;
+
+  @override
+  Widget build(BuildContext context, EmbedContext embedContext) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.orange.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: const Text('[imagen: no se incluye en el correo]',
+          style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
     );
   }
 }

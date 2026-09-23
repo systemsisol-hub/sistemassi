@@ -9,6 +9,7 @@ import 'login_page.dart';
 import 'reset_password_page.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_quill/flutter_quill.dart' show FlutterQuillLocalizations;
 import 'package:syncfusion_localizations/syncfusion_localizations.dart';
 import 'theme/si_theme.dart';
 
@@ -79,6 +80,9 @@ class _MyAppState extends State<MyApp> {
           GlobalWidgetsLocalizations.delegate,
           GlobalCupertinoLocalizations.delegate,
           SfGlobalLocalizations.delegate,
+          // El editor de Correspondencia la exige: sin ella su barra de herramientas no encuentra sus
+          // textos y la pagina revienta al abrirse, sin ningun error en la compilacion.
+          FlutterQuillLocalizations.delegate,
         ],
         supportedLocales: const [
           Locale('es', 'MX'),
