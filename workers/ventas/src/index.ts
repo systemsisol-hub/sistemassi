@@ -257,6 +257,13 @@ function leadYaRegistrado(history: { role: string; content: string }[]): boolean
   );
 }
 
+// Los recordatorios se pegan al final del mensaje del visitante. La app los guarda recortados —sin
+// el salto de linea con el que empiezan los del codigo—, y asi quedaban pegados a la ultima palabra
+// del cliente («…en Tulum?[Recordatorio…»). Se separan aqui, guardados como se guarden.
+function separado(recordatorio: string): string {
+  return "\n\n" + recordatorio.trim();
+}
+
 async function loadConfig(env: Env): Promise<AgentConfig> {
   const rows = await sb<{ clave: string; valor: string }[]>(env, "ventas_config?select=clave,valor");
   const raw: Record<string, string> = {};
@@ -267,12 +274,12 @@ async function loadConfig(env: Env): Promise<AgentConfig> {
     max_tokens: parseInt(raw.max_tokens ?? "") || 500,
     mensaje_fin: raw.mensaje_fin || MENSAJE_FIN,
     mensaje_solo_ventas: raw.mensaje_solo_ventas || MENSAJE_SOLO_VENTAS,
-    recordatorio: raw.recordatorio || RECORDATORIO,
-    recordatorio_datos_incompletos: raw.recordatorio_datos_incompletos || RECORDATORIO_DATOS_INCOMPLETOS,
-    recordatorio_lead: raw.recordatorio_lead || RECORDATORIO_LEAD,
-    recordatorio_post_lead: raw.recordatorio_post_lead || RECORDATORIO_POST_LEAD,
+    recordatorio: separado(raw.recordatorio || RECORDATORIO),
+    recordatorio_datos_incompletos: separado(raw.recordatorio_datos_incompletos || RECORDATORIO_DATOS_INCOMPLETOS),
+    recordatorio_lead: separado(raw.recordatorio_lead || RECORDATORIO_LEAD),
+    recordatorio_post_lead: separado(raw.recordatorio_post_lead || RECORDATORIO_POST_LEAD),
     prompt_personalidad: raw.prompt_personalidad || PROMPT_PERSONALIDAD_DEFAULT,
-    recordatorio_externo: raw.recordatorio_externo || RECORDATORIO_EXTERNO,
+    recordatorio_externo: separado(raw.recordatorio_externo || RECORDATORIO_EXTERNO),
     contacto_asesores_externos: raw.contacto_asesores_externos || CONTACTO_EXTERNO_DEFAULT,
     contacto_proveedores: raw.contacto_proveedores || CONTACTO_EXTERNO_DEFAULT,
     chat_detenido: raw.chat_detenido === "1",
