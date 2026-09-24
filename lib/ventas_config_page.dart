@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'services/ventas_datos.dart';
 import 'theme/si_theme.dart';
 import 'ventas_comun.dart';
+import 'ventas_drive_panel.dart';
 
 /// Cómo se comporta Sisol: su personalidad, los mensajes fijos, los límites y el interruptor que
 /// apaga el chat público.
@@ -184,6 +185,8 @@ class _VentasConfigPageState extends State<VentasConfigPage> {
         children: [
           _interruptor(c),
           const SizedBox(height: SiSpace.x5),
+          // Arriba de los textos: es lo que Sisol sabe de los desarrollos, y lo que más se actualiza.
+          VentasDrivePanel(puedeActualizar: _puedeEditar),
           if (_error != null)
             Container(
               padding: const EdgeInsets.all(SiSpace.x4),
