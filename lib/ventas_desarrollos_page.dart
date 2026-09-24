@@ -872,8 +872,7 @@ class _InventarioState extends State<_Inventario> {
             borderRadius: SiRadius.rLg,
             border: Border.all(color: c.line),
           ),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
+          child: TablaAncha(
             child: DataTable(
               headingTextStyle: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: c.ink2),
               dataTextStyle: TextStyle(fontSize: 12.5, color: c.ink),

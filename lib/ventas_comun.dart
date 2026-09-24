@@ -189,3 +189,25 @@ Widget etiquetaVentas(SiColors c, String texto, Color color) {
         style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color)),
   );
 }
+
+/// Una tabla que ocupa todo el ancho de su tarjeta y, si no cabe, se desplaza de lado.
+///
+/// `DataTable` dentro de un `SingleChildScrollView` horizontal mide lo que piden sus columnas, no lo
+/// que mide la tarjeta: con pocas columnas quedaba una franja vacía a la derecha.
+class TablaAncha extends StatelessWidget {
+  final Widget child;
+  const TablaAncha({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, caja) => SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minWidth: caja.maxWidth),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
