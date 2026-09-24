@@ -7,6 +7,7 @@ import {
 import { ALL_TOOLS, AMBITO, construirPrompt, QUE_HACE } from "./herramientas.ts";
 import {
   AFECTADOS_POR_PROMOCION,
+  QUE_CONTESTA_DIRECTO,
   campoUnico,
   desarrolloDelHilo,
   documentoMencionado,
@@ -94,6 +95,17 @@ Deno.serve(async (req: Request) => {
   // cuanto alguien toque esta funcion, y entonces la pantalla miente.
   if (cuerpo.configuracion === true) {
     if (!esAdmin) return responde({ error: "Solo para administradores." }, 403);
+
+    // Las reglas de extras y las promociones salen de las MISMAS herramientas que usa SOL, con la
+    // misma redaccion: lo que se revisa aqui es exactamente lo que el modelo recibe.
+    const [reglas, promos, des, uni, docs] = await Promise.all([
+      runTool("reglas_de_extras", {}, svc),
+      runTool("buscar_promocion", {}, svc),
+      (svc.from("desarrollos") as any).select("id", { count: "exact", head: true }).eq("is_active", true),
+      (svc.from("unidades") as any).select("id", { count: "exact", head: true }).eq("estatus", "DISPONIBLE"),
+      (svc.from("documentos") as any).select("id", { count: "exact", head: true }).eq("is_active", true),
+    ]);
+
     return responde({
       modelo: SOL_MODEL,
       modelo_respaldo: SOL_MODEL_RESPALDO,
@@ -108,6 +120,22 @@ Deno.serve(async (req: Request) => {
         que_hace: QUE_HACE[t.function.name] ?? "",
       })),
       ambito: AMBITO,
+      // Lo que se contesta SIN pasar por el modelo, desde la ficha del desarrollo.
+      respuestas_directas: (Object.keys(QUE_CONTESTA_DIRECTO) as Array<keyof typeof QUE_CONTESTA_DIRECTO>)
+        .map((campo) => ({
+          campo,
+          que: QUE_CONTESTA_DIRECTO[campo],
+          // Con una promocion vigente este dato puede no ser el que aplica: pasa al modelo, que
+          // tiene las dos cosas delante.
+          salvo_con_promocion: AFECTADOS_POR_PROMOCION.includes(campo),
+        })),
+      reglas_extras: reglas.resultados ?? [],
+      promociones_vigentes: promos.resultados ?? [],
+      datos: {
+        desarrollos_activos: des.count ?? 0,
+        unidades_disponibles: uni.count ?? 0,
+        documentos_catalogo: docs.count ?? 0,
+      },
     });
   }
 
