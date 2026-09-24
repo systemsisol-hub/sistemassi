@@ -37,6 +37,7 @@ const _grupos = <(String, String, List<String>)>[
 class _VentasConfigPageState extends State<VentasConfigPage> {
   final _supabase = Supabase.instance.client;
   List<Map<String, dynamic>> _meta = [];
+  Map<String, dynamic> _agente = {};
   Map<String, Map<String, dynamic>> _guardado = {};
   final _campos = <String, TextEditingController>{};
   bool _cargando = true;
@@ -73,10 +74,12 @@ class _VentasConfigPageState extends State<VentasConfigPage> {
         _guardado = guardado;
         _chatActivo = guardado['chat_detenido']?['valor'] != '1';
       });
-      final meta = await SisolApi.configMeta();
+      final r = await SisolApi.configMeta();
+      final meta = r.config;
       if (!mounted) return;
       setState(() {
         _meta = meta;
+        _agente = r.agente;
         for (final m in meta) {
           final clave = '${m['clave']}';
           (_campos[clave] ??= TextEditingController()).text =
@@ -185,6 +188,10 @@ class _VentasConfigPageState extends State<VentasConfigPage> {
         children: [
           _interruptor(c),
           const SizedBox(height: SiSpace.x5),
+          if (_agente.isNotEmpty) ...[
+            _resumen(c),
+            const SizedBox(height: SiSpace.x5),
+          ],
           // Arriba de los textos: es lo que Sisol sabe de los desarrollos, y lo que más se actualiza.
           VentasDrivePanel(puedeActualizar: _puedeEditar),
           if (_error != null)
@@ -230,6 +237,104 @@ class _VentasConfigPageState extends State<VentasConfigPage> {
             onPressed: _chatActivo == null ? null : () => _cambiarChat(!activo),
             child: Text(activo ? 'Detener chat' : 'Reactivar chat'),
           ),
+      ]),
+    );
+  }
+
+  /// Cómo está armado Sisol, en tarjetas como las de SOL. Todo sale del Worker —de las mismas
+  /// constantes y cargas que usa el chat—, así que lo que se lee aquí es lo que de verdad corre.
+  Widget _resumen(SiColors c) {
+    final a = _agente;
+    final wa = (a['whatsapp'] as Map?) ?? const {};
+    final datos = (a['datos'] as Map?) ?? const {};
+    final herramientas = (a['herramientas'] as List?) ?? const [];
+    final protecciones = (a['protecciones'] as List?) ?? const [];
+    final tarjetas = <Widget>[
+      _tarjetaInfo(c, 'El modelo', [
+        _fila(c, 'Modelo', '${a['modelo'] ?? '—'}'),
+        _fila(c, 'Respaldo', '${a['modelo_respaldo'] ?? '—'}'),
+        _fila(c, 'Proveedor', '${a['proveedor'] ?? '—'}'),
+        _fila(c, 'Recuerda', 'los últimos ${a['historial'] ?? '?'} mensajes de la plática'),
+        _fila(c, 'Aviso al asesor',
+            wa['configurado'] == true ? 'WhatsApp al ${wa['asesor']} (${wa['servidor']})' : 'FALTA configurar OpenWA',
+            alerta: wa['configurado'] != true),
+        _nota(c, 'El modelo y el aviso se cambian en el código del Worker (workers/ventas); '
+            'los textos y límites, abajo.'),
+      ]),
+      _tarjetaInfo(c, 'Qué sabe hacer', [
+        for (final h in herramientas) _fila(c, '${h['nombre']}', '${h['que_hace']}'),
+      ]),
+      _tarjetaInfo(c, 'Lo que tiene cargado', [
+        _fila(c, 'Desarrollos activos', '${datos['desarrollos_activos'] ?? 0}'),
+        _fila(c, 'Unidades en inventario', '${datos['unidades'] ?? 0} (${datos['unidades_disponibles'] ?? 0} disponibles)'),
+        _fila(c, 'Documentos del Drive', '${datos['documentos_drive'] ?? 0}'),
+        _fila(c, 'Información adicional', '${datos['conocimiento_adicional'] ?? 0} fragmentos'),
+      ]),
+      _tarjetaInfo(c, 'Protecciones', [
+        for (final p in protecciones) _nota(c, '• $p'),
+      ]),
+      _tarjetaInfo(c, 'Hasta dónde llega', [
+        _nota(c, '${a['ambito'] ?? ''}'),
+      ]),
+    ];
+    // Tres columnas en pantalla ancha, dos en mediana y una en el teléfono; cada columna crece hacia
+    // abajo con lo suyo, igual que la Configuración de SOL.
+    return LayoutBuilder(builder: (_, caja) {
+      final columnas = caja.maxWidth >= 1100 ? 3 : (caja.maxWidth >= 720 ? 2 : 1);
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var k = 0; k < columnas; k++) ...[
+            if (k > 0) const SizedBox(width: SiSpace.x4),
+            Expanded(
+              child: Column(children: [
+                for (var i = k; i < tarjetas.length; i += columnas) ...[
+                  tarjetas[i],
+                  const SizedBox(height: SiSpace.x4),
+                ],
+              ]),
+            ),
+          ],
+        ],
+      );
+    });
+  }
+
+  Widget _tarjetaInfo(SiColors c, String titulo, List<Widget> hijos) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(SiSpace.x4),
+      decoration: BoxDecoration(
+        color: c.panel,
+        border: Border.all(color: c.line),
+        borderRadius: SiRadius.rMd,
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(titulo.toUpperCase(),
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: c.ink3, letterSpacing: .5)),
+        const SizedBox(height: SiSpace.x2),
+        ...hijos,
+      ]),
+    );
+  }
+
+  Widget _nota(SiColors c, String texto) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Text(texto, style: TextStyle(fontSize: 12.5, color: c.ink3, height: 1.45)),
+      );
+
+  Widget _fila(SiColors c, String etiqueta, String valor, {bool alerta = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        SizedBox(width: 150, child: Text(etiqueta, style: TextStyle(fontSize: 12.5, color: c.ink3))),
+        Expanded(
+          child: SelectableText(valor,
+              style: TextStyle(
+                  fontSize: 12.5,
+                  color: alerta ? c.danger : c.ink,
+                  fontWeight: alerta ? FontWeight.w600 : FontWeight.w400)),
+        ),
       ]),
     );
   }
