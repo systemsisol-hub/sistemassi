@@ -82,7 +82,7 @@ class _VentasLeadsPageState extends State<VentasLeadsPage> {
         avisoVentas(context, error, error: true);
       }
     } catch (e) {
-      if (mounted) avisoVentas(context, 'No se pudo enviar: $e', error: true);
+      if (mounted) avisoVentas(context, '$e'.replaceFirst('Exception: ', ''), error: true);
     } finally {
       if (mounted) setState(() => _notificando.remove(folio));
     }
@@ -192,8 +192,7 @@ class _VentasLeadsPageState extends State<VentasLeadsPage> {
         borderRadius: SiRadius.rLg,
         border: Border.all(color: c.line),
       ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
+      child: TablaAncha(
         child: DataTable(
           headingTextStyle: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: c.ink2),
           dataTextStyle: TextStyle(fontSize: 12.5, color: c.ink),

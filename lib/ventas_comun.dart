@@ -32,7 +32,18 @@ class SisolApi {
     final res = metodo == 'POST'
         ? await http.post(uri, headers: headers)
         : await http.get(uri, headers: headers);
-    if (res.statusCode == 401) throw Exception('Sin permiso para Ventas.');
+    // 401 = la sesión ya no la reconoce Auth (p. ej. se cerró al cambiar la contraseña) aunque
+    // todavía sirva para leer tablas; 403 = falta el permiso. El Worker manda el texto de cada caso.
+    if (res.statusCode == 401 || res.statusCode == 403) {
+      String? texto;
+      try {
+        texto = (jsonDecode(res.body) as Map)['error']?.toString();
+      } catch (_) {}
+      throw Exception(texto ??
+          (res.statusCode == 401
+              ? 'Tu sesión ya no es válida. Cierra sesión y vuelve a entrar.'
+              : 'No tienes permiso para Ventas.'));
+    }
     // Una respuesta que no es JSON es la página «Not found» de un Worker que no tiene esta ruta:
     // el de chat.sisol.red todavía es la versión anterior a la sección Ventas.
     final Object? cuerpo;
@@ -177,4 +188,26 @@ Widget etiquetaVentas(SiColors c, String texto, Color color) {
     child: Text(texto,
         style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color)),
   );
+}
+
+/// Una tabla que ocupa todo el ancho de su tarjeta y, si no cabe, se desplaza de lado.
+///
+/// `DataTable` dentro de un `SingleChildScrollView` horizontal mide lo que piden sus columnas, no lo
+/// que mide la tarjeta: con pocas columnas quedaba una franja vacía a la derecha.
+class TablaAncha extends StatelessWidget {
+  final Widget child;
+  const TablaAncha({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, caja) => SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minWidth: caja.maxWidth),
+          child: child,
+        ),
+      ),
+    );
+  }
 }

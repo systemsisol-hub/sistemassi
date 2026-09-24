@@ -66,23 +66,37 @@ export async function cargarDesarrollos(env: EnvSupabase): Promise<Desarrollo[]>
 
 // Quien pide algo del panel: se valida su sesion de sistemassi contra Supabase Auth y se revisa
 // su permiso en profiles, igual que has_permission() en la base.
-export async function usuarioConPermiso(
+//
+// Distingue «sin sesion» de «sin permiso» porque piden cosas distintas a quien lo ve: una sesion
+// cerrada en otro lado (p. ej. al cambiar la contraseña) sigue sirviendo para leer tablas hasta que
+// caduca el token, pero Auth ya no la reconoce; decir «sin permiso» ahi manda a buscar un problema
+// de permisos que no existe.
+export type Acceso = "ok" | "sin_sesion" | "sin_permiso";
+
+export async function accesoVentas(
   env: EnvSupabase,
   authorization: string | undefined,
   permiso: "show_ventas" | "edit_ventas"
-): Promise<boolean> {
-  if (!authorization?.startsWith("Bearer ")) return false;
+): Promise<Acceso> {
+  if (!authorization?.startsWith("Bearer ")) return "sin_sesion";
   const res = await fetch(`${env.SUPABASE_URL}/auth/v1/user`, {
     headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, authorization },
   });
-  if (!res.ok) return false;
+  if (!res.ok) return "sin_sesion";
   const user = (await res.json()) as { id?: string; app_metadata?: { role?: string } };
-  if (!user.id) return false;
-  if (user.app_metadata?.role === "admin") return true;
+  if (!user.id) return "sin_sesion";
+  if (user.app_metadata?.role === "admin") return "ok";
   const perfiles = await sb<{ role: string | null; permissions: Record<string, unknown> | null }[]>(
     env,
     `profiles?select=role,permissions&id=${eq(user.id)}`
   );
   const p = perfiles[0];
-  return p?.role === "admin" || p?.permissions?.[permiso] === true;
+  return p?.role === "admin" || p?.permissions?.[permiso] === true ? "ok" : "sin_permiso";
+}
+
+// 401 = hay que volver a iniciar sesion; 403 = la sesion es buena pero le falta el permiso.
+export function respuestaSinAcceso(acceso: Exclude<Acceso, "ok">): Response {
+  return acceso === "sin_sesion"
+    ? Response.json({ ok: false, error: "Tu sesión ya no es válida. Cierra sesión y vuelve a entrar." }, { status: 401 })
+    : Response.json({ ok: false, error: "No tienes permiso para Ventas." }, { status: 403 });
 }

@@ -3,7 +3,7 @@ import { cors } from "hono/cors";
 import { KNOWLEDGE } from "./knowledge";
 import { KNOWLEDGE_EXTRA } from "./knowledge-extra";
 import { generarCotizacionPDF, archivoLogoDesarrollo, type Lead } from "./cotizacion";
-import { sb, eq, cargarDesarrollos, usuarioConPermiso, type Desarrollo, type EnvSupabase } from "./supabase";
+import { sb, eq, cargarDesarrollos, accesoVentas, respuestaSinAcceso, type Desarrollo, type EnvSupabase } from "./supabase";
 
 // Los datos viven en Supabase (tablas ventas_*); el panel es la seccion Ventas de sistemassi.
 type Env = EnvSupabase & {
@@ -1101,8 +1101,8 @@ const CONFIG_DEFAULTS: Record<string, string> = {
 // la sesion de sistemassi, no una clave compartida.
 
 app.get("/api/ventas/config-meta", async (c) => {
-  if (!(await usuarioConPermiso(c.env, c.req.header("authorization"), "show_ventas")))
-    return c.json({ error: "No autorizado" }, 401);
+  const acceso = await accesoVentas(c.env, c.req.header("authorization"), "show_ventas");
+  if (acceso !== "ok") return respuestaSinAcceso(acceso);
   const config = Object.entries(CONFIG_META).map(([clave, meta]) => ({
     clave,
     ...meta,
@@ -1113,8 +1113,8 @@ app.get("/api/ventas/config-meta", async (c) => {
 
 // Re-envia el aviso de WhatsApp al asesor (p. ej. si OpenWA estaba caido cuando entro el lead).
 app.post("/api/ventas/leads/:folio/notificar", async (c) => {
-  if (!(await usuarioConPermiso(c.env, c.req.header("authorization"), "show_ventas")))
-    return c.json({ ok: false, error: "No autorizado" }, 401);
+  const acceso = await accesoVentas(c.env, c.req.header("authorization"), "show_ventas");
+  if (acceso !== "ok") return respuestaSinAcceso(acceso);
 
   const folio = c.req.param("folio");
   const [fila] = await sb<(Lead & { uuid: string })[]>(
