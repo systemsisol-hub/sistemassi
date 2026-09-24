@@ -143,7 +143,9 @@ class _VentasConfigPageState extends State<VentasConfigPage> {
         return;
       }
       // Igual al predeterminado y sin fila: no se escribe, para que siga el del código si cambia.
-      if (v == '${m['predeterminado']}' && !_guardado.containsKey(k)) continue;
+      // Se compara recortado: los recordatorios del código empiezan con un salto de línea y el campo
+      // lo quita, así que «Guardar» sin tocar nada los grababa como personalizados.
+      if (v == '${m['predeterminado']}'.trim() && !_guardado.containsKey(k)) continue;
       filas.add({'clave': k, 'valor': v});
     }
     setState(() => _guardandoGrupo = grupo);
