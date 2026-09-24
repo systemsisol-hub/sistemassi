@@ -112,6 +112,8 @@ void main() {
     expect(csv, contains('24/09/2026 12:00'));
     expect(csv, contains('"Ana, ""la de AG"""'));
     expect(csv, contains(',si,https://chat.sisol.red/api/cotizacion/abc'));
+    // Sin `tipo` (los leads de antes) se lee como Cliente.
+    expect(csv, contains('12:00,Cliente,'));
   });
 
   group('leerPegadoVentas', () {

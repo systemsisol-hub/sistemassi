@@ -62,7 +62,7 @@ class _VentasConversacionesPageState extends State<VentasConversacionesPage> {
       final r = await _supabase
           .from('ventas_conversaciones')
           .select('id, created_at, updated_at, num_mensajes, origen, transcript, lead_id, '
-              'ventas_leads(folio, nombre)')
+              'ventas_leads(folio, nombre, tipo)')
           .order('updated_at', ascending: false)
           .limit(500);
       final lista = <_Conversacion>[];
@@ -206,7 +206,8 @@ class _VentasConversacionesPageState extends State<VentasConversacionesPage> {
                   const SizedBox(width: SiSpace.x2),
                 ],
                 if (cv.fila['lead_id'] != null) ...[
-                  etiquetaVentas(c, 'Lead', c.success),
+                  etiquetaVentas(c, tipoTexto[(cv.fila['ventas_leads'] as Map?)?['tipo']] ?? 'Lead',
+                      (cv.fila['ventas_leads'] as Map?)?['tipo'] == 'CLIENTE' ? c.success : c.warn),
                   const SizedBox(width: SiSpace.x2),
                 ],
                 SizedBox(

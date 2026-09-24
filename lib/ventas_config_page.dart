@@ -32,6 +32,12 @@ const _grupos = <(String, String, List<String>)>[
     ['mensaje_fin', 'mensaje_solo_ventas', 'recordatorio', 'recordatorio_datos_incompletos', 'recordatorio_lead', 'recordatorio_post_lead'],
   ),
   ('Límites de la conversación', 'Topes para que una plática no se alargue sin fin ni gaste de más.', ['max_mensajes_cliente', 'max_chars_mensaje', 'max_tokens']),
+  (
+    'Asesores externos, proveedores y empleo',
+    'A quien no es cliente Sisol le pide los mismos datos y, en vez de la cotización, le da una tarjeta con estos contactos. '
+        'Un renglón por dato: teléfonos y correos se pueden tocar en el chat.',
+    ['contacto_asesores_externos', 'contacto_proveedores', 'recordatorio_externo'],
+  ),
 ];
 
 class _VentasConfigPageState extends State<VentasConfigPage> {
@@ -193,9 +199,9 @@ class _VentasConfigPageState extends State<VentasConfigPage> {
             const SizedBox(height: SiSpace.x5),
           ],
           // Arriba de los textos: es lo que Sisol sabe de los desarrollos, y lo que más se actualiza.
-          VentasDrivePanel(puedeActualizar: _puedeEditar),
           if (_error != null)
             Container(
+              margin: const EdgeInsets.only(bottom: SiSpace.x5),
               padding: const EdgeInsets.all(SiSpace.x4),
               decoration: BoxDecoration(color: c.dangerTint, borderRadius: SiRadius.rLg),
               child: Row(children: [
@@ -206,8 +212,25 @@ class _VentasConfigPageState extends State<VentasConfigPage> {
                 TextButton(onPressed: _cargar, child: const Text('Reintentar')),
               ]),
             ),
-          for (final g in _grupos) _tarjeta(c, g.$1, g.$2, g.$3),
-          if (otros.isNotEmpty) _tarjeta(c, 'Otros', '', otros),
+          // Dos columnas: a todo lo ancho, los cuadros de texto quedaban de una sola línea larguísima
+          // (pedido del usuario el 24/09/2026). Se reparten para que las dos midan parecido: el Drive
+          // y la personalidad a la izquierda, los mensajes —seis cuadros— y los límites a la derecha.
+          LayoutBuilder(builder: (_, caja) {
+            final izquierda = <Widget>[
+              VentasDrivePanel(puedeActualizar: _puedeEditar),
+              _tarjeta(c, _grupos[0].$1, _grupos[0].$2, _grupos[0].$3),
+            ];
+            final derecha = <Widget>[
+              for (final g in _grupos.skip(1)) _tarjeta(c, g.$1, g.$2, g.$3),
+              if (otros.isNotEmpty) _tarjeta(c, 'Otros', '', otros),
+            ];
+            if (caja.maxWidth < 900) return Column(children: [...izquierda, ...derecha]);
+            return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(child: Column(children: izquierda)),
+              const SizedBox(width: SiSpace.x4),
+              Expanded(child: Column(children: derecha)),
+            ]);
+          }),
         ],
       ),
     );
