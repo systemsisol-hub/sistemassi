@@ -1,0 +1,26 @@
+{
+  "name": "sisol-agente-ventas",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sisol, agente de ventas publico de SI SOL INMOBILIARIAS sobre Cloudflare Workers",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "sync-drive": "python scripts/sync_drive.py"
+  },
+  "dependencies": {
+    "hono": "^4.6.0",
+    "pdf-lib": "^1.17.1",
+    "pptxgenjs": "^4.0.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250303.0",
+    "typescript": "^5.6.0",
+    "wrangler": "^4.0.0"
+  },
+  "main": "index.js",
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
+}

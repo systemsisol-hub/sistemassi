@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SI SOL · Asistente de ventas</title>
+<link rel="icon" href="/assets/iconoapp.png" type="image/png">
+<style>
+  @font-face { font-family: 'Geist'; src: url('/assets/fonts/Geist-Regular.ttf') format('truetype'); font-weight: 400; font-display: swap; }
+  @font-face { font-family: 'Geist'; src: url('/assets/fonts/Geist-Medium.ttf') format('truetype'); font-weight: 500; font-display: swap; }
+  @font-face { font-family: 'Geist'; src: url('/assets/fonts/Geist-SemiBold.ttf') format('truetype'); font-weight: 600; font-display: swap; }
+  @font-face { font-family: 'Geist'; src: url('/assets/fonts/Geist-Bold.ttf') format('truetype'); font-weight: 700; font-display: swap; }
+  :root {
+    --naranja: #F0961A;
+    --azul: #1A2466;
+    --fondo: #FBFBFC;
+    --burbuja-bot: #ffffff;
+    --burbuja-user: #1A2466;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Geist', system-ui, sans-serif;
+    background: var(--fondo);
+    display: flex; flex-direction: column; height: 100dvh;
+  }
+  header {
+    background: var(--azul); color: #fff;
+    padding: 14px 20px; display: flex; align-items: center; gap: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.15);
+  }
+  .sol {
+    width: 38px; height: 38px; border-radius: 50%;
+    flex-shrink: 0; object-fit: cover;
+  }
+  header h1 { font-size: 16px; font-weight: 600; }
+  header p { font-size: 12px; color: #ffd76e; }
+  #chat {
+    flex: 1; overflow-y: auto; padding: 20px;
+    display: flex; flex-direction: column; gap: 12px;
+    max-width: 760px; width: 100%; margin: 0 auto;
+  }
+  .msg {
+    max-width: 80%; padding: 10px 14px; border-radius: 14px;
+    font-size: 14.5px; line-height: 1.45; white-space: pre-wrap;
+    word-wrap: break-word; animation: pop .15s ease-out;
+  }
+  @keyframes pop { from { opacity: 0; transform: translateY(6px); } }
+  .bot { background: var(--burbuja-bot); align-self: flex-start;
+         border: 1px solid #e3e5ee; border-bottom-left-radius: 4px; }
+  .user { background: var(--burbuja-user); color: #fff; align-self: flex-end;
+          border-bottom-right-radius: 4px; }
+  .bot a { color: var(--naranja); font-weight: 600; }
+  .devcard {
+    display: flex; flex-direction: column; gap: 5px;
+    color: inherit;
+    border-left: 4px solid var(--naranja) !important;
+  }
+  .devcard a {
+    font-size: 12.5px; color: var(--naranja); font-weight: 600;
+    text-decoration: none;
+  }
+  .devcard a:hover { text-decoration: underline; }
+  .chips {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    align-self: flex-start; max-width: 95%;
+    animation: pop .15s ease-out;
+  }
+  .chips button {
+    background: #fff; color: var(--azul);
+    border: 1.5px solid var(--naranja); border-radius: 18px;
+    padding: 7px 14px; font-size: 13.5px; font-weight: 600;
+    cursor: pointer; transition: background .15s, color .15s;
+  }
+  .chips button:hover { background: var(--naranja); color: #fff; }
+  #btn-menu {
+    background: none; border: none; color: #ffd76e;
+    font-size: 12px; font-weight: 600; cursor: pointer;
+    margin-left: auto; padding: 6px 10px; border-radius: 14px;
+    border: 1.5px solid rgba(255,215,110,.5);
+  }
+  #btn-menu:hover { background: rgba(255,215,110,.15); }
+  .escribiendo { display: flex; gap: 4px; padding: 14px; }
+  .escribiendo span {
+    width: 7px; height: 7px; border-radius: 50%; background: #b9bdd1;
+    animation: blink 1.2s infinite;
+  }
+  .escribiendo span:nth-child(2) { animation-delay: .2s; }
+  .escribiendo span:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%,80%,100% { opacity: .3 } 40% { opacity: 1 } }
+  form {
+    display: flex; gap: 10px; padding: 14px 20px 18px;
+    max-width: 760px; width: 100%; margin: 0 auto;
+  }
+  input {
+    flex: 1; padding: 12px 16px; border-radius: 24px;
+    border: 1.5px solid #d8dbe8; font-size: 15px; outline: none;
+    background: #fff;
+  }
+  input:focus { border-color: var(--naranja); }
+  button {
+    background: var(--naranja); color: #fff; border: none;
+    border-radius: 24px; padding: 0 22px; font-size: 15px; font-weight: 600;
+    cursor: pointer; transition: filter .15s;
+  }
+  button:hover { filter: brightness(1.08); }
+  button:disabled { opacity: .5; cursor: default; }
+</style>
+</head>
+<body>
+<header>
+  <img src="/assets/sisolok.png" alt="SI SOL" style="width:44px;height:44px;border-radius:50%;object-fit:cover;flex-shrink:0">
+  <div>
+    <h1 style="font-size:20px;font-weight:700;color:#fff;line-height:1.1">SI SOL</h1>
+    <p style="font-size:12px;color:#ffd76e;">Sisol · Asistente de ventas</p>
+  </div>
+  <button id="btn-menu" type="button">🏘️ Desarrollos</button>
+</header>
+
+<div id="chat"></div>
+
+<form id="form">
+  <input id="input" type="text" placeholder="Escribe tu mensaje..." autocomplete="off" maxlength="1000">
+  <button id="send" type="submit">Enviar</button>
+</form>
+
+<script>
+const chat = document.getElementById('chat');
+const form = document.getElementById('form');
+const input = document.getElementById('input');
+const send = document.getElementById('send');
+const messages = [];
+
+// Identificador único de la conversación; se envía al servidor para poder
+// guardar el transcript en el panel. Persiste junto con el historial.
+let convId = '';
+function nuevoConvId() {
+  try { return crypto.randomUUID(); }
+  catch (e) { return 'c-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10); }
+}
+
+// La conversación sobrevive a cambios de página y pestañas nuevas del sitio
+// padre (localStorage se comparte entre pestañas; sessionStorage no).
+// Expira a las 12 horas de inactividad.
+const SESION_MAX_MS = 12 * 60 * 60 * 1000;
+
+function guardarSesion() {
+  try {
+    localStorage.setItem('sisol-chat', JSON.stringify({
+      t: Date.now(),
+      cid: convId,
+      messages: messages.slice(-40),
+      devs: Array.from(devsAbiertos)
+    }));
+  } catch (e) {}
+}
+
+function cargarSesion() {
+  try {
+    const data = JSON.parse(localStorage.getItem('sisol-chat'));
+    if (!data || !Array.isArray(data.messages) || data.messages.length === 0) return false;
+    if (!data.t || Date.now() - data.t > SESION_MAX_MS) {
+      localStorage.removeItem('sisol-chat');
+      return false;
+    }
+    convId = data.cid || nuevoConvId();
+    for (const m of data.messages) {
+      messages.push(m);
+      addBubble(m.role, m.content);
+    }
+    for (const u of data.devs || []) devsAbiertos.add(u);
+    return true;
+  } catch (e) { return false; }
+}
+
+function addBubble(role, text) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + (role === 'user' ? 'user' : 'bot');
+  if (role === 'assistant') {
+    // Convierte URLs en links clicables (para la cotización PDF)
+    const safe = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    div.innerHTML = safe.replace(/(https?:\/\/[^\s)]+)/g,
+      '<a href="$1" target="_blank" rel="noopener">📄 Ver mi cotización</a>');
+  } else {
+    div.textContent = text;
+  }
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+  return div;
+}
+
+const devsAbiertos = new Set();
+
+function addDevCard(nombre, url, brochure) {
+  const div = document.createElement('div');
+  div.className = 'msg bot devcard';
+  let html = '🏝️ <strong>Conoce ' + nombre + '</strong>' +
+    '<a href="' + url + '" target="_blank" rel="noopener">Ver página del desarrollo →</a>';
+  if (brochure) {
+    html += '<a href="' + brochure + '" target="_blank" rel="noopener">📄 Descargar brochure</a>';
+  }
+  div.innerHTML = html;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+// Muestra la tarjeta del desarrollo (una vez por desarrollo); la página
+// solo se abre cuando el usuario da click al enlace.
+function abrirDesarrollo(dev) {
+  if (!dev || !dev.url || devsAbiertos.has(dev.url)) return;
+  devsAbiertos.add(dev.url);
+  addDevCard(dev.nombre, dev.url, dev.brochure);
+}
+
+function addTyping() {
+  const div = document.createElement('div');
+  div.className = 'msg bot escribiendo';
+  div.innerHTML = '<span></span><span></span><span></span>';
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+  return div;
+}
+
+async function sendMessage(text) {
+  quitarChips();
+  messages.push({ role: 'user', content: text });
+  addBubble('user', text);
+  input.value = '';
+  send.disabled = true;
+  const typing = addTyping();
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ messages, conversationId: convId })
+    });
+    const data = await res.json();
+    typing.remove();
+    const reply = data.reply || 'Disculpa, tuve un problema. ¿Me lo repites?';
+    messages.push({ role: 'assistant', content: reply });
+    addBubble('assistant', reply);
+    abrirDesarrollo(data.dev);
+    guardarSesion();
+    if (data.fin) terminarConversacion();
+  } catch (e) {
+    typing.remove();
+    addBubble('assistant', 'Disculpa, perdí la conexión un momento. Intenta de nuevo por favor.');
+  } finally {
+    send.disabled = false;
+    input.focus();
+  }
+}
+
+// ====== Menú guiado de desarrollos (no consume tokens) ======
+const ZONAS = {
+  tulum:    { nombre: '🌴 Tulum',            devs: ['selvanorte', 'zenesis', 'zenesisclub'] },
+  playa:    { nombre: '🌊 Playa del Carmen', devs: ['bonanza'] },
+  morelos:  { nombre: '🐚 Puerto Morelos',   devs: ['koox'] },
+  acapulco: { nombre: '🌅 Acapulco',         devs: ['olympia', 'vidamar'] },
+  cdmx:     { nombre: '🌆 CDMX',             devs: ['ag117'] },
+  ensenada: { nombre: '🗻 Ensenada',         devs: ['puntapacifico'] },
+};
+
+const DEVS = {
+  selvanorte: {
+    nombre: 'Selva Norte', zona: 'Tulum',
+    info: 'Selva Norte 🌴 es un desarrollo integrado a la naturaleza en Tulum: condos y villas estilo boho chic con más de 10 amenidades (restaurante, gimnasio, albercas, coworking), departamentos de 2 recámaras con acceso tipo lock-off, a 5 min del centro y 10 de la playa. Oferta especial vigente: condos desde $140,294 USD y penthouses con roof garden y jacuzzi desde $206,471 USD.',
+    url: 'https://sisol.com.mx/desarrollos/selva-norte/', brochure: '/brochures/selva-norte-es.pdf',
+  },
+  zenesis: {
+    nombre: 'Zénesis', zona: 'Tulum',
+    info: 'Zénesis 🧘 en Tulum: 60 condos de estilo holístico con 9 amenidades, alberca tipo cenote, cancha de pickleball, gimnasio y coworking. Condos de 2-3 recámaras (128 a 181 m²) y penthouses con roof garden (236 a 239 m²). Pregúntame por precios y disponibilidad.',
+    url: 'https://sisol.com.mx/desarrollos/zenesis/', brochure: '/brochures/zenesis-es.pdf',
+  },
+  zenesisclub: {
+    nombre: 'Zénesis Club', zona: 'Tulum',
+    info: 'Zénesis Club 🧘 en Tulum: suites tipo club dentro del ecosistema Zénesis, ideales para inversión y renta vacacional. Pregúntame por precios y disponibilidad.',
+    url: 'https://sisol.com.mx/desarrollos/zenesis/', brochure: null,
+  },
+  bonanza: {
+    nombre: 'Bonanza Prisma', zona: 'Playa del Carmen',
+    info: 'Bonanza Prisma 🌊 en Playa del Carmen, residencial de casas con casa club, alberca, gimnasio y pet park. Dos privadas: Coto Jade (casas Carisma de 97 m² desde $2,549,060 y Toledo de 171 m² desde $3,700,000) y Privada Ágata (casas Alba de 104 m², 3 recámaras/3 baños, desde $2,749,000). Pregúntame por disponibilidad.',
+    url: 'https://sisol.com.mx/desarrollos/bonanza/', brochure: null,
+  },
+  koox: {
+    nombre: 'Koox', zona: 'Puerto Morelos',
+    info: 'Koox 🐚 en Puerto Morelos, el pueblo costero más tranquilo de la Riviera Maya, entre Cancún y Playa del Carmen. Pregúntame por tipologías, precios y disponibilidad.',
+    url: 'https://sisol.com.mx/desarrollos/koox/', brochure: null,
+  },
+  olympia: {
+    nombre: 'Olympia', zona: 'Acapulco',
+    info: 'Olympia Residencial 🌅 en Acapulco Diamante: desarrollo exclusivo de solo 36 departamentos a 2 min del aeropuerto y la laguna Tres Palos. Amenidades: alberca, jacuzzi, gimnasio, pool bar, palapa, family room y seguridad 24/7, con domótica inteligente incluida. Departamentos de 3 recámaras desde $4,389,000 MXN. ¡Últimas unidades!',
+    url: 'https://sisol.com.mx/desarrollos/olympia/', brochure: '/brochures/olympia-es.pdf',
+  },
+  vidamar: {
+    nombre: 'VidaMar', zona: 'Acapulco',
+    info: 'VidaMar Residencial 🏖️ en Acapulco (Clúster III): quedan solo 2 unidades disponibles — planta baja de 155 m² en $4,899,000 MXN y penthouse de 210 m² en $5,249,000 MXN. ¡Aprovecha antes de que se agoten!',
+    url: 'https://sisol.com.mx/desarrollos/vidamar/', brochure: null,
+  },
+  ag117: {
+    nombre: 'AG117', zona: 'CDMX',
+    info: 'AG117 🌆 en la colonia Juárez, corazón de la CDMX: proyecto residencial del galardonado despacho vgzarquitectura, 5 torres con roof garden, gimnasio, coworking y domótica inteligente. Departamentos de 1 y 2 recámaras con estudio desde $5,000,000 MXN, precios de lanzamiento.',
+    url: 'https://sisol.com.mx/desarrollos/ag117/', brochure: '/brochures/ag117-es.pdf',
+  },
+  puntapacifico: {
+    nombre: 'Punta Pacífico', zona: 'Ensenada',
+    info: 'Punta Pacífico 🗻 en Ensenada, Baja California: casas de 1 nivel con roof garden frente al Pacífico. Pregúntame por precios y disponibilidad.',
+    url: 'https://sisol.com.mx/desarrollos/punta-pacifico/', brochure: null,
+  },
+};
+
+let chipsActivos = null;
+
+function quitarChips() {
+  if (chipsActivos) { chipsActivos.remove(); chipsActivos = null; }
+}
+
+function mostrarChips(opciones) {
+  quitarChips();
+  const div = document.createElement('div');
+  div.className = 'chips';
+  for (const op of opciones) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = op.label;
+    b.onclick = () => { quitarChips(); op.action(); };
+    div.appendChild(b);
+  }
+  chipsActivos = div;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+// Registra la interacción del menú en el historial para que Sisol tenga
+// contexto si el cliente luego escribe libremente.
+function interaccionMenu(textoUsuario, textoBot) {
+  messages.push({ role: 'user', content: textoUsuario });
+  addBubble('user', textoUsuario);
+  messages.push({ role: 'assistant', content: textoBot });
+  addBubble('assistant', textoBot);
+  guardarSesion();
+}
+
+function menuZonas() {
+  if (input.disabled) return;
+  quitarChips();
+  const ops = Object.keys(ZONAS).map(z => ({
+    label: ZONAS[z].nombre,
+    action: () => menuDesarrollos(z)
+  }));
+  ops.push({ label: '💬 Escribir mi pregunta', action: () => input.focus() });
+  mostrarChips(ops);
+}
+
+function menuDesarrollos(zonaKey) {
+  const zona = ZONAS[zonaKey];
+  interaccionMenu(
+    'Me interesa la zona de ' + zona.nombre.replace(/^\S+\s/, ''),
+    '¡Gran elección! Esto tenemos ahí:'
+  );
+  const ops = zona.devs.map(d => ({
+    label: DEVS[d].nombre,
+    action: () => fichaDesarrollo(d)
+  }));
+  ops.push({ label: '← Otras zonas', action: menuZonas });
+  mostrarChips(ops);
+}
+
+function fichaDesarrollo(devKey) {
+  const dev = DEVS[devKey];
+  interaccionMenu('Cuéntame de ' + dev.nombre, dev.info);
+  devsAbiertos.add(dev.url); // evita tarjeta duplicada cuando el modelo responda
+  addDevCard(dev.nombre, dev.url, dev.brochure);
+  mostrarChips([
+    { label: '💰 Cotizar ' + dev.nombre, action: () => sendMessage('Me interesa ' + dev.nombre + ' en ' + dev.zona + ', quiero una cotización') },
+    { label: '← Ver otros desarrollos', action: menuZonas },
+    { label: '💬 Escribir mi pregunta', action: () => input.focus() },
+  ]);
+}
+
+document.getElementById('btn-menu').addEventListener('click', menuZonas);
+
+// Cierra la conversación: bloquea el input y ofrece empezar de nuevo
+function terminarConversacion() {
+  quitarChips();
+  input.disabled = true;
+  input.placeholder = 'Conversación finalizada';
+  send.disabled = true;
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'msg bot';
+  btn.style.cssText = 'cursor:pointer;color:#f28c1b;font-weight:600;border:1.5px dashed #f28c1b;background:#fff7ec;';
+  btn.textContent = '🔄 Iniciar nueva conversación';
+  btn.onclick = () => { try { localStorage.removeItem('sisol-chat'); } catch (e) {} location.reload(); };
+  chat.appendChild(btn);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+form.addEventListener('submit', e => {
+  e.preventDefault();
+  const text = input.value.trim();
+  if (text && !send.disabled) sendMessage(text);
+});
+
+// Restaura la conversación previa de esta sesión; si no hay, saludo inicial
+if (!cargarSesion()) {
+  convId = nuevoConvId();
+  const saludo = '¡Hola! ☀️ Soy Sisol, asistente de SI SOL Inmobiliarias. Elige una zona para ver nuestros desarrollos, o escríbeme directamente lo que buscas 👇';
+  messages.push({ role: 'assistant', content: saludo });
+  addBubble('assistant', saludo);
+  menuZonas();
+}
+input.focus();
+</script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+# Copia este archivo como .dev.vars para desarrollo local
+# API key del servidor open-wa (https://owa.sisol.red)
+OPENWA_API_KEY=pon_aqui_tu_api_key
+# Llave service_role de Supabase (Settings > API)
+SUPABASE_SERVICE_ROLE_KEY=pon_aqui_la_llave
