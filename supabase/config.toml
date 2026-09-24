@@ -83,6 +83,10 @@ verify_jwt = true
 [functions.drive-sync]
 verify_jwt = true
 
+# El Drive comercial de Sisol (Ventas). La pide la app con la sesion de quien tiene edit_ventas.
+[functions.ventas-drive-sync]
+verify_jwt = true
+
 # La llama `bi-assistant`, no la aplicación, reenviando el JWT del usuario para que el permiso del
 # reporte se compruebe en un solo lugar. Por eso no aparece en el código Dart: buscarla sólo ahí
 # hace parecer que nadie la usa.

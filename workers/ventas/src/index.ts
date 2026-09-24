@@ -245,9 +245,13 @@ async function loadCaracteristicas(env: Env): Promise<string> {
   const fmt = (n: number) => n.toLocaleString("es-MX", { maximumFractionDigits: 0 });
 
   const byDev = new Map<string, string[]>();
+  const conteo = new Map<string, Record<string, number>>();
   for (const r of rows) {
     const dev = r.ventas_desarrollos?.nombre ?? "";
     if (!byDev.has(dev)) byDev.set(dev, []);
+    const c = conteo.get(dev) ?? {};
+    c[r.estatus] = (c[r.estatus] ?? 0) + 1;
+    conteo.set(dev, c);
     const partes: string[] = [];
     if (r.tipo)                partes.push(r.tipo);
     if (r.nivel)               partes.push(`Nivel ${r.nivel}`);
@@ -261,9 +265,22 @@ async function loadCaracteristicas(env: Env): Promise<string> {
     byDev.get(dev)!.push(`  • ${partes.join(" | ")}`);
   }
 
-  const lineas: string[] = ["Inventario de unidades (usar estos datos sobre la base de conocimiento):"];
+  // El total va escrito y ya contado. El 24/09/2026 un cliente pregunto de cuantos departamentos se
+  // conforma AG117 y Sisol contesto «288», que no sale de ningun documento: no tenia el numero y lo
+  // invento. El usuario confirmo que el inventario es el total de cada desarrollo, asi que el numero
+  // se da hecho —contar 71 renglones es justo lo que un modelo hace mal—.
+  const lineas: string[] = [
+    "Inventario de unidades (usar estos datos sobre la base de conocimiento).",
+    "El inventario de cada desarrollo es su TOTAL de unidades: si preguntan cuántos departamentos o unidades tiene, da el total de abajo tal cual. " +
+      "Para cualquier otra cifra que no aparezca en esta información, di que no tienes el dato y ofrece que un asesor lo confirme: NUNCA la estimes ni la inventes.",
+  ];
   for (const [dev, filas] of byDev) {
-    lineas.push(`\n${dev}:`);
+    const c = conteo.get(dev) ?? {};
+    const detalle = Object.entries(ESTATUS_TEXTO)
+      .filter(([k]) => c[k])
+      .map(([k, t]) => `${c[k]} ${t.toLowerCase()}`)
+      .join(", ");
+    lineas.push(`\n${dev} — total de unidades del desarrollo: ${filas.length} (${detalle}):`);
     lineas.push(...filas);
   }
   return lineas.join("\n");
@@ -282,6 +299,28 @@ async function loadKnowledgeChunks(env: Env): Promise<string> {
   return lineas.join("\n");
 }
 
+// Lo que leyo `ventas-drive-sync` del Drive comercial: brochures, listas de precios y ubicacion.
+// Sustituye a KNOWLEDGE (el mismo texto, pero sacado a mano en agosto). Se guarda un minuto por
+// instancia: son decenas de KB y cambian cuando alguien actualiza el Drive, no a cada mensaje.
+let cacheDrive: { texto: string; en: number } | null = null;
+
+async function loadDriveConocimiento(env: Env): Promise<string> {
+  if (cacheDrive && Date.now() - cacheDrive.en < 60_000) return cacheDrive.texto;
+  const rows = await sb<{ desarrollo: string; carpeta: string; categoria: string; nombre: string; texto: string }[]>(
+    env,
+    "v_ventas_drive_conocimiento?select=desarrollo,carpeta,categoria,nombre,texto&order=desarrollo,carpeta,categoria,nombre"
+  );
+  const etiqueta: Record<string, string> = { BROCHURE: "Brochure", PRECIOS: "Lista de precios", UBICACION: "Ubicación" };
+  const texto = rows
+    .map((r) => {
+      const donde = r.carpeta && r.carpeta.toLowerCase() !== r.desarrollo.toLowerCase() ? ` (${r.carpeta})` : "";
+      return `## DESARROLLO: ${r.desarrollo}${donde} | ${etiqueta[r.categoria] ?? r.categoria}: ${r.nombre.replace(/\.pdf$/i, "")}\n${r.texto.trim()}`;
+    })
+    .join("\n\n");
+  cacheDrive = { texto, en: Date.now() };
+  return texto;
+}
+
 // Contacto oficial + regla anti-invención. Se inyecta SIEMPRE (aunque el prompt
 // de D1 no lo incluya) para evitar que el modelo invente correos/teléfonos o dé
 // números de un brochure como si fueran la línea general.
@@ -294,7 +333,7 @@ const CONTACTO_OFICIAL = `
 - Si no tienes un dato, dilo con honestidad y ofrece el contacto oficial de arriba.
 === FIN CONTACTO OFICIAL ===`;
 
-function buildSystemPrompt(personalidad: string, preciosDinamicos: string, chunks: string): string {
+function buildSystemPrompt(personalidad: string, preciosDinamicos: string, chunks: string, drive: string): string {
   const secPrecios = preciosDinamicos
     ? `\n\n=== PRECIOS VIGENTES (prioridad sobre base de conocimiento) ===\n${preciosDinamicos}\n=== FIN PRECIOS ===`
     : "";
@@ -304,9 +343,7 @@ function buildSystemPrompt(personalidad: string, preciosDinamicos: string, chunk
   return `${personalidad}${CONTACTO_OFICIAL}${secPrecios}${secChunks}
 
 === BASE DE CONOCIMIENTO DE DESARROLLOS SISOL ===
-${KNOWLEDGE}
-
-${KNOWLEDGE_EXTRA}
+${drive || `${KNOWLEDGE}\n\n${KNOWLEDGE_EXTRA}`}
 === FIN DE LA BASE DE CONOCIMIENTO ===`;
 }
 
@@ -757,13 +794,18 @@ app.post("/api/chat", async (c) => {
     });
   }
 
-  let cfg: AgentConfig, preciosDinamicos: string, chunks: string, devs: Desarrollo[];
+  let cfg: AgentConfig, preciosDinamicos: string, chunks: string, devs: Desarrollo[], drive: string;
   try {
-    [cfg, preciosDinamicos, chunks, devs] = await Promise.all([
+    [cfg, preciosDinamicos, chunks, devs, drive] = await Promise.all([
       loadConfig(c.env),
       loadCaracteristicas(c.env),
       loadKnowledgeChunks(c.env),
       cargarDesarrollos(c.env),
+      // Si el Drive falla o todavia no se lee, se usa la copia fija de agosto: mejor vieja que nada.
+      loadDriveConocimiento(c.env).catch((e) => {
+        console.error("No se pudo leer el Drive de Sisol:", e);
+        return "";
+      }),
     ]);
   } catch (e) {
     // Sin la base no hay precios que citar: mejor no contestar que contestar de memoria.
@@ -825,7 +867,7 @@ app.post("/api/chat", async (c) => {
   }
 
   const origin = new URL(c.req.url).origin;
-  const messages: any[] = [{ role: "system", content: buildSystemPrompt(cfg.prompt_personalidad, preciosDinamicos, chunks) }, ...history];
+  const messages: any[] = [{ role: "system", content: buildSystemPrompt(cfg.prompt_personalidad, preciosDinamicos, chunks, drive) }, ...history];
   const yaRegistrado = leadYaRegistrado(history);
   const { tieneEmail, tieneTelefono } = estadoContacto(history);
   const tieneNombre = detectarNombre(history) !== "";
