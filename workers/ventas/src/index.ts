@@ -1150,8 +1150,65 @@ app.get("/api/ventas/config-meta", async (c) => {
     ...meta,
     predeterminado: CONFIG_DEFAULTS[clave] ?? "",
   }));
-  return c.json({ config });
+  return c.json({ config, agente: await descripcionAgente(c.env) });
 });
+
+// Como esta armado Sisol, para las tarjetas de Configuracion. Sale de las MISMAS constantes y
+// cargas que usa /api/chat, no de una descripcion aparte: si cambia el modelo o un limite aqui, la
+// pantalla lo dice sin que nadie la actualice.
+async function descripcionAgente(env: Env) {
+  const [devs, unidades, drive, conocimiento] = await Promise.all([
+    cargarDesarrollos(env),
+    sb<{ estatus: string }[]>(env, "ventas_unidades?select=estatus,ventas_desarrollos!inner(is_active)&ventas_desarrollos.is_active=eq.true"),
+    sb<{ id: string }[]>(env, "v_ventas_drive_conocimiento?select=id").catch(() => []),
+    sb<{ id: string }[]>(env, "ventas_conocimiento?select=id&is_active=eq.true"),
+  ]);
+  // El numero del asesor a medias: la pantalla es interna, pero no hace falta mostrarlo entero.
+  const tel = String(env.ADVISOR_PHONE ?? "").replace(/\D/g, "").slice(-10);
+  const asesor = tel.length === 10 ? `${tel.slice(0, 2)} **** ${tel.slice(-4)}` : "";
+  return {
+    modelo: MODEL,
+    modelo_respaldo: MODEL_RESPALDO,
+    proveedor: "Cloudflare Workers AI",
+    max_tokens_predeterminado: 500,
+    historial: MAX_HISTORY,
+    limite_por_ip: "12 mensajes por minuto",
+    origenes: [...HOSTS_PERMITIDOS],
+    whatsapp: {
+      configurado: !!(env.OPENWA_API_KEY && env.OPENWA_URL && env.OPENWA_SESSION && env.ADVISOR_PHONE),
+      servidor: env.OPENWA_URL,
+      asesor,
+    },
+    herramientas: [
+      { nombre: "Contesta sobre los desarrollos", que_hace: `Con el texto de ${drive.length} documentos del Drive comercial (brochures, precios, ubicación) y ${conocimiento.length} fragmentos de información adicional.` },
+      { nombre: "Cita precios e inventario", que_hace: "Copia precios, superficies, estatus y el total de unidades de la tabla de inventario. Lo que no está ahí, dice que no lo tiene." },
+      { nombre: "Recomienda por presupuesto", que_hace: "Pide el presupuesto y sugiere el o los desarrollos que caben; si el cliente habla en dólares usa la columna USD." },
+      { nombre: "Registra el lead", que_hace: "En cuanto el cliente dio nombre, correo y teléfono de 10 dígitos, lo guarda en Leads. Lo decide el código, no el modelo." },
+      { nombre: "Avisa al asesor", que_hace: "Manda un WhatsApp con los datos del cliente y el enlace a la cotización." },
+      { nombre: "Genera la cotización", que_hace: "Un PDF con los datos del cliente, el desarrollo y su presupuesto. El enlace lleva un folio que no se puede adivinar." },
+      { nombre: "Muestra la tarjeta del desarrollo", que_hace: `Cuando la respuesta habla de uno solo, enlaza su página en sisol.com.mx y su brochure (${devs.filter((d) => d.url_pagina).length} con página, ${devs.filter((d) => d.brochure_es || d.brochure_en).length} con brochure).` },
+      { nombre: "Habla inglés", que_hace: "Si el cliente escribe en inglés, contesta en inglés y ofrece el brochure en inglés cuando existe." },
+    ],
+    protecciones: [
+      "Solo contesta desde sisol.com.mx y chat.sisol.red.",
+      "Máximo 12 mensajes por minuto por visitante.",
+      "Cierra la plática al llegar al tope de mensajes de Límites.",
+      "Frases como «ignora tus instrucciones» se contestan con el mensaje fuera de tema, sin llamar al modelo.",
+      "Una respuesta larga que no habla de bienes raíces se descarta.",
+      "Nunca da otro contacto que el oficial (55 8070 1197, contacto@sisol.com.mx).",
+    ],
+    datos: {
+      desarrollos_activos: devs.length,
+      unidades: unidades.length,
+      unidades_disponibles: unidades.filter((u) => u.estatus === "DISPONIBLE").length,
+      documentos_drive: drive.length,
+      conocimiento_adicional: conocimiento.length,
+    },
+    ambito:
+      "Sisol es el agente de ventas público de sisol.com.mx: le habla a clientes, no a asesores. Solo platica de los desarrollos de SI SOL, " +
+      "el proceso de compra y financiamiento. No manda correos, no agenda citas ni confirma apartados: para todo eso registra el lead y el asesor le da seguimiento.",
+  };
+}
 
 // Re-envia el aviso de WhatsApp al asesor (p. ej. si OpenWA estaba caido cuando entro el lead).
 app.post("/api/ventas/leads/:folio/notificar", async (c) => {

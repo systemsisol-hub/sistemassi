@@ -59,10 +59,14 @@ class SisolApi {
     return Map<String, dynamic>.from(cuerpo as Map);
   }
 
-  /// Etiqueta, pista, tipo y valor predeterminado de cada clave de `ventas_config`.
-  static Future<List<Map<String, dynamic>>> configMeta() async {
+  /// Etiqueta, pista, tipo y valor predeterminado de cada clave de `ventas_config`, y en `agente`
+  /// cómo está armado Sisol (modelo, qué sabe hacer, qué tiene cargado) para las tarjetas.
+  static Future<({List<Map<String, dynamic>> config, Map<String, dynamic> agente})> configMeta() async {
     final r = await _llamar('GET', '/api/ventas/config-meta');
-    return [for (final c in r['config'] as List) Map<String, dynamic>.from(c as Map)];
+    return (
+      config: [for (final c in r['config'] as List) Map<String, dynamic>.from(c as Map)],
+      agente: Map<String, dynamic>.from((r['agente'] as Map?) ?? const {}),
+    );
   }
 
   /// Re-envía el WhatsApp al asesor. Devuelve el error, o null si salió.
