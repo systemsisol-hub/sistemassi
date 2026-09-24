@@ -118,4 +118,18 @@ void main() {
       esperarEspanol(mensajeDeAuth(StateError('unexpected internal failure')));
     });
   });
+
+  group('AuthRetryableFetchException', () {
+    test('sin respuesta del servidor es un problema de conexión', () {
+      expect(mensajeDeAuth(AuthRetryableFetchException()), contains('conexión'));
+    });
+
+    // 24/09/2026: el SMTP de Supabase rechazaba sus credenciales (535) y /recover devolvía 500;
+    // la pantalla le pedía al usuario revisar su conexión, que estaba bien.
+    test('un 500 del servidor no culpa a la conexión del usuario', () {
+      final m = mensajeDeAuth(AuthRetryableFetchException(message: '{}', statusCode: '500'));
+      expect(m, isNot(contains('conexión')));
+      expect(m, contains('Sistemas'));
+    });
+  });
 }

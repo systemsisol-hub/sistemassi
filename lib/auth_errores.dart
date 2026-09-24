@@ -50,6 +50,15 @@ String mensajeDeAuth(Object error) {
   }
 
   if (error is AuthRetryableFetchException) {
+    // La misma excepción cubre dos cosas distintas: sin respuesta (red caída, statusCode nulo) y
+    // un 5xx del servidor. El 24/09/2026 «Recuperar contraseña» decía «revisa tu conexión» cuando
+    // lo que fallaba era el SMTP de Supabase (535, credenciales rechazadas): la conexión estaba
+    // bien y el usuario no tenía nada que revisar.
+    if ((error.statusCode ?? '').startsWith('5')) {
+      debugPrint('auth: error ${error.statusCode} del servidor — ${error.message}');
+      return 'El servidor no pudo completar la operación. Si es el correo de recuperación, '
+          'avisa a Sistemas: el envío de correos puede estar fallando.';
+    }
     return 'No se pudo conectar con el servidor. Revisa tu conexión e intenta de nuevo.';
   }
 
