@@ -1,0 +1,43 @@
+{
+  // Sisol, agente de ventas publico de SI SOL INMOBILIARIAS (chat.sisol.red).
+  // Los datos viven en Supabase (tablas ventas_*); el panel es la seccion Ventas de sistemassi.
+  "name": "sisol-agente-ventas",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+  "workers_dev": true,
+  "routes": [
+    {
+      "pattern": "chat.sisol.red",
+      "custom_domain": true
+    }
+  ],
+  "ai": {
+    "binding": "AI"
+  },
+  // Máximo 12 mensajes por minuto por IP en /api/chat
+  "unsafe": {
+    "bindings": [
+      {
+        "name": "RATE_LIMITER",
+        "type": "ratelimit",
+        "namespace_id": "1001",
+        "simple": { "limit": 12, "period": 60 }
+      }
+    ]
+  },
+  "vars": {
+    "SUPABASE_URL": "https://zkmbebybyyefmqcxjqrg.supabase.co",
+    // Servidor OpenWA de SISOL para avisar al asesor por WhatsApp
+    "OPENWA_URL": "https://owa.sisol.red",
+    // Id de la sesión de WhatsApp conectada en el panel OpenWA
+    "OPENWA_SESSION": "2329e135-727a-4b74-bb93-b0dd34e172a2",
+    // Número del asesor como chatId de OpenWA: 52 + 1 + 10 dígitos + @s.whatsapp.net (con este formato llegan los avisos de los 21 leads de D1)
+    "ADVISOR_PHONE": "5215580180569@s.whatsapp.net"
+  }
+  // Secrets requeridos (no van aquí): wrangler secret put OPENWA_API_KEY
+  //                                   wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+}

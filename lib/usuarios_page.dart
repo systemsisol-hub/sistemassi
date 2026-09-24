@@ -1361,6 +1361,7 @@ class _PermIcons extends StatelessWidget {
       _PermIcon(Icons.apps_outlined, perms['show_herramientas'] == true),
       _PermIcon(Icons.smart_toy_outlined, perms['show_ai'] == true),
       _PermIcon(Icons.delete_outline, perms['show_trash'] == true),
+      _PermIcon(Icons.person_add_alt_1, perms['show_ventas'] == true),
     ];
     return Wrap(
       spacing: 3,
@@ -1472,6 +1473,8 @@ class _UserFormSheetState extends State<_UserFormSheet> {
       'show_passwords': false,
       'show_ai': false,
       'show_trash': false,
+      'show_ventas': false,
+      'edit_ventas': false,
     });
   }
 
@@ -1983,6 +1986,10 @@ class _UserFormSheetState extends State<_UserFormSheet> {
     // acceso en permiso de borrado sobre los precios de la empresa.
     ('SOL (comercial)', 'show_sol', Icons.smart_toy_outlined),
     ('Editar desarrollos', 'edit_desarrollos', Icons.business),
+    // Ventas: Sisol, el chat público de sisol.com.mx. Mismo criterio de dos permisos: ver leads y
+    // conversaciones no es lo mismo que cambiar precios o apagar el chat.
+    ('Ventas (Sisol)', 'show_ventas', Icons.person_add_alt_1),
+    ('Editar ventas', 'edit_ventas', Icons.support_agent_outlined),
   ];
 
   /// `dosColumnas` sólo en escritorio: en un teléfono la columna quedaría tan angosta que las

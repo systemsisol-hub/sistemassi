@@ -1,0 +1,5 @@
+node_modules/
+drive-data/
+.wrangler/
+.dev.vars
+__pycache__/
