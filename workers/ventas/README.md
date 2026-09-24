@@ -17,7 +17,7 @@ sisol.com.mx ── widget.js ──► Worker chat.sisol.red ──► Supabase
 | `POST /api/chat` | widget (origen permitido, 12/min por IP) | conversación, registro del lead, aviso por WhatsApp |
 | `GET /api/cotizacion/:folio` | público | PDF de la cotización |
 | `GET /brochures/:archivo` | público | brochure desde el bucket `ventas-brochures` |
-| `GET /api/ventas/config-meta` | sesión de sistemassi con `show_ventas` | etiquetas y textos predeterminados de la configuración |
+| `GET /api/ventas/config-meta` | sesión de sistemassi con `show_ventas` (401 sin sesión válida, 403 sin permiso) | etiquetas y textos predeterminados de la configuración |
 | `POST /api/ventas/leads/:folio/notificar` | sesión de sistemassi con `show_ventas` | re-envía el WhatsApp al asesor |
 
 Lo demás (leads, conversaciones, desarrollos, inventario, conocimiento, configuración, «detener

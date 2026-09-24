@@ -82,7 +82,7 @@ class _VentasLeadsPageState extends State<VentasLeadsPage> {
         avisoVentas(context, error, error: true);
       }
     } catch (e) {
-      if (mounted) avisoVentas(context, 'No se pudo enviar: $e', error: true);
+      if (mounted) avisoVentas(context, '$e'.replaceFirst('Exception: ', ''), error: true);
     } finally {
       if (mounted) setState(() => _notificando.remove(folio));
     }

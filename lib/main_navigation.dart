@@ -32,10 +32,7 @@ import 'ai_page.dart';
 import 'sol_page.dart';
 import 'knowledge_page.dart';
 import 'trash_page.dart';
-import 'ventas_leads_page.dart';
-import 'ventas_conversaciones_page.dart';
-import 'ventas_desarrollos_page.dart';
-import 'ventas_config_page.dart';
+import 'ventas_page.dart';
 import 'theme/si_theme.dart';
 
 class _OpenSearchIntent extends Intent {
@@ -55,7 +52,8 @@ final _navGroups = <(String, List<String>)>[
   ('OPERACIÓN',      ['Incidencias', 'Inventario', 'Colaborador', 'Asistencia']),
   // Sisol, el agente de ventas PÚBLICO de sisol.com.mx (chat.sisol.red). Su propia sección y no una
   // pestaña de SOL: le habla a clientes, no a asesores, y tiene su propio catálogo de desarrollos.
-  ('VENTAS',         ['Leads', 'Conversaciones', 'Desarrollos', 'Agente Sisol']),
+  // Una sola entrada con pestañas (Leads, Conversaciones, Desarrollos, Configuración), como SOL.
+  ('VENTAS',         ['Agente Sisol']),
   // Logs sale de ANÁLISIS: no se analiza el negocio con ellos, se revisa el sistema.
   ('ANÁLISIS',       ['BI', 'Tablas']),
   ('ADMINISTRACIÓN', ['Usuarios', 'Logs', 'WhatsApp', 'Papelera']),
@@ -344,28 +342,10 @@ class _MainNavigationState extends State<MainNavigation> {
     // sale en blanco hasta que caduca la fuente en caché.
     if (widget.role == 'admin' || widget.permissions['show_ventas'] == true) {
       pages.add({
-        'title': 'Leads',
-        'icon': Icons.person_add_alt_1,
-        'activeIcon': Icons.person_add_alt_1,
-        'widget': VentasLeadsPage(role: widget.role, permissions: widget.permissions),
-      });
-      pages.add({
-        'title': 'Conversaciones',
-        'icon': Icons.chat_outlined,
-        'activeIcon': Icons.chat_outlined,
-        'widget': VentasConversacionesPage(role: widget.role, permissions: widget.permissions),
-      });
-      pages.add({
-        'title': 'Desarrollos',
-        'icon': Icons.business,
-        'activeIcon': Icons.business,
-        'widget': VentasDesarrollosPage(role: widget.role, permissions: widget.permissions),
-      });
-      pages.add({
         'title': 'Agente Sisol',
         'icon': Icons.support_agent_outlined,
         'activeIcon': Icons.support_agent_outlined,
-        'widget': VentasConfigPage(role: widget.role, permissions: widget.permissions),
+        'widget': VentasPage(role: widget.role, permissions: widget.permissions),
       });
     }
     // La configuración del agente NO va aquí: vive en una pestaña dentro de la propia página de IA.

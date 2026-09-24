@@ -32,7 +32,18 @@ class SisolApi {
     final res = metodo == 'POST'
         ? await http.post(uri, headers: headers)
         : await http.get(uri, headers: headers);
-    if (res.statusCode == 401) throw Exception('Sin permiso para Ventas.');
+    // 401 = la sesión ya no la reconoce Auth (p. ej. se cerró al cambiar la contraseña) aunque
+    // todavía sirva para leer tablas; 403 = falta el permiso. El Worker manda el texto de cada caso.
+    if (res.statusCode == 401 || res.statusCode == 403) {
+      String? texto;
+      try {
+        texto = (jsonDecode(res.body) as Map)['error']?.toString();
+      } catch (_) {}
+      throw Exception(texto ??
+          (res.statusCode == 401
+              ? 'Tu sesión ya no es válida. Cierra sesión y vuelve a entrar.'
+              : 'No tienes permiso para Ventas.'));
+    }
     // Una respuesta que no es JSON es la página «Not found» de un Worker que no tiene esta ruta:
     // el de chat.sisol.red todavía es la versión anterior a la sección Ventas.
     final Object? cuerpo;
