@@ -96,6 +96,58 @@ const RECORDATORIO_LEAD =
 const RECORDATORIO_POST_LEAD =
   "\n\n[Recordatorio del sistema para Sisol — el cliente no ve esto: la cotización YA fue entregada y un asesor ya fue notificado. NO vuelvas a compartir el enlace de cotización. NO repitas que un asesor se contactará (ya lo dijiste). Si el cliente pide más información o características del desarrollo, responde con datos específicos: tipo de unidad, superficies, niveles, amenidades, precios o fechas de entrega. Si tiene dudas sobre el brochure, recuérdale que puede descargarlo desde el enlace que ya se compartió en el chat.]";
 
+// ─── Quien escribe: cliente, asesor externo, proveedor o alguien que busca empleo ──────────────
+//
+// Pedido del usuario el 24/09/2026: al chat llegan brokers que quieren vender los desarrollos y
+// empresas que quieren ofrecer servicios. Se les piden los mismos datos que a un cliente, pero en
+// lugar de la cotizacion reciben una tarjeta con los contactos de SI SOL, y el registro queda
+// etiquetado. Se decide en codigo, sobre lo que escribio el VISITANTE: es la frase que lo delata
+// («soy broker», «ofrezco servicios de…») y no conviene que el modelo la reinterprete.
+export type TipoContacto = "CLIENTE" | "ASESOR_EXTERNO" | "PROVEEDOR" | "BUSCA_EMPLEO";
+
+const RE_BUSCA_EMPLEO =
+  /\b(vacantes?|bolsa de trabajo|busco (trabajo|empleo)|buscando (trabajo|empleo)|solicitud de empleo|postular(me)?|mi (cv|curr[ií]culum)|enviar(les)? mi (cv|curr[ií]culum)|trabajar (con|en|para) ustedes)\b/i;
+const RE_PROVEEDOR =
+  /\b(proveedor(es)?|ofrecer(les)? (mis|nuestros) servicios|ofrezco (mis |nuestros )?servicios|ofrecemos (servicios|soluciones)|mi empresa (ofrece|se dedica)|somos una empresa|presentar(les)? (una )?propuesta|propuesta comercial|cotizarles|vendemos (materiales|equipo|servicios)|servicios de (limpieza|seguridad|mantenimiento|marketing|publicidad|construcci[oó]n|jardiner[ií]a|fotograf[ií]a))\b/i;
+const RE_ASESOR_EXTERNO =
+  /\b(brokers?|realtors?|real estate agent|soy (agente|asesor(a)?)( inmobiliari[oa])?|asesor(a)? (inmobiliari[oa]|externo|independiente)|agente inmobiliari[oa]|tengo (una )?inmobiliaria|mi inmobiliaria|comercializar (sus|los) desarrollos|vender (sus|los) (desarrollos|departamentos|propiedades)|comparten comisi[oó]n|esquema de comisiones|alta (de|como) broker)\b/i;
+
+export function detectarTipo(history: { role: string; content: string }[]): TipoContacto {
+  const texto = history.filter((m) => m.role === "user").map((m) => m.content).join("\n");
+  if (RE_BUSCA_EMPLEO.test(texto)) return "BUSCA_EMPLEO";
+  if (RE_PROVEEDOR.test(texto)) return "PROVEEDOR";
+  if (RE_ASESOR_EXTERNO.test(texto)) return "ASESOR_EXTERNO";
+  return "CLIENTE";
+}
+
+const TIPO_TEXTO: Record<TipoContacto, string> = {
+  CLIENTE: "cliente",
+  ASESOR_EXTERNO: "asesor externo",
+  PROVEEDOR: "proveedor",
+  BUSCA_EMPLEO: "persona que busca empleo",
+};
+
+const CONTACTO_EXTERNO_DEFAULT = "📞 55 8070 1197\n✉️ contacto@sisol.com.mx";
+
+// Mientras platica con alguien que NO es cliente. Reemplaza a los recordatorios de venta, que le
+// pedirian presupuesto y le prometerian una cotizacion.
+const RECORDATORIO_EXTERNO =
+  "\n\n[Recordatorio del sistema para Sisol — el cliente no ve esto: quien escribe NO es un cliente sino un {tipo}. NO le ofrezcas desarrollos, NO le pidas presupuesto y NO le menciones cotizaciones. Agradécele el interés con cordialidad y, si todavía no los tienes, pídele su nombre completo, su correo electrónico y su teléfono a 10 dígitos para que el área correspondiente de SI SOL lo contacte; en cuanto los tengas le darás nuestros contactos. Si ya se los diste, no los repitas salvo que te los pida.]";
+
+// Tarjeta y texto de cierre para quien no es cliente, con los contactos que se editan en
+// Configuracion (uno para asesores externos, otro para proveedores y quien busca empleo).
+function respuestaExterno(tipo: TipoContacto, cfg: AgentConfig, nombre: string) {
+  const contacto = tipo === "ASESOR_EXTERNO" ? cfg.contacto_asesores_externos : cfg.contacto_proveedores;
+  const titulo =
+    tipo === "ASESOR_EXTERNO" ? "Contacto para asesores externos" :
+    tipo === "BUSCA_EMPLEO" ? "Contacto de SI SOL" : "Contacto para proveedores";
+  const saludo = nombre ? `¡Gracias, ${nombre.split(/\s+/)[0]}!` : "¡Gracias!";
+  return {
+    reply: `${saludo} Ya registramos tus datos y el área correspondiente de SI SOL te contactará. Mientras, aquí tienes nuestros contactos:\n\n${contacto}`,
+    contacto: { titulo, texto: contacto },
+  };
+}
+
 // El catalogo de desarrollos (pagina en sisol.com.mx, brochures, alias) viene de
 // ventas_desarrollos: un desarrollo o un brochure nuevo ya no pide desplegar.
 
@@ -192,6 +244,9 @@ interface AgentConfig {
   recordatorio_lead: string;
   recordatorio_post_lead: string;
   prompt_personalidad: string;
+  recordatorio_externo: string;
+  contacto_asesores_externos: string;
+  contacto_proveedores: string;
   chat_detenido: boolean;
 }
 
@@ -217,6 +272,9 @@ async function loadConfig(env: Env): Promise<AgentConfig> {
     recordatorio_lead: raw.recordatorio_lead || RECORDATORIO_LEAD,
     recordatorio_post_lead: raw.recordatorio_post_lead || RECORDATORIO_POST_LEAD,
     prompt_personalidad: raw.prompt_personalidad || PROMPT_PERSONALIDAD_DEFAULT,
+    recordatorio_externo: raw.recordatorio_externo || RECORDATORIO_EXTERNO,
+    contacto_asesores_externos: raw.contacto_asesores_externos || CONTACTO_EXTERNO_DEFAULT,
+    contacto_proveedores: raw.contacto_proveedores || CONTACTO_EXTERNO_DEFAULT,
     chat_detenido: raw.chat_detenido === "1",
   };
 }
@@ -388,16 +446,25 @@ const TOOLS = [
   },
 ];
 
-async function notificarAsesor(env: Env, lead: Lead, quoteUrl: string) {
+async function notificarAsesor(env: Env, lead: Lead, quoteUrl: string, tipo: TipoContacto = "CLIENTE") {
+  // Al mismo asesor que los clientes (decision del usuario del 24/09/2026), pero con otro titulo
+  // para que un broker o un proveedor no se lea como un comprador.
+  const titulo: Record<TipoContacto, string> = {
+    CLIENTE: "🔔 *NUEVO LEAD - Agente IA SISOL*",
+    ASESOR_EXTERNO: "🤝 *NUEVO ASESOR EXTERNO - Agente IA SISOL*",
+    PROVEEDOR: "🧰 *NUEVO PROVEEDOR - Agente IA SISOL*",
+    BUSCA_EMPLEO: "💼 *BUSCA EMPLEO - Agente IA SISOL*",
+  };
+  const esCliente = tipo === "CLIENTE";
   const texto =
-    `🔔 *NUEVO LEAD - Agente IA SISOL*\n\n` +
+    `${titulo[tipo]}\n\n` +
     `👤 *Nombre:* ${lead.nombre}\n` +
     `📧 *Correo:* ${lead.email}\n` +
     `📱 *Teléfono:* ${lead.telefono}\n` +
-    `💰 *Presupuesto:* ${lead.presupuesto}\n` +
-    `🏗️ *Desarrollo de interés:* ${lead.desarrollo}\n` +
+    (esCliente ? `💰 *Presupuesto:* ${lead.presupuesto}\n` : "") +
+    (esCliente ? `🏗️ *Desarrollo de interés:* ${lead.desarrollo}\n` : "") +
     (lead.resumen ? `📝 *Resumen:* ${lead.resumen}\n` : "") +
-    `\n📄 Cotización: ${quoteUrl}\n` +
+    (esCliente ? `\n📄 Cotización: ${quoteUrl}\n` : "\n") +
     `🕐 ${new Date().toLocaleString("es-MX", { timeZone: "America/Mexico_City" })}`;
 
   // Timeout de 15 s: si OpenWA se cuelga (p. ej. formato de chatId inválido),
@@ -469,7 +536,9 @@ async function ejecutarRegistrarLead(
   // duplicados se filtran después en el panel. (La misma conversación NO
   // re-registra: lo evita leadYaRegistrado(), que detecta la liga ya entregada.)
   // El folio (lo que va en el enlace) lo pone la base: 32 hex que no se pueden adivinar.
-  const desarrolloId = devs.find((d) => d.re.test(lead.desarrollo))?.id ?? null;
+  const tipo: TipoContacto = (["CLIENTE", "ASESOR_EXTERNO", "PROVEEDOR", "BUSCA_EMPLEO"] as const)
+    .find((t) => t === args.tipo) ?? "CLIENTE";
+  const desarrolloId = tipo === "CLIENTE" ? devs.find((d) => d.re.test(lead.desarrollo))?.id ?? null : null;
   const [fila] = await sb<{ id: string; folio: string }[]>(env, "ventas_leads?select=id,folio", {
     method: "POST",
     prefer: "return=representation",
@@ -481,6 +550,7 @@ async function ejecutarRegistrarLead(
       desarrollo: lead.desarrollo,
       desarrollo_id: desarrolloId,
       resumen: lead.resumen || null,
+      tipo,
     }),
   });
   lead.id = fila.folio;
@@ -488,7 +558,7 @@ async function ejecutarRegistrarLead(
 
   let notificado = false;
   try {
-    notificado = await notificarAsesor(env, lead, quoteUrl);
+    notificado = await notificarAsesor(env, lead, quoteUrl, tipo);
     if (notificado) await marcarNotificado(env, fila.id);
   } catch (e) {
     console.error("Error notificando asesor:", e);
@@ -502,6 +572,17 @@ async function ejecutarRegistrarLead(
     mensaje:
       "Lead registrado. Comparte al cliente el enlace de su cotización y dile que un asesor humano lo contactará pronto.",
   });
+}
+
+async function conversacionConRegistro(env: Env, conversationId: string): Promise<boolean> {
+  const id = String(conversationId ?? "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64);
+  if (!id) return false;
+  try {
+    const [fila] = await sb<{ lead_id: string | null }[]>(env, `ventas_conversaciones?select=lead_id&id=${eq(id)}`);
+    return !!fila?.lead_id;
+  } catch {
+    return false;
+  }
 }
 
 async function marcarNotificado(env: Env, leadId: string): Promise<void> {
@@ -642,7 +723,8 @@ async function extraerYRegistrarFallback(
   env: Env,
   devs: Desarrollo[],
   history: { role: string; content: string }[],
-  origin: string
+  origin: string,
+  tipo: TipoContacto = "CLIENTE"
 ): Promise<string | null> {
   const textoUser = history
     .filter((m) => m.role === "user")
@@ -702,10 +784,14 @@ async function extraerYRegistrarFallback(
   // si pasa el filtro pareceNombre.
   const nombreModelo = limpiar(datos.nombre);
   const nombre = nombreHeur || (pareceNombre(nombreModelo) ? nombreModelo : "") || "Prospecto web";
-  const presupuesto = limpiar(datos.presupuesto) || presupuestoHeur || "No especificado";
-  const desarrollo = devHeur || limpiar(datos.desarrollo) || "No especificado";
+  // Un asesor externo o un proveedor no trae presupuesto ni desarrollo de interes: se dice asi, y no
+  // «No especificado», que en Leads se leeria como un cliente al que le falto el dato.
+  const esCliente = tipo === "CLIENTE";
+  const presupuesto = esCliente ? limpiar(datos.presupuesto) || presupuestoHeur || "No especificado" : "No aplica";
+  const desarrollo = esCliente ? devHeur || limpiar(datos.desarrollo) || "No especificado" : "No aplica";
   // Resumen: usa el del modelo o arma uno determinista con desarrollo/presupuesto.
   let resumen = limpiar(datos.resumen);
+  if (!resumen && !esCliente) resumen = `Se presentó como ${TIPO_TEXTO[tipo]}`;
   if (!resumen) {
     const partes: string[] = [];
     if (desarrollo && desarrollo !== "No especificado") partes.push(`Interesado en ${desarrollo}`);
@@ -723,6 +809,7 @@ async function extraerYRegistrarFallback(
       presupuesto,
       desarrollo,
       resumen,
+      tipo,
     },
     origin
   );
@@ -868,7 +955,12 @@ app.post("/api/chat", async (c) => {
 
   const origin = new URL(c.req.url).origin;
   const messages: any[] = [{ role: "system", content: buildSystemPrompt(cfg.prompt_personalidad, preciosDinamicos, chunks, drive) }, ...history];
-  const yaRegistrado = leadYaRegistrado(history);
+  const tipo = detectarTipo(history);
+  const esCliente = tipo === "CLIENTE";
+  // A un cliente se le nota el registro por la liga de la cotizacion en el hilo. A quien no es
+  // cliente no se le da liga, asi que se pregunta a la base si su conversacion ya tiene registro;
+  // sin esto se le volveria a registrar en cada mensaje.
+  const yaRegistrado = leadYaRegistrado(history) || (!esCliente && (await conversacionConRegistro(c.env, conversationId)));
   const { tieneEmail, tieneTelefono } = estadoContacto(history);
   const tieneNombre = detectarNombre(history) !== "";
   // Solo se ofrece el registro cuando hay nombre + correo + teléfono. Requerir
@@ -883,7 +975,9 @@ app.post("/api/chat", async (c) => {
   //   - datos completos  → registrar lead y compartir URL
   //   - datos parciales  → pedir el dato que falta, sin narrar la cotización
   //   - sin datos        → recordatorio anti-abuso (suave con respuestas breves)
-  const recordatorioActivo = yaRegistrado
+  const recordatorioActivo = !esCliente
+    ? cfg.recordatorio_externo.replace(/\{tipo\}/g, TIPO_TEXTO[tipo])
+    : yaRegistrado
     ? cfg.recordatorio_post_lead
     : ofrecerTools
     ? cfg.recordatorio_lead
@@ -901,7 +995,15 @@ app.post("/api/chat", async (c) => {
   // de la API) y respondemos con una confirmación limpia + la cotización.
   let urlCotizacion: string | null = null;
   if (ofrecerTools) {
-    const urlReg = await extraerYRegistrarFallback(c.env, devs, history, origin);
+    const urlReg = await extraerYRegistrarFallback(c.env, devs, history, origin, tipo);
+    if (urlReg && !esCliente) {
+      // Quien no es cliente recibe la tarjeta de contacto, no la cotizacion.
+      const r = respuestaExterno(tipo, cfg, detectarNombre(history));
+      c.executionCtx.waitUntil(
+        guardarConversacion(c.env, conversationId, [...completo, { role: "assistant", content: r.reply }], origenHost, leadIdDesdeUrl(urlReg))
+      );
+      return c.json(r);
+    }
     if (urlReg) {
       const replyReg =
         `¡Listo! Quedaste registrado y un asesor humano de SI SOL te contactará muy pronto.\n\n📄 Descarga tu cotización aquí: ${urlReg}`;
@@ -981,7 +1083,14 @@ app.post("/api/chat", async (c) => {
     // 7) Respaldo: el cliente ya dio datos pero el modelo no llamó la
     // herramienta → el servidor extrae y registra por su cuenta.
     if (ofrecerTools && !urlCotizacion) {
-      const urlFallback = await extraerYRegistrarFallback(c.env, devs, history, origin);
+      const urlFallback = await extraerYRegistrarFallback(c.env, devs, history, origin, tipo);
+      if (urlFallback && !esCliente) {
+        const r = respuestaExterno(tipo, cfg, detectarNombre(history));
+        c.executionCtx.waitUntil(
+          guardarConversacion(c.env, conversationId, [...completo, { role: "assistant", content: r.reply }], origenHost, leadIdDesdeUrl(urlFallback))
+        );
+        return c.json(r);
+      }
       if (urlFallback) {
         urlCotizacion = urlFallback;
         // El lead ya quedó registrado por el respaldo determinista. El texto que
@@ -1117,6 +1226,9 @@ const CONFIG_META: Record<string, { label: string; descripcion: string; tipo: "t
   recordatorio_post_lead: { label: "Recordatorio post-cotización",    descripcion: "Se añade después de que la cotización ya fue entregada en la conversación",   tipo: "area" },
   max_mensajes_cliente: { label: "Máx. mensajes por conversación",    descripcion: "Cuántos mensajes del cliente se permiten antes de cerrar la plática",         tipo: "numero" },
   max_chars_mensaje:    { label: "Máx. caracteres por mensaje",       descripcion: "Límite de caracteres por mensaje del cliente",                                tipo: "numero" },
+  recordatorio_externo: { label: "Recordatorio para quien no es cliente", descripcion: "Se añade al mensaje de asesores externos, proveedores y quien busca empleo. {tipo} se cambia por el que corresponda", tipo: "area" },
+  contacto_asesores_externos: { label: "Contacto para asesores externos", descripcion: "Lo que recibe un broker o asesor externo en su tarjeta al dejar sus datos (teléfonos, correo, WhatsApp)", tipo: "area" },
+  contacto_proveedores: { label: "Contacto para proveedores y empleo", descripcion: "Lo que recibe un proveedor o quien busca empleo en su tarjeta al dejar sus datos", tipo: "area" },
   max_tokens:           { label: "Máx. tokens de respuesta",          descripcion: "Cuántos tokens puede generar el modelo en cada respuesta",                    tipo: "numero" },
 };
 
@@ -1133,6 +1245,9 @@ const CONFIG_DEFAULTS: Record<string, string> = {
   max_mensajes_cliente: String(MAX_MENSAJES_CLIENTE),
   max_chars_mensaje:    String(MAX_CHARS_MENSAJE),
   max_tokens:           "500",
+  recordatorio_externo: RECORDATORIO_EXTERNO,
+  contacto_asesores_externos: CONTACTO_EXTERNO_DEFAULT,
+  contacto_proveedores: CONTACTO_EXTERNO_DEFAULT,
 };
 
 // ── Lo que pide la seccion Ventas de sistemassi ─────────────────────────────
@@ -1187,6 +1302,7 @@ async function descripcionAgente(env: Env) {
       { nombre: "Avisa al asesor", que_hace: "Manda un WhatsApp con los datos del cliente y el enlace a la cotización." },
       { nombre: "Genera la cotización", que_hace: "Un PDF con los datos del cliente, el desarrollo y su presupuesto. El enlace lleva un folio que no se puede adivinar." },
       { nombre: "Muestra la tarjeta del desarrollo", que_hace: `Cuando la respuesta habla de uno solo, enlaza su página en sisol.com.mx y su brochure (${devs.filter((d) => d.url_pagina).length} con página, ${devs.filter((d) => d.brochure_es || d.brochure_en).length} con brochure).` },
+      { nombre: "Atiende a quien no es cliente", que_hace: "Reconoce a asesores externos, proveedores y a quien busca empleo; les pide los mismos datos, los registra con su etiqueta y les da la tarjeta de contacto de Configuración en vez de la cotización." },
       { nombre: "Habla inglés", que_hace: "Si el cliente escribe en inglés, contesta en inglés y ofrece el brochure en inglés cuando existe." },
     ],
     protecciones: [
@@ -1216,9 +1332,9 @@ app.post("/api/ventas/leads/:folio/notificar", async (c) => {
   if (acceso !== "ok") return respuestaSinAcceso(acceso);
 
   const folio = c.req.param("folio");
-  const [fila] = await sb<(Lead & { uuid: string })[]>(
+  const [fila] = await sb<(Lead & { uuid: string; tipo: TipoContacto })[]>(
     c.env,
-    `ventas_leads?select=uuid:id,id:folio,nombre,email,telefono,presupuesto,desarrollo,resumen&folio=${eq(folio)}`
+    `ventas_leads?select=uuid:id,id:folio,nombre,email,telefono,presupuesto,desarrollo,resumen,tipo&folio=${eq(folio)}`
   );
   if (!fila) return c.json({ ok: false, error: "Lead no encontrado" }, 404);
 
@@ -1228,7 +1344,7 @@ app.post("/api/ventas/leads/:folio/notificar", async (c) => {
   fila.desarrollo  = decodificarEscapes(fila.desarrollo);
   fila.resumen     = decodificarEscapes(fila.resumen ?? "");
 
-  const enviado = await notificarAsesor(c.env, fila, quoteUrl);
+  const enviado = await notificarAsesor(c.env, fila, quoteUrl, fila.tipo);
   if (enviado) await marcarNotificado(c.env, fila.uuid);
   return c.json({ ok: enviado, error: enviado ? null : "No se pudo enviar. Verifica la sesión de WhatsApp." });
 });

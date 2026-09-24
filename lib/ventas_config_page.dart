@@ -32,6 +32,12 @@ const _grupos = <(String, String, List<String>)>[
     ['mensaje_fin', 'mensaje_solo_ventas', 'recordatorio', 'recordatorio_datos_incompletos', 'recordatorio_lead', 'recordatorio_post_lead'],
   ),
   ('Límites de la conversación', 'Topes para que una plática no se alargue sin fin ni gaste de más.', ['max_mensajes_cliente', 'max_chars_mensaje', 'max_tokens']),
+  (
+    'Asesores externos, proveedores y empleo',
+    'A quien no es cliente Sisol le pide los mismos datos y, en vez de la cotización, le da una tarjeta con estos contactos. '
+        'Un renglón por dato: teléfonos y correos se pueden tocar en el chat.',
+    ['contacto_asesores_externos', 'contacto_proveedores', 'recordatorio_externo'],
+  ),
 ];
 
 class _VentasConfigPageState extends State<VentasConfigPage> {

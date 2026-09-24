@@ -235,11 +235,12 @@ String _celdaCsv(Object? v) {
 
 /// Con BOM para que Excel lo abra en UTF-8 y no rompa los acentos.
 String leadsCsv(List<Map<String, dynamic>> leads, {required String Function(String folio) urlCotizacion}) {
-  const cols = ['fecha_mx', 'nombre', 'email', 'telefono', 'presupuesto', 'desarrollo', 'resumen', 'notificado', 'cotizacion'];
+  const cols = ['fecha_mx', 'tipo', 'nombre', 'email', 'telefono', 'presupuesto', 'desarrollo', 'resumen', 'notificado', 'cotizacion'];
   final buf = StringBuffer('﻿${cols.join(',')}\r\n');
   for (final l in leads) {
     buf.write([
       fechaCorta(l['created_at']),
+      tipoTexto[l['tipo']] ?? 'Cliente',
       l['nombre'],
       l['email'],
       l['telefono'],
@@ -257,6 +258,15 @@ String leadsCsv(List<Map<String, dynamic>> leads, {required String Function(Stri
 // ─── Inventario pegado desde Excel ───────────────────────────────────────────
 
 const estatusVentas = ['DISPONIBLE', 'APARTADO', 'RESERVADO', 'VENDIDO', 'EN_PROCESO'];
+
+/// Quién dejó sus datos en el chat. Solo CLIENTE recibe cotización; los demás reciben la tarjeta de
+/// contacto de Configuración (decisión del usuario del 24/09/2026).
+const tipoTexto = {
+  'CLIENTE': 'Cliente',
+  'ASESOR_EXTERNO': 'Asesor externo',
+  'PROVEEDOR': 'Proveedor',
+  'BUSCA_EMPLEO': 'Busca empleo',
+};
 
 const estatusTexto = {
   'DISPONIBLE': 'Disponible',

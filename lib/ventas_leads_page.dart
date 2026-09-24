@@ -29,6 +29,7 @@ class _VentasLeadsPageState extends State<VentasLeadsPage> {
   bool _cargando = true;
   String _busqueda = '';
   String? _desarrollo;
+  String? _tipo;
   final _notificando = <String>{};
 
   @override
@@ -43,7 +44,7 @@ class _VentasLeadsPageState extends State<VentasLeadsPage> {
       final r = await _supabase
           .from('ventas_leads')
           .select('id, folio, created_at, nombre, email, telefono, presupuesto, desarrollo, '
-              'resumen, notificado, notificado_en, ventas_desarrollos(nombre)')
+              'resumen, notificado, notificado_en, tipo, ventas_desarrollos(nombre)')
           .order('created_at', ascending: false)
           .limit(1000);
       if (!mounted) return;
@@ -64,6 +65,7 @@ class _VentasLeadsPageState extends State<VentasLeadsPage> {
     final q = _busqueda.trim().toLowerCase();
     return _leads.where((l) {
       if (_desarrollo != null && _desarrolloDe(l) != _desarrollo) return false;
+      if (_tipo != null && (l['tipo'] ?? 'CLIENTE') != _tipo) return false;
       if (q.isEmpty) return true;
       return '${l['nombre']} ${l['email']} ${l['telefono']}'.toLowerCase().contains(q);
     }).toList();
@@ -116,6 +118,16 @@ class _VentasLeadsPageState extends State<VentasLeadsPage> {
             pista: 'Buscar por nombre, correo o teléfono',
             onBuscar: (v) => setState(() => _busqueda = v),
             acciones: [
+              DropdownButton<String?>(
+                value: _tipo,
+                hint: const Text('Todos'),
+                underline: const SizedBox.shrink(),
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('Todos')),
+                  for (final e in tipoTexto.entries) DropdownMenuItem(value: e.key, child: Text(e.value)),
+                ],
+                onChanged: (v) => setState(() => _tipo = v),
+              ),
               DropdownButton<String?>(
                 value: _desarrollo,
                 hint: const Text('Todos los desarrollos'),
@@ -199,6 +211,7 @@ class _VentasLeadsPageState extends State<VentasLeadsPage> {
           dataRowMaxHeight: 64,
           columns: const [
             DataColumn(label: Text('Fecha')),
+            DataColumn(label: Text('Tipo')),
             DataColumn(label: Text('Nombre')),
             DataColumn(label: Text('Correo')),
             DataColumn(label: Text('Teléfono')),
@@ -212,6 +225,7 @@ class _VentasLeadsPageState extends State<VentasLeadsPage> {
             for (final l in vistos)
               DataRow(cells: [
                 DataCell(Text(fechaCorta(l['created_at']), style: SiType.mono(size: 11.5))),
+                DataCell(_etiquetaTipo(c, '${l['tipo'] ?? 'CLIENTE'}')),
                 DataCell(Text('${l['nombre']}', style: const TextStyle(fontWeight: FontWeight.w600))),
                 DataCell(Row(mainAxisSize: MainAxisSize.min, children: [
                   SelectableText('${l['email']}'),
@@ -250,6 +264,18 @@ class _VentasLeadsPageState extends State<VentasLeadsPage> {
       ),
     );
   }
+
+  /// Cliente en verde; asesor externo, proveedor y quien busca empleo en otro color, para que no se
+  /// confundan con un comprador al revisar la lista.
+  Widget _etiquetaTipo(SiColors c, String tipo) => etiquetaVentas(
+        c,
+        tipoTexto[tipo] ?? tipo,
+        switch (tipo) {
+          'CLIENTE' => c.success,
+          'ASESOR_EXTERNO' => c.brand,
+          _ => c.warn,
+        },
+      );
 
   Widget _celdaAsesor(SiColors c, Map<String, dynamic> l) {
     if (l['notificado'] == true) return etiquetaVentas(c, 'Avisado', c.success);
