@@ -72,6 +72,18 @@ export type CampoDirecto =
 /// capture activaria el problema sin que nadie lo relacionara con esto.
 export const AFECTADOS_POR_PROMOCION: CampoDirecto[] = ["enganche", "mensualidades"];
 
+/// Lo que contesta cada atajo, en palabras, para la pestaña de Configuracion.
+///
+/// Es un `Record` sobre `CampoDirecto` a proposito: el dia que se agregue un campo nuevo, la
+/// comprobacion de tipos obliga a describirlo aqui, y la pantalla no puede quedarse sin el.
+export const QUE_CONTESTA_DIRECTO: Record<CampoDirecto, string> = {
+  ubicacion: "Donde esta el desarrollo: la direccion capturada",
+  amenidades: "Las amenidades del desarrollo",
+  enganche: "El porcentaje de enganche",
+  mensualidades: "El numero de mensualidades",
+  etapa: "La etapa en que esta el desarrollo",
+};
+
 /// Los reconocedores, con sus EXCLUSIONES.
 ///
 /// Las exclusiones no son un detalle: sin ellas el atajo contesta otra pregunta.

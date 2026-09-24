@@ -1875,68 +1875,151 @@ class _ConfiguracionSolState extends State<_ConfiguracionSol> {
     final respaldo = (cfg['modelo_respaldo'] ?? '').toString();
     final cuenta = cfg['cuenta_configurada'] == true;
     final herramientas = (cfg['herramientas'] as List?) ?? const [];
+    final directas = (cfg['respuestas_directas'] as List?) ?? const [];
+    final reglas = (cfg['reglas_extras'] as List?) ?? const [];
+    final promos = (cfg['promociones_vigentes'] as List?) ?? const [];
+    final datos = (cfg['datos'] as Map?) ?? const {};
+
+    final tarjetas = <Widget>[
+      _tarjeta(c, 'El modelo', [
+        // Un hueco aquí no es un cero: es que nadie lo configuró, y se dice así.
+        _fila(c, 'Modelo', modelo.isEmpty ? 'sin configurar' : modelo,
+            alerta: modelo.isEmpty),
+        _fila(c, 'Respaldo',
+            respaldo.isEmpty ? 'sin respaldo configurado' : respaldo,
+            alerta: respaldo.isEmpty),
+        _fila(c, 'Proveedor', (cfg['proveedor'] ?? '—').toString()),
+        _fila(c, 'Cuenta',
+            cuenta ? 'configurada' : 'FALTA la llave del proveedor',
+            alerta: !cuenta),
+        _fila(c, 'Comparte cuenta con',
+            (cfg['cuenta_compartida_con'] ?? '—').toString()),
+      ]),
+
+      _tarjeta(c, 'Qué sabe hacer', [
+        for (final h in herramientas)
+          _fila(c, (h['nombre'] ?? '').toString(),
+              (h['que_hace'] ?? '').toString()),
+      ]),
+
+      _tarjeta(c, 'Lo que tiene cargado', [
+        _fila(c, 'Desarrollos activos', '${datos['desarrollos_activos'] ?? 0}'),
+        _fila(c, 'Unidades disponibles', '${datos['unidades_disponibles'] ?? 0}'),
+        _fila(c, 'Documentos del catálogo', '${datos['documentos_catalogo'] ?? 0}'),
+        _fila(c, 'Promociones vigentes', '${promos.length}'),
+      ]),
+
+      // Las reglas vienen de la MISMA herramienta que usa SOL, ya redactadas: lo que se lee aquí
+      // es la frase que el modelo repite.
+      _tarjeta(c, 'Reglas de extras', [
+        if (reglas.isEmpty)
+          _nota(c, 'No hay reglas capturadas.')
+        else
+          for (final d in reglas) ...[
+            Padding(
+              padding: const EdgeInsets.only(top: SiSpace.x2, bottom: SiSpace.x1),
+              child: Text((d['desarrollo'] ?? '').toString(),
+                  style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: c.ink)),
+            ),
+            if (d['sin_reglas'] == true)
+              _nota(c, 'Sin reglas: SOL no ofrece extras de este desarrollo.')
+            else
+              for (final r in (d['extras'] as List? ?? const []))
+                _fila(c, _capital((r['extra'] ?? '').toString()),
+                    (r['regla'] ?? '').toString()),
+          ],
+      ]),
+
+      _tarjeta(c, 'Promociones vigentes', [
+        if (promos.isEmpty)
+          _nota(c, 'Ninguna vigente hoy. SOL contesta el enganche y las mensualidades de la ficha.')
+        else
+          for (final p in promos)
+            _fila(c, (p['desarrollo'] ?? 'Todos los desarrollos').toString(),
+                '${p['titulo']} · hasta ${p['vigente_hasta']}'
+                '${p['detalle'] != null ? '\n${p['detalle']}' : ''}'),
+      ]),
+
+      _tarjeta(c, 'Contesta sin el modelo', [
+        _nota(c, 'Si la pregunta es por UNO de estos datos, SOL lo lee de la ficha del '
+            'desarrollo y contesta directo, sin que el modelo pueda equivocarse.'),
+        for (final d in directas)
+          _fila(c, _capital((d['campo'] ?? '').toString()),
+              '${d['que']}'
+              '${d['salvo_con_promocion'] == true ? ' (con una promoción vigente, lo contesta el modelo)' : ''}'),
+      ]),
+
+      _tarjeta(c, 'Hasta dónde llega', [
+        Padding(
+          padding: const EdgeInsets.only(top: SiSpace.x2),
+          child: Text((cfg['ambito'] ?? '').toString(),
+              style: TextStyle(fontSize: 13, color: c.ink2, height: 1.5)),
+        ),
+      ]),
+    ];
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(SiSpace.x6),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 680),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Configuración de SOL',
-                  style: TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.w700, color: c.ink)),
-              const SizedBox(height: SiSpace.x2),
-              Text(
-                'Sólo de consulta. Todo esto vive en las variables de entorno de Supabase y no se '
-                'puede cambiar desde la aplicación.',
-                style: TextStyle(fontSize: 13, color: c.ink3, height: 1.5),
-              ),
-              const SizedBox(height: SiSpace.x5),
-
-              _tarjeta(c, 'El modelo', [
-                // Un hueco aquí no es un cero: es que nadie lo configuró, y se dice así.
-                _fila(c, 'Modelo', modelo.isEmpty ? 'sin configurar' : modelo,
-                    alerta: modelo.isEmpty),
-                _fila(c, 'Respaldo',
-                    respaldo.isEmpty ? 'sin respaldo configurado' : respaldo,
-                    alerta: respaldo.isEmpty),
-                _fila(c, 'Proveedor', (cfg['proveedor'] ?? '—').toString()),
-                _fila(c, 'Cuenta',
-                    cuenta ? 'configurada' : 'FALTA la llave del proveedor',
-                    alerta: !cuenta),
-                _fila(c, 'Comparte cuenta con',
-                    (cfg['cuenta_compartida_con'] ?? '—').toString()),
-              ]),
-              const SizedBox(height: SiSpace.x4),
-
-              _tarjeta(c, 'Qué sabe hacer', [
-                for (final h in herramientas)
-                  _fila(c, (h['nombre'] ?? '').toString(),
-                      (h['que_hace'] ?? '').toString()),
-              ]),
-              const SizedBox(height: SiSpace.x4),
-
-              // Lo que SOL leyó del Drive, para revisarlo. Pedido del usuario el 23/09/2026.
-              _tarjeta(c, 'El Drive', [
-                const SizedBox(height: SiSpace.x1),
-                const SolDrivePanel(),
-              ]),
-              const SizedBox(height: SiSpace.x4),
-
-              _tarjeta(c, 'Hasta dónde llega', [
-                Padding(
-                  padding: const EdgeInsets.only(top: SiSpace.x2),
-                  child: Text((cfg['ambito'] ?? '').toString(),
-                      style: TextStyle(fontSize: 13, color: c.ink2, height: 1.5)),
-                ),
-              ]),
-            ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Configuración de SOL',
+              style: TextStyle(
+                  fontSize: 16, fontWeight: FontWeight.w700, color: c.ink)),
+          const SizedBox(height: SiSpace.x2),
+          Text(
+            'Sólo de consulta. El modelo vive en las variables de entorno de Supabase, y las '
+            'reglas, promociones e inventario en el panel de Desarrollos.',
+            style: TextStyle(fontSize: 13, color: c.ink3, height: 1.5),
           ),
-        ),
+          const SizedBox(height: SiSpace.x5),
+
+          // Tres columnas que ocupan el ancho; dos en una pantalla mediana y una en el teléfono.
+          // Se reparten en orden —1, 2, 3 en la primera fila— y cada columna crece hacia abajo
+          // con lo suyo, para que una tarjeta larga no deje huecos en las de al lado.
+          LayoutBuilder(builder: (_, caja) {
+            final columnas = caja.maxWidth >= 1100 ? 3 : (caja.maxWidth >= 720 ? 2 : 1);
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var k = 0; k < columnas; k++) ...[
+                  if (k > 0) const SizedBox(width: SiSpace.x4),
+                  Expanded(
+                    child: Column(
+                      children: [
+                        for (var i = k; i < tarjetas.length; i += columnas) ...[
+                          tarjetas[i],
+                          const SizedBox(height: SiSpace.x4),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            );
+          }),
+
+          // El Drive va a todo lo ancho: es una lista de más de cien archivos, y en un tercio de
+          // pantalla los nombres no se leerían.
+          _tarjeta(c, 'El Drive', [
+            const SizedBox(height: SiSpace.x1),
+            const SolDrivePanel(),
+          ]),
+        ],
       ),
     );
+  }
+
+  Widget _nota(SiColors c, String texto) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Text(texto, style: TextStyle(fontSize: 12.5, color: c.ink3, height: 1.45)),
+      );
+
+  static String _capital(String s) {
+    final t = s.replaceAll('_', ' ').toLowerCase();
+    if (t.isEmpty) return t;
+    final conAcento = {'ubicacion': 'ubicación'}[t] ?? t;
+    return conAcento[0].toUpperCase() + conAcento.substring(1);
   }
 
   Widget _tarjeta(SiColors c, String titulo, List<Widget> hijos) {
