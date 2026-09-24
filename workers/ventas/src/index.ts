@@ -523,6 +523,11 @@ async function ejecutarRegistrarLead(
     resumen: decodificarEscapes(args.resumen),
   };
 
+  // Solo el correo, sin lo que el visitante escribio pegado: «ana@x.com, 55…» dejaba la coma dentro
+  // (visto el 24/09/2026 en un registro de prueba). Se limpia aqui, antes de guardar, venga del
+  // modelo o de la expresion regular.
+  lead.email = (lead.email.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/) ?? [""])[0];
+
   if (!lead.nombre || !lead.email.includes("@") || lead.telefono.length < 10) {
     return JSON.stringify({
       ok: false,
@@ -648,6 +653,11 @@ const PALABRAS_NO_NOMBRE = new Set([
   "cuánto","que","qué","cual","cuál","como","cómo","donde","dónde","porfa","favor","depa",
   "departamento","info","informacion","información","zona","precio","precios","adios","adiós",
   "cdmx","tulum","acapulco","ensenada","playa","puerto","morelos","selva","norte",
+  // Lo que dice de si mismo quien no es cliente: «soy broker inmobiliario en Cancún» no es un nombre.
+  "broker","brokers","asesor","asesora","agente","inmobiliario","inmobiliaria","empresa","proveedor",
+  "en","con","para","por","saber","mas","más",
+  // Acuses que contestan a «¿me das tu nombre?» sin darlo.
+  "perfecto","listo","excelente","bien","genial","entendido","sale","dale","correcto","exacto",
 ]);
 // ¿Un texto parece un nombre propio? (1-4 palabras alfabéticas, sin dígitos,
 // sin "@", sin "?", y que no empiece con una palabra de la lista de arriba)
@@ -657,7 +667,9 @@ function pareceNombre(texto: string): boolean {
   const p = t.split(/\s+/).filter(Boolean);
   if (p.length < 1 || p.length > 4) return false;
   if (!p.every((w) => /^[A-Za-zÁÉÍÓÚÑáéíóúñ'.-]{2,}$/.test(w))) return false;
-  return !PALABRAS_NO_NOMBRE.has(p[0].toLowerCase());
+  // Ninguna palabra, no solo la primera: «broker inmobiliario en Cancún» o «lockoff quiero saber
+  // mas» no son nombres aunque empiecen con una palabra que no esta en la lista.
+  return !p.some((w) => PALABRAS_NO_NOMBRE.has(w.toLowerCase()));
 }
 // Detecta el nombre del cliente en la conversación de forma determinista, de
 // más a menos confiable: (1) "me llamo/soy X"; (2) texto antes del correo en el
@@ -976,7 +988,12 @@ app.post("/api/chat", async (c) => {
   //   - datos parciales  → pedir el dato que falta, sin narrar la cotización
   //   - sin datos        → recordatorio anti-abuso (suave con respuestas breves)
   const recordatorioActivo = !esCliente
-    ? cfg.recordatorio_externo.replace(/\{tipo\}/g, TIPO_TEXTO[tipo])
+    ? cfg.recordatorio_externo.replace(/\{tipo\}/g, TIPO_TEXTO[tipo]) +
+      // Sin esto, en el mensaje siguiente al registro le volvia a pedir los datos (visto en la prueba
+      // del 24/09/2026): el recordatorio dice «si todavia no los tienes» y el modelo no lo sabia.
+      (yaRegistrado
+        ? "\n\n[Recordatorio del sistema — el cliente no ve esto: sus datos YA quedaron registrados y ya le diste nuestros contactos. NO se los vuelvas a pedir; contesta con cordialidad y, si pregunta cómo seguir, dile que el área correspondiente lo contactará.]"
+        : "")
     : yaRegistrado
     ? cfg.recordatorio_post_lead
     : ofrecerTools

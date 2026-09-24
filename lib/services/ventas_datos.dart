@@ -119,6 +119,9 @@ const _noNombre = {
   'porfa', 'favor', 'depa', 'departamento', 'info', 'informacion', 'información', 'zona', 'precio',
   'precios', 'adios', 'adiós', 'cdmx', 'tulum', 'acapulco', 'ensenada', 'playa', 'puerto',
   'morelos', 'selva', 'norte', 'saber', 'mas', 'más', 'tienen', 'hay', 'ver',
+  'broker', 'brokers', 'asesor', 'asesora', 'agente', 'inmobiliario', 'inmobiliaria', 'empresa',
+  'proveedor', 'en', 'con', 'para', 'por',
+  'perfecto', 'listo', 'excelente', 'bien', 'genial', 'entendido', 'sale', 'dale', 'correcto', 'exacto',
 };
 
 bool pareceNombre(String texto) {
