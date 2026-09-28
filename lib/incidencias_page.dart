@@ -21,11 +21,162 @@ import 'widgets/grafica_vacaciones_mes.dart';
 /// Se pregunta desde los TRES menus de esta pagina. En uno solo seria media regla.
 bool sePuedeDescargarPdf(Map<String, dynamic> inc) => inc['status'] == 'APROBADA';
 
+/// El último periodo de vacaciones que ya se cumplió a la fecha [hoy], con el nombre con que se
+/// guarda: «2025 - 2026». Null si todavía no se cumple el primer año o no hay fecha de ingreso.
+///
+/// Los periodos van de aniversario a aniversario de [base] —el reingreso si lo hay, si no el
+/// ingreso—, igual que en el historial. Fuera de la clase para poder probarla con cualquier fecha.
+String? periodoCumplido(DateTime? base, DateTime hoy) {
+  if (base == null) return null;
+  var anios = hoy.year - base.year;
+  if (hoy.month < base.month || (hoy.month == base.month && hoy.day < base.day)) anios--;
+  if (anios < 1) return null;
+  return '${base.year + anios - 1} - ${base.year + anios}';
+}
+
+/// Incidencias, en dos pestañas. Pedido del usuario el 28/09/2026.
+///
+/// * **Mis incidencias** — la de todos: lo de la persona que entra y nada más. Sus registros, su
+///   calendario, su antigüedad, su historial —sólo el periodo que ya cumplió y el que está en
+///   curso— y sus vacaciones por mes. Aquí sólo se pide sobre el periodo que ya cumplió.
+/// * **RH** — la página tal como estaba: elegir colaborador, solicitudes pendientes de todos,
+///   registros por quincena y aprobar. Sólo para quien tiene el interruptor «Incidencias: pestaña
+///   RH» en Usuarios, sea o no administrador (pedido del mismo día). Eliminar sigue siendo sólo de
+///   administrador, porque pasa por la papelera.
+///
+/// Quien tiene RH ve las dos. En «Mis incidencias» se le aplican las MISMAS reglas que a
+/// cualquiera: es su vista como colaborador, y lo de RH se hace en RH.
 class IncidenciasPage extends StatefulWidget {
   const IncidenciasPage({super.key});
 
   @override
-  State<IncidenciasPage> createState() => _IncidenciasPageState();
+  State<IncidenciasPage> createState() => _IncidenciasArmazonState();
+}
+
+class _IncidenciasArmazonState extends State<IncidenciasPage>
+    with SingleTickerProviderStateMixin {
+  /// Si tiene la pestaña RH. Null mientras se averigua.
+  bool? _puedeRH;
+  TabController? _tabs;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarRol();
+  }
+
+  /// La pestaña se muestra según el PERFIL, que es lo que se ve en Usuarios.
+  ///
+  /// Pero lo que abre los datos de los demás es el TOKEN (`app_metadata.incidencias_rh`, ver
+  /// 20260928120000_incidencias_rh.sql), y el token sólo se renueva cada hora. Si el perfil ya lo
+  /// tiene y el token todavía no, se renueva aquí: si no, la pestaña aparecería y sólo mostraría lo
+  /// propio, sin ningún aviso de por qué.
+  Future<void> _cargarRol() async {
+    final auth = Supabase.instance.client.auth;
+    final user = auth.currentUser;
+    var puede = false;
+    if (user != null) {
+      try {
+        final p = await Supabase.instance.client
+            .from('profiles')
+            .select('permissions')
+            .eq('id', user.id)
+            .maybeSingle();
+        final permisos = (p?['permissions'] as Map?) ?? const {};
+        puede = permisos['show_incidencias_rh'] == true;
+        if (puede && user.appMetadata['incidencias_rh'] != true) {
+          await auth.refreshSession();
+        }
+      } catch (e) {
+        debugPrint('Error leyendo el permiso de RH: $e');
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _puedeRH = puede;
+      if (puede) _tabs = TabController(length: 2, vsync: this);
+    });
+  }
+
+  @override
+  void dispose() {
+    _tabs?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = SiColors.of(context);
+    if (_puedeRH == null) {
+      return Scaffold(
+        backgroundColor: c.bg,
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+    // Sin el permiso no hay pestaña de RH que elegir: la barra con una sola pestaña sobra.
+    if (_puedeRH == false) return const _VistaIncidencias(rh: false);
+
+    return Scaffold(
+      backgroundColor: c.bg,
+      body: Column(
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              color: c.panel,
+              border: Border(bottom: BorderSide(color: c.line)),
+            ),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: TabBar(
+                controller: _tabs,
+                isScrollable: true,
+                tabAlignment: TabAlignment.start,
+                labelColor: c.brand,
+                unselectedLabelColor: c.ink3,
+                indicatorColor: c.brand,
+                indicatorSize: TabBarIndicatorSize.label,
+                labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                unselectedLabelStyle: const TextStyle(fontSize: 13),
+                tabs: const [
+                  Tab(
+                    height: 42,
+                    icon: Icon(Icons.person_outline, size: 16),
+                    iconMargin: EdgeInsets.zero,
+                    text: 'Mis incidencias',
+                  ),
+                  Tab(
+                    height: 42,
+                    icon: Icon(Icons.groups_outlined, size: 16),
+                    iconMargin: EdgeInsets.zero,
+                    text: 'RH',
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Expanded(
+            child: TabBarView(
+              controller: _tabs,
+              children: const [
+                _VistaIncidencias(rh: false),
+                _VistaIncidencias(rh: true),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _VistaIncidencias extends StatefulWidget {
+  /// La vista de RH —la de antes— o la personal.
+  final bool rh;
+
+  const _VistaIncidencias({required this.rh});
+
+  @override
+  State<_VistaIncidencias> createState() => _IncidenciasPageState();
 }
 
 /// El hueco a la derecha de la columna DÍAS.
@@ -35,7 +186,21 @@ class IncidenciasPage extends StatefulWidget {
 /// descuadre que no se ve leyendo el código.
 const double _huecoDias = 18;
 
-class _IncidenciasPageState extends State<IncidenciasPage> {
+class _IncidenciasPageState extends State<_VistaIncidencias>
+    with AutomaticKeepAliveClientMixin {
+  /// Que al cambiar de pestaña no se tire lo cargado: la de RH trae las pendientes de todos y el
+  /// resumen de ~700 registros, y volver a pedirlo en cada cambio no aporta nada.
+  @override
+  bool get wantKeepAlive => true;
+
+  /// Si esta es la vista de RH.
+  ///
+  /// Es lo que decide todo lo que antes decidía `_userRole == 'admin'`: el selector de
+  /// colaborador, las pendientes, el resumen por quincena, aprobar, y no aplicarse las reglas de
+  /// colaborador al pedir. La pestaña sólo existe para quien tiene el permiso, así que basta con
+  /// saber cuál es. En «Mis incidencias» vale `false` para todos, administradores incluidos.
+  bool get _vistaRH => widget.rh;
+
   List<Map<String, dynamic>> _incidencias = [];
   List<Map<String, dynamic>> _allIncidencias =
       []; // all PENDIENTE for admin view
@@ -96,7 +261,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (_userRole == 'admin' && _adminUserList.isNotEmpty) ...[
+          if (_vistaRH && _adminUserList.isNotEmpty) ...[
             SizedBox(
               width: 220,
               child: _buildUserAutocomplete(c, maxWidth: 280),
@@ -161,7 +326,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
             _selectedUserProfile = profile;
           });
 
-          if (_userRole == 'admin') {
+          if (_vistaRH) {
             await _fetchAdminUserList();
           }
         }
@@ -331,7 +496,13 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
     return 10; // 31-35+
   }
 
-  Widget _buildLeyesVacacionesTable() {
+  /// La antigüedad y la tabla de ley, en UNA tarjeta con el estilo del Historial de Vacaciones.
+  ///
+  /// Pedido del 28/09/2026: antes eran una tarjeta con la antigüedad y «Desde: <fecha>» y, debajo,
+  /// la tabla aparte. Ahora la antigüedad va en el título y la fecha ya no se muestra.
+  ///
+  /// [plegable] es para el teléfono: el título abre y cierra la tabla, como hacía la tarjeta.
+  Widget _buildLeyesVacacionesTable({bool plegable = false}) {
     final theme = Theme.of(context);
     final c = SiColors.of(context);
     const rows = [
@@ -351,13 +522,63 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
     final years = _calcYears();
     final highlightIdx = _getRowIndex(years);
 
+    final abierta = !plegable || _antiguedadExpanded;
+    final titulo = Container(
+      color: c.hover,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          Icon(Icons.workspace_premium_outlined,
+              size: 18, color: theme.colorScheme.secondary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text.rich(
+              TextSpan(children: [
+                TextSpan(
+                    text: _fechaReingreso != null
+                        ? 'Antigüedad (reingreso): '
+                        : 'Antigüedad: ',
+                    style: TextStyle(color: theme.colorScheme.secondary)),
+                TextSpan(
+                    text: _calcAntiguedad(),
+                    style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: theme.colorScheme.secondary)),
+              ]),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+          ),
+          if (plegable)
+            AnimatedRotation(
+              turns: abierta ? 0.5 : 0,
+              duration: const Duration(milliseconds: 250),
+              child: Icon(Icons.expand_more,
+                  size: 20, color: theme.colorScheme.secondary.withOpacity(0.7)),
+            ),
+        ],
+      ),
+    );
+
     return Container(
       decoration: BoxDecoration(
         border: Border.all(color: c.line),
         borderRadius: BorderRadius.circular(12),
       ),
       clipBehavior: Clip.hardEdge,
-      child: Table(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          plegable
+              ? GestureDetector(
+                  onTap: () => setState(() => _antiguedadExpanded = !_antiguedadExpanded),
+                  child: titulo,
+                )
+              : titulo,
+          AnimatedSize(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeInOut,
+            child: !abierta ? const SizedBox(width: double.infinity) : Table(
         columnWidths: const {
           0: FlexColumnWidth(2),
           1: FlexColumnWidth(1),
@@ -369,7 +590,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
             children: const [
               Padding(
                 padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                child: Text('Antigüedad',
+                child: Text('Años de servicio',
                     style:
                         TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
               ),
@@ -426,66 +647,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
             ),
         ],
       ),
-    );
-  }
-
-  /// Tarjeta de antigüedad (Contenido interno)
-  Widget _buildAntiguedadCardContent({
-    required ThemeData theme,
-    required String label,
-    required String dateStr,
-    bool isDesktop = false,
-    bool expanded = false,
-    Widget? table,
-  }) {
-    final c = SiColors.of(context);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.secondary.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: theme.colorScheme.secondary.withOpacity(0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.workspace_premium_outlined,
-                  color: theme.colorScheme.secondary, size: 28),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(label,
-                        style:
-                            TextStyle(fontSize: 11, color: c.ink3)),
-                    Text(_calcAntiguedad(),
-                        style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.secondary)),
-                    Text('Desde: $dateStr',
-                        style:
-                            TextStyle(fontSize: 11, color: c.ink3)),
-                  ],
-                ),
-              ),
-              if (!isDesktop)
-                AnimatedRotation(
-                  turns: expanded ? 0.5 : 0,
-                  duration: const Duration(milliseconds: 250),
-                  child: Icon(Icons.expand_more,
-                      color: theme.colorScheme.secondary.withOpacity(0.6)),
-                ),
-            ],
           ),
-          if (!isDesktop && expanded && table != null) ...[
-            const SizedBox(height: 8),
-            table,
-          ],
         ],
       ),
     );
@@ -517,59 +679,21 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
     );
   }
 
-  /// Antigüedad para Móvil (Hamburguesa/ExpansionTile)
+  /// Antigüedad para el teléfono: la misma tarjeta, que se abre y cierra desde el título.
   Widget _buildAntiguedadMobile() {
     final base = _fechaReingreso ?? _fechaIngreso;
     if (base == null) return _buildMissingDateFallback(isDesktop: false);
-    final theme = Theme.of(context);
-    final label =
-        _fechaReingreso != null ? 'Antigüedad (Reingreso)' : 'Antigüedad';
-    final dateStr =
-        '${base.day.toString().padLeft(2, '0')}/${base.month.toString().padLeft(2, '0')}/${base.year}';
-
     return Padding(
       padding: const EdgeInsets.only(top: 12, bottom: 4),
-      child: GestureDetector(
-        onTap: () => setState(() => _antiguedadExpanded = !_antiguedadExpanded),
-        child: AnimatedSize(
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeInOut,
-          child: SizedBox(
-            width: double.infinity,
-            child: _buildAntiguedadCardContent(
-              theme: theme,
-              label: label,
-              dateStr: dateStr,
-              isDesktop: false,
-              expanded: _antiguedadExpanded,
-              table: _buildLeyesVacacionesTable(),
-            ),
-          ),
-        ),
-      ),
+      child: _buildLeyesVacacionesTable(plegable: true),
     );
   }
 
-  /// Antigüedad para Escritorio (Inline)
+  /// Antigüedad para escritorio.
   Widget _buildAntiguedadDesktop() {
     final base = _fechaReingreso ?? _fechaIngreso;
     if (base == null) return _buildMissingDateFallback(isDesktop: true);
-    final theme = Theme.of(context);
-    final label =
-        _fechaReingreso != null ? 'Antigüedad (Reingreso)' : 'Antigüedad';
-    final dateStr =
-        '${base.day.toString().padLeft(2, '0')}/${base.month.toString().padLeft(2, '0')}/${base.year}';
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildAntiguedadCardContent(
-            theme: theme, label: label, dateStr: dateStr, isDesktop: true),
-        const SizedBox(height: 12),
-        _buildLeyesVacacionesTable(),
-      ],
-    );
+    return _buildLeyesVacacionesTable();
   }
 
   /// Días de vacaciones según nueva ley 2023 y años de servicio
@@ -586,6 +710,17 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
     if (years <= 30) return 30;
     return 32;
   }
+
+  /// El periodo que la persona YA CUMPLIÓ más recientemente: «2025 - 2026» para quien cumplió
+  /// años de servicio entre enero y hoy, «2024 - 2025» para quien los cumple entre hoy y
+  /// diciembre. Null si todavía no cumple el primer año.
+  ///
+  /// Es «el periodo anterior» del pedido del 28/09/2026. Se entendió por aniversario y no por
+  /// el año del calendario porque así se cuentan aquí todos los periodos, y se comprobó con las
+  /// solicitudes de los últimos 60 días: ninguna pedía «2025 - 2026» sin que fuera el último
+  /// periodo cumplido de esa persona, y 7 pedían su último periodo cumplido con otro nombre.
+  String? _periodoAnterior() =>
+      periodoCumplido(_fechaReingreso ?? _fechaIngreso, DateTime.now());
 
   /// Returns all vacation periods for the current user.
   /// When [onlyWithDays] is true (default), only periods with días
@@ -755,6 +890,10 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
       final proporcional =
           _calcProporcionalDouble(days, periodStart, periodEnd);
       final saldo = proporcional - daysRequested;
+
+      // En «Mis incidencias» sólo el periodo que ya cumplió y el que está en curso. Los anteriores
+      // se siguen viendo en RH.
+      if (!_vistaRH && y < completedYears) continue;
 
       tableRows.add({
         'periodo': periodLabel,
@@ -987,6 +1126,9 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
   /// que quiera deshacerse de su solicitud tiene el camino correcto ya puesto: cancelarla, que su
   /// política sí le permite mientras esté PENDIENTE.
   bool _sePuedeEliminar(Map<String, dynamic> inc) =>
+      // En RH, y además administrador: la pestaña se abre con su propio permiso, pero la papelera
+      // sigue siendo sólo de administradores.
+      _vistaRH &&
       _userRole == 'admin' &&
       (inc['status'] == 'PENDIENTE' || inc['status'] == 'CANCELADA');
 
@@ -1092,7 +1234,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
     }
 
     // Separately fetch ALL pending incidencias for admin view (independent query)
-    if (_userRole == 'admin') {
+    if (_vistaRH) {
       try {
         final pendingResp = await Supabase.instance.client
             .from('incidencias')
@@ -1147,7 +1289,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
     final status = incidencia?['status'] ?? 'PENDIENTE';
 
     // Si no es admin y el estatus no es PENDIENTE, no se puede editar
-    if (isEditing && _userRole != 'admin' && status != 'PENDIENTE') {
+    if (isEditing && !_vistaRH && status != 'PENDIENTE') {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
             content:
@@ -1157,7 +1299,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
     }
 
     // Verificar antigüedad mínima de 1 año (solo para crear, no para editar, y no para admin)
-    if (!isEditing && _userRole != 'admin') {
+    if (!isEditing && !_vistaRH) {
       final base = _fechaReingreso ?? _fechaIngreso;
       if (base != null) {
         final now = DateTime.now();
@@ -1193,8 +1335,17 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
     }
 
     // Períodos disponibles (filtra solo los que tienen días cuando es alta nueva)
-    final availablePeriods = _getAvailablePeriods(onlyWithDays: !isEditing);
     String norm(String? p) => (p ?? '').replaceAll(RegExp(r'\D'), '');
+    var availablePeriods = _getAvailablePeriods(onlyWithDays: !isEditing);
+
+    // En «Mis incidencias» una solicitud nueva sólo puede ser del periodo que ya cumplió. Al editar
+    // una pendiente se deja como estaba: cambiarle el periodo a la fuerza la movería de sitio.
+    final soloPeriodo = (!isEditing && !_vistaRH) ? _periodoAnterior() : null;
+    if (soloPeriodo != null) {
+      availablePeriods = availablePeriods
+          .where((p) => norm(p['label'] as String?) == norm(soloPeriodo))
+          .toList();
+    }
 
     // Valor inicial del período: para edición usa el guardado, para alta el
     // primer período con días disponibles.
@@ -1264,6 +1415,18 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                     ),
                     TextButton(
                       onPressed: () async {
+                        // Sin periodo no se guarda: en «Mis incidencias» pasa cuando el periodo
+                        // que ya cumplió no tiene días, y una solicitud sin periodo no la
+                        // cuenta nadie.
+                        if (!_vistaRH && periodController.text.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                                content: Text(soloPeriodo == null
+                                    ? 'No hay un periodo con días disponibles.'
+                                    : 'El periodo $soloPeriodo ya no tiene días disponibles.')),
+                          );
+                          return;
+                        }
                         if (diasController.text.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
@@ -1345,10 +1508,13 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                         Icon(Icons.info_outline,
                             color: Colors.orange.shade700, size: 18),
                         const SizedBox(width: 8),
-                        const Expanded(
+                        Expanded(
                           child: Text(
-                            'Sin períodos con días disponibles.',
-                            style: TextStyle(fontSize: 13),
+                            soloPeriodo == null
+                                ? 'Sin períodos con días disponibles.'
+                                : 'Sin días disponibles en el periodo $soloPeriodo, que es el '
+                                    'único que se puede pedir.',
+                            style: const TextStyle(fontSize: 13),
                           ),
                         ),
                       ],
@@ -1507,7 +1673,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                       _showIncidenciaForm(incidencia: inc);
                     } else if (val == 'DELETE') {
                       await _eliminarIncidencia(inc);
-                    } else if (_userRole == 'admin') {
+                    } else if (_vistaRH) {
                       await Supabase.instance.client
                           .from('incidencias')
                           .update({'status': val}).eq('id', inc['id']);
@@ -1529,14 +1695,14 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                               leading: Icon(Icons.picture_as_pdf_outlined),
                               title: Text('Descargar PDF'),
                               dense: true)),
-                    if (_userRole == 'admin' || inc['status'] == 'PENDIENTE')
+                    if (_vistaRH || inc['status'] == 'PENDIENTE')
                       const PopupMenuItem(
                           value: 'EDIT',
                           child: ListTile(
                               leading: Icon(Icons.edit_outlined),
                               title: Text('Editar'),
                               dense: true)),
-                    if (_userRole == 'admin') ...[
+                    if (_vistaRH) ...[
                       const PopupMenuDivider(),
                       const PopupMenuItem(
                           value: 'APROBADA', child: Text('Aprobar')),
@@ -2113,7 +2279,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
         child: PaginatedDataTable(
           header: Row(
             children: [
-              if (_userRole == 'admin' && _adminUserList.isNotEmpty)
+              if (_vistaRH && _adminUserList.isNotEmpty)
                 SizedBox(
                   width: 320,
                   child: _buildTableUserSelector(c),
@@ -2180,7 +2346,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
             _dataSource ??= _IncidenciasDataSource(
               items: _incidencias,
               theme: theme,
-              isAdmin: _userRole == 'admin',
+              isAdmin: _vistaRH,
               userProfile: _selectedUserProfile,
               formatDate: _formatDate,
               siColors: c,
@@ -2365,6 +2531,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final c = SiColors.of(context);
 
     return Scaffold(
@@ -2383,7 +2550,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
               child: Column(
                 children: [
                   // Admin Pending Section
-                  if (_userRole == 'admin') ...[
+                  if (_vistaRH) ...[
                     _buildPendingTable(c),
                     SizedBox(height: SiSpace.x6),
                   ],
@@ -2443,6 +2610,12 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                             if (_incidencias.isNotEmpty)
                               SizedBox(height: SiSpace.x4),
                             _buildHistorialVacaciones(),
+                            // En la vista personal, también en el teléfono: es una de las cinco
+                            // cosas que se pidieron para esta pestaña.
+                            if (!_vistaRH) ...[
+                              SizedBox(height: SiSpace.x4),
+                              GraficaVacacionesPorMes(incidencias: _incidencias),
+                            ],
                             SizedBox(height: SiSpace.x6),
                             _incidencias.isEmpty
                                 ? const Padding(
@@ -2464,7 +2637,7 @@ class _IncidenciasPageState extends State<IncidenciasPage> {
                   // parece: las pendientes son lo que hay que atender HOY y van primero, mientras
                   // que esta se consulta al cerrar la quincena. Y es la mas larga de las tres, asi
                   // que arriba empujaba el resto de la pagina fuera de la pantalla.
-                  if (_userRole == 'admin') ...[
+                  if (_vistaRH) ...[
                     SizedBox(height: SiSpace.x6),
                     _buildResumenMensual(c),
                   ],
