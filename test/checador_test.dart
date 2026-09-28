@@ -65,4 +65,78 @@ void main() {
     expect(enlaceAlMapa(20.63, -87.07),
         'https://www.google.com/maps/search/?api=1&query=20.63,-87.07');
   });
+
+  group('horario y semáforo', () {
+    // El horario «Ag117 L-S»: lunes a sábado, entrada 9:00 con 15 de tolerancia, salida 18:00
+    // entre semana y 15:00 el sábado.
+    final reglas = [
+      for (var d = 1; d <= 5; d++) ...[
+        {'day': d, 'tol': 15, 'time': '09:00:00', 'type': 'ENTRADA'},
+        {'day': d, 'tol': 0, 'time': '18:00:00', 'type': 'SALIDA'},
+      ],
+      {'day': 6, 'tol': 15, 'time': '09:00:00', 'type': 'ENTRADA'},
+      {'day': 6, 'tol': 0, 'time': '15:00:00', 'type': 'SALIDA'},
+    ];
+
+    test('el día del horario sale del día de la semana', () {
+      final lunes = reglasDelDia(reglas, DateTime(2026, 9, 28));
+      expect(lunes.entrada!.hora, '09:00');
+      expect(lunes.salida!.hora, '18:00');
+      expect(reglasDelDia(reglas, DateTime(2026, 10, 3)).salida!.hora, '15:00'); // sábado
+      expect(reglasDelDia(reglas, DateTime(2026, 10, 4)).entrada, isNull); // domingo
+      expect(reglasDelDia(null, DateTime(2026, 9, 28)).entrada, isNull);
+    });
+
+    test('entrada: verde, amarillo en tolerancia, rojo después', () {
+      const r = ReglaDia(9 * 60, 15);
+      expect(semaforoEntrada(8 * 60 + 50, r), Semaforo.verde);
+      expect(semaforoEntrada(9 * 60, r), Semaforo.verde);
+      expect(semaforoEntrada(9 * 60 + 1, r), Semaforo.amarillo);
+      expect(semaforoEntrada(9 * 60 + 15, r), Semaforo.amarillo);
+      expect(semaforoEntrada(9 * 60 + 16, r), Semaforo.rojo);
+    });
+
+    test('salida: rojo antes, verde a su hora, amarillo mucho después', () {
+      const r = ReglaDia(18 * 60, 0);
+      expect(semaforoSalida(17 * 60 + 59, r), Semaforo.rojo);
+      expect(semaforoSalida(18 * 60, r), Semaforo.verde);
+      expect(semaforoSalida(18 * 60 + 30, r), Semaforo.verde);
+      expect(semaforoSalida(18 * 60 + 31, r), Semaforo.amarillo);
+    });
+
+    test('la hora local sale de dónde se checó', () {
+      final utc = DateTime.utc(2026, 9, 28, 14, 5);
+      // Playa del Carmen: UTC-5.
+      expect(horaLocalDeChecada(utc, 20.63, -87.07), DateTime(2026, 9, 28, 9, 5));
+      // Ciudad de México: UTC-6.
+      expect(horaLocalDeChecada(utc, 19.43, -99.13), DateTime(2026, 9, 28, 8, 5));
+      // Sin coordenadas, la del centro.
+      expect(desfaseHorasDe(null, null), -6);
+    });
+
+    test('el contador', () {
+      const e = ReglaDia(9 * 60, 15);
+      const s = ReglaDia(18 * 60, 0);
+      ({String texto, Semaforo? color}) a(int h, int m, {bool entro = false, bool salio = false}) =>
+          contadorDelDia(
+              ahora: DateTime(2026, 9, 28, h, m), entrada: e, salida: s,
+              yaEntro: entro, yaSalio: salio);
+      expect(a(8, 40).color, Semaforo.verde);
+      expect(a(8, 40).texto, contains('20 min para tu entrada (09:00)'));
+      expect(a(9, 10).color, Semaforo.amarillo);
+      expect(a(9, 10).texto, contains('te quedan 5 min'));
+      expect(a(10, 5).color, Semaforo.rojo);
+      expect(a(10, 5).texto, contains('1 h 05 min de retardo'));
+      expect(a(15, 0, entro: true).texto, contains('3 h para tu salida (18:00)'));
+      expect(a(18, 10, entro: true).texto, contains('Ya es tu hora de salida'));
+      expect(a(19, 0, entro: true).color, Semaforo.amarillo);
+      expect(a(19, 0, entro: true, salio: true).color, isNull);
+      expect(
+          contadorDelDia(
+                  ahora: DateTime(2026, 10, 4, 10), entrada: null, salida: null,
+                  yaEntro: false, yaSalio: false)
+              .texto,
+          contains('no tienes horario'));
+    });
+  });
 }

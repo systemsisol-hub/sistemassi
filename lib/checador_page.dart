@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
@@ -44,9 +45,51 @@ Future<String?> _urlFoto(String ruta) async {
   }
 }
 
-String _hora(dynamic iso) {
-  final d = DateTime.tryParse(iso?.toString() ?? '')?.toLocal();
+/// La hora de la checada en el lugar donde se hizo, no en el reloj de quien mira. Ver
+/// `desfaseHorasDe`.
+DateTime? _horaLocal(Map<String, dynamic> ch) {
+  final d = DateTime.tryParse(ch['registrada_en']?.toString() ?? '');
+  if (d == null) return null;
+  return horaLocalDeChecada(d, ch['latitud'] as num?, ch['longitud'] as num?);
+}
+
+String _horaDe(Map<String, dynamic>? ch) {
+  final d = ch == null ? null : _horaLocal(ch);
   return d == null ? '—' : DateFormat('HH:mm').format(d);
+}
+
+/// El color de una checada contra el horario. Sólo la entrada y el fin de jornada tienen hora en
+/// los horarios; la comida no lleva color.
+Semaforo? _semaforoDe(Map<String, dynamic> ch, List<dynamic>? reglas) {
+  final d = _horaLocal(ch);
+  final dia = DateTime.tryParse(ch['fecha']?.toString() ?? '');
+  if (d == null || dia == null) return null;
+  final r = reglasDelDia(reglas, dia);
+  final m = d.hour * 60 + d.minute;
+  if (ch['tipo'] == 'ENTRADA' && r.entrada != null) return semaforoEntrada(m, r.entrada!);
+  if (ch['tipo'] == 'SALIDA' && r.salida != null) return semaforoSalida(m, r.salida!);
+  return null;
+}
+
+Color _colorSemaforo(SiColors c, Semaforo s) => switch (s) {
+      Semaforo.verde => c.success,
+      Semaforo.amarillo => c.warn,
+      Semaforo.rojo => c.danger,
+    };
+
+Widget _punto(SiColors c, Semaforo? s) => Container(
+      width: 10,
+      height: 10,
+      decoration: BoxDecoration(
+        color: s == null ? Colors.transparent : _colorSemaforo(c, s),
+        shape: BoxShape.circle,
+      ),
+    );
+
+/// El horario de cada quien: `profiles.schedule_id` → `schedules`.
+Future<Map<String, Map<String, dynamic>>> _horarios() async {
+  final r = await _supabase.from('schedules').select('id, name, rules');
+  return {for (final h in (r as List).cast<Map<String, dynamic>>()) h['id'] as String: h};
 }
 
 String _fechaLarga(DateTime d) {
@@ -74,10 +117,26 @@ class _ChecadorPropioState extends State<ChecadorPropio> {
   /// Las propias de los últimos 14 días, de la más reciente a la más vieja.
   List<Map<String, dynamic>> _checadas = [];
 
+  /// Su horario. Null si no tiene uno asignado.
+  String? _nombreHorario;
+  List<dynamic>? _reglas;
+
+  /// Refresca el contador. Cada 20 segundos basta: cuenta en minutos.
+  Timer? _reloj;
+
   @override
   void initState() {
     super.initState();
     _cargar();
+    _reloj = Timer.periodic(const Duration(seconds: 20), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _reloj?.cancel();
+    super.dispose();
   }
 
   Future<void> _cargar({bool silencioso = false}) async {
@@ -95,9 +154,19 @@ class _ChecadorPropioState extends State<ChecadorPropio> {
           .eq('profile_id', uid)
           .gte('fecha', desde)
           .order('registrada_en', ascending: false);
+      final perfil = await _supabase
+          .from('profiles').select('schedule_id').eq('id', uid).maybeSingle();
+      final idHorario = perfil?['schedule_id'] as String?;
+      Map<String, dynamic>? horario;
+      if (idHorario != null) {
+        horario = await _supabase
+            .from('schedules').select('name, rules').eq('id', idHorario).maybeSingle();
+      }
       if (!mounted) return;
       setState(() {
         _checadas = (r as List).cast<Map<String, dynamic>>();
+        _nombreHorario = horario?['name'] as String?;
+        _reglas = horario?['rules'] as List<dynamic>?;
         _cargando = false;
       });
     } catch (e) {
@@ -121,7 +190,7 @@ class _ChecadorPropioState extends State<ChecadorPropio> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text('${nombreDeChecada[tipo]} registrada a las '
-            '${_hora(_deHoy[tipo]?['registrada_en'])}.'),
+            '${_horaDe(_deHoy[tipo])}.'),
       ));
     }
   }
@@ -150,10 +219,56 @@ class _ChecadorPropioState extends State<ChecadorPropio> {
       porDia.putIfAbsent(ch['fecha'] as String, () => {})[ch['tipo'] as String] = ch;
     }
 
+    final reglasHoy = reglasDelDia(_reglas, DateTime.now());
+    final contador = contadorDelDia(
+      ahora: DateTime.now(),
+      entrada: reglasHoy.entrada,
+      salida: reglasHoy.salida,
+      yaEntro: hoy.containsKey('ENTRADA'),
+      yaSalio: hoy.containsKey('SALIDA'),
+    );
+    final colorContador = contador.color == null ? c.ink3 : _colorSemaforo(c, contador.color!);
+
     final tarjetaHoy = _tarjeta(
       c,
       titulo: 'Hoy · ${_fechaLarga(DateTime.now())}',
       children: [
+        // El contador: cuánto falta para la entrada o la salida, o cuánto se lleva de retardo, con
+        // el color del semáforo. Pedido del 28/09/2026.
+        Container(
+          padding: const EdgeInsets.all(SiSpace.x3),
+          decoration: BoxDecoration(
+            color: colorContador.withValues(alpha: 0.08),
+            border: Border.all(color: colorContador.withValues(alpha: 0.4)),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.timer_outlined, size: 20, color: colorContador),
+              const SizedBox(width: SiSpace.x3),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_nombreHorario == null ? 'No tienes horario asignado.' : contador.texto,
+                        style: TextStyle(
+                            fontSize: 13.5, fontWeight: FontWeight.w600, color: colorContador)),
+                    const SizedBox(height: 2),
+                    Text(
+                      _nombreHorario == null
+                          ? 'Pídele a Recursos Humanos que te asigne uno para ver tu semáforo.'
+                          : 'Tu horario: $_nombreHorario'
+                              '${reglasHoy.entrada == null ? '' : ' · hoy ${reglasHoy.entrada!.hora}'}'
+                              '${reglasHoy.salida == null ? '' : '–${reglasHoy.salida!.hora}'}',
+                      style: TextStyle(fontSize: 11.5, color: c.ink3),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: SiSpace.x2),
         for (final t in tiposDeChecada) _filaHoy(c, t, hoy[t]),
         if (posibles.isEmpty) ...[
           const SizedBox(height: SiSpace.x3),
@@ -236,7 +351,11 @@ class _ChecadorPropioState extends State<ChecadorPropio> {
               child: Text(nombreDeChecada[tipo]!,
                   style: TextStyle(fontSize: 14, color: ch == null ? c.ink3 : c.ink)),
             ),
-            Text(ch == null ? '—' : _hora(ch['registrada_en']),
+            if (ch != null) ...[
+              _punto(c, _semaforoDe(ch, _reglas)),
+              const SizedBox(width: SiSpace.x2),
+            ],
+            Text(ch == null ? '—' : _horaDe(ch),
                 style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
@@ -270,13 +389,19 @@ class _ChecadorPropioState extends State<ChecadorPropio> {
                   ? Text('—', textAlign: TextAlign.center, style: TextStyle(color: c.ink4))
                   : InkWell(
                       onTap: () => mostrarChecada(context, deEse[t]!, nombreDeChecada[t]!),
-                      child: Text(_hora(deEse[t]!['registrada_en']),
-                          textAlign: TextAlign.center,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _punto(c, _semaforoDe(deEse[t]!, _reglas)),
+                          const SizedBox(width: 4),
+                          Text(_horaDe(deEse[t]),
                           style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
                               color: c.brand,
                               fontFeatures: const [FontFeature.tabularFigures()])),
+                        ],
+                      ),
                     ),
             ),
         ],
@@ -344,7 +469,7 @@ Future<void> mostrarChecada(BuildContext context, Map<String, dynamic> ch, Strin
             ),
             const SizedBox(height: SiSpace.x3),
             Text(
-              '${_fechaLarga(DateTime.parse(ch['fecha'].toString()))} · ${_hora(ch['registrada_en'])}',
+              '${_fechaLarga(DateTime.parse(ch['fecha'].toString()))} · ${_horaDe(ch)}',
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: c.ink),
             ),
             const SizedBox(height: SiSpace.x1),
@@ -710,6 +835,10 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
   /// Por persona: sus checadas del día por tipo.
   Map<String, Map<String, Map<String, dynamic>>> _porPersona = {};
   Map<String, Map<String, dynamic>> _perfiles = {};
+  Map<String, Map<String, dynamic>> _horariosPorId = {};
+
+  /// El filtro de los contadores: 'verde', 'amarillo', 'rojo', 'sin' o null para todos.
+  String? _filtro;
 
   @override
   void initState() {
@@ -731,26 +860,50 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
       for (final f in filas) {
         porPersona.putIfAbsent(f['profile_id'] as String, () => {})[f['tipo'] as String] = f;
       }
-      var perfiles = <String, Map<String, dynamic>>{};
-      if (porPersona.isNotEmpty) {
-        final p = await _supabase
-            .from('profiles')
-            .select('id, nombre, paterno, materno, numero_empleado')
-            .inFilter('id', porPersona.keys.toList());
-        perfiles = {
-          for (final x in (p as List).cast<Map<String, dynamic>>()) x['id'] as String: x,
-        };
+      // Los ACTIVOS, para saber quién debía checar y no lo hizo; y quien checó aunque ya no lo esté.
+      const campos = 'id, nombre, paterno, materno, numero_empleado, schedule_id';
+      final activos = await _supabase.from('profiles').select(campos).eq('status_sys', 'ACTIVO');
+      final perfiles = <String, Map<String, dynamic>>{
+        for (final x in (activos as List).cast<Map<String, dynamic>>()) x['id'] as String: x,
+      };
+      final faltan = porPersona.keys.where((id) => !perfiles.containsKey(id)).toList();
+      if (faltan.isNotEmpty) {
+        final otros = await _supabase.from('profiles').select(campos).inFilter('id', faltan);
+        for (final x in (otros as List).cast<Map<String, dynamic>>()) {
+          perfiles[x['id'] as String] = x;
+        }
       }
+      final horarios = await _horarios();
       if (!mounted) return;
       setState(() {
         _porPersona = porPersona;
         _perfiles = perfiles;
+        _horariosPorId = horarios;
         _cargando = false;
       });
     } catch (e) {
       debugPrint('checador: registros: $e');
       if (mounted) setState(() { _cargando = false; _error = '$e'; });
     }
+  }
+
+  Map<String, dynamic>? _horarioDe(String id) {
+    final h = _perfiles[id]?['schedule_id'] as String?;
+    return h == null ? null : _horariosPorId[h];
+  }
+
+  /// Cómo va la ENTRADA de una persona ese día: su color, 'sin' si debía checar y no lo hizo,
+  /// 'aun' si todavía está a tiempo de hacerlo, o null si no tiene horario ese día.
+  String? _estadoEntrada(String id) {
+    final reglas = _horarioDe(id)?['rules'] as List<dynamic>?;
+    final entrada = reglasDelDia(reglas, _dia).entrada;
+    final ch = _porPersona[id]?['ENTRADA'];
+    if (ch != null) return _semaforoDe(ch, reglas)?.name;
+    if (entrada == null) return null;
+    final hoy = DateUtils.isSameDay(_dia, DateTime.now());
+    final ahora = DateTime.now();
+    if (hoy && ahora.hour * 60 + ahora.minute <= entrada.minutos + entrada.tolerancia) return 'aun';
+    return 'sin';
   }
 
   String _nombre(String id) {
@@ -779,11 +932,50 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
   Widget build(BuildContext context) {
     final c = SiColors.of(context);
     final q = _busqueda.trim().toLowerCase();
-    final ids = _porPersona.keys
+
+    // Quien checó, y quien debía checar ese día según su horario aunque no lo haya hecho.
+    final todos = <String>{
+      ..._porPersona.keys,
+      for (final id in _perfiles.keys)
+        if (reglasDelDia(_horarioDe(id)?['rules'] as List<dynamic>?, _dia).entrada != null) id,
+    };
+    final estados = {for (final id in todos) id: _estadoEntrada(id)};
+    final cuenta = <String, int>{};
+    for (final e in estados.values) {
+      if (e != null) cuenta[e] = (cuenta[e] ?? 0) + 1;
+    }
+
+    final ids = todos
+        .where((id) => _filtro == null || estados[id] == _filtro)
         .where((id) => q.isEmpty || _nombre(id).toLowerCase().contains(q)
             || (_perfiles[id]?['numero_empleado']?.toString() ?? '').contains(q))
         .toList()
       ..sort((a, b) => _nombre(a).compareTo(_nombre(b)));
+
+    Widget contador(String clave, String etiqueta, Color color) {
+      final activo = _filtro == clave;
+      return InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => setState(() => _filtro = activo ? null : clave),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: SiSpace.x3, vertical: SiSpace.x2),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: activo ? 0.18 : 0.08),
+            border: Border.all(color: color.withValues(alpha: activo ? 0.9 : 0.35)),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('${cuenta[clave] ?? 0}',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: color)),
+              const SizedBox(width: SiSpace.x2),
+              Text(etiqueta, style: TextStyle(fontSize: 12.5, color: c.ink2)),
+            ],
+          ),
+        ),
+      );
+    }
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(SiSpace.x6),
@@ -822,6 +1014,20 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
                     style: TextStyle(fontSize: 12.5, color: c.ink3)),
             ],
           ),
+          const SizedBox(height: SiSpace.x3),
+          // El conteo del día por color de la ENTRADA. Tocar uno filtra la tabla.
+          if (!_cargando && _error == null)
+            Wrap(
+              spacing: SiSpace.x2,
+              runSpacing: SiSpace.x2,
+              children: [
+                contador('verde', 'a tiempo', c.success),
+                contador('amarillo', 'en tolerancia', c.warn),
+                contador('rojo', 'con retardo', c.danger),
+                contador('sin', 'sin checar', c.ink3),
+                if ((cuenta['aun'] ?? 0) > 0) contador('aun', 'aún a tiempo', c.ink4),
+              ],
+            ),
           const SizedBox(height: SiSpace.x4),
           if (_cargando)
             const Padding(
@@ -835,9 +1041,9 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
               padding: const EdgeInsets.all(SiSpace.x8),
               child: Center(
                 child: Text(
-                    _porPersona.isEmpty
+                    todos.isEmpty
                         ? 'Nadie ha checado con el sistema este día.'
-                        : 'Nadie coincide con la búsqueda.',
+                        : 'Nadie coincide con el filtro o la búsqueda.',
                     style: TextStyle(color: c.ink3)),
               ),
             )
@@ -860,15 +1066,36 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
                   rows: [
                     for (final id in ids)
                       DataRow(cells: [
-                        DataCell(Text(_nombre(id))),
+                        DataCell(Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(_nombre(id)),
+                            Text(_horarioDe(id)?['name']?.toString() ?? 'Sin horario asignado',
+                                style: TextStyle(fontSize: 11, color: c.ink4)),
+                          ],
+                        )),
                         for (final t in tiposDeChecada)
                           DataCell(
-                            _porPersona[id]![t] == null
-                                ? Text('—', style: TextStyle(color: c.ink4))
+                            _porPersona[id]?[t] == null
+                                ? Text(
+                                    t == 'ENTRADA' && estados[id] == 'sin'
+                                        ? 'Sin checar'
+                                        : (t == 'ENTRADA' && estados[id] == 'aun' ? 'Aún no' : '—'),
+                                    style: TextStyle(
+                                        color: t == 'ENTRADA' && estados[id] == 'sin'
+                                            ? c.danger
+                                            : c.ink4,
+                                        fontWeight: t == 'ENTRADA' && estados[id] == 'sin'
+                                            ? FontWeight.w600
+                                            : null))
                                 : Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Text(_hora(_porPersona[id]![t]!['registrada_en']),
+                                      _punto(c, _semaforoDe(_porPersona[id]![t]!,
+                                          _horarioDe(id)?['rules'] as List<dynamic>?)),
+                                      const SizedBox(width: 6),
+                                      Text(_horaDe(_porPersona[id]![t]),
                                           style: TextStyle(
                                               fontWeight: FontWeight.w600,
                                               color: c.brand,
@@ -877,7 +1104,7 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
                                       Icon(Icons.photo_camera_outlined, size: 14, color: c.ink4),
                                     ],
                                   ),
-                            onTap: _porPersona[id]![t] == null
+                            onTap: _porPersona[id]?[t] == null
                                 ? null
                                 : () => mostrarChecada(
                                     context, _porPersona[id]![t]!, nombreDeChecada[t]!,

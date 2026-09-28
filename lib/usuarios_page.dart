@@ -220,7 +220,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
       var dataQuery = Supabase.instance.client
           .from('profiles')
-          .select('id, nombre, paterno, materno, email, numero_empleado, role, is_blocked, status_sys, status_rh, permissions, full_name, has_auth_account, mail_user, mail_pass');
+          .select('id, nombre, paterno, materno, email, numero_empleado, role, is_blocked, status_sys, status_rh, permissions, full_name, has_auth_account, mail_user, mail_pass, schedule_id');
       var countQuery =
           Supabase.instance.client.from('profiles').count(CountOption.exact);
 
@@ -1461,6 +1461,9 @@ class _UserFormSheetState extends State<_UserFormSheet> {
   late String _role;
   late String? _statusSys;
   late String? _statusRh;
+  /// Su horario, contra el que se pinta el semáforo del Checador. Null = sin horario.
+  String? _scheduleId;
+  List<Map<String, dynamic>> _horarios = [];
   late bool _isBlocked;
   late Map<String, bool> _permissions;
   final Map<String, bool> _obscure = {
@@ -1470,6 +1473,16 @@ class _UserFormSheetState extends State<_UserFormSheet> {
   bool _saving = false;
 
   bool get _isEditing => widget.user != null;
+
+  Future<void> _cargarHorarios() async {
+    try {
+      final r = await Supabase.instance.client
+          .from('schedules').select('id, name').order('name', ascending: true);
+      if (mounted) setState(() => _horarios = (r as List).cast<Map<String, dynamic>>());
+    } catch (e) {
+      debugPrint('Error al leer los horarios: $e');
+    }
+  }
 
   @override
   void initState() {
@@ -1496,6 +1509,8 @@ class _UserFormSheetState extends State<_UserFormSheet> {
     _role = u?['role'] ?? 'usuario';
     _statusSys = u?['status_sys'] ?? 'ACTIVO';
     _statusRh = u?['status_rh'] ?? 'ACTIVO';
+    _scheduleId = u?['schedule_id'] as String?;
+    _cargarHorarios();
     _isBlocked = u?['is_blocked'] ?? false;
     _permissions = Map<String, bool>.from(u?['permissions'] ?? {
       'show_calendar': false,
@@ -1574,6 +1589,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
           'role': _role,
           'status_sys': _statusSys,
           'status_rh': _statusRh,
+          'schedule_id': _scheduleId,
           'is_blocked': _isBlocked,
           'permissions': _permissions,
           'mail_user': _mailUser.text.trim(),
@@ -1602,6 +1618,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
           await Supabase.instance.client.from('profiles').update({
             'status_sys': _statusSys,
             'status_rh': _statusRh,
+            'schedule_id': _scheduleId,
             'permissions': _permissions,
             'role': _role,
             'mail_user': _mailUser.text.trim(),
@@ -1929,6 +1946,22 @@ class _UserFormSheetState extends State<_UserFormSheet> {
               .map((e) => DropdownMenuItem(value: e, child: Text(e)))
               .toList(),
           onChanged: (v) => setState(() => _statusRh = v),
+        ),
+        const SizedBox(height: SiSpace.x4),
+        // Horario: contra él se pinta el semáforo del Checador de Asistencia (28/09/2026).
+        DropdownButtonFormField<String?>(
+          value: _horarios.any((h) => h['id'] == _scheduleId) ? _scheduleId : null,
+          isExpanded: true,
+          decoration: const InputDecoration(
+              labelText: 'Horario',
+              prefixIcon: Icon(Icons.schedule_outlined)),
+          items: [
+            const DropdownMenuItem<String?>(value: null, child: Text('Sin horario')),
+            for (final h in _horarios)
+              DropdownMenuItem<String?>(
+                  value: h['id'] as String, child: Text(h['name']?.toString() ?? '')),
+          ],
+          onChanged: (v) => setState(() => _scheduleId = v),
         ),
         const SizedBox(height: SiSpace.x4),
         // Email y contraseña solo al crear un usuario nuevo (botón +)
