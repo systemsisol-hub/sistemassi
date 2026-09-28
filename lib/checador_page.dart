@@ -80,10 +80,12 @@ class _ChecadorPropioState extends State<ChecadorPropio> {
     _cargar();
   }
 
-  Future<void> _cargar() async {
+  Future<void> _cargar({bool silencioso = false}) async {
     final uid = _supabase.auth.currentUser?.id;
     if (uid == null) return;
-    setState(() { _cargando = true; _error = null; });
+    // Silencioso después de checar: con el indicador de carga la cámara se desmontaría y el
+    // navegador volvería a encenderla —y en algunos, a pedir el permiso—.
+    if (!silencioso) setState(() { _cargando = true; _error = null; });
     try {
       final desde = DateFormat('yyyy-MM-dd')
           .format(DateTime.now().subtract(const Duration(days: 13)));
@@ -113,20 +115,14 @@ class _ChecadorPropioState extends State<ChecadorPropio> {
     };
   }
 
-  Future<void> _checar(String tipo) async {
-    final hecho = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => _CapturaChecada(tipo: tipo),
-    );
-    if (hecho == true) {
-      await _cargar();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('${nombreDeChecada[tipo]} registrada a las '
-              '${_hora(_deHoy[tipo]?['registrada_en'])}.'),
-        ));
-      }
+  /// Lo llama la cámara cuando la checada ya quedó guardada.
+  Future<void> _alChecar(String tipo) async {
+    await _cargar(silencioso: true);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('${nombreDeChecada[tipo]} registrada a las '
+            '${_hora(_deHoy[tipo]?['registrada_en'])}.'),
+      ));
     }
   }
 
@@ -154,49 +150,55 @@ class _ChecadorPropioState extends State<ChecadorPropio> {
       porDia.putIfAbsent(ch['fecha'] as String, () => {})[ch['tipo'] as String] = ch;
     }
 
+    final tarjetaHoy = _tarjeta(
+      c,
+      titulo: 'Hoy · ${_fechaLarga(DateTime.now())}',
+      children: [
+        for (final t in tiposDeChecada) _filaHoy(c, t, hoy[t]),
+        if (posibles.isEmpty) ...[
+          const SizedBox(height: SiSpace.x3),
+          Text('Tu jornada de hoy está completa.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, color: c.ink3)),
+        ],
+      ],
+    );
+
+    // La cámara se abre sola al entrar —pedido del 28/09/2026, antes era una ventana que se abría
+    // con el botón— y sólo mientras haya algo que checar: con la jornada completa no tiene caso
+    // tenerla encendida.
+    final camara = posibles.isEmpty
+        ? null
+        : _CamaraChecador(posibles: posibles, alChecar: _alChecar);
+
     return RefreshIndicator(
-      onRefresh: _cargar,
+      onRefresh: () => _cargar(silencioso: true),
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(SiSpace.x6),
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 720),
+            constraints: const BoxConstraints(maxWidth: 1100),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _tarjeta(
-                  c,
-                  titulo: 'Hoy · ${_fechaLarga(DateTime.now())}',
-                  children: [
-                    for (final t in tiposDeChecada) _filaHoy(c, t, hoy[t]),
-                    const SizedBox(height: SiSpace.x4),
-                    if (posibles.isEmpty)
-                      Text('Tu jornada de hoy está completa.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 13, color: c.ink3))
-                    else
-                      Wrap(
-                        alignment: WrapAlignment.center,
-                        spacing: SiSpace.x3,
-                        runSpacing: SiSpace.x3,
-                        children: [
-                          for (var i = 0; i < posibles.length; i++)
-                            i == 0
-                                ? FilledButton.icon(
-                                    onPressed: () => _checar(posibles[i]),
-                                    icon: const Icon(Icons.photo_camera_outlined, size: 18),
-                                    label: Text('Checar ${nombreDeChecada[posibles[i]]!.toLowerCase()}'),
-                                  )
-                                : OutlinedButton.icon(
-                                    onPressed: () => _checar(posibles[i]),
-                                    icon: const Icon(Icons.photo_camera_outlined, size: 18),
-                                    label: Text('Checar ${nombreDeChecada[posibles[i]]!.toLowerCase()}'),
-                                  ),
-                        ],
-                      ),
-                  ],
-                ),
+                LayoutBuilder(builder: (_, caja) {
+                  if (camara == null) return tarjetaHoy;
+                  if (caja.maxWidth >= 860) {
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(flex: 3, child: camara),
+                        const SizedBox(width: SiSpace.x4),
+                        Expanded(flex: 2, child: tarjetaHoy),
+                      ],
+                    );
+                  }
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [camara, const SizedBox(height: SiSpace.x4), tarjetaHoy],
+                  );
+                }),
                 const SizedBox(height: SiSpace.x4),
                 _tarjeta(
                   c,
@@ -374,18 +376,29 @@ Future<void> mostrarChecada(BuildContext context, Map<String, dynamic> ch, Strin
 // Checar: la cámara en vivo y el GPS
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _CapturaChecada extends StatefulWidget {
-  final String tipo;
-  const _CapturaChecada({required this.tipo});
+/// La cámara y el GPS, dentro de la página.
+///
+/// Se encienden solos al entrar y se apagan al salir de la pestaña —el `dispose`— y, en el
+/// teléfono, al mandar la aplicación al fondo: una cámara encendida sin que nadie la vea es una
+/// cámara que alguien puede estar usando.
+class _CamaraChecador extends StatefulWidget {
+  /// Lo que se puede checar ahora. Uno por botón.
+  final List<String> posibles;
+  final Future<void> Function(String tipo) alChecar;
+
+  const _CamaraChecador({required this.posibles, required this.alChecar});
 
   @override
-  State<_CapturaChecada> createState() => _CapturaChecadaState();
+  State<_CamaraChecador> createState() => _CamaraChecadorState();
 }
 
-class _CapturaChecadaState extends State<_CapturaChecada> {
+class _CamaraChecadorState extends State<_CamaraChecador> with WidgetsBindingObserver {
   CameraController? _camara;
   String? _errorCamara;
+
+  /// La foto recién tomada, esperando confirmación, y para qué checada es.
   Uint8List? _foto;
+  String? _tipo;
 
   Position? _posicion;
   String? _errorUbicacion;
@@ -397,15 +410,30 @@ class _CapturaChecadaState extends State<_CapturaChecada> {
   @override
   void initState() {
     super.initState();
-    // Las dos a la vez: el GPS tarda unos segundos, y así está listo cuando la foto ya se tomó.
+    WidgetsBinding.instance.addObserver(this);
+    // Las dos a la vez: el GPS tarda unos segundos, y así está listo cuando se pulsa el botón.
     _abrirCamara();
     _ubicar();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _camara?.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState estado) {
+    if (estado == AppLifecycleState.inactive || estado == AppLifecycleState.paused) {
+      final cam = _camara;
+      if (cam != null) {
+        setState(() => _camara = null);
+        cam.dispose();
+      }
+    } else if (estado == AppLifecycleState.resumed && _camara == null && _errorCamara == null) {
+      _abrirCamara();
+    }
   }
 
   /// La cámara EN VIVO, nunca un selector de archivos: una foto guardada no demuestra que la
@@ -414,7 +442,7 @@ class _CapturaChecadaState extends State<_CapturaChecada> {
     try {
       final camaras = await availableCameras();
       if (camaras.isEmpty) {
-        setState(() => _errorCamara = 'No se encontró ninguna cámara en este equipo.');
+        if (mounted) setState(() => _errorCamara = 'No se encontró ninguna cámara en este equipo.');
         return;
       }
       final frontal = camaras.firstWhere(
@@ -427,11 +455,11 @@ class _CapturaChecadaState extends State<_CapturaChecada> {
         await ctrl.dispose();
         return;
       }
-      setState(() => _camara = ctrl);
+      setState(() { _camara = ctrl; _errorCamara = null; });
     } on CameraException catch (e) {
       debugPrint('checador: cámara: ${e.code} ${e.description}');
       if (mounted) {
-        setState(() => _errorCamara = e.code.contains('Denied') || e.code.contains('denied')
+        setState(() => _errorCamara = e.code.toLowerCase().contains('denied')
             ? 'No diste permiso de usar la cámara. Actívalo en la configuración del navegador '
                 'o del teléfono y vuelve a intentarlo.'
             : 'No se pudo abrir la cámara: ${e.description ?? e.code}');
@@ -474,23 +502,24 @@ class _CapturaChecadaState extends State<_CapturaChecada> {
     }
   }
 
-  Future<void> _tomarFoto() async {
+  Future<void> _tomarFoto(String tipo) async {
     final cam = _camara;
     if (cam == null) return;
     try {
       final x = await cam.takePicture();
       final bytes = await x.readAsBytes();
-      if (mounted) setState(() => _foto = bytes);
+      if (mounted) setState(() { _foto = bytes; _tipo = tipo; _errorGuardar = null; });
     } catch (e) {
-      if (mounted) setState(() => _errorCamara = 'No se pudo tomar la foto: $e');
+      if (mounted) setState(() => _errorGuardar = 'No se pudo tomar la foto: $e');
     }
   }
 
   Future<void> _guardar() async {
     final uid = _supabase.auth.currentUser?.id;
     final foto = _foto;
+    final tipo = _tipo;
     final pos = _posicion;
-    if (uid == null || foto == null || pos == null) return;
+    if (uid == null || foto == null || tipo == null || pos == null) return;
     setState(() { _guardando = true; _errorGuardar = null; });
     try {
       final lista = prepararFotoChecada(foto);
@@ -503,22 +532,23 @@ class _CapturaChecadaState extends State<_CapturaChecada> {
           );
       // La hora y el día NO van aquí: los pone la base con su reloj.
       await _supabase.from('checadas').insert({
-        'tipo': widget.tipo,
+        'tipo': tipo,
         'latitud': pos.latitude,
         'longitud': pos.longitude,
         'precision_m': pos.accuracy,
         'foto': ruta,
         'dispositivo': kIsWeb ? 'web' : defaultTargetPlatform.name,
       });
-      if (mounted) Navigator.pop(context, true);
+      if (!mounted) return;
+      setState(() { _guardando = false; _foto = null; _tipo = null; });
+      await widget.alChecar(tipo);
     } on PostgrestException catch (e) {
       // El disparador explica en palabras lo que no se puede: «Primero hay que checar la entrada».
-      final ya = e.code == '23505';
       if (mounted) {
         setState(() {
           _guardando = false;
-          _errorGuardar = ya
-              ? 'Ya habías checado «${nombreDeChecada[widget.tipo]}» hoy.'
+          _errorGuardar = e.code == '23505'
+              ? 'Ya habías checado «${nombreDeChecada[tipo]}» hoy.'
               : e.message;
         });
       }
@@ -530,7 +560,6 @@ class _CapturaChecadaState extends State<_CapturaChecada> {
   @override
   Widget build(BuildContext context) {
     final c = SiColors.of(context);
-    final nombre = nombreDeChecada[widget.tipo]!;
 
     Widget vista;
     if (_foto != null) {
@@ -539,95 +568,123 @@ class _CapturaChecadaState extends State<_CapturaChecada> {
       vista = Padding(
         padding: const EdgeInsets.all(SiSpace.x4),
         child: Center(
-          child: Text(_errorCamara!,
-              textAlign: TextAlign.center, style: TextStyle(color: c.danger, fontSize: 13)),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(_errorCamara!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.red.shade200, fontSize: 13)),
+              const SizedBox(height: SiSpace.x2),
+              TextButton(
+                onPressed: () {
+                  setState(() => _errorCamara = null);
+                  _abrirCamara();
+                },
+                child: const Text('Reintentar'),
+              ),
+            ],
+          ),
         ),
       );
     } else if (_camara == null) {
       vista = const Center(child: CircularProgressIndicator());
     } else {
-      vista = CameraPreview(_camara!);
+      vista = Center(
+        child: AspectRatio(
+          aspectRatio: _camara!.value.aspectRatio,
+          child: CameraPreview(_camara!),
+        ),
+      );
     }
 
-    return AlertDialog(
-      title: Text('Checar ${nombre.toLowerCase()}',
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-      content: SizedBox(
-        width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+    final nombre = _tipo == null ? '' : nombreDeChecada[_tipo]!.toLowerCase();
+
+    return _tarjeta(
+      c,
+      titulo: _foto == null ? 'Checar' : '¿Así queda tu checada de $nombre?',
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: Container(color: Colors.black, height: 320, child: vista),
+        ),
+        const SizedBox(height: SiSpace.x3),
+        Row(
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: Container(
-                color: Colors.black,
-                height: 300,
-                child: vista,
+            Icon(
+              _posicion != null
+                  ? Icons.location_on
+                  : (_errorUbicacion != null ? Icons.location_off : Icons.my_location),
+              size: 16,
+              color: _posicion != null
+                  ? c.success
+                  : (_errorUbicacion != null ? c.danger : c.ink3),
+            ),
+            const SizedBox(width: SiSpace.x2),
+            Expanded(
+              child: Text(
+                _posicion != null
+                    ? 'Ubicación lista (${precisionEnPalabras(_posicion!.accuracy)})'
+                    : (_errorUbicacion ?? (_buscandoUbicacion ? 'Buscando tu ubicación…' : '')),
+                style: TextStyle(
+                    fontSize: 12.5, color: _errorUbicacion != null ? c.danger : c.ink2),
               ),
             ),
-            const SizedBox(height: SiSpace.x3),
-            Row(
-              children: [
-                Icon(
-                  _posicion != null
-                      ? Icons.location_on
-                      : (_errorUbicacion != null ? Icons.location_off : Icons.my_location),
-                  size: 16,
-                  color: _posicion != null
-                      ? c.success
-                      : (_errorUbicacion != null ? c.danger : c.ink3),
-                ),
-                const SizedBox(width: SiSpace.x2),
-                Expanded(
-                  child: Text(
-                    _posicion != null
-                        ? 'Ubicación lista (${precisionEnPalabras(_posicion!.accuracy)})'
-                        : (_errorUbicacion ??
-                            (_buscandoUbicacion ? 'Buscando tu ubicación…' : '')),
-                    style: TextStyle(
-                        fontSize: 12.5,
-                        color: _errorUbicacion != null ? c.danger : c.ink2),
-                  ),
-                ),
-                if (_errorUbicacion != null)
-                  TextButton(onPressed: _ubicar, child: const Text('Reintentar')),
-              ],
-            ),
-            if (_errorGuardar != null) ...[
-              const SizedBox(height: SiSpace.x2),
-              Text(_errorGuardar!, style: TextStyle(fontSize: 12.5, color: c.danger)),
-            ],
-            const SizedBox(height: SiSpace.x1),
-            Text('La hora la pone el servidor al guardar.',
-                style: TextStyle(fontSize: 11.5, color: c.ink4)),
+            if (_errorUbicacion != null)
+              TextButton(onPressed: _ubicar, child: const Text('Reintentar')),
           ],
         ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _guardando ? null : () => Navigator.pop(context, false),
-          child: const Text('Cancelar'),
-        ),
-        if (_foto == null)
-          FilledButton.icon(
-            onPressed: _camara == null ? null : _tomarFoto,
-            icon: const Icon(Icons.photo_camera, size: 18),
-            label: const Text('Tomar foto'),
-          )
-        else ...[
-          TextButton(
-            onPressed: _guardando ? null : () => setState(() => _foto = null),
-            child: const Text('Repetir foto'),
-          ),
-          FilledButton(
-            onPressed: _guardando || _posicion == null ? null : _guardar,
-            child: _guardando
-                ? const SizedBox(
-                    width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                : Text('Checar ${nombre.toLowerCase()}'),
-          ),
+        if (_errorGuardar != null) ...[
+          const SizedBox(height: SiSpace.x2),
+          Text(_errorGuardar!, style: TextStyle(fontSize: 12.5, color: c.danger)),
         ],
+        const SizedBox(height: SiSpace.x3),
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: SiSpace.x3,
+          runSpacing: SiSpace.x3,
+          children: _foto == null
+              ? [
+                  // Un botón por cada checada posible: pulsarlo toma la foto de ESA checada.
+                  for (var i = 0; i < widget.posibles.length; i++)
+                    i == 0
+                        ? FilledButton.icon(
+                            onPressed: _camara == null
+                                ? null
+                                : () => _tomarFoto(widget.posibles[i]),
+                            icon: const Icon(Icons.photo_camera, size: 18),
+                            label: Text(
+                                'Checar ${nombreDeChecada[widget.posibles[i]]!.toLowerCase()}'),
+                          )
+                        : OutlinedButton.icon(
+                            onPressed: _camara == null
+                                ? null
+                                : () => _tomarFoto(widget.posibles[i]),
+                            icon: const Icon(Icons.photo_camera, size: 18),
+                            label: Text(
+                                'Checar ${nombreDeChecada[widget.posibles[i]]!.toLowerCase()}'),
+                          ),
+                ]
+              : [
+                  TextButton(
+                    onPressed: _guardando
+                        ? null
+                        : () => setState(() { _foto = null; _tipo = null; }),
+                    child: const Text('Repetir foto'),
+                  ),
+                  FilledButton(
+                    onPressed: _guardando || _posicion == null ? null : _guardar,
+                    child: _guardando
+                        ? const SizedBox(
+                            width: 16, height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2))
+                        : Text('Confirmar $nombre'),
+                  ),
+                ],
+        ),
+        const SizedBox(height: SiSpace.x2),
+        Text('La hora la pone el servidor al guardar.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 11.5, color: c.ink4)),
       ],
     );
   }
