@@ -1352,6 +1352,7 @@ class _PermIcons extends StatelessWidget {
       _PermIcon(Icons.inventory_2_outlined, perms['show_issi'] == true),
       _PermIcon(Icons.badge_outlined, perms['show_cssi'] == true),
       _PermIcon(Icons.description_outlined, perms['show_incidencias'] == true),
+      _PermIcon(Icons.groups_outlined, perms['show_incidencias_rh'] == true),
       _PermIcon(Icons.assignment_outlined, perms['show_logs'] == true),
       _PermIcon(Icons.fingerprint, perms['show_asistencia'] == true),
       _PermIcon(Icons.bar_chart_outlined, perms['show_powerbi'] == true),
@@ -1460,6 +1461,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
       'show_issi': false,
       'show_cssi': false,
       'show_incidencias': false,
+      'show_incidencias_rh': false,
       'show_logs': false,
       'show_external_contacts': false,
       'show_avisos': false,
@@ -1563,6 +1565,11 @@ class _UserFormSheetState extends State<_UserFormSheet> {
             'mail_user': _mailUser.text.trim(),
             'mail_pass': _mailPass.text.trim(),
           }).eq('id', res);
+          // El rol y la pestaña RH de Incidencias se leen del TOKEN, no del perfil, y este camino
+          // no pasa por `update_user_admin`, que es quien los copia. Sin esto un usuario nuevo con
+          // el interruptor encendido no veía nada hasta que alguien lo volviera a guardar.
+          await Supabase.instance.client
+              .rpc('sincronizar_token_de_usuario', params: {'user_id_param': res});
         }
       }
       if (mounted) {
@@ -1964,6 +1971,11 @@ class _UserFormSheetState extends State<_UserFormSheet> {
     ('Inventario ISSI', 'show_issi', Icons.inventory_2_outlined),
     ('Colaboradores CSSI', 'show_cssi', Icons.badge_outlined),
     ('Incidencias', 'show_incidencias', Icons.description_outlined),
+    // La pestaña RH de Incidencias: las solicitudes de TODOS, aprobarlas y la tabla por quincena.
+    // Aparte de `show_incidencias`, y sin importar si es administrador: pedido del 28/09/2026.
+    // Se copia al token de sesión al guardar (ver 20260928120000_incidencias_rh.sql), que es lo
+    // que de verdad abre los datos de los demás.
+    ('Incidencias: pestaña RH', 'show_incidencias_rh', Icons.groups_outlined),
     ('Logs del sistema', 'show_logs', Icons.assignment_outlined),
     ('Avisos', 'show_avisos', Icons.campaign_outlined),
     ('Correspondencia', 'show_correspondencia', Icons.mail_outline),

@@ -40,11 +40,12 @@ String? periodoCumplido(DateTime? base, DateTime hoy) {
 ///   calendario, su antigüedad, su historial —sólo el periodo que ya cumplió y el que está en
 ///   curso— y sus vacaciones por mes. Aquí sólo se pide sobre el periodo que ya cumplió.
 /// * **RH** — la página tal como estaba: elegir colaborador, solicitudes pendientes de todos,
-///   registros por quincena, aprobar y eliminar. Sólo para administradores, que son los que la
-///   veían así.
+///   registros por quincena y aprobar. Sólo para quien tiene el interruptor «Incidencias: pestaña
+///   RH» en Usuarios, sea o no administrador (pedido del mismo día). Eliminar sigue siendo sólo de
+///   administrador, porque pasa por la papelera.
 ///
-/// Un administrador ve las dos. En «Mis incidencias» se le aplican las MISMAS reglas que a
-/// cualquiera: es su vista como colaborador, y lo que es de administrador se hace en RH.
+/// Quien tiene RH ve las dos. En «Mis incidencias» se le aplican las MISMAS reglas que a
+/// cualquiera: es su vista como colaborador, y lo de RH se hace en RH.
 class IncidenciasPage extends StatefulWidget {
   const IncidenciasPage({super.key});
 
@@ -54,7 +55,8 @@ class IncidenciasPage extends StatefulWidget {
 
 class _IncidenciasArmazonState extends State<IncidenciasPage>
     with SingleTickerProviderStateMixin {
-  bool? _esAdmin;
+  /// Si tiene la pestaña RH. Null mientras se averigua.
+  bool? _puedeRH;
   TabController? _tabs;
 
   @override
@@ -63,27 +65,36 @@ class _IncidenciasArmazonState extends State<IncidenciasPage>
     _cargarRol();
   }
 
-  /// El rol sale de `profiles`, igual que en la vista: si aquí se leyera de otro lado, las
-  /// pestañas y lo que cada una muestra podrían no estar de acuerdo.
+  /// La pestaña se muestra según el PERFIL, que es lo que se ve en Usuarios.
+  ///
+  /// Pero lo que abre los datos de los demás es el TOKEN (`app_metadata.incidencias_rh`, ver
+  /// 20260928120000_incidencias_rh.sql), y el token sólo se renueva cada hora. Si el perfil ya lo
+  /// tiene y el token todavía no, se renueva aquí: si no, la pestaña aparecería y sólo mostraría lo
+  /// propio, sin ningún aviso de por qué.
   Future<void> _cargarRol() async {
-    final user = Supabase.instance.client.auth.currentUser;
-    var admin = false;
+    final auth = Supabase.instance.client.auth;
+    final user = auth.currentUser;
+    var puede = false;
     if (user != null) {
       try {
         final p = await Supabase.instance.client
             .from('profiles')
-            .select('role')
+            .select('permissions')
             .eq('id', user.id)
             .maybeSingle();
-        admin = p?['role'] == 'admin';
+        final permisos = (p?['permissions'] as Map?) ?? const {};
+        puede = permisos['show_incidencias_rh'] == true;
+        if (puede && user.appMetadata['incidencias_rh'] != true) {
+          await auth.refreshSession();
+        }
       } catch (e) {
-        debugPrint('Error leyendo el rol: $e');
+        debugPrint('Error leyendo el permiso de RH: $e');
       }
     }
     if (!mounted) return;
     setState(() {
-      _esAdmin = admin;
-      if (admin) _tabs = TabController(length: 2, vsync: this);
+      _puedeRH = puede;
+      if (puede) _tabs = TabController(length: 2, vsync: this);
     });
   }
 
@@ -96,14 +107,14 @@ class _IncidenciasArmazonState extends State<IncidenciasPage>
   @override
   Widget build(BuildContext context) {
     final c = SiColors.of(context);
-    if (_esAdmin == null) {
+    if (_puedeRH == null) {
       return Scaffold(
         backgroundColor: c.bg,
         body: const Center(child: CircularProgressIndicator()),
       );
     }
-    // Sin administrador no hay pestaña de RH que elegir: la barra con una sola pestaña sobra.
-    if (_esAdmin == false) return const _VistaIncidencias(rh: false);
+    // Sin el permiso no hay pestaña de RH que elegir: la barra con una sola pestaña sobra.
+    if (_puedeRH == false) return const _VistaIncidencias(rh: false);
 
     return Scaffold(
       backgroundColor: c.bg,
@@ -182,13 +193,13 @@ class _IncidenciasPageState extends State<_VistaIncidencias>
   @override
   bool get wantKeepAlive => true;
 
-  /// Si esta es la vista de RH y quien la ve es administrador.
+  /// Si esta es la vista de RH.
   ///
   /// Es lo que decide todo lo que antes decidía `_userRole == 'admin'`: el selector de
-  /// colaborador, las pendientes, el resumen por quincena, aprobar, eliminar, y no aplicarse las
-  /// reglas de colaborador al pedir. En «Mis incidencias» vale `false` también para un
-  /// administrador.
-  bool get _vistaRH => widget.rh && _userRole == 'admin';
+  /// colaborador, las pendientes, el resumen por quincena, aprobar, y no aplicarse las reglas de
+  /// colaborador al pedir. La pestaña sólo existe para quien tiene el permiso, así que basta con
+  /// saber cuál es. En «Mis incidencias» vale `false` para todos, administradores incluidos.
+  bool get _vistaRH => widget.rh;
 
   List<Map<String, dynamic>> _incidencias = [];
   List<Map<String, dynamic>> _allIncidencias =
@@ -485,7 +496,13 @@ class _IncidenciasPageState extends State<_VistaIncidencias>
     return 10; // 31-35+
   }
 
-  Widget _buildLeyesVacacionesTable() {
+  /// La antigüedad y la tabla de ley, en UNA tarjeta con el estilo del Historial de Vacaciones.
+  ///
+  /// Pedido del 28/09/2026: antes eran una tarjeta con la antigüedad y «Desde: <fecha>» y, debajo,
+  /// la tabla aparte. Ahora la antigüedad va en el título y la fecha ya no se muestra.
+  ///
+  /// [plegable] es para el teléfono: el título abre y cierra la tabla, como hacía la tarjeta.
+  Widget _buildLeyesVacacionesTable({bool plegable = false}) {
     final theme = Theme.of(context);
     final c = SiColors.of(context);
     const rows = [
@@ -505,13 +522,63 @@ class _IncidenciasPageState extends State<_VistaIncidencias>
     final years = _calcYears();
     final highlightIdx = _getRowIndex(years);
 
+    final abierta = !plegable || _antiguedadExpanded;
+    final titulo = Container(
+      color: c.hover,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Row(
+        children: [
+          Icon(Icons.workspace_premium_outlined,
+              size: 18, color: theme.colorScheme.secondary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text.rich(
+              TextSpan(children: [
+                TextSpan(
+                    text: _fechaReingreso != null
+                        ? 'Antigüedad (reingreso): '
+                        : 'Antigüedad: ',
+                    style: TextStyle(color: theme.colorScheme.secondary)),
+                TextSpan(
+                    text: _calcAntiguedad(),
+                    style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: theme.colorScheme.secondary)),
+              ]),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+          ),
+          if (plegable)
+            AnimatedRotation(
+              turns: abierta ? 0.5 : 0,
+              duration: const Duration(milliseconds: 250),
+              child: Icon(Icons.expand_more,
+                  size: 20, color: theme.colorScheme.secondary.withOpacity(0.7)),
+            ),
+        ],
+      ),
+    );
+
     return Container(
       decoration: BoxDecoration(
         border: Border.all(color: c.line),
         borderRadius: BorderRadius.circular(12),
       ),
       clipBehavior: Clip.hardEdge,
-      child: Table(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          plegable
+              ? GestureDetector(
+                  onTap: () => setState(() => _antiguedadExpanded = !_antiguedadExpanded),
+                  child: titulo,
+                )
+              : titulo,
+          AnimatedSize(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeInOut,
+            child: !abierta ? const SizedBox(width: double.infinity) : Table(
         columnWidths: const {
           0: FlexColumnWidth(2),
           1: FlexColumnWidth(1),
@@ -523,7 +590,7 @@ class _IncidenciasPageState extends State<_VistaIncidencias>
             children: const [
               Padding(
                 padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                child: Text('Antigüedad',
+                child: Text('Años de servicio',
                     style:
                         TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
               ),
@@ -580,66 +647,7 @@ class _IncidenciasPageState extends State<_VistaIncidencias>
             ),
         ],
       ),
-    );
-  }
-
-  /// Tarjeta de antigüedad (Contenido interno)
-  Widget _buildAntiguedadCardContent({
-    required ThemeData theme,
-    required String label,
-    required String dateStr,
-    bool isDesktop = false,
-    bool expanded = false,
-    Widget? table,
-  }) {
-    final c = SiColors.of(context);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.secondary.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: theme.colorScheme.secondary.withOpacity(0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.workspace_premium_outlined,
-                  color: theme.colorScheme.secondary, size: 28),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(label,
-                        style:
-                            TextStyle(fontSize: 11, color: c.ink3)),
-                    Text(_calcAntiguedad(),
-                        style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: theme.colorScheme.secondary)),
-                    Text('Desde: $dateStr',
-                        style:
-                            TextStyle(fontSize: 11, color: c.ink3)),
-                  ],
-                ),
-              ),
-              if (!isDesktop)
-                AnimatedRotation(
-                  turns: expanded ? 0.5 : 0,
-                  duration: const Duration(milliseconds: 250),
-                  child: Icon(Icons.expand_more,
-                      color: theme.colorScheme.secondary.withOpacity(0.6)),
-                ),
-            ],
           ),
-          if (!isDesktop && expanded && table != null) ...[
-            const SizedBox(height: 8),
-            table,
-          ],
         ],
       ),
     );
@@ -671,59 +679,21 @@ class _IncidenciasPageState extends State<_VistaIncidencias>
     );
   }
 
-  /// Antigüedad para Móvil (Hamburguesa/ExpansionTile)
+  /// Antigüedad para el teléfono: la misma tarjeta, que se abre y cierra desde el título.
   Widget _buildAntiguedadMobile() {
     final base = _fechaReingreso ?? _fechaIngreso;
     if (base == null) return _buildMissingDateFallback(isDesktop: false);
-    final theme = Theme.of(context);
-    final label =
-        _fechaReingreso != null ? 'Antigüedad (Reingreso)' : 'Antigüedad';
-    final dateStr =
-        '${base.day.toString().padLeft(2, '0')}/${base.month.toString().padLeft(2, '0')}/${base.year}';
-
     return Padding(
       padding: const EdgeInsets.only(top: 12, bottom: 4),
-      child: GestureDetector(
-        onTap: () => setState(() => _antiguedadExpanded = !_antiguedadExpanded),
-        child: AnimatedSize(
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeInOut,
-          child: SizedBox(
-            width: double.infinity,
-            child: _buildAntiguedadCardContent(
-              theme: theme,
-              label: label,
-              dateStr: dateStr,
-              isDesktop: false,
-              expanded: _antiguedadExpanded,
-              table: _buildLeyesVacacionesTable(),
-            ),
-          ),
-        ),
-      ),
+      child: _buildLeyesVacacionesTable(plegable: true),
     );
   }
 
-  /// Antigüedad para Escritorio (Inline)
+  /// Antigüedad para escritorio.
   Widget _buildAntiguedadDesktop() {
     final base = _fechaReingreso ?? _fechaIngreso;
     if (base == null) return _buildMissingDateFallback(isDesktop: true);
-    final theme = Theme.of(context);
-    final label =
-        _fechaReingreso != null ? 'Antigüedad (Reingreso)' : 'Antigüedad';
-    final dateStr =
-        '${base.day.toString().padLeft(2, '0')}/${base.month.toString().padLeft(2, '0')}/${base.year}';
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildAntiguedadCardContent(
-            theme: theme, label: label, dateStr: dateStr, isDesktop: true),
-        const SizedBox(height: 12),
-        _buildLeyesVacacionesTable(),
-      ],
-    );
+    return _buildLeyesVacacionesTable();
   }
 
   /// Días de vacaciones según nueva ley 2023 y años de servicio
@@ -1156,7 +1126,10 @@ class _IncidenciasPageState extends State<_VistaIncidencias>
   /// que quiera deshacerse de su solicitud tiene el camino correcto ya puesto: cancelarla, que su
   /// política sí le permite mientras esté PENDIENTE.
   bool _sePuedeEliminar(Map<String, dynamic> inc) =>
+      // En RH, y además administrador: la pestaña se abre con su propio permiso, pero la papelera
+      // sigue siendo sólo de administradores.
       _vistaRH &&
+      _userRole == 'admin' &&
       (inc['status'] == 'PENDIENTE' || inc['status'] == 'CANCELADA');
 
   /// Manda la incidencia a la papelera: se guarda entera y se puede restaurar.
