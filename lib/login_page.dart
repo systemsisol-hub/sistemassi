@@ -14,7 +14,9 @@ const _navyBrand = Color(0xFF6B7BD6);
 // ─────────────────────────────────────────────────────────────────────────────
 class LoginPage extends StatefulWidget {
   final ValueNotifier<ThemeMode>? themeNotifier;
-  const LoginPage({super.key, this.themeNotifier});
+  /// Un aviso que mostrar al abrir, p. ej. que el enlace de recuperación ya caducó.
+  final String? aviso;
+  const LoginPage({super.key, this.themeNotifier, this.aviso});
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -39,6 +41,17 @@ class _LoginPageState extends State<LoginPage>
       ..forward();
     _fadeAnim = CurvedAnimation(parent: _fadeCtrl, curve: SiMotion.easeOut);
     _fetchActiveCount();
+    final aviso = widget.aviso;
+    if (aviso != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(aviso),
+          backgroundColor: SiColors.of(context).danger,
+          duration: const Duration(seconds: 10),
+        ));
+      });
+    }
   }
 
   Future<void> _fetchActiveCount() async {
