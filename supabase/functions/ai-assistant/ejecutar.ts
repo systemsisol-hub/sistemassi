@@ -459,6 +459,10 @@ export async function runTool(
       .from("incidencias")
       .select("periodo,dias,status,fecha_inicio,fecha_fin,fecha_regreso")
       .eq("usuario_id", targetId)
+      // Un AJUSTE DE SALDO no es una salida: RH lo usa para cerrar periodos viejos —un solo dia con
+      // 22 dias— y contarlo aqui diria que la persona salio de vacaciones ese dia. El saldo de
+      // arriba si lo cuenta. Ver 20260928150000_incidencias_ajuste_de_saldo.sql.
+      .neq("tipo", "AJUSTE")
       .order("fecha_inicio", { ascending: false })
       .limit(6);
 
@@ -573,6 +577,9 @@ export async function runTool(
     const desde = typeof input.desde === "string" ? input.desde.trim() : "";
     const hasta = typeof input.hasta === "string" ? input.hasta.trim() : "";
     const porFechas = desde !== "" || hasta !== "";
+    // Los ajustes de saldo no son tiempo fuera: en «quien esta de vacaciones» serian gente que no se
+    // fue. Y un colaborador tampoco los ve en su pagina, asi que Soli tampoco se los muestra.
+    if (porFechas || !isAdmin) q = (q as any).neq("tipo", "AJUSTE");
     if (hasta !== "") q = (q as any).lte("fecha_inicio", hasta);
     if (desde !== "") q = (q as any).gte("fecha_fin", desde);
 

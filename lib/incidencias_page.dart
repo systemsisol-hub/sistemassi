@@ -19,7 +19,23 @@ import 'widgets/grafica_vacaciones_mes.dart';
 /// pendiente —o que se cancelo— seria un papel que dice que algo se autorizo cuando no.
 ///
 /// Se pregunta desde los TRES menus de esta pagina. En uno solo seria media regla.
-bool sePuedeDescargarPdf(Map<String, dynamic> inc) => inc['status'] == 'APROBADA';
+bool sePuedeDescargarPdf(Map<String, dynamic> inc) =>
+    inc['status'] == 'APROBADA' && !esAjuste(inc);
+
+/// Si el registro es un AJUSTE DE SALDO y no unas vacaciones.
+///
+/// Pedido del 28/09/2026, con el caso del colaborador 1178: RH cerró sus periodos viejos con tres
+/// registros de un solo día —el 25/10 de cada año— por 6, 14 y 22 días. No son días de descanso:
+/// son el saldo que se da por liquidado. Así que:
+///
+/// * SÍ cuentan en el saldo —historial, días disponibles, lo que calcula Soli—.
+/// * NO salen como vacaciones: ni en la tabla ni en el listado de «Mis incidencias», ni en el
+///   calendario ni en la gráfica por mes —tampoco en RH—, ni en el resumen por quincena.
+/// * En RH la tabla sí los muestra, marcados «Ajuste», para poder revisarlos.
+///
+/// Se eligió marcar el TIPO y no quién lo creó: RH también captura vacaciones de verdad por quien
+/// no usa el sistema, y ésas el colaborador sí las tiene que ver.
+bool esAjuste(Map<String, dynamic> inc) => inc['tipo'] == 'AJUSTE';
 
 /// El último periodo de vacaciones que ya se cumplió a la fecha [hoy], con el nombre con que se
 /// guarda: «2025 - 2026». Null si todavía no se cumple el primer año o no hay fecha de ingreso.
@@ -192,6 +208,17 @@ class _IncidenciasPageState extends State<_VistaIncidencias>
   /// resumen de ~700 registros, y volver a pedirlo en cada cambio no aporta nada.
   @override
   bool get wantKeepAlive => true;
+
+  /// Lo que se ve como VACACIONES: sin los ajustes de saldo. Calendario y gráfica, en las dos
+  /// pestañas. Ver `esAjuste`.
+  List<Map<String, dynamic>> get _vacaciones =>
+      _incidencias.where((i) => !esAjuste(i)).toList();
+
+  /// Lo que va en la tabla de registros: en RH todo, con los ajustes marcados; en «Mis
+  /// incidencias», sin ajustes.
+  List<Map<String, dynamic>> _enTablaDe(List<Map<String, dynamic>> todas) =>
+      _vistaRH ? todas : todas.where((i) => !esAjuste(i)).toList();
+  List<Map<String, dynamic>> get _enTabla => _enTablaDe(_incidencias);
 
   /// Si esta es la vista de RH.
   ///
@@ -1224,7 +1251,7 @@ class _IncidenciasPageState extends State<_VistaIncidencias>
           // Reutiliza el DataSource existente para que PaginatedDataTable
           // detecte el cambio vía notifyListeners()
           if (_dataSource != null) {
-            _dataSource!.updateItems(sorted);
+            _dataSource!.updateItems(_enTablaDe(sorted));
           }
         });
       }
@@ -1266,6 +1293,9 @@ class _IncidenciasPageState extends State<_VistaIncidencias>
             .select('created_at,status,nombre_usuario,dias,'
                 'fecha_inicio,fecha_fin,fecha_regreso,usuario_id')
             .eq('status', 'APROBADA')
+            // Un ajuste no es tiempo fuera: contarlo inflaba la quincena con 22 días de un solo
+            // día. Ver `esAjuste`.
+            .neq('tipo', 'AJUSTE')
             .order('created_at', ascending: false);
         final filas = List<Map<String, dynamic>>.from(resumenResp);
         if (mounted) {
@@ -1365,6 +1395,9 @@ class _IncidenciasPageState extends State<_VistaIncidencias>
     }
 
     final periodController = TextEditingController(text: initPeriod);
+    // Sólo RH elige el tipo. En «Mis incidencias» siempre son vacaciones, y la base lo exige: la
+    // política de los colaboradores no deja guardar un ajuste.
+    String tipo = (incidencia?['tipo'] as String?) ?? 'VACACIONES';
     final diasController =
         TextEditingController(text: incidencia?['dias']?.toString() ?? '');
     DateTime fechaInicio = incidencia != null
@@ -1439,6 +1472,7 @@ class _IncidenciasPageState extends State<_VistaIncidencias>
                           if (!isEditing) 'nombre_usuario': _userFullName,
                           'periodo': periodController.text,
                           'dias': int.parse(diasController.text),
+                          if (_vistaRH) 'tipo': tipo,
                           'fecha_inicio': fechaInicio.toIso8601String(),
                           'fecha_fin': fechaFin.toIso8601String(),
                           'fecha_regreso': fechaRegreso.toIso8601String(),
@@ -1495,6 +1529,23 @@ class _IncidenciasPageState extends State<_VistaIncidencias>
                       fontWeight: FontWeight.bold, fontSize: 16, color: c.ink),
                 ),
                 const SizedBox(height: 20),
+                if (_vistaRH) ...[
+                  DropdownButtonFormField<String>(
+                    value: tipo,
+                    items: const [
+                      DropdownMenuItem(value: 'VACACIONES', child: Text('Vacaciones')),
+                      DropdownMenuItem(
+                          value: 'AJUSTE',
+                          child: Text('Ajuste de saldo (no se muestra como vacaciones)')),
+                    ],
+                    onChanged: (v) => setModalState(() => tipo = v ?? 'VACACIONES'),
+                    decoration: const InputDecoration(
+                      labelText: 'Tipo',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
                 if (availablePeriods.isEmpty)
                   Container(
                     padding: const EdgeInsets.all(12),
@@ -1624,9 +1675,9 @@ class _IncidenciasPageState extends State<_VistaIncidencias>
       physics: const NeverScrollableScrollPhysics(),
       padding: const EdgeInsets.only(bottom: 16),
       separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemCount: _incidencias.length,
+      itemCount: _enTabla.length,
       itemBuilder: (context, index) {
-        final inc = _incidencias[index];
+        final inc = _enTabla[index];
         return Card(
           elevation: 0,
           margin: EdgeInsets.zero,
@@ -1638,7 +1689,9 @@ class _IncidenciasPageState extends State<_VistaIncidencias>
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             title: Text(
-              inc['periodo'] ?? '---',
+              esAjuste(inc)
+                  ? '${inc['periodo'] ?? '---'} · Ajuste de saldo'
+                  : (inc['periodo'] ?? '---'),
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             subtitle: Text(
@@ -2344,7 +2397,7 @@ class _IncidenciasPageState extends State<_VistaIncidencias>
           ],
           source: () {
             _dataSource ??= _IncidenciasDataSource(
-              items: _incidencias,
+              items: _enTabla,
               theme: theme,
               isAdmin: _vistaRH,
               userProfile: _selectedUserProfile,
@@ -2377,9 +2430,9 @@ class _IncidenciasPageState extends State<_VistaIncidencias>
             );
             return _dataSource!;
           }(),
-          rowsPerPage: _incidencias.isEmpty
+          rowsPerPage: _enTabla.isEmpty
               ? 1
-              : (_incidencias.length > 5 ? 5 : _incidencias.length),
+              : (_enTabla.length > 5 ? 5 : _enTabla.length),
           showCheckboxColumn: false,
         ),
       ),
@@ -2574,7 +2627,7 @@ class _IncidenciasPageState extends State<_VistaIncidencias>
                           children: [
                             // Sin solicitudes el calendario no se pinta, así que la tabla se queda
                             // con todo el ancho en vez de apretarse contra media página vacía.
-                            if (_incidencias.isEmpty)
+                            if (_vacaciones.isEmpty)
                               _buildDesktopTable(c)
                             else
                               Row(
@@ -2595,7 +2648,7 @@ class _IncidenciasPageState extends State<_VistaIncidencias>
                                 SizedBox(width: SiSpace.x6),
                                 Expanded(
                                   child: GraficaVacacionesPorMes(
-                                      incidencias: _incidencias),
+                                      incidencias: _vacaciones),
                                 ),
                               ],
                             ),
@@ -2607,17 +2660,17 @@ class _IncidenciasPageState extends State<_VistaIncidencias>
                             _buildAntiguedadMobile(),
                             SizedBox(height: SiSpace.x4),
                             _buildIncidenciasCalendar(),
-                            if (_incidencias.isNotEmpty)
+                            if (_vacaciones.isNotEmpty)
                               SizedBox(height: SiSpace.x4),
                             _buildHistorialVacaciones(),
                             // En la vista personal, también en el teléfono: es una de las cinco
                             // cosas que se pidieron para esta pestaña.
                             if (!_vistaRH) ...[
                               SizedBox(height: SiSpace.x4),
-                              GraficaVacacionesPorMes(incidencias: _incidencias),
+                              GraficaVacacionesPorMes(incidencias: _vacaciones),
                             ],
                             SizedBox(height: SiSpace.x6),
-                            _incidencias.isEmpty
+                            _enTabla.isEmpty
                                 ? const Padding(
                                     padding: EdgeInsets.all(40),
                                     child:
@@ -2651,9 +2704,9 @@ class _IncidenciasPageState extends State<_VistaIncidencias>
 
 
   Widget _buildIncidenciasCalendar() {
-    if (_incidencias.isEmpty) return const SizedBox.shrink();
+    if (_vacaciones.isEmpty) return const SizedBox.shrink();
     return CalendarioIncidencias(
-      incidencias: _incidencias,
+      incidencias: _vacaciones,
       colorDeEstatus: _getStatusColor,
     );
   }
@@ -2718,8 +2771,28 @@ class _IncidenciasDataSource extends DataTableSource {
       index: index,
       cells: [
         DataCell(
-          Text(inc['periodo'] ?? '---',
-              style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13)),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(inc['periodo'] ?? '---',
+                  style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13)),
+              // Sólo llega a verse en RH: «Mis incidencias» no pinta los ajustes.
+              if (esAjuste(inc)) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: siColors.hover,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: siColors.line),
+                  ),
+                  child: Text('Ajuste',
+                      style: TextStyle(
+                          fontSize: 10, fontWeight: FontWeight.w700, color: siColors.ink3)),
+                ),
+              ],
+            ],
+          ),
         ),
         DataCell(Text('${inc['dias'] ?? '-'}',
             style: const TextStyle(fontSize: 13))),
