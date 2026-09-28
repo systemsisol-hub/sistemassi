@@ -93,6 +93,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
   String _searchQuery = '';
   String? _filterStatusSys;
   bool?   _filterAcceso;
+  /// `admin` o `usuario`, que son los dos valores de `user_role`. Null = todos.
+  String? _filterRol;
   bool _isAdmin = false;
   Timer? _searchDebounce;
 
@@ -229,6 +231,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
       if (_filterAcceso != null) {
         dataQuery  = dataQuery.eq('has_auth_account', _filterAcceso!);
         countQuery = countQuery.eq('has_auth_account', _filterAcceso!);
+      }
+      if (_filterRol != null) {
+        dataQuery  = dataQuery.eq('role', _filterRol!);
+        countQuery = countQuery.eq('role', _filterRol!);
       }
 
       if (words.isNotEmpty) {
@@ -539,9 +545,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
       ),
       padding: const EdgeInsets.symmetric(
           horizontal: SiSpace.x4, vertical: SiSpace.x3),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
+      // En pantalla ancha, todo en una fila. En el teléfono no cabe —búsqueda, tres filtros y el
+      // botón—, así que la búsqueda va arriba a todo lo ancho y lo demás debajo, deslizable.
+      child: LayoutBuilder(builder: (context, caja) {
+        final piezas = <Widget>[
           Expanded(
             child: Container(
               constraints: const BoxConstraints(maxWidth: 280),
@@ -612,6 +619,22 @@ class _AdminDashboardState extends State<AdminDashboard> {
             },
           ),
           const SizedBox(width: SiSpace.x3),
+          _buildFilterDropdown<String?>(
+            c,
+            label: 'ROL',
+            value: _filterRol,
+            isActive: _filterRol != null,
+            items: [
+              DropdownMenuItem(value: null, child: Text('Todos', style: TextStyle(color: c.ink3))),
+              const DropdownMenuItem(value: 'admin', child: Text('Administradores')),
+              const DropdownMenuItem(value: 'usuario', child: Text('Usuarios')),
+            ],
+            onChanged: (val) {
+              setState(() { _filterRol = val; _page = 0; });
+              _fetchUsers();
+            },
+          ),
+          const SizedBox(width: SiSpace.x3),
           if (_isAdmin)
             ElevatedButton.icon(
               onPressed: () => _showUserForm(),
@@ -628,8 +651,27 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     borderRadius: SiRadius.rMd),
               ),
             ),
-        ],
-      ),
+        ];
+        if (caja.maxWidth >= 720) {
+          return Row(crossAxisAlignment: CrossAxisAlignment.end, children: piezas);
+        }
+        final busqueda = piezas.first is Expanded ? (piezas.first as Expanded).child : piezas.first;
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            busqueda,
+            const SizedBox(height: SiSpace.x3),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: piezas.skip(2).toList(),
+              ),
+            ),
+          ],
+        );
+      }),
     );
   }
 
