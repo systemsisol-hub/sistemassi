@@ -16,6 +16,8 @@ import 'theme/si_theme.dart';
 // Importación condicional para web
 import 'web_url_strategy_stub.dart'
     if (dart.library.html) 'package:flutter_web_plugins/url_strategy.dart';
+import 'utils/limpiar_url_stub.dart'
+    if (dart.library.js_interop) 'utils/limpiar_url_web.dart';
 
 void main() {
   runZonedGuarded(_init, (error, stack) {
@@ -120,9 +122,27 @@ class _AuthRouterState extends State<AuthRouter> {
     if (kIsWeb) _handleWebAuthCallback();
   }
 
-  /// Intercambia el `?code=` del enlace de recuperación por una sesión.
+  /// Aviso para la pantalla de inicio de sesión: el enlace de recuperación ya no sirve.
+  String? _avisoLogin;
+
+  /// Intercambia el enlace de recuperación por una sesión.
+  ///
+  /// Dos formas de enlace:
+  ///
+  ///   * `?token_hash=…&type=recovery` — la de la plantilla del correo desde el 28/09/2026. Se verifica
+  ///     directo con Supabase, así que sirve abierto en CUALQUIER navegador o teléfono.
+  ///   * `?code=…` — la de antes (PKCE). Solo sirve en el navegador que pidió el correo, porque la
+  ///     clave para canjearlo se guardó ahí. Por eso no servía para mandar el correo a todos desde el
+  ///     servidor: nadie lo abre en el navegador que lo pidió. Se conserva para los correos que ya
+  ///     estén en camino.
   Future<void> _handleWebAuthCallback() async {
-    final code = Uri.base.queryParameters['code'];
+    final params = Uri.base.queryParameters;
+    final tokenHash = params['token_hash'];
+    if (tokenHash != null && tokenHash.isNotEmpty && params['type'] == 'recovery') {
+      await _canjearTokenHash(tokenHash);
+      return;
+    }
+    final code = params['code'];
     if (code == null || code.isEmpty) return;
     try {
       await Supabase.instance.client.auth.exchangeCodeForSession(code);
@@ -139,6 +159,31 @@ class _AuthRouterState extends State<AuthRouter> {
           _isLoading  = false;
         });
       }
+    }
+  }
+
+  Future<void> _canjearTokenHash(String tokenHash) async {
+    // Antes de verificar: el inicio de sesión que dispara la verificación no debe ir a cargar el menú
+    // (ver `_listenToAuth`), sino quedarse en la pantalla de nueva contraseña.
+    setState(() => _isRecovery = true);
+    try {
+      await Supabase.instance.client.auth.verifyOTP(
+        type: OtpType.recovery,
+        tokenHash: tokenHash,
+      );
+      if (mounted) setState(() => _isLoading = false);
+    } catch (e) {
+      debugPrint('Enlace de recuperación inválido: $e');
+      if (mounted) {
+        setState(() {
+          _isRecovery = false;
+          _isLoading = false;
+          _avisoLogin = 'Ese enlace ya se usó o caducó. Pide uno nuevo en «¿Olvidaste?» '
+              'o escríbele a Sistemas (mam@sisol.com.mx, ave@sisol.com.mx).';
+        });
+      }
+    } finally {
+      quitarParametrosDeLaUrl();
     }
   }
 
@@ -242,7 +287,7 @@ class _AuthRouterState extends State<AuthRouter> {
     }
 
     if (_user == null) {
-      return LoginPage(themeNotifier: widget.themeNotifier);
+      return LoginPage(themeNotifier: widget.themeNotifier, aviso: _avisoLogin);
     }
 
     // Now everything returns MainNavigation, it handles the logic internally
