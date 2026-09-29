@@ -1,0 +1,312 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Cómo funciona SOL",
+    "output": "docs/sol.html",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1320,
+      740
+    ],
+    "repository": {
+      "url": "https://github.com/systemsisol-hub/sistemassi",
+      "provider": "github",
+      "link_mode": "local-only",
+      "revision": "fcc46027453b979173bdaaee1eeca8979d4e56d8"
+    }
+  },
+  "components": [
+    {
+      "id": "asesor",
+      "type": "frontend",
+      "label": "Pantalla de SOL",
+      "sublabel": "asesor con show_sol",
+      "pos": [
+        30,
+        260
+      ],
+      "size": [
+        170,
+        64
+      ],
+      "sources": [
+        {
+          "path": "lib/sol_page.dart",
+          "label": "pantalla"
+        }
+      ]
+    },
+    {
+      "id": "puerta",
+      "type": "security",
+      "label": "Puerta de Supabase",
+      "sublabel": "sesión y permiso",
+      "pos": [
+        260,
+        260
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "sol",
+      "type": "backend",
+      "label": "sol-assistant",
+      "sublabel": "hasta 4 vueltas",
+      "pos": [
+        490,
+        260
+      ],
+      "size": [
+        170,
+        64
+      ],
+      "sources": [
+        {
+          "path": "supabase/functions/sol-assistant/index.ts",
+          "label": "flujo"
+        }
+      ]
+    },
+    {
+      "id": "ollama",
+      "type": "external",
+      "label": "Ollama Cloud",
+      "sublabel": "gpt-oss:120b-cloud",
+      "pos": [
+        490,
+        60
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "directas",
+      "type": "backend",
+      "label": "Respuestas directas",
+      "sublabel": "sin pasar por el modelo",
+      "pos": [
+        700,
+        60
+      ],
+      "size": [
+        170,
+        64
+      ],
+      "sources": [
+        {
+          "path": "supabase/functions/sol-assistant/directas.ts",
+          "label": "vías directas"
+        }
+      ]
+    },
+    {
+      "id": "desarrollos",
+      "type": "database",
+      "label": "desarrollos",
+      "sublabel": "ficha y condiciones",
+      "pos": [
+        940,
+        60
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "unidades",
+      "type": "database",
+      "label": "unidades",
+      "sublabel": "inventario de AG117",
+      "pos": [
+        940,
+        200
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "promos",
+      "type": "database",
+      "label": "promociones y extras",
+      "sublabel": "vigencias y reglas",
+      "pos": [
+        940,
+        340
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "documentos",
+      "type": "database",
+      "label": "documentos",
+      "sublabel": "20 enlaces al Drive",
+      "pos": [
+        940,
+        480
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "drive",
+      "type": "external",
+      "label": "Google Drive",
+      "sublabel": "SOL no lo lee",
+      "pos": [
+        700,
+        600
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "panel",
+      "type": "frontend",
+      "label": "Panel Desarrollos",
+      "sublabel": "captura a mano",
+      "pos": [
+        1150,
+        340
+      ],
+      "size": [
+        150,
+        64
+      ]
+    },
+    {
+      "id": "bitacora",
+      "type": "database",
+      "label": "sol_bitacora",
+      "sublabel": "pregunta y respuesta",
+      "pos": [
+        490,
+        460
+      ],
+      "size": [
+        170,
+        64
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "asesor",
+      "to": "puerta",
+      "label": "pregunta",
+      "variant": "emphasis"
+    },
+    {
+      "from": "puerta",
+      "to": "sol",
+      "label": "show_sol",
+      "variant": "security"
+    },
+    {
+      "from": "sol",
+      "to": "ollama",
+      "label": "prompt y herramientas",
+      "variant": "emphasis"
+    },
+    {
+      "from": "sol",
+      "to": "directas",
+      "label": "un solo dato"
+    },
+    {
+      "from": "directas",
+      "to": "desarrollos",
+      "label": "lee el campo"
+    },
+    {
+      "from": "sol",
+      "to": "desarrollos",
+      "label": "buscar_desarrollo"
+    },
+    {
+      "from": "sol",
+      "to": "unidades",
+      "label": "buscar_unidades"
+    },
+    {
+      "from": "sol",
+      "to": "promos",
+      "label": "promociones y extras",
+      "labelSegment": 2
+    },
+    {
+      "from": "sol",
+      "to": "documentos",
+      "label": "buscar_documento"
+    },
+    {
+      "from": "sol",
+      "to": "bitacora",
+      "label": "registra",
+      "labelDy": 24
+    },
+    {
+      "from": "panel",
+      "to": "unidades",
+      "label": "Excel pegado",
+      "variant": "dashed"
+    },
+    {
+      "from": "panel",
+      "to": "documentos",
+      "label": "enlaces",
+      "variant": "dashed"
+    },
+    {
+      "from": "documentos",
+      "to": "drive",
+      "label": "solo la URL",
+      "variant": "dashed",
+      "labelDy": 24
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Qué puede hacer SOL",
+      "items": [
+        "Dar la ficha de un desarrollo: ubicación, amenidades, etapa, enganche y mensualidades.",
+        "Consultar el inventario disponible con precio, metros y los extras a los que da derecho.",
+        "Decir las promociones vigentes con su fecha y entregar enlaces de brochures, planos y listas."
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "El Drive no está conectado",
+      "items": [
+        "SOL no abre archivos ni busca dentro de carpetas: solo conoce los 20 enlaces capturados en documentos.",
+        "17 de esos enlaces son carpetas; lo que hay dentro, SOL no lo ve y el asesor lo elige al abrirla.",
+        "Un archivo nuevo o sustituido en el Drive no existe para SOL hasta que alguien actualiza su enlace."
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "De dónde salen sus datos",
+      "items": [
+        "Todo sale de tablas de Supabase que se capturan en el Panel de Desarrollos.",
+        "El inventario llega pegando el Excel mensual; recámaras y baños hoy están vacíos.",
+        "Un dato suelto -la ubicación, el enganche- se contesta sin modelo para que no se equivoque."
+      ]
+    }
+  ]
+}
