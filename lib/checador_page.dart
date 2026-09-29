@@ -842,6 +842,7 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
   String? _error;
   String _busqueda = '';
   String _filtroEstatus = 'todos';
+  String _filtroZona = 'todas';
 
   // Los umbrales de la pestaña Configuración (`checador_umbrales`), los mismos del Panel.
   double _criticoMax = 70;
@@ -851,35 +852,6 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
   /// El primer día con checadas del sistema: antes de él no hay faltas que contar.
   DateTime? _inicio;
 
-  /// Las fotos de appchecar que faltan por copiar a nuestro almacenamiento.
-  int _fotosPorCopiar = 0;
-  bool _copiando = false;
-
-  /// Arranca la copia: la función copia un lote y se sigue llamando sola hasta terminar, así que
-  /// basta con pedirla una vez. Aquí sólo se vuelve a contar.
-  Future<void> _copiarFotos() async {
-    setState(() => _copiando = true);
-    try {
-      final r = await _supabase.functions.invoke('copiar-fotos-appchecar', body: {});
-      final d = (r.data as Map?)?.cast<String, dynamic>() ?? {};
-      if (d['error'] != null) throw d['error'];
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Copiando las fotos en segundo plano: van ${d['copiadas'] ?? 0} y '
-              'quedan ${d['pendientes'] ?? 0}. Actualiza en unos minutos.'),
-        ));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('No se pudo copiar: $e'),
-          backgroundColor: SiColors.of(context).danger,
-        ));
-      }
-    } finally {
-      if (mounted) setState(() => _copiando = false);
-    }
-  }
   late Quincena _periodo = Quincena.deIso(_hoyISO())!;
 
   Map<String, Map<String, dynamic>> _perfiles = {};
@@ -906,15 +878,6 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
         _retardosPorDescuento =
             ((umbrales['retardos_por_descuento'] as num?)?.toInt() ?? 3).clamp(1, 100);
       }
-
-      final porCopiar = await _supabase
-          .from('checadas')
-          .select('id')
-          .eq('origen', 'APPCHECAR')
-          .isFilter('foto', null)
-          .isFilter('foto_error', null)
-          .count(CountOption.exact);
-      _fotosPorCopiar = porCopiar.count;
 
       final primera = await _supabase
           .from('checadas').select('fecha').order('fecha', ascending: true).limit(1);
@@ -1096,16 +1059,19 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
     );
   }
 
-  // Los anchos de «Detalle por empleado», sin la columna de Zona: suman 582 y el sobrante se va al
-  // nombre y a la barra de puntualidad, igual que allá.
-  static const _anchos = [184.0, 90.0, 64.0, 56.0, 56.0, 72.0, 82.0];
-  static const _reparto = [3, 2, 0, 0, 0, 0, 0];
+  // Los anchos mínimos, los de «Detalle por empleado» del Panel. El sobrante se reparte entre TODAS
+  // las columnas y no sólo entre el nombre, la zona y la barra como allá: en 3/4 de una pantalla
+  // ancha sobran unos 700px, y dados sólo a esas tres dejaban un hueco entre el nombre y la zona y
+  // los números pegados a la barra (29/09/2026).
+  static const _anchos = [184.0, 96.0, 90.0, 64.0, 56.0, 56.0, 72.0, 82.0];
+  static const _reparto = [2, 1, 2, 1, 1, 1, 1, 1];
 
   static List<double> _anchosEn(double disponible) {
     final minimo = _anchos.reduce((a, b) => a + b);
     if (!disponible.isFinite || disponible <= minimo) return _anchos;
     final sobra = disponible - minimo;
-    return [for (var i = 0; i < _anchos.length; i++) _anchos[i] + sobra * _reparto[i] / 5];
+    final pesos = _reparto.reduce((a, b) => a + b);
+    return [for (var i = 0; i < _anchos.length; i++) _anchos[i] + sobra * _reparto[i] / pesos];
   }
 
   static const _etiquetaEstatus = {
@@ -1138,12 +1104,16 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
       final e = _estatus(r);
       cuenta[e] = (cuenta[e] ?? 0) + 1;
     }
+    // Las zonas de quienes salen en el periodo, para el desplegable.
+    final zonas = {for (final r in todos) _zonaDe(r.profileId)}.toList()..sort();
     final q = _busqueda.trim().toLowerCase();
     final filas = todos.where((r) {
       if (_filtroEstatus != 'todos' && _estatus(r) != _filtroEstatus) return false;
+      if (_filtroZona != 'todas' && _zonaDe(r.profileId) != _filtroZona) return false;
       if (q.isEmpty) return true;
       return _nombre(r.profileId).toLowerCase().contains(q) ||
-          (_perfiles[r.profileId]?['numero_empleado']?.toString() ?? '').contains(q);
+          (_perfiles[r.profileId]?['numero_empleado']?.toString() ?? '').contains(q) ||
+          _zonaDe(r.profileId).toLowerCase().contains(q);
     }).toList();
 
     Widget chip(String valor, String etiqueta, int n, Color color) {
@@ -1195,18 +1165,6 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
               Text('Detalle por empleado',
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: c.ink)),
               const Spacer(),
-              // Mientras queden fotos de appchecar por copiar. Desaparece solo cuando terminan.
-              if (_fotosPorCopiar > 0) ...[
-                OutlinedButton.icon(
-                  onPressed: _copiando ? null : _copiarFotos,
-                  icon: _copiando
-                      ? const SizedBox(
-                          width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.photo_library_outlined, size: 16),
-                  label: Text('Copiar fotos de appchecar ($_fotosPorCopiar)'),
-                ),
-                const SizedBox(width: SiSpace.x2),
-              ],
               IconButton(tooltip: 'Actualizar', onPressed: _cargar, icon: const Icon(Icons.refresh)),
             ]),
             const SizedBox(height: SiSpace.x3),
@@ -1216,7 +1174,7 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
                   onChanged: (v) => setState(() => _busqueda = v),
                   style: const TextStyle(fontSize: 13),
                   decoration: InputDecoration(
-                    hintText: 'Buscar por nombre o número…',
+                    hintText: 'Buscar por nombre, número o zona…',
                     hintStyle: TextStyle(fontSize: 13, color: c.ink4),
                     prefixIcon: Icon(Icons.search, size: 17, color: c.ink3),
                     prefixIconConstraints: const BoxConstraints(minWidth: 36, minHeight: 0),
@@ -1226,6 +1184,43 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
                   ),
                 ),
               ),
+              // Con una sola zona el filtro no filtra nada; sólo estorbaría.
+              if (zonas.length > 1) ...[
+                const SizedBox(width: SiSpace.x3),
+                SizedBox(
+                  width: 190,
+                  child: DropdownButtonFormField<String>(
+                    key: ValueKey('zona-$_filtroZona-${zonas.length}'),
+                    initialValue: zonas.contains(_filtroZona) ? _filtroZona : 'todas',
+                    isExpanded: true,
+                    isDense: true,
+                    style: TextStyle(fontSize: 13, color: c.ink),
+                    icon: Icon(Icons.expand_more, size: 18, color: c.ink3),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      contentPadding: relleno,
+                      prefixIcon: Icon(Icons.place_outlined, size: 15, color: c.ink3),
+                      prefixIconConstraints: const BoxConstraints(minWidth: 32, minHeight: 0),
+                      border: OutlineInputBorder(borderRadius: SiRadius.rMd),
+                    ),
+                    items: [
+                      DropdownMenuItem(
+                        value: 'todas',
+                        child: Text('Todas las zonas',
+                            style: TextStyle(fontSize: 13, color: c.ink2)),
+                      ),
+                      for (final z in zonas)
+                        DropdownMenuItem(
+                          value: z,
+                          child: Text(z,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(fontSize: 13, color: c.ink2)),
+                        ),
+                    ],
+                    onChanged: (v) => setState(() => _filtroZona = v ?? 'todas'),
+                  ),
+                ),
+              ],
               const SizedBox(width: SiSpace.x3),
               SizedBox(
                 width: 215,
@@ -1293,7 +1288,8 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
               LayoutBuilder(builder: (context, box) {
                 final anchos = _anchosEn(box.maxWidth);
                 const titulos = [
-                  'EMPLEADO', '% PUNT.', 'RETARDOS', 'FALTAS', 'JUSTIF.', 'DÍAS DESC.', 'ESTATUS'
+                  'EMPLEADO', 'ZONA', '% PUNT.', 'RETARDOS', 'FALTAS', 'JUSTIF.', 'DÍAS DESC.',
+                  'ESTATUS'
                 ];
                 return SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
@@ -1381,6 +1377,9 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
           child: Text('Sin datos en el periodo', style: TextStyle(fontSize: 12.5, color: c.ink3)),
         ),
       );
+
+  String _zonaDe(String profileId) =>
+      _nombreZona(_perfiles[profileId]?['ubicacion']?.toString());
 
   /// «BONANZA_PRISMA» → «Bonanza Prisma». La zona es la ubicación del perfil.
   static String _nombreZona(String? u) {
@@ -1647,6 +1646,13 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
             ),
             celda(
               1,
+              Text(_zonaDe(r.profileId),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, color: c.ink2)),
+            ),
+            celda(
+              2,
               Row(children: [
                 SizedBox(
                   width: 42,
@@ -1668,14 +1674,14 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
                     ),
                   ),
                 ),
-                const SizedBox(width: SiSpace.x2),
+                const SizedBox(width: SiSpace.x6),
               ]),
             ),
-            celda(2, numeroEn(r.retardos, r.retardos > 0 ? c.warn : c.ink3)),
-            celda(3, numeroEn(r.faltas, r.faltas > 0 ? c.danger : c.ink3)),
-            celda(4, numeroEn(r.justificados, c.ink3)),
+            celda(3, numeroEn(r.retardos, r.retardos > 0 ? c.warn : c.ink3)),
+            celda(4, numeroEn(r.faltas, r.faltas > 0 ? c.danger : c.ink3)),
+            celda(5, numeroEn(r.justificados, c.ink3)),
             celda(
-              5,
+              6,
               Tooltip(
                 message: descuento == 0
                     ? 'Sin días a descontar'
@@ -1685,7 +1691,7 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
               ),
             ),
             celda(
-              6,
+              7,
               Align(
                 alignment: Alignment.centerLeft,
                 child: Container(
