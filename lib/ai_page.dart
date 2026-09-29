@@ -683,19 +683,22 @@ class _AiPageState extends State<AiPage> with SingleTickerProviderStateMixin {
                 ),
                 border: isUser ? null : Border.all(color: c.line),
               ),
-              child: Text(
-                msg.text,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: isUser
-                      ? Colors.white
-                      : (msg.isError ? c.danger : c.ink),
-                  height: 1.5,
+              // Seleccionable para poder copiar lo que contesta Soli (29/09/2026).
+              child: SelectionArea(
+                child: Text(
+                  msg.text,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isUser
+                        ? Colors.white
+                        : (msg.isError ? c.danger : c.ink),
+                    height: 1.5,
+                  ),
                 ),
               ),
             ),
           if (!isUser && msg.structured != null)
-            _buildStructured(msg.structured!, c),
+            SelectionArea(child: _buildStructured(msg.structured!, c)),
         ],
       ),
     );
