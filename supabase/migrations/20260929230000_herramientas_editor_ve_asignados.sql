@@ -11,7 +11,7 @@
 --
 -- Sólo LEER, y sólo las asignaciones de las herramientas que esa persona mantiene
 -- (`herramienta_editable_id`, la misma función de las políticas de la tabla y del bucket). Cambiar
--- quién la ve sigue siendo de administración: no hay política de escritura nueva.
+-- quién la ve se abre aparte, en la migración siguiente (20260929233000), sólo para la lectura.
 --
 -- Se AÑADE una política en lugar de tocar la de siempre: las permisivas se suman con OR, así que lo
 -- que ya veía cada quien no cambia.
