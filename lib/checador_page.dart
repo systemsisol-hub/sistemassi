@@ -1059,16 +1059,18 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
     );
   }
 
-  // Los anchos de «Detalle por empleado» del Panel: suman 678 y el sobrante se va al nombre, a la
-  // zona y a la barra de puntualidad, igual que allá.
+  // Los anchos mínimos, los de «Detalle por empleado» del Panel. El sobrante se reparte entre TODAS
+  // las columnas y no sólo entre el nombre, la zona y la barra como allá: en 3/4 de una pantalla
+  // ancha sobran unos 700px, y dados sólo a esas tres dejaban un hueco entre el nombre y la zona y
+  // los números pegados a la barra (29/09/2026).
   static const _anchos = [184.0, 96.0, 90.0, 64.0, 56.0, 56.0, 72.0, 82.0];
-  static const _reparto = [3, 1, 2, 0, 0, 0, 0, 0];
+  static const _reparto = [2, 1, 2, 1, 1, 1, 1, 1];
 
   static List<double> _anchosEn(double disponible) {
     final minimo = _anchos.reduce((a, b) => a + b);
     if (!disponible.isFinite || disponible <= minimo) return _anchos;
     final sobra = disponible - minimo;
-    const pesos = 3 + 1 + 2;
+    final pesos = _reparto.reduce((a, b) => a + b);
     return [for (var i = 0; i < _anchos.length; i++) _anchos[i] + sobra * _reparto[i] / pesos];
   }
 
@@ -1672,7 +1674,7 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
                     ),
                   ),
                 ),
-                const SizedBox(width: SiSpace.x2),
+                const SizedBox(width: SiSpace.x6),
               ]),
             ),
             celda(3, numeroEn(r.retardos, r.retardos > 0 ? c.warn : c.ink3)),
