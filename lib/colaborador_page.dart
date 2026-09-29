@@ -314,11 +314,17 @@ Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
     final numeroEmpleadoCtrl =
         TextEditingController(text: item?['numero_empleado']);
 
-    // Al crear un nuevo registro, precarga el siguiente número de empleado
+    // Al crear un nuevo registro, precarga el siguiente número de empleado.
+    // Se piden los más altos ordenados en la base: traer la lista completa se cortaba en las 1,000
+    // filas que entrega Supabase y los números más nuevos quedaban fuera. Todos son de 4 dígitos,
+    // así que el orden de texto coincide con el numérico.
     if (!isEditing) {
       Supabase.instance.client
           .from('profiles')
           .select('numero_empleado')
+          .not('numero_empleado', 'is', null)
+          .order('numero_empleado', ascending: false)
+          .limit(20)
           .then((data) {
             final nums = (data as List)
                 .map((e) => int.tryParse(e['numero_empleado']?.toString() ?? '') ?? 0)
@@ -1936,7 +1942,7 @@ Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
             ],
             columns: [
               DataColumn(label: SizedBox(width: screenWidth * 0.25, child: Text('COLABORADOR', style: TextStyle(color: c.ink3, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
-              DataColumn(label: SizedBox(width: screenWidth * 0.08, child: Text('ID', style: TextStyle(color: c.ink3, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+              DataColumn(label: SizedBox(width: screenWidth * 0.08, child: Text('N. EMPLEADO', style: TextStyle(color: c.ink3, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
               DataColumn(label: SizedBox(width: screenWidth * 0.15, child: Text('PUESTO', style: TextStyle(color: c.ink3, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
               DataColumn(label: SizedBox(width: screenWidth * 0.15, child: Text('UBICACIÓN', style: TextStyle(color: c.ink3, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
               DataColumn(label: SizedBox(width: screenWidth * 0.12, child: Text('ESTADO', style: TextStyle(color: c.ink3, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
