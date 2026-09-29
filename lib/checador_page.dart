@@ -77,14 +77,26 @@ Color _colorSemaforo(SiColors c, Semaforo s) => switch (s) {
       Semaforo.rojo => c.danger,
     };
 
-Widget _punto(SiColors c, Semaforo? s) => Container(
-      width: 10,
-      height: 10,
-      decoration: BoxDecoration(
-        color: s == null ? Colors.transparent : _colorSemaforo(c, s),
-        shape: BoxShape.circle,
-      ),
-    );
+/// La diferencia contra el horario, del color del semáforo: «36 min antes» en verde, «12 min
+/// tarde» en amarillo. Nada si esa checada no tiene hora en el horario. Pedido del 29/09/2026, en
+/// lugar del punto de color.
+Widget _diferencia(SiColors c, Map<String, dynamic> ch, List<dynamic>? reglas,
+    {double tamano = 11.5}) {
+  final hora = _horaLocal(ch);
+  final tipo = ch['tipo']?.toString() ?? '';
+  final d = hora == null ? null : diferenciaContraHorario(tipo, hora, reglas);
+  if (d == null) return const SizedBox.shrink();
+  final color = _colorSemaforo(c, d.color);
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(6),
+    ),
+    child: Text(diferenciaEnPalabras(tipo, d.minutos),
+        style: TextStyle(fontSize: tamano, fontWeight: FontWeight.w700, color: color)),
+  );
+}
 
 /// El horario de cada quien: `profiles.schedule_id` → `schedules`.
 Future<Map<String, Map<String, dynamic>>> _horarios() async {
@@ -352,7 +364,7 @@ class _ChecadorPropioState extends State<ChecadorPropio> {
                   style: TextStyle(fontSize: 14, color: ch == null ? c.ink3 : c.ink)),
             ),
             if (ch != null) ...[
-              _punto(c, _semaforoDe(ch, _reglas)),
+              _diferencia(c, ch, _reglas),
               const SizedBox(width: SiSpace.x2),
             ],
             Text(ch == null ? '—' : _horaDe(ch),
@@ -389,17 +401,16 @@ class _ChecadorPropioState extends State<ChecadorPropio> {
                   ? Text('—', textAlign: TextAlign.center, style: TextStyle(color: c.ink4))
                   : InkWell(
                       onTap: () => mostrarChecada(context, deEse[t]!, nombreDeChecada[t]!),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          _punto(c, _semaforoDe(deEse[t]!, _reglas)),
-                          const SizedBox(width: 4),
                           Text(_horaDe(deEse[t]),
                           style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
                               color: c.brand,
                               fontFeatures: const [FontFeature.tabularFigures()])),
+                          _diferencia(c, deEse[t]!, _reglas, tamano: 10),
                         ],
                       ),
                     ),
@@ -1092,14 +1103,14 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
                                 : Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      _punto(c, _semaforoDe(_porPersona[id]![t]!,
-                                          _horarioDe(id)?['rules'] as List<dynamic>?)),
-                                      const SizedBox(width: 6),
                                       Text(_horaDe(_porPersona[id]![t]),
                                           style: TextStyle(
                                               fontWeight: FontWeight.w600,
                                               color: c.brand,
                                               fontFeatures: const [FontFeature.tabularFigures()])),
+                                      const SizedBox(width: 6),
+                                      _diferencia(c, _porPersona[id]![t]!,
+                                          _horarioDe(id)?['rules'] as List<dynamic>?),
                                       const SizedBox(width: 4),
                                       Icon(Icons.photo_camera_outlined, size: 14, color: c.ink4),
                                     ],

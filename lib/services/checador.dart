@@ -164,6 +164,32 @@ DateTime horaLocalDeChecada(DateTime registrada, num? latitud, num? longitud) {
   return DateTime(u.year, u.month, u.day, u.hour, u.minute, u.second);
 }
 
+/// Cuánto se separó una checada de su hora: negativo, antes; positivo, después. Con el color del
+/// semáforo. Null si esa checada no tiene hora en el horario —la comida— o no hay horario ese día.
+///
+/// Pedido del 29/09/2026: en lugar del punto de color, la diferencia —«checó 07:24 y su entrada
+/// es a las 08:00»: 36 min antes, en verde—.
+({int minutos, Semaforo color})? diferenciaContraHorario(
+    String tipo, DateTime horaLocal, List<dynamic>? reglas) {
+  final r = reglasDelDia(reglas, horaLocal);
+  final m = horaLocal.hour * 60 + horaLocal.minute;
+  if (tipo == 'ENTRADA' && r.entrada != null) {
+    return (minutos: m - r.entrada!.minutos, color: semaforoEntrada(m, r.entrada!));
+  }
+  if (tipo == 'SALIDA' && r.salida != null) {
+    return (minutos: m - r.salida!.minutos, color: semaforoSalida(m, r.salida!));
+  }
+  return null;
+}
+
+/// La diferencia en palabras: «36 min antes», «12 min tarde», «1 h 05 min después».
+String diferenciaEnPalabras(String tipo, int minutos) {
+  if (minutos == 0) return tipo == 'SALIDA' ? 'a su hora' : 'a tiempo';
+  final cuanto = duracionEnPalabras(minutos.abs());
+  if (minutos < 0) return '$cuanto antes';
+  return tipo == 'SALIDA' ? '$cuanto después' : '$cuanto tarde';
+}
+
 String duracionEnPalabras(int minutos) {
   if (minutos < 1) return 'menos de un minuto';
   if (minutos < 60) return '$minutos min';

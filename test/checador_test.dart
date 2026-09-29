@@ -114,6 +114,35 @@ void main() {
       expect(desfaseHorasDe(null, null), -6);
     });
 
+    test('la diferencia contra el horario', () {
+      // El caso del pedido: checó 07:24 y su entrada es a las 08:00.
+      final ocho = [
+        {'day': 2, 'tol': 15, 'time': '08:00:00', 'type': 'ENTRADA'},
+        {'day': 2, 'tol': 0, 'time': '18:00:00', 'type': 'SALIDA'},
+      ];
+      final martes = DateTime(2026, 9, 29, 7, 24);
+      final d = diferenciaContraHorario('ENTRADA', martes, ocho)!;
+      expect(d.minutos, -36);
+      expect(d.color, Semaforo.verde);
+      expect(diferenciaEnPalabras('ENTRADA', d.minutos), '36 min antes');
+
+      final tarde = diferenciaContraHorario('ENTRADA', DateTime(2026, 9, 29, 8, 12), ocho)!;
+      expect((tarde.minutos, tarde.color), (12, Semaforo.amarillo));
+      expect(diferenciaEnPalabras('ENTRADA', 12), '12 min tarde');
+      expect(diferenciaContraHorario('ENTRADA', DateTime(2026, 9, 29, 9, 5), ocho)!.color,
+          Semaforo.rojo);
+
+      final salio = diferenciaContraHorario('SALIDA', DateTime(2026, 9, 29, 17, 45), ocho)!;
+      expect((salio.minutos, salio.color), (-15, Semaforo.rojo));
+      expect(diferenciaEnPalabras('SALIDA', 65), '1 h 05 min después');
+      expect(diferenciaEnPalabras('SALIDA', 0), 'a su hora');
+      expect(diferenciaEnPalabras('ENTRADA', 0), 'a tiempo');
+
+      // La comida no tiene hora; un día sin horario, tampoco.
+      expect(diferenciaContraHorario('SALIDA_COMIDA', martes, ocho), isNull);
+      expect(diferenciaContraHorario('ENTRADA', DateTime(2026, 9, 27, 8), ocho), isNull);
+    });
+
     test('el contador', () {
       const e = ReglaDia(9 * 60, 15);
       const s = ReglaDia(18 * 60, 0);

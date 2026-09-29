@@ -389,7 +389,10 @@ Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
     String? fuenteOption = item?['fuente_reclutamiento'];
     String? statusSys = item?['status_sys'] ?? 'CAMBIO';
     String? statusRh = item?['status_rh'] ?? 'ACTIVO';
-    String? horario = item?['horario'];
+    // El MISMO horario que Usuarios y el Checador: `schedule_id`. Antes éste guardaba en
+    // `profiles.horario` y Usuarios en `schedule_id`, y cada pantalla mostraba uno distinto
+    // (pedido del 29/09/2026). Ver 20260929120000_un_solo_horario.sql.
+    String? horario = item?['schedule_id'] as String?;
     String? area = item?['area'];
     String? puesto = item?['puesto'];
     String? ubicacion = item?['ubicacion'];
@@ -1490,7 +1493,7 @@ Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
         'numero_empleado': numeroEmpleadoCtrl.text.trim(),
         'status_sys': statusSys,
         'status_rh': statusRh,
-        'horario': horario,
+        'schedule_id': horario,
         'foto_url': currentFotoUrl,
       };
       try {
