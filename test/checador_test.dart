@@ -112,6 +112,25 @@ void main() {
       expect(horaLocalDeChecada(utc, 19.43, -99.13), DateTime(2026, 9, 28, 8, 5));
       // Sin coordenadas, la del centro.
       expect(desfaseHorasDe(null, null), -6);
+      // Ensenada: UTC-7 en verano, UTC-8 en invierno.
+      expect(horaLocalDeChecada(DateTime.utc(2026, 7, 29, 16, 6), 31.87, -116.6),
+          DateTime(2026, 7, 29, 9, 6));
+      expect(horaLocalDeChecada(DateTime.utc(2026, 12, 1, 17, 0), 31.87, -116.6),
+          DateTime(2026, 12, 1, 9, 0));
+    });
+
+    test('manda la hora local que calcula la base', () {
+      // Una de appchecar: sin coordenadas, con la hora que la base sacó de su sucursal.
+      final fila = {
+        'registrada_en': '2026-07-16T13:12:00+00:00',
+        'hora_local': '2026-07-16T08:12:00',
+        'latitud': null,
+        'longitud': null,
+      };
+      expect(horaLocalDeFila(fila), DateTime(2026, 7, 16, 8, 12));
+      // Sin `hora_local`, se calcula por las coordenadas.
+      expect(horaLocalDeFila({'registrada_en': '2026-09-29T13:24:00Z', 'latitud': 19.4, 'longitud': -99.1}),
+          DateTime(2026, 9, 29, 7, 24));
     });
 
     test('la diferencia contra el horario', () {

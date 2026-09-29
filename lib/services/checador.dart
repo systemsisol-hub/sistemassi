@@ -150,17 +150,49 @@ Semaforo semaforoSalida(int minutos, ReglaDia r) {
 /// 2022. Se decide por las coordenadas y no por el reloj de quien MIRA: un administrador en la
 /// Ciudad de México vería las checadas de Playa del Carmen una hora corridas, y el semáforo saldría
 /// mal.
-int desfaseHorasDe(num? latitud, num? longitud) {
+int desfaseHorasDe(num? latitud, num? longitud, [DateTime? instante]) {
   if (latitud != null && longitud != null &&
       latitud >= 17.8 && latitud <= 21.8 && longitud >= -89.5 && longitud <= -86.5) {
     return -5;
   }
+  // Baja California —Ensenada— va con Tijuana: UTC-8, y UTC-7 en verano. Es lo único del país que
+  // sigue cambiando de horario, del segundo domingo de marzo al primer domingo de noviembre.
+  if (latitud != null && longitud != null &&
+      latitud >= 28.0 && latitud <= 32.8 && longitud >= -117.3 && longitud <= -112.5) {
+    return _enHorarioDeVerano((instante ?? DateTime.now()).toUtc()) ? -7 : -8;
+  }
   return -6;
+}
+
+bool _enHorarioDeVerano(DateTime utc) {
+  DateTime domingo(int anio, int mes, int cual) {
+    var d = DateTime.utc(anio, mes, 1);
+    while (d.weekday != DateTime.sunday) {
+      d = d.add(const Duration(days: 1));
+    }
+    return d.add(Duration(days: 7 * (cual - 1)));
+  }
+  // El cambio es a las 2:00 locales: 10:00 UTC en marzo (UTC-8) y 9:00 UTC en noviembre (UTC-7).
+  final empieza = domingo(utc.year, 3, 2).add(const Duration(hours: 10));
+  final termina = domingo(utc.year, 11, 1).add(const Duration(hours: 9));
+  return !utc.isBefore(empieza) && utc.isBefore(termina);
+}
+
+/// La hora local de una fila de `checadas`.
+///
+/// Primero `hora_local`, que calcula la BASE con las zonas horarias de verdad —incluida la de
+/// Tijuana, que cambia de horario en verano, y la de las checadas de appchecar, que no traen
+/// coordenadas y se ubican por su sucursal—. Si no viene, se calcula aquí por las coordenadas.
+DateTime? horaLocalDeFila(Map<String, dynamic> ch) {
+  final l = DateTime.tryParse(ch['hora_local']?.toString() ?? '');
+  if (l != null) return DateTime(l.year, l.month, l.day, l.hour, l.minute, l.second);
+  final t = DateTime.tryParse(ch['registrada_en']?.toString() ?? '');
+  return t == null ? null : horaLocalDeChecada(t, ch['latitud'] as num?, ch['longitud'] as num?);
 }
 
 /// La hora de la checada en el lugar donde se hizo, lista para mostrar y comparar con el horario.
 DateTime horaLocalDeChecada(DateTime registrada, num? latitud, num? longitud) {
-  final u = registrada.toUtc().add(Duration(hours: desfaseHorasDe(latitud, longitud)));
+  final u = registrada.toUtc().add(Duration(hours: desfaseHorasDe(latitud, longitud, registrada)));
   return DateTime(u.year, u.month, u.day, u.hour, u.minute, u.second);
 }
 

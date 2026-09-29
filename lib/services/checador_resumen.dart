@@ -124,11 +124,7 @@ ResumenChecador resumirPersona({
     }
     if (!esperado && del.isEmpty) continue;
 
-    DateTime? local(Map<String, dynamic>? ch) {
-      if (ch == null) return null;
-      final t = DateTime.tryParse(ch['registrada_en']?.toString() ?? '');
-      return t == null ? null : horaLocalDeChecada(t, ch['latitud'] as num?, ch['longitud'] as num?);
-    }
+    DateTime? local(Map<String, dynamic>? ch) => ch == null ? null : horaLocalDeFila(ch);
 
     final hEntrada = local(entrada);
     final hSalida = local(salida);

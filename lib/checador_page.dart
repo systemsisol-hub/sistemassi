@@ -51,11 +51,7 @@ Future<String?> _urlFoto(String ruta) async {
 
 /// La hora de la checada en el lugar donde se hizo, no en el reloj de quien mira. Ver
 /// `desfaseHorasDe`.
-DateTime? _horaLocal(Map<String, dynamic> ch) {
-  final d = DateTime.tryParse(ch['registrada_en']?.toString() ?? '');
-  if (d == null) return null;
-  return horaLocalDeChecada(d, ch['latitud'] as num?, ch['longitud'] as num?);
-}
+DateTime? _horaLocal(Map<String, dynamic> ch) => horaLocalDeFila(ch);
 
 String _horaDe(Map<String, dynamic>? ch) {
   final d = ch == null ? null : _horaLocal(ch);
@@ -153,7 +149,8 @@ class _ChecadorPropioState extends State<ChecadorPropio> {
           .format(DateTime.now().subtract(const Duration(days: 13)));
       final r = await _supabase
           .from('checadas')
-          .select('id, tipo, registrada_en, fecha, latitud, longitud, precision_m, foto')
+          .select('id, tipo, registrada_en, fecha, latitud, longitud, precision_m, foto, '
+              'hora_local, origen, direccion')
           .eq('profile_id', uid)
           .gte('fecha', desde)
           .order('registrada_en', ascending: false);
@@ -452,7 +449,7 @@ Future<void> mostrarChecada(BuildContext context, Map<String, dynamic> ch, Strin
             ClipRRect(
               borderRadius: BorderRadius.circular(10),
               child: FutureBuilder<String?>(
-                future: _urlFoto(ch['foto'].toString()),
+                future: ch['foto'] == null ? Future.value(null) : _urlFoto(ch['foto'].toString()),
                 builder: (_, snap) {
                   if (snap.connectionState != ConnectionState.done) {
                     return const SizedBox(
@@ -462,8 +459,13 @@ Future<void> mostrarChecada(BuildContext context, Map<String, dynamic> ch, Strin
                     return SizedBox(
                         height: 120,
                         child: Center(
-                            child: Text('No se pudo cargar la foto.',
-                                style: TextStyle(color: c.danger))));
+                            child: Text(
+                                ch['foto'] == null
+                                    ? 'La foto todavía se está copiando de appchecar.'
+                                    : 'No se pudo cargar la foto.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                    color: ch['foto'] == null ? c.ink3 : c.danger))));
                   }
                   return Image.network(snap.data!, fit: BoxFit.cover);
                 },
@@ -475,13 +477,17 @@ Future<void> mostrarChecada(BuildContext context, Map<String, dynamic> ch, Strin
               style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: c.ink),
             ),
             const SizedBox(height: SiSpace.x1),
+            // Las de appchecar no traen coordenadas: traen la dirección que registró su aplicación.
             Text(
               lat == null || lng == null
-                  ? 'Sin ubicación'
+                  ? (ch['direccion']?.toString() ?? 'Sin ubicación')
                   : '${lat.toStringAsFixed(6)}, ${lng.toStringAsFixed(6)} · '
                       '${precisionEnPalabras(ch['precision_m'] as num?)}',
               style: TextStyle(fontSize: 12.5, color: c.ink3),
             ),
+            if (ch['origen'] == 'APPCHECAR')
+              Text('Registrada con appchecar.',
+                  style: TextStyle(fontSize: 11.5, color: c.ink4)),
           ],
         ),
       ),
@@ -844,6 +850,36 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
 
   /// El primer día con checadas del sistema: antes de él no hay faltas que contar.
   DateTime? _inicio;
+
+  /// Las fotos de appchecar que faltan por copiar a nuestro almacenamiento.
+  int _fotosPorCopiar = 0;
+  bool _copiando = false;
+
+  /// Arranca la copia: la función copia un lote y se sigue llamando sola hasta terminar, así que
+  /// basta con pedirla una vez. Aquí sólo se vuelve a contar.
+  Future<void> _copiarFotos() async {
+    setState(() => _copiando = true);
+    try {
+      final r = await _supabase.functions.invoke('copiar-fotos-appchecar', body: {});
+      final d = (r.data as Map?)?.cast<String, dynamic>() ?? {};
+      if (d['error'] != null) throw d['error'];
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Copiando las fotos en segundo plano: van ${d['copiadas'] ?? 0} y '
+              'quedan ${d['pendientes'] ?? 0}. Actualiza en unos minutos.'),
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('No se pudo copiar: $e'),
+          backgroundColor: SiColors.of(context).danger,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _copiando = false);
+    }
+  }
   late Quincena _periodo = Quincena.deIso(_hoyISO())!;
 
   Map<String, Map<String, dynamic>> _perfiles = {};
@@ -871,6 +907,15 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
             ((umbrales['retardos_por_descuento'] as num?)?.toInt() ?? 3).clamp(1, 100);
       }
 
+      final porCopiar = await _supabase
+          .from('checadas')
+          .select('id')
+          .eq('origen', 'APPCHECAR')
+          .isFilter('foto', null)
+          .isFilter('foto_error', null)
+          .count(CountOption.exact);
+      _fotosPorCopiar = porCopiar.count;
+
       final primera = await _supabase
           .from('checadas').select('fecha').order('fecha', ascending: true).limit(1);
       final lista = (primera as List);
@@ -879,14 +924,15 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
       final checadas = await _supabase
           .from('checadas')
           .select('id, profile_id, tipo, registrada_en, fecha, latitud, longitud, precision_m, '
-              'foto, dispositivo')
+              'foto, dispositivo, hora_local, origen, direccion')
           .gte('fecha', _periodo.desdeIso)
           .lte('fecha', _periodo.hastaIso)
           .order('registrada_en', ascending: true);
       _checadas = (checadas as List).cast<Map<String, dynamic>>();
 
       // Los ACTIVOS —para saber quién debía checar— y quien checó aunque ya no lo esté.
-      const campos = 'id, nombre, paterno, materno, numero_empleado, schedule_id, ubicacion';
+      const campos = 'id, nombre, paterno, materno, numero_empleado, schedule_id, ubicacion, '
+          'fecha_ingreso, fecha_reingreso';
       final activos = await _supabase.from('profiles').select(campos).eq('status_sys', 'ACTIVO');
       final perfiles = <String, Map<String, dynamic>>{
         for (final x in (activos as List).cast<Map<String, dynamic>>()) x['id'] as String: x,
@@ -972,6 +1018,14 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
         if (_horarioDe(id) != null) id,
     };
     final inicio = _inicio ?? DateTime.now();
+    // Y para cada quien, no antes de su ingreso —o reingreso—: con la historia de appchecar desde
+    // julio, a quien entró en agosto se le habrían contado faltas de cuando todavía no trabajaba aquí.
+    DateTime inicioDe(String id) {
+      final p = _perfiles[id];
+      final ingreso = DateTime.tryParse(
+          (p?['fecha_reingreso'] ?? p?['fecha_ingreso'])?.toString() ?? '');
+      return ingreso != null && ingreso.isAfter(inicio) ? ingreso : inicio;
+    }
     return [
       for (final id in ids)
         resumirPersona(
@@ -980,7 +1034,7 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
           reglas: _horarioDe(id)?['rules'] as List<dynamic>?,
           desde: DateTime.parse(_periodo.desdeIso),
           hasta: DateTime.parse(_periodo.hastaIso),
-          inicio: inicio,
+          inicio: inicioDe(id),
           vacaciones: _vacaciones[id] ?? const [],
           ahora: DateTime.now(),
         ),
@@ -1141,6 +1195,18 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
               Text('Detalle por empleado',
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: c.ink)),
               const Spacer(),
+              // Mientras queden fotos de appchecar por copiar. Desaparece solo cuando terminan.
+              if (_fotosPorCopiar > 0) ...[
+                OutlinedButton.icon(
+                  onPressed: _copiando ? null : _copiarFotos,
+                  icon: _copiando
+                      ? const SizedBox(
+                          width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.photo_library_outlined, size: 16),
+                  label: Text('Copiar fotos de appchecar ($_fotosPorCopiar)'),
+                ),
+                const SizedBox(width: SiSpace.x2),
+              ],
               IconButton(tooltip: 'Actualizar', onPressed: _cargar, icon: const Icon(Icons.refresh)),
             ]),
             const SizedBox(height: SiSpace.x3),
