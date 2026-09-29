@@ -124,19 +124,22 @@ void main() {
       final d = diferenciaContraHorario('ENTRADA', martes, ocho)!;
       expect(d.minutos, -36);
       expect(d.color, Semaforo.verde);
-      expect(diferenciaEnPalabras('ENTRADA', d.minutos), '36 min antes');
+      expect(diferenciaCorta(d.minutos), '- 36m');
 
       final tarde = diferenciaContraHorario('ENTRADA', DateTime(2026, 9, 29, 8, 12), ocho)!;
       expect((tarde.minutos, tarde.color), (12, Semaforo.amarillo));
-      expect(diferenciaEnPalabras('ENTRADA', 12), '12 min tarde');
+      expect(diferenciaCorta(12), '+ 12m');
       expect(diferenciaContraHorario('ENTRADA', DateTime(2026, 9, 29, 9, 5), ocho)!.color,
           Semaforo.rojo);
 
       final salio = diferenciaContraHorario('SALIDA', DateTime(2026, 9, 29, 17, 45), ocho)!;
       expect((salio.minutos, salio.color), (-15, Semaforo.rojo));
-      expect(diferenciaEnPalabras('SALIDA', 65), '1 h 05 min después');
-      expect(diferenciaEnPalabras('SALIDA', 0), 'a su hora');
-      expect(diferenciaEnPalabras('ENTRADA', 0), 'a tiempo');
+      // Los ejemplos del pedido.
+      expect(diferenciaCorta(8 * 60 + 12), '+ 8h 12m');
+      expect(diferenciaCorta(-(60 + 32)), '- 1h 32m');
+      expect(diferenciaCorta(5), '+ 5m');
+      expect(diferenciaCorta(120), '+ 2h');
+      expect(diferenciaCorta(0), '0m');
 
       // La comida no tiene hora; un día sin horario, tampoco.
       expect(diferenciaContraHorario('SALIDA_COMIDA', martes, ocho), isNull);

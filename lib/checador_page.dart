@@ -77,8 +77,8 @@ Color _colorSemaforo(SiColors c, Semaforo s) => switch (s) {
       Semaforo.rojo => c.danger,
     };
 
-/// La diferencia contra el horario, del color del semáforo: «36 min antes» en verde, «12 min
-/// tarde» en amarillo. Nada si esa checada no tiene hora en el horario. Pedido del 29/09/2026, en
+/// La diferencia contra el horario, del color del semáforo: «- 36m» en verde, «+ 5m» en amarillo,
+/// «+ 8h 12m» en rojo. Nada si esa checada no tiene hora en el horario. Pedido del 29/09/2026, en
 /// lugar del punto de color.
 Widget _diferencia(SiColors c, Map<String, dynamic> ch, List<dynamic>? reglas,
     {double tamano = 11.5}) {
@@ -93,7 +93,7 @@ Widget _diferencia(SiColors c, Map<String, dynamic> ch, List<dynamic>? reglas,
       color: color.withValues(alpha: 0.12),
       borderRadius: BorderRadius.circular(6),
     ),
-    child: Text(diferenciaEnPalabras(tipo, d.minutos),
+    child: Text(diferenciaCorta(d.minutos),
         style: TextStyle(fontSize: tamano, fontWeight: FontWeight.w700, color: color)),
   );
 }

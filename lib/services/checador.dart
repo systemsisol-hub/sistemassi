@@ -182,12 +182,17 @@ DateTime horaLocalDeChecada(DateTime registrada, num? latitud, num? longitud) {
   return null;
 }
 
-/// La diferencia en palabras: «36 min antes», «12 min tarde», «1 h 05 min después».
-String diferenciaEnPalabras(String tipo, int minutos) {
-  if (minutos == 0) return tipo == 'SALIDA' ? 'a su hora' : 'a tiempo';
-  final cuanto = duracionEnPalabras(minutos.abs());
-  if (minutos < 0) return '$cuanto antes';
-  return tipo == 'SALIDA' ? '$cuanto después' : '$cuanto tarde';
+/// La diferencia, corta y con signo: «- 1h 32m» antes de la hora, «+ 8h 12m» después, «0m» justo a
+/// la hora. Pedido del 29/09/2026: sólo el número, y el color dice si está bien o mal.
+String diferenciaCorta(int minutos) {
+  if (minutos == 0) return '0m';
+  final signo = minutos < 0 ? '-' : '+';
+  final total = minutos.abs();
+  final h = total ~/ 60;
+  final m = total % 60;
+  if (h == 0) return '$signo ${m}m';
+  if (m == 0) return '$signo ${h}h';
+  return '$signo ${h}h ${m}m';
 }
 
 String duracionEnPalabras(int minutos) {
