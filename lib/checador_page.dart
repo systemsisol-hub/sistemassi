@@ -10,7 +10,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'services/checador.dart';
+import 'services/checador_resumen.dart';
+import 'services/quincena.dart';
 import 'theme/si_theme.dart';
+import 'widgets/ficha_asistencia.dart';
 
 /// El checador propio del sistema. Pedido del usuario el 28/09/2026.
 ///
@@ -56,19 +59,6 @@ DateTime? _horaLocal(Map<String, dynamic> ch) {
 String _horaDe(Map<String, dynamic>? ch) {
   final d = ch == null ? null : _horaLocal(ch);
   return d == null ? '—' : DateFormat('HH:mm').format(d);
-}
-
-/// El color de una checada contra el horario. Sólo la entrada y el fin de jornada tienen hora en
-/// los horarios; la comida no lleva color.
-Semaforo? _semaforoDe(Map<String, dynamic> ch, List<dynamic>? reglas) {
-  final d = _horaLocal(ch);
-  final dia = DateTime.tryParse(ch['fecha']?.toString() ?? '');
-  if (d == null || dia == null) return null;
-  final r = reglasDelDia(reglas, dia);
-  final m = d.hour * 60 + d.minute;
-  if (ch['tipo'] == 'ENTRADA' && r.entrada != null) return semaforoEntrada(m, r.entrada!);
-  if (ch['tipo'] == 'SALIDA' && r.salida != null) return semaforoSalida(m, r.salida!);
-  return null;
 }
 
 Color _colorSemaforo(SiColors c, Semaforo s) => switch (s) {
@@ -837,19 +827,28 @@ class ChecadorRegistros extends StatefulWidget {
   State<ChecadorRegistros> createState() => _ChecadorRegistrosState();
 }
 
+/// Registros, con la forma de «Detalle por empleado» del Panel pero sin Zona, sobre el checador
+/// propio y con los umbrales de Configuración. Pedido del 29/09/2026. La cuenta está en
+/// `services/checador_resumen.dart`, que es la que se prueba.
 class _ChecadorRegistrosState extends State<ChecadorRegistros> {
-  DateTime _dia = DateTime.now();
   bool _cargando = true;
   String? _error;
   String _busqueda = '';
+  String _filtroEstatus = 'todos';
 
-  /// Por persona: sus checadas del día por tipo.
-  Map<String, Map<String, Map<String, dynamic>>> _porPersona = {};
+  // Los umbrales de la pestaña Configuración (`checador_umbrales`), los mismos del Panel.
+  double _criticoMax = 70;
+  double _atencionMax = 90;
+  int _retardosPorDescuento = 3;
+
+  /// El primer día con checadas del sistema: antes de él no hay faltas que contar.
+  DateTime? _inicio;
+  late Quincena _periodo = Quincena.deIso(_hoyISO())!;
+
   Map<String, Map<String, dynamic>> _perfiles = {};
   Map<String, Map<String, dynamic>> _horariosPorId = {};
-
-  /// El filtro de los contadores: 'verde', 'amarillo', 'rojo', 'sin' o null para todos.
-  String? _filtro;
+  List<Map<String, dynamic>> _checadas = [];
+  Map<String, List<(String, String)>> _vacaciones = {};
 
   @override
   void initState() {
@@ -860,38 +859,69 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
   Future<void> _cargar() async {
     setState(() { _cargando = true; _error = null; });
     try {
-      final r = await _supabase
+      final umbrales = await _supabase
+          .from('checador_umbrales')
+          .select('critico_max, atencion_max, retardos_por_descuento')
+          .maybeSingle();
+      if (umbrales != null) {
+        _criticoMax = (umbrales['critico_max'] as num).toDouble();
+        _atencionMax = (umbrales['atencion_max'] as num).toDouble();
+        _retardosPorDescuento =
+            ((umbrales['retardos_por_descuento'] as num?)?.toInt() ?? 3).clamp(1, 100);
+      }
+
+      final primera = await _supabase
+          .from('checadas').select('fecha').order('fecha', ascending: true).limit(1);
+      final lista = (primera as List);
+      _inicio = lista.isEmpty ? null : DateTime.tryParse(lista.first['fecha'].toString());
+
+      final checadas = await _supabase
           .from('checadas')
           .select('id, profile_id, tipo, registrada_en, fecha, latitud, longitud, precision_m, '
               'foto, dispositivo')
-          .eq('fecha', DateFormat('yyyy-MM-dd').format(_dia))
+          .gte('fecha', _periodo.desdeIso)
+          .lte('fecha', _periodo.hastaIso)
           .order('registrada_en', ascending: true);
-      final filas = (r as List).cast<Map<String, dynamic>>();
-      final porPersona = <String, Map<String, Map<String, dynamic>>>{};
-      for (final f in filas) {
-        porPersona.putIfAbsent(f['profile_id'] as String, () => {})[f['tipo'] as String] = f;
-      }
-      // Los ACTIVOS, para saber quién debía checar y no lo hizo; y quien checó aunque ya no lo esté.
+      _checadas = (checadas as List).cast<Map<String, dynamic>>();
+
+      // Los ACTIVOS —para saber quién debía checar— y quien checó aunque ya no lo esté.
       const campos = 'id, nombre, paterno, materno, numero_empleado, schedule_id';
       final activos = await _supabase.from('profiles').select(campos).eq('status_sys', 'ACTIVO');
       final perfiles = <String, Map<String, dynamic>>{
         for (final x in (activos as List).cast<Map<String, dynamic>>()) x['id'] as String: x,
       };
-      final faltan = porPersona.keys.where((id) => !perfiles.containsKey(id)).toList();
+      final faltan = _checadas
+          .map((x) => x['profile_id'] as String)
+          .where((id) => !perfiles.containsKey(id))
+          .toSet()
+          .toList();
       if (faltan.isNotEmpty) {
         final otros = await _supabase.from('profiles').select(campos).inFilter('id', faltan);
         for (final x in (otros as List).cast<Map<String, dynamic>>()) {
           perfiles[x['id'] as String] = x;
         }
       }
-      final horarios = await _horarios();
-      if (!mounted) return;
-      setState(() {
-        _porPersona = porPersona;
-        _perfiles = perfiles;
-        _horariosPorId = horarios;
-        _cargando = false;
-      });
+      _perfiles = perfiles;
+      _horariosPorId = await _horarios();
+
+      // Las vacaciones aprobadas que tocan el periodo: son las que justifican un día sin entrada.
+      final inc = await _supabase
+          .from('incidencias')
+          .select('usuario_id, fecha_inicio, fecha_fin')
+          .eq('status', 'APROBADA')
+          .eq('tipo', 'VACACIONES')
+          .lte('fecha_inicio', _periodo.hastaIso)
+          .gte('fecha_fin', _periodo.desdeIso);
+      final vac = <String, List<(String, String)>>{};
+      for (final x in (inc as List).cast<Map<String, dynamic>>()) {
+        final id = x['usuario_id']?.toString();
+        if (id == null) continue;
+        vac.putIfAbsent(id, () => []).add(
+            (x['fecha_inicio'].toString().substring(0, 10), x['fecha_fin'].toString().substring(0, 10)));
+      }
+      _vacaciones = vac;
+
+      if (mounted) setState(() => _cargando = false);
     } catch (e) {
       debugPrint('checador: registros: $e');
       if (mounted) setState(() { _cargando = false; _error = '$e'; });
@@ -903,20 +933,6 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
     return h == null ? null : _horariosPorId[h];
   }
 
-  /// Cómo va la ENTRADA de una persona ese día: su color, 'sin' si debía checar y no lo hizo,
-  /// 'aun' si todavía está a tiempo de hacerlo, o null si no tiene horario ese día.
-  String? _estadoEntrada(String id) {
-    final reglas = _horarioDe(id)?['rules'] as List<dynamic>?;
-    final entrada = reglasDelDia(reglas, _dia).entrada;
-    final ch = _porPersona[id]?['ENTRADA'];
-    if (ch != null) return _semaforoDe(ch, reglas)?.name;
-    if (entrada == null) return null;
-    final hoy = DateUtils.isSameDay(_dia, DateTime.now());
-    final ahora = DateTime.now();
-    if (hoy && ahora.hour * 60 + ahora.minute <= entrada.minutos + entrada.tolerancia) return 'aun';
-    return 'sin';
-  }
-
   String _nombre(String id) {
     final p = _perfiles[id];
     if (p == null) return 'Sin ficha';
@@ -925,208 +941,412 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
         .join(' ');
   }
 
-  Future<void> _elegirDia() async {
-    final d = await showDatePicker(
-      context: context,
-      initialDate: _dia,
-      firstDate: DateTime(2026, 1, 1),
-      lastDate: DateTime.now(),
-      locale: const Locale('es', 'MX'),
-    );
-    if (d != null) {
-      setState(() => _dia = d);
-      _cargar();
+  /// Las quincenas desde que existe el checador hasta hoy, la más reciente primero.
+  List<Quincena> get _quincenas {
+    final hoy = Quincena.deIso(_hoyISO())!;
+    final desde = _inicio == null ? hoy : Quincena.deIso(DateFormat('yyyy-MM-dd').format(_inicio!))!;
+    final lista = <Quincena>[];
+    var q = hoy;
+    for (var i = 0; i < 48; i++) {
+      lista.add(q);
+      if (q.clave.compareTo(desde.clave) <= 0) break;
+      final anterior = DateTime.parse(q.desdeIso).subtract(const Duration(days: 1));
+      q = Quincena.deIso(DateFormat('yyyy-MM-dd').format(anterior))!;
     }
+    return lista;
   }
+
+  List<ResumenChecador> get _resumenes {
+    final porPersona = <String, List<Map<String, dynamic>>>{};
+    for (final ch in _checadas) {
+      porPersona.putIfAbsent(ch['profile_id'] as String, () => []).add(ch);
+    }
+    final ids = <String>{
+      ...porPersona.keys,
+      for (final id in _perfiles.keys)
+        if (_horarioDe(id) != null) id,
+    };
+    final inicio = _inicio ?? DateTime.now();
+    return [
+      for (final id in ids)
+        resumirPersona(
+          profileId: id,
+          checadas: porPersona[id] ?? const [],
+          reglas: _horarioDe(id)?['rules'] as List<dynamic>?,
+          desde: DateTime.parse(_periodo.desdeIso),
+          hasta: DateTime.parse(_periodo.hastaIso),
+          inicio: inicio,
+          vacaciones: _vacaciones[id] ?? const [],
+          ahora: DateTime.now(),
+        ),
+    ]..sort((a, b) => _nombre(a.profileId).toLowerCase().compareTo(_nombre(b.profileId).toLowerCase()));
+  }
+
+  String _estatus(ResumenChecador r) =>
+      estatusDePuntualidad(r.puntualidad, _criticoMax, _atencionMax);
+
+  Future<void> _mostrarFicha(ResumenChecador r) async {
+    // Las fotos van en un bucket privado: se firman todas las del periodo en una sola llamada.
+    final rutas = <String>{
+      for (final d in r.dias) ...[
+        if (d['foto_entrada'] != null) d['foto_entrada'] as String,
+        if (d['foto_salida'] != null) d['foto_salida'] as String,
+      ],
+    }.toList();
+    final urls = <String, String>{};
+    if (rutas.isNotEmpty) {
+      try {
+        final firmadas = await _supabase.storage.from(_bucket).createSignedUrls(rutas, 3600);
+        for (final f in firmadas) {
+          urls[f.path] = f.signedUrl;
+        }
+      } catch (e) {
+        debugPrint('checador: no se firmaron las fotos: $e');
+      }
+    }
+    final dias = [
+      for (final d in r.dias)
+        {
+          ...d,
+          'foto_entrada': urls[d['foto_entrada']],
+          'foto_salida': urls[d['foto_salida']],
+        },
+    ];
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => FichaAsistencia(
+        nombre: _nombre(r.profileId),
+        numero: _perfiles[r.profileId]?['numero_empleado']?.toString() ?? '',
+        zona: '',
+        horario: _horarioDe(r.profileId)?['name']?.toString() ?? 'Sin horario asignado',
+        estatus: _estatus(r),
+        puntualidad: r.puntualidad,
+        asistio: r.asistio,
+        esperados: r.esperados,
+        retardos: r.retardos,
+        faltas: r.faltas,
+        incompletas: r.incompletas,
+        justificados: r.justificados,
+        minutosTarde: r.minutosTarde,
+        diasDescuento: r.diasDescuento(_retardosPorDescuento),
+        reglaDescuento: 'Cada $_retardosPorDescuento retardos son 1 día, '
+            'y cada falta sin justificar es 1 día.',
+        dias: dias,
+      ),
+    );
+  }
+
+  // Los anchos de «Detalle por empleado», sin la columna de Zona: suman 582 y el sobrante se va al
+  // nombre y a la barra de puntualidad, igual que allá.
+  static const _anchos = [184.0, 90.0, 64.0, 56.0, 56.0, 72.0, 82.0];
+  static const _reparto = [3, 2, 0, 0, 0, 0, 0];
+
+  static List<double> _anchosEn(double disponible) {
+    final minimo = _anchos.reduce((a, b) => a + b);
+    if (!disponible.isFinite || disponible <= minimo) return _anchos;
+    final sobra = disponible - minimo;
+    return [for (var i = 0; i < _anchos.length; i++) _anchos[i] + sobra * _reparto[i] / 5];
+  }
+
+  static const _etiquetaEstatus = {
+    'critico': 'Crítico',
+    'atencion': 'Atención',
+    'puntual': 'Puntual',
+    'sin datos': 'Sin datos',
+  };
+
+  Color _colorEstatus(SiColors c, String e) => switch (e) {
+        'critico' => c.danger,
+        'atencion' => c.warn,
+        'puntual' => c.success,
+        _ => c.ink3,
+      };
 
   @override
   Widget build(BuildContext context) {
     final c = SiColors.of(context);
-    final q = _busqueda.trim().toLowerCase();
-
-    // Quien checó, y quien debía checar ese día según su horario aunque no lo haya hecho.
-    final todos = <String>{
-      ..._porPersona.keys,
-      for (final id in _perfiles.keys)
-        if (reglasDelDia(_horarioDe(id)?['rules'] as List<dynamic>?, _dia).entrada != null) id,
-    };
-    final estados = {for (final id in todos) id: _estadoEntrada(id)};
-    final cuenta = <String, int>{};
-    for (final e in estados.values) {
-      if (e != null) cuenta[e] = (cuenta[e] ?? 0) + 1;
+    if (_cargando) return const Center(child: CircularProgressIndicator());
+    if (_error != null) {
+      return Center(
+        child: Text('No se pudieron leer las checadas: $_error', style: TextStyle(color: c.danger)),
+      );
     }
 
-    final ids = todos
-        .where((id) => _filtro == null || estados[id] == _filtro)
-        .where((id) => q.isEmpty || _nombre(id).toLowerCase().contains(q)
-            || (_perfiles[id]?['numero_empleado']?.toString() ?? '').contains(q))
-        .toList()
-      ..sort((a, b) => _nombre(a).compareTo(_nombre(b)));
+    final todos = _resumenes;
+    final cuenta = <String, int>{};
+    for (final r in todos) {
+      final e = _estatus(r);
+      cuenta[e] = (cuenta[e] ?? 0) + 1;
+    }
+    final q = _busqueda.trim().toLowerCase();
+    final filas = todos.where((r) {
+      if (_filtroEstatus != 'todos' && _estatus(r) != _filtroEstatus) return false;
+      if (q.isEmpty) return true;
+      return _nombre(r.profileId).toLowerCase().contains(q) ||
+          (_perfiles[r.profileId]?['numero_empleado']?.toString() ?? '').contains(q);
+    }).toList();
 
-    Widget contador(String clave, String etiqueta, Color color) {
-      final activo = _filtro == clave;
+    Widget chip(String valor, String etiqueta, int n, Color color) {
+      final activo = _filtroEstatus == valor;
       return InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: () => setState(() => _filtro = activo ? null : clave),
+        onTap: () => setState(() => _filtroEstatus = valor),
+        borderRadius: SiRadius.rPill,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: SiSpace.x3, vertical: SiSpace.x2),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: color.withValues(alpha: activo ? 0.18 : 0.08),
-            border: Border.all(color: color.withValues(alpha: activo ? 0.9 : 0.35)),
-            borderRadius: BorderRadius.circular(10),
+            color: activo ? color : c.panel,
+            borderRadius: SiRadius.rPill,
+            border: Border.all(color: activo ? color : c.line),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('${cuenta[clave] ?? 0}',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: color)),
-              const SizedBox(width: SiSpace.x2),
-              Text(etiqueta, style: TextStyle(fontSize: 12.5, color: c.ink2)),
-            ],
-          ),
+          child: Text('$etiqueta ($n)',
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: activo ? FontWeight.w600 : FontWeight.normal,
+                  color: activo ? Colors.white : c.ink2)),
         ),
       );
     }
 
+    const relleno = EdgeInsets.symmetric(horizontal: 12, vertical: 10);
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(SiSpace.x6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Wrap(
-            spacing: SiSpace.x3,
-            runSpacing: SiSpace.x3,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              OutlinedButton.icon(
-                onPressed: _elegirDia,
-                icon: const Icon(Icons.calendar_today_outlined, size: 16),
-                label: Text(_fechaLarga(_dia)),
-              ),
-              SizedBox(
-                width: 260,
+      child: Container(
+        padding: const EdgeInsets.all(SiSpace.x4),
+        decoration: BoxDecoration(
+          color: c.panel,
+          borderRadius: SiRadius.rMd,
+          border: Border.all(color: c.line),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(children: [
+              Icon(Icons.people_outline, size: 16, color: c.brand),
+              const SizedBox(width: SiSpace.x2),
+              Text('Detalle por empleado',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: c.ink)),
+              const Spacer(),
+              IconButton(tooltip: 'Actualizar', onPressed: _cargar, icon: const Icon(Icons.refresh)),
+            ]),
+            const SizedBox(height: SiSpace.x3),
+            Row(children: [
+              Expanded(
                 child: TextField(
-                  decoration: const InputDecoration(
-                    isDense: true,
-                    prefixIcon: Icon(Icons.search, size: 18),
-                    hintText: 'Buscar por nombre o número',
-                    border: OutlineInputBorder(),
-                  ),
                   onChanged: (v) => setState(() => _busqueda = v),
+                  style: const TextStyle(fontSize: 13),
+                  decoration: InputDecoration(
+                    hintText: 'Buscar por nombre o número…',
+                    hintStyle: TextStyle(fontSize: 13, color: c.ink4),
+                    prefixIcon: Icon(Icons.search, size: 17, color: c.ink3),
+                    prefixIconConstraints: const BoxConstraints(minWidth: 36, minHeight: 0),
+                    isDense: true,
+                    contentPadding: relleno,
+                    border: OutlineInputBorder(borderRadius: SiRadius.rMd),
+                  ),
                 ),
               ),
-              IconButton(
-                tooltip: 'Actualizar',
-                onPressed: _cargar,
-                icon: const Icon(Icons.refresh),
+              const SizedBox(width: SiSpace.x3),
+              SizedBox(
+                width: 215,
+                child: DropdownButtonFormField<String>(
+                  initialValue: _periodo.clave,
+                  isExpanded: true,
+                  isDense: true,
+                  style: TextStyle(fontSize: 13, color: c.ink),
+                  icon: Icon(Icons.expand_more, size: 18, color: c.ink3),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    contentPadding: relleno,
+                    prefixIcon: Icon(Icons.date_range_outlined, size: 15, color: c.ink3),
+                    prefixIconConstraints: const BoxConstraints(minWidth: 32, minHeight: 0),
+                    border: OutlineInputBorder(borderRadius: SiRadius.rMd),
+                  ),
+                  items: [
+                    for (final qn in _quincenas)
+                      DropdownMenuItem(
+                        value: qn.clave,
+                        child: Text(qn.etiqueta,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 13, color: c.ink2)),
+                      ),
+                  ],
+                  onChanged: (v) {
+                    final elegida = _quincenas.firstWhere((qn) => qn.clave == v);
+                    setState(() => _periodo = elegida);
+                    _cargar();
+                  },
+                ),
               ),
-              if (!_cargando)
-                Text('${_porPersona.length} personas checaron este día',
-                    style: TextStyle(fontSize: 12.5, color: c.ink3)),
-            ],
-          ),
-          const SizedBox(height: SiSpace.x3),
-          // El conteo del día por color de la ENTRADA. Tocar uno filtra la tabla.
-          if (!_cargando && _error == null)
+            ]),
+            const SizedBox(height: SiSpace.x3),
             Wrap(
               spacing: SiSpace.x2,
               runSpacing: SiSpace.x2,
               children: [
-                contador('verde', 'a tiempo', c.success),
-                contador('amarillo', 'en tolerancia', c.warn),
-                contador('rojo', 'con retardo', c.danger),
-                contador('sin', 'sin checar', c.ink3),
-                if ((cuenta['aun'] ?? 0) > 0) contador('aun', 'aún a tiempo', c.ink4),
+                chip('todos', 'Todos', todos.length, c.brand),
+                chip('critico', 'Críticos', cuenta['critico'] ?? 0, c.danger),
+                chip('atencion', 'Atención', cuenta['atencion'] ?? 0, c.warn),
+                chip('puntual', 'Puntuales', cuenta['puntual'] ?? 0, c.success),
               ],
             ),
-          const SizedBox(height: SiSpace.x4),
-          if (_cargando)
-            const Padding(
-              padding: EdgeInsets.all(SiSpace.x8),
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else if (_error != null)
-            Text('No se pudieron leer las checadas: $_error', style: TextStyle(color: c.danger))
-          else if (ids.isEmpty)
-            Padding(
-              padding: const EdgeInsets.all(SiSpace.x8),
-              child: Center(
-                child: Text(
-                    todos.isEmpty
-                        ? 'Nadie ha checado con el sistema este día.'
-                        : 'Nadie coincide con el filtro o la búsqueda.',
-                    style: TextStyle(color: c.ink3)),
+            const SizedBox(height: SiSpace.x2),
+            Text(
+              'Puntualidad: crítico por debajo de ${_criticoMax.toStringAsFixed(0)}%, atención hasta '
+              '${_atencionMax.toStringAsFixed(0)}%. Cada $_retardosPorDescuento retardos, 1 día a '
+              'descontar. Se ajusta en Configuración.',
+              style: TextStyle(fontSize: 11.5, color: c.ink4),
+            ),
+            const SizedBox(height: SiSpace.x3),
+            if (filas.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: SiSpace.x6),
+                child: Center(
+                  child: Text(
+                      todos.isEmpty
+                          ? 'Nadie tiene checadas ni horario en este periodo.'
+                          : 'Nadie coincide con el filtro',
+                      style: TextStyle(fontSize: 12.5, color: c.ink3)),
+                ),
+              )
+            else
+              LayoutBuilder(builder: (context, box) {
+                final anchos = _anchosEn(box.maxWidth);
+                const titulos = [
+                  'EMPLEADO', '% PUNT.', 'RETARDOS', 'FALTAS', 'JUSTIF.', 'DÍAS DESC.', 'ESTATUS'
+                ];
+                return SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(
+                    width: anchos.reduce((a, b) => a + b),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: SiSpace.x2),
+                          child: Row(children: [
+                            for (var i = 0; i < titulos.length; i++)
+                              SizedBox(
+                                width: anchos[i],
+                                child: Text(titulos[i],
+                                    style: SiType.mono(size: 9.5, color: c.ink3, letterSpacing: 0.8)),
+                              ),
+                          ]),
+                        ),
+                        Divider(height: 1, color: c.line),
+                        for (final r in filas) _fila(c, r, anchos),
+                      ],
+                    ),
+                  ),
+                );
+              }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _fila(SiColors c, ResumenChecador r, List<double> anchos) {
+    final estatus = _estatus(r);
+    final color = _colorEstatus(c, estatus);
+    final pct = r.puntualidad;
+    final descuento = r.diasDescuento(_retardosPorDescuento);
+    final numero = _perfiles[r.profileId]?['numero_empleado']?.toString() ?? '';
+    final horario = _horarioDe(r.profileId)?['name']?.toString() ?? 'Sin horario asignado';
+
+    Widget celda(int i, Widget hijo) => SizedBox(width: anchos[i], child: hijo);
+    Widget numeroEn(int n, Color col) => Text('$n',
+        style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: n > 0 ? FontWeight.w600 : FontWeight.normal,
+            color: col,
+            fontFeatures: const [FontFeature.tabularFigures()]));
+
+    return InkWell(
+      onTap: () => _mostrarFicha(r),
+      child: Container(
+        decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.line2))),
+        padding: const EdgeInsets.symmetric(vertical: SiSpace.x2),
+        child: Row(
+          children: [
+            celda(
+              0,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(_nombre(r.profileId),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: c.brand,
+                          decoration: TextDecoration.underline,
+                          decorationColor: c.brand.withValues(alpha: 0.3))),
+                  Text([if (numero.isNotEmpty) '#$numero', horario].join(' · '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 10.5, color: c.ink3)),
+                ],
               ),
-            )
-          else
-            Container(
-              decoration: BoxDecoration(
-                color: c.panel,
-                border: Border.all(color: c.line),
-                borderRadius: BorderRadius.circular(12),
+            ),
+            celda(
+              1,
+              Row(children: [
+                SizedBox(
+                  width: 42,
+                  child: Text(pct == null ? '—' : '${pct.toStringAsFixed(0)}%',
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: color,
+                          fontFeatures: const [FontFeature.tabularFigures()])),
+                ),
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(3),
+                    child: LinearProgressIndicator(
+                      value: ((pct ?? 0) / 100).clamp(0.0, 1.0),
+                      minHeight: 5,
+                      backgroundColor: c.line,
+                      valueColor: AlwaysStoppedAnimation(color),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: SiSpace.x2),
+              ]),
+            ),
+            celda(2, numeroEn(r.retardos, r.retardos > 0 ? c.warn : c.ink3)),
+            celda(3, numeroEn(r.faltas, r.faltas > 0 ? c.danger : c.ink3)),
+            celda(4, numeroEn(r.justificados, c.ink3)),
+            celda(
+              5,
+              Tooltip(
+                message: descuento == 0
+                    ? 'Sin días a descontar'
+                    : '${r.retardos} retardos ÷ $_retardosPorDescuento = '
+                        '${r.retardos ~/ _retardosPorDescuento} · faltas: ${r.faltas}',
+                child: numeroEn(descuento, descuento > 0 ? c.danger : c.ink3),
               ),
-              clipBehavior: Clip.antiAlias,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: DataTable(
-                  headingRowColor: WidgetStatePropertyAll(c.hover),
-                  columns: [
-                    const DataColumn(label: Text('Colaborador')),
-                    for (final t in tiposDeChecada) DataColumn(label: Text(nombreDeChecada[t]!)),
-                  ],
-                  rows: [
-                    for (final id in ids)
-                      DataRow(cells: [
-                        DataCell(Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(_nombre(id)),
-                            Text(_horarioDe(id)?['name']?.toString() ?? 'Sin horario asignado',
-                                style: TextStyle(fontSize: 11, color: c.ink4)),
-                          ],
-                        )),
-                        for (final t in tiposDeChecada)
-                          DataCell(
-                            _porPersona[id]?[t] == null
-                                ? Text(
-                                    t == 'ENTRADA' && estados[id] == 'sin'
-                                        ? 'Sin checar'
-                                        : (t == 'ENTRADA' && estados[id] == 'aun' ? 'Aún no' : '—'),
-                                    style: TextStyle(
-                                        color: t == 'ENTRADA' && estados[id] == 'sin'
-                                            ? c.danger
-                                            : c.ink4,
-                                        fontWeight: t == 'ENTRADA' && estados[id] == 'sin'
-                                            ? FontWeight.w600
-                                            : null))
-                                : Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(_horaDe(_porPersona[id]![t]),
-                                          style: TextStyle(
-                                              fontWeight: FontWeight.w600,
-                                              color: c.brand,
-                                              fontFeatures: const [FontFeature.tabularFigures()])),
-                                      const SizedBox(width: 6),
-                                      _diferencia(c, _porPersona[id]![t]!,
-                                          _horarioDe(id)?['rules'] as List<dynamic>?),
-                                      const SizedBox(width: 4),
-                                      Icon(Icons.photo_camera_outlined, size: 14, color: c.ink4),
-                                    ],
-                                  ),
-                            onTap: _porPersona[id]?[t] == null
-                                ? null
-                                : () => mostrarChecada(
-                                    context, _porPersona[id]![t]!, nombreDeChecada[t]!,
-                                    deQuien: _nombre(id)),
-                          ),
-                      ]),
-                  ],
+            ),
+            celda(
+              6,
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.12),
+                    borderRadius: SiRadius.rPill,
+                  ),
+                  child: Text(_etiquetaEstatus[estatus] ?? estatus,
+                      style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: color)),
                 ),
               ),
             ),
-        ],
+          ],
+        ),
       ),
     );
   }
