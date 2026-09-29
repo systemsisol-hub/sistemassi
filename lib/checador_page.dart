@@ -844,6 +844,45 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
   String _filtroEstatus = 'todos';
   String _filtroZona = 'todas';
 
+  /// La columna por la que se ordena la tabla (su índice en los títulos) y en qué sentido. Sin
+  /// columna, el orden es el alfabético de siempre.
+  int? _ordenColumna;
+  bool _ordenDescendente = true;
+
+  /// Un clic en un título ordena por esa columna; otro clic en el mismo, al revés. Los números
+  /// empiezan de mayor a menor y los textos de la A a la Z.
+  void _ordenarPor(int columna) => setState(() {
+        if (_ordenColumna == columna) {
+          _ordenDescendente = !_ordenDescendente;
+        } else {
+          _ordenColumna = columna;
+          _ordenDescendente = columna >= 2;
+        }
+      });
+
+  /// El valor de cada columna para ordenar. En ESTATUS, de mayor a menor pone primero a los
+  /// críticos; quien no tiene puntualidad («—») queda al final en % PUNT. de mayor a menor.
+  Comparable<Object> _valorParaOrden(ResumenChecador r, int columna) {
+    switch (columna) {
+      case 0:
+        return _nombre(r.profileId).toLowerCase();
+      case 1:
+        return _zonaDe(r.profileId).toLowerCase();
+      case 2:
+        return r.puntualidad ?? -1.0;
+      case 3:
+        return r.retardos;
+      case 4:
+        return r.faltas;
+      case 5:
+        return r.justificados;
+      case 6:
+        return r.diasDescuento(_retardosPorDescuento);
+      default:
+        return const {'critico': 3, 'atencion': 2, 'puntual': 1}[_estatus(r)] ?? 0;
+    }
+  }
+
   // Los umbrales de la pestaña Configuración (`checador_umbrales`), los mismos del Panel.
   double _criticoMax = 70;
   double _atencionMax = 90;
@@ -1063,7 +1102,8 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
   // las columnas y no sólo entre el nombre, la zona y la barra como allá: en 3/4 de una pantalla
   // ancha sobran unos 700px, y dados sólo a esas tres dejaban un hueco entre el nombre y la zona y
   // los números pegados a la barra (29/09/2026).
-  static const _anchos = [184.0, 96.0, 90.0, 64.0, 56.0, 56.0, 72.0, 82.0];
+  // RETARDOS, JUSTIF. y DÍAS DESC. llevan 12px más que allá por la flecha de orden del título.
+  static const _anchos = [184.0, 96.0, 90.0, 76.0, 56.0, 68.0, 84.0, 82.0];
   static const _reparto = [2, 1, 2, 1, 1, 1, 1, 1];
 
   static List<double> _anchosEn(double disponible) {
@@ -1115,6 +1155,18 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
           (_perfiles[r.profileId]?['numero_empleado']?.toString() ?? '').contains(q) ||
           _zonaDe(r.profileId).toLowerCase().contains(q);
     }).toList();
+    final columna = _ordenColumna;
+    if (columna != null) {
+      // Empates por nombre, para que el orden no brinque entre recargas.
+      filas.sort((a, b) {
+        final va = _valorParaOrden(a, columna);
+        final vb = _valorParaOrden(b, columna);
+        final cmp = _ordenDescendente ? vb.compareTo(va) : va.compareTo(vb);
+        return cmp != 0
+            ? cmp
+            : _nombre(a.profileId).toLowerCase().compareTo(_nombre(b.profileId).toLowerCase());
+      });
+    }
 
     Widget chip(String valor, String etiqueta, int n, Color color) {
       final activo = _filtroEstatus == valor;
@@ -1304,8 +1356,30 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
                             for (var i = 0; i < titulos.length; i++)
                               SizedBox(
                                 width: anchos[i],
-                                child: Text(titulos[i],
-                                    style: SiType.mono(size: 9.5, color: c.ink3, letterSpacing: 0.8)),
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: InkWell(
+                                    onTap: () => _ordenarPor(i),
+                                    borderRadius: SiRadius.rSm,
+                                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                      Flexible(
+                                        child: Text(titulos[i],
+                                            style: SiType.mono(
+                                                size: 9.5,
+                                                color: _ordenColumna == i ? c.brand : c.ink3,
+                                                letterSpacing: 0.8)),
+                                      ),
+                                      Icon(
+                                          _ordenColumna != i
+                                              ? Icons.unfold_more
+                                              : _ordenDescendente
+                                                  ? Icons.arrow_downward
+                                                  : Icons.arrow_upward,
+                                          size: 11,
+                                          color: _ordenColumna == i ? c.brand : c.ink4),
+                                    ]),
+                                  ),
+                                ),
                               ),
                           ]),
                         ),
