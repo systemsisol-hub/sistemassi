@@ -83,11 +83,6 @@ verify_jwt = true
 [functions.drive-sync]
 verify_jwt = true
 
-# Temporal: copia las fotos de appchecar a nuestro bucket (29/09/2026). La llama un administrador
-# desde Registros y ella misma con la llave de servicio para seguir por lotes.
-[functions.copiar-fotos-appchecar]
-verify_jwt = true
-
 # El Drive comercial de Sisol (Ventas). La pide la app con la sesion de quien tiene edit_ventas.
 [functions.ventas-drive-sync]
 verify_jwt = true
