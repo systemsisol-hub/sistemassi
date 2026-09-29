@@ -1,12 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'checador_page.dart';
 import 'checador_panel.dart';
 import 'schedules_page.dart';
 import 'theme/si_theme.dart';
 import 'widgets/carga_reportes.dart';
 
-/// Asistencia, en dos pestañas: el Panel para mirar y Configuración para administrar.
+/// Asistencia, en pestañas.
+///
+/// * **Checador** (todos) — checar con foto en vivo, hora del servidor y GPS. Pedido del 28/09/2026;
+///   ver `checador_page.dart`. Es la primera porque es lo que cada quien viene a hacer.
+/// * **Registros** (administradores) — las checadas del Checador de todos, por día.
+/// * **Panel** (todos) — puntualidad y faltas del reporte de appchecar.
+/// * **Configuración** (administradores) — horarios, reportes y umbrales.
 ///
 /// La pestaña de Configuración sólo existe para administradores, y no por estética: crear horarios,
 /// cargar reportes y mover los umbrales están reservados a administrador en la base. Mostrarla a
@@ -53,8 +60,7 @@ class _AsistenciaPageState extends State<AsistenciaPage>
     }
     if (!mounted) return;
     setState(() {
-      // Sólo para administradores: es el único caso con dos pestañas entre las que cambiar.
-      if (_esAdmin) _tabs = TabController(length: 2, vsync: this);
+      _tabs = TabController(length: _esAdmin ? 4 : 2, vsync: this);
       _cargando = false;
     });
   }
@@ -67,16 +73,6 @@ class _AsistenciaPageState extends State<AsistenciaPage>
       return Scaffold(
         backgroundColor: c.bg,
         body: Center(child: CircularProgressIndicator(color: c.brand)),
-      );
-    }
-
-    // Un usuario sin rol de administrador no tiene a dónde cambiar: Configuración no existe para
-    // él. Una barra con una sola pestaña subrayada es cromo que promete una navegación que no hay,
-    // así que en ese caso el panel se pinta solo.
-    if (!_esAdmin) {
-      return Scaffold(
-        backgroundColor: c.bg,
-        body: ChecadorPanel(key: ValueKey(_version)),
       );
     }
 
@@ -105,16 +101,30 @@ class _AsistenciaPageState extends State<AsistenciaPage>
                 tabs: [
                   const Tab(
                     height: 42,
+                    icon: Icon(Icons.photo_camera_front_outlined, size: 16),
+                    iconMargin: EdgeInsets.zero,
+                    text: 'Checador',
+                  ),
+                  if (_esAdmin)
+                    const Tab(
+                      height: 42,
+                      icon: Icon(Icons.fact_check_outlined, size: 16),
+                      iconMargin: EdgeInsets.zero,
+                      text: 'Registros',
+                    ),
+                  const Tab(
+                    height: 42,
                     icon: Icon(Icons.insights_outlined, size: 16),
                     iconMargin: EdgeInsets.zero,
                     text: 'Panel',
                   ),
-                  const Tab(
-                    height: 42,
-                    icon: Icon(Icons.settings_outlined, size: 16),
-                    iconMargin: EdgeInsets.zero,
-                    text: 'Configuración',
-                  ),
+                  if (_esAdmin)
+                    const Tab(
+                      height: 42,
+                      icon: Icon(Icons.settings_outlined, size: 16),
+                      iconMargin: EdgeInsets.zero,
+                      text: 'Configuración',
+                    ),
                 ],
               ),
             ),
@@ -123,10 +133,13 @@ class _AsistenciaPageState extends State<AsistenciaPage>
             child: TabBarView(
               controller: _tabs!,
               children: [
+                const ChecadorPropio(),
+                if (_esAdmin) const ChecadorRegistros(),
                 ChecadorPanel(key: ValueKey(_version)),
-                _Configuracion(
-                  alCargarReporte: () => setState(() => _version++),
-                ),
+                if (_esAdmin)
+                  _Configuracion(
+                    alCargarReporte: () => setState(() => _version++),
+                  ),
               ],
             ),
           ),

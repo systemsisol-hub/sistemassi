@@ -36,6 +36,8 @@ dependencies:
   excel: ^4.0.3
   flutter_quill: ^11.6.0
   image: ^4.3.0
+  camera: ^0.12.1
+  geolocator: ^14.0.2
 
 dev_dependencies:
   flutter_test:

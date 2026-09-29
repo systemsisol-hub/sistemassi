@@ -56,7 +56,8 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
 
   Future<void> _fetchSchedule() async {
     try {
-      final scheduleId = widget.colab['horario'];
+      // `schedule_id`, el mismo que usan Usuarios y el Checador. Ver 20260929120000_un_solo_horario.sql.
+      final scheduleId = widget.colab['schedule_id'];
       if (scheduleId == null || scheduleId.toString().isEmpty) {
         if (mounted) setState(() => _isLoadingSchedule = false);
         return;
@@ -89,7 +90,7 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
 
     final horarioDisplay = _isLoadingSchedule 
       ? 'Cargando...' 
-      : (_scheduleName ?? colab['horario'] ?? '---');
+      : (_scheduleName ?? '---');
 
     return Scaffold(
       backgroundColor: c.bg,
@@ -523,7 +524,7 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
   Future<void> _printFicha(BuildContext context) async {
     final doc = pw.Document();
     final colab = widget.colab;
-    final scheduleDisplay = _scheduleName ?? colab['horario'] ?? '---';
+    final scheduleDisplay = _scheduleName ?? '---';
     final brandColor = PdfColor.fromInt(0xFF344092);
 
     // Load logo
