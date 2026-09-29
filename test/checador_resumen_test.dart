@@ -42,7 +42,7 @@ void main() {
       desde: DateTime(2026, 9, 28),
       hasta: DateTime(2026, 10, 4),
       inicio: DateTime(2026, 9, 28),
-      vacaciones: [('2026-10-02', '2026-10-02')],
+      vacaciones: [('2026-10-02', '2026-10-02', 'APROBADA')],
       ahora: DateTime(2026, 10, 5, 12),
     );
     expect(r.esperados, 5);
@@ -58,6 +58,33 @@ void main() {
     expect(r.dias.firstWhere((d) => d['fecha'] == '2026-10-01')['estado'], 'FALTA');
     expect(r.dias.firstWhere((d) => d['fecha'] == '2026-10-02')['justificacion_tipo'], 'Vacaciones');
     expect(r.dias.firstWhere((d) => d['fecha'] == '2026-09-30')['hora_entrada'], '09:40');
+  });
+
+  test('las vacaciones se marcan en el calendario; sólo las aprobadas justifican', () {
+    final r = resumirPersona(
+      profileId: 'u',
+      checadas: [ch('2026-09-29', 'ENTRADA', 8, 50)],
+      reglas: reglas,
+      desde: DateTime(2026, 9, 28),
+      hasta: DateTime(2026, 10, 11),
+      inicio: DateTime(2026, 9, 28),
+      vacaciones: [
+        ('2026-09-29', '2026-09-29', 'APROBADA'), // checó igual ese día
+        ('2026-09-30', '2026-10-04', 'APROBADA'), // miércoles a domingo
+        ('2026-10-06', '2026-10-07', 'PENDIENTE'), // todavía por aprobar, en el futuro
+      ],
+      ahora: DateTime(2026, 10, 5, 12),
+    );
+    Map<String, dynamic> dia(String f) => r.dias.firstWhere((d) => d['fecha'] == f);
+    expect(dia('2026-09-29')['vacaciones'], 'APROBADA');
+    expect(dia('2026-09-29')['tiene_entrada'], true, reason: 'se ve que checó en vacaciones');
+    expect(dia('2026-10-01')['estado'], 'JUSTIFICADO');
+    expect(dia('2026-10-03')['estado'], 'VACACIONES', reason: 'el sábado también se ve');
+    expect(dia('2026-10-06')['vacaciones'], 'PENDIENTE');
+    expect(r.justificados, 3, reason: 'miércoles, jueves y viernes');
+    expect(r.faltas, 2, reason: 'el lunes 28 y el lunes 5: a las 12 ya pasó su tolerancia');
+    expect(r.dias.map((d) => d['fecha']).toList(),
+        [...r.dias.map((d) => d['fecha'] as String)]..sort(), reason: 'en orden');
   });
 
   test('antes de que existiera el checador no hay faltas', () {

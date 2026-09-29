@@ -848,7 +848,7 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
   Map<String, Map<String, dynamic>> _perfiles = {};
   Map<String, Map<String, dynamic>> _horariosPorId = {};
   List<Map<String, dynamic>> _checadas = [];
-  Map<String, List<(String, String)>> _vacaciones = {};
+  Map<String, List<SolicitudVacaciones>> _vacaciones = {};
 
   @override
   void initState() {
@@ -904,20 +904,24 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
       _perfiles = perfiles;
       _horariosPorId = await _horarios();
 
-      // Las vacaciones aprobadas que tocan el periodo: son las que justifican un día sin entrada.
+      // Las vacaciones que tocan el periodo. Las APROBADAS justifican un día sin entrada; las
+      // pendientes sólo se marcan en el calendario de la ficha. Las canceladas no se traen.
       final inc = await _supabase
           .from('incidencias')
-          .select('usuario_id, fecha_inicio, fecha_fin')
-          .eq('status', 'APROBADA')
+          .select('usuario_id, fecha_inicio, fecha_fin, status')
+          .inFilter('status', ['APROBADA', 'PENDIENTE'])
           .eq('tipo', 'VACACIONES')
           .lte('fecha_inicio', _periodo.hastaIso)
           .gte('fecha_fin', _periodo.desdeIso);
-      final vac = <String, List<(String, String)>>{};
+      final vac = <String, List<SolicitudVacaciones>>{};
       for (final x in (inc as List).cast<Map<String, dynamic>>()) {
         final id = x['usuario_id']?.toString();
         if (id == null) continue;
-        vac.putIfAbsent(id, () => []).add(
-            (x['fecha_inicio'].toString().substring(0, 10), x['fecha_fin'].toString().substring(0, 10)));
+        vac.putIfAbsent(id, () => []).add((
+          x['fecha_inicio'].toString().substring(0, 10),
+          x['fecha_fin'].toString().substring(0, 10),
+          x['status'].toString(),
+        ));
       }
       _vacaciones = vac;
 

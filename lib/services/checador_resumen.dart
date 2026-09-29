@@ -62,11 +62,15 @@ String _iso(DateTime d) =>
 String _hhmm(DateTime d) =>
     '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 
+/// Una solicitud de vacaciones de Incidencias: del día ISO al día ISO, y su estatus.
+typedef SolicitudVacaciones = (String desde, String hasta, String estatus);
+
 /// Resume a una persona en el periodo [desde]–[hasta], ambos incluidos.
 ///
-/// [checadas] son las suyas, de cualquier fecha. [vacaciones] son sus rangos aprobados como pares
-/// de fechas ISO. [inicio] es el primer día del checador; [ahora], el reloj con que se decide si
-/// hoy ya cuenta.
+/// [checadas] son las suyas, de cualquier fecha. [vacaciones] son sus solicitudes de Incidencias:
+/// sólo las APROBADAS justifican un día sin entrada, pero todas se marcan en el calendario de la
+/// ficha —las pendientes, como «por aprobar»—. Pedido del 29/09/2026. [inicio] es el primer día del
+/// checador; [ahora], el reloj con que se decide si hoy ya cuenta.
 ResumenChecador resumirPersona({
   required String profileId,
   required List<Map<String, dynamic>> checadas,
@@ -74,7 +78,7 @@ ResumenChecador resumirPersona({
   required DateTime desde,
   required DateTime hasta,
   required DateTime inicio,
-  required List<(String, String)> vacaciones,
+  required List<SolicitudVacaciones> vacaciones,
   required DateTime ahora,
 }) {
   final r = ResumenChecador(profileId: profileId);
@@ -90,8 +94,19 @@ ResumenChecador resumirPersona({
   var fin = DateTime(hasta.year, hasta.month, hasta.day);
   if (fin.isAfter(hoy)) fin = hoy;
 
-  bool deVacaciones(String iso) =>
-      vacaciones.any((v) => v.$1.compareTo(iso) <= 0 && iso.compareTo(v.$2) <= 0);
+  /// El estatus de las vacaciones que cubren [iso], o null. Si se enciman, manda la aprobada.
+  String? vacacionesEn(String iso) {
+    String? hallado;
+    for (final v in vacaciones) {
+      if (v.$1.compareTo(iso) <= 0 && iso.compareTo(v.$2) <= 0) {
+        if (v.$3 == 'APROBADA') return 'APROBADA';
+        hallado ??= v.$3;
+      }
+    }
+    return hallado;
+  }
+
+  bool deVacaciones(String iso) => vacacionesEn(iso) == 'APROBADA';
 
   for (; !d.isAfter(fin); d = DateTime(d.year, d.month, d.day + 1)) {
     final iso = _iso(d);
@@ -173,7 +188,29 @@ ResumenChecador resumirPersona({
       'justificacion_tipo': justificado ? 'Vacaciones' : null,
       'foto_entrada': entrada?['foto'],
       'foto_salida': salida?['foto'],
+      'vacaciones': vacacionesEn(iso),
     });
   }
+
+  // Los días de vacaciones que no quedaron arriba —fines de semana, días que todavía no llegan, o
+  // hoy mientras sigue a tiempo— también van al calendario: la ficha tiene que mostrar las
+  // vacaciones completas, no sólo los días en que había que checar. No cuentan en nada.
+  final yaEsta = {for (final x in r.dias) x['fecha'] as String};
+  final inicioPeriodo = DateTime(desde.year, desde.month, desde.day);
+  final finPeriodo = DateTime(hasta.year, hasta.month, hasta.day);
+  for (var v = inicioPeriodo; !v.isAfter(finPeriodo); v = DateTime(v.year, v.month, v.day + 1)) {
+    final iso = _iso(v);
+    final estatus = vacacionesEn(iso);
+    if (estatus == null || yaEsta.contains(iso)) continue;
+    r.dias.add({
+      'fecha': iso,
+      'estado': 'VACACIONES',
+      'esperado': reglasDelDia(reglas, v).entrada != null,
+      'tiene_entrada': false,
+      'tiene_salida': false,
+      'vacaciones': estatus,
+    });
+  }
+  r.dias.sort((a, b) => (a['fecha'] as String).compareTo(b['fecha'] as String));
   return r;
 }

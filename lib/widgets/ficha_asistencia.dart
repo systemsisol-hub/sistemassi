@@ -234,6 +234,14 @@ class CalendarioAsistencia extends StatelessWidget {
 
   static const _diasSemana = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 
+  /// «Vacaciones» o «Vac. por aprobar» si el día cae en unas vacaciones de Incidencias; null si no.
+  /// Sólo el Checador propio manda `vacaciones` en los días; los de appchecar no lo traen.
+  static String? _etiquetaVacaciones(Map<String, dynamic>? d) => switch (d?['vacaciones']) {
+        'APROBADA' => 'Vacaciones',
+        'PENDIENTE' => 'Vac. por aprobar',
+        _ => null,
+      };
+
   @override
   Widget build(BuildContext context) {
     final c = SiColors.of(context);
@@ -362,6 +370,8 @@ class CalendarioAsistencia extends StatelessWidget {
         '${mes.year}-${mes.month.toString().padLeft(2, '0')}-${dia.toString().padLeft(2, '0')}';
     final d = porFecha[clave];
     final esFalta = d?['estado'] == 'FALTA';
+    // Las vacaciones de Incidencias, si el día cae en ellas (sólo las manda el Checador propio).
+    final vacaciones = _etiquetaVacaciones(d);
     final justificado = d?['justificado'] == true;
     final foto = (d?['foto_entrada'] ?? d?['foto_salida'])?.toString();
     // El tinte amarillo dice que el día está justificado, pero no por qué. El motivo va en un
@@ -383,7 +393,9 @@ class CalendarioAsistencia extends StatelessWidget {
             ? c.dangerTint
             : justificado
                 ? c.warnTint
-                : null,
+                : vacaciones != null
+                    ? c.brandTint
+                    : null,
         border: Border.all(color: c.line2, width: 0.5),
       ),
       child: Column(
@@ -402,6 +414,12 @@ class CalendarioAsistencia extends StatelessWidget {
               if (foto != null && foto.isNotEmpty) _botonFoto(context, c, foto),
             ],
           ),
+          if (vacaciones != null)
+            Text(vacaciones,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    fontSize: 9.5, height: 1.2, fontWeight: FontWeight.w600, color: c.brand)),
           if (d != null)
             if (esFalta)
               Text('Falta',
@@ -410,6 +428,10 @@ class CalendarioAsistencia extends StatelessWidget {
                       height: 1.2,
                       fontWeight: FontWeight.w600,
                       color: c.danger))
+            // En vacaciones y sin checar no hay horas que enseñar: «— sin registro» dos veces sólo
+            // haría parecer que faltó algo.
+            else if (vacaciones != null && d['tiene_entrada'] != true)
+              const SizedBox.shrink()
             else ...[
               _hora(c, d['hora_entrada'], d['es_retardo'] == true,
                   d['minutos_retardo'], d['tiene_entrada'] != true),
@@ -450,7 +472,13 @@ class CalendarioAsistencia extends StatelessWidget {
                             color: c.ink)),
                   ),
                   Expanded(
-                    child: porFecha[k]!['estado'] == 'FALTA'
+                    child: _etiquetaVacaciones(porFecha[k]) != null &&
+                            porFecha[k]!['tiene_entrada'] != true &&
+                            porFecha[k]!['estado'] != 'FALTA'
+                        ? Text(_etiquetaVacaciones(porFecha[k])!,
+                            style: TextStyle(
+                                fontSize: 11.5, fontWeight: FontWeight.w600, color: c.brand))
+                        : porFecha[k]!['estado'] == 'FALTA'
                         ? Text('Falta',
                             style: TextStyle(
                                 fontSize: 11.5,
@@ -561,6 +589,7 @@ class CalendarioAsistencia extends StatelessWidget {
         punto(c.success, 'En regla'),
         punto(c.danger, 'Retardo o salida antes de hora'),
         punto(c.warn, 'Sin registro / justificado'),
+        punto(c.brand, 'Vacaciones'),
       ],
     );
   }
