@@ -1112,7 +1112,12 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(SiSpace.x6),
-      child: Container(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+      _kpis(c, todos),
+      const SizedBox(height: SiSpace.x4),
+      Container(
         padding: const EdgeInsets.all(SiSpace.x4),
         decoration: BoxDecoration(
           color: c.panel,
@@ -1244,6 +1249,80 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
           ],
         ),
       ),
+        ],
+      ),
+    );
+  }
+
+  /// Las tarjetas de arriba, las mismas del Panel —puntualidad, retardos, faltas, justificados, días
+  /// a descontar, días evaluados y empleados— con los datos del checador propio y del periodo
+  /// elegido. Pedido del 29/09/2026.
+  ///
+  /// La puntualidad es la del conjunto, PONDERADA por días —a tiempo entre evaluadas de todos—, no el
+  /// promedio de los porcentajes: una persona con un solo día evaluado no debe pesar como una con
+  /// quince. Es la misma cuenta del Panel.
+  Widget _kpis(SiColors c, List<ResumenChecador> todos) {
+    final evaluadas = todos.fold<int>(0, (a, r) => a + r.evaluadas);
+    final retardos = todos.fold<int>(0, (a, r) => a + r.retardos);
+    final faltas = todos.fold<int>(0, (a, r) => a + r.faltas);
+    final justificados = todos.fold<int>(0, (a, r) => a + r.justificados);
+    // Por persona y luego sumado, igual que la columna de la tabla: dividir el total de retardos
+    // daría más días de los que son.
+    final descuento = todos.fold<int>(0, (a, r) => a + r.diasDescuento(_retardosPorDescuento));
+    final pct = evaluadas == 0 ? null : (evaluadas - retardos) / evaluadas * 100;
+    final colorPct = pct == null
+        ? c.ink3
+        : _colorEstatus(c, estatusDePuntualidad(pct, _criticoMax, _atencionMax));
+
+    Widget tarjeta(String titulo, String valor, String pie, Color color) => Container(
+          width: 150,
+          padding: const EdgeInsets.all(SiSpace.x3),
+          decoration: BoxDecoration(
+            color: c.panel,
+            borderRadius: SiRadius.rMd,
+            border: Border.all(color: c.line),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(titulo.toUpperCase(),
+                  style: SiType.mono(size: 9.5, color: c.ink3, letterSpacing: 0.8)),
+              const SizedBox(height: 6),
+              Text(valor,
+                  style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w700,
+                      height: 1,
+                      color: color,
+                      fontFeatures: const [FontFeature.tabularFigures()])),
+              const SizedBox(height: 4),
+              Text(pie, style: TextStyle(fontSize: 11, color: c.ink3)),
+            ],
+          ),
+        );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(_periodo.etiqueta,
+            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: c.brand)),
+        const SizedBox(height: SiSpace.x3),
+        Wrap(
+          spacing: SiSpace.x3,
+          runSpacing: SiSpace.x3,
+          children: [
+            tarjeta('Puntualidad', pct == null ? '—' : '${pct.toStringAsFixed(1)}%',
+                'del periodo', colorPct),
+            tarjeta('Retardos', '$retardos', 'llegadas tarde', c.warn),
+            tarjeta('Faltas', '$faltas', 'sin justificar', c.danger),
+            tarjeta('Justificados', '$justificados', 'días de vacaciones', c.ink2),
+            tarjeta('Días a descontar', '$descuento', 'para nómina',
+                descuento > 0 ? c.danger : c.success),
+            tarjeta('Días evaluados', '$evaluadas', 'con checada', c.ink2),
+            tarjeta('Empleados', '${todos.length}', 'en el periodo', c.ink2),
+          ],
+        ),
+      ],
     );
   }
 
