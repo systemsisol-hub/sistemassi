@@ -13,6 +13,7 @@ import 'services/checador.dart';
 import 'services/checador_resumen.dart';
 import 'services/quincena.dart';
 import 'theme/si_theme.dart';
+import 'widgets/dona_painter.dart';
 import 'widgets/ficha_asistencia.dart';
 
 /// El checador propio del sistema. Pedido del usuario el 28/09/2026.
@@ -885,7 +886,7 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
       _checadas = (checadas as List).cast<Map<String, dynamic>>();
 
       // Los ACTIVOS —para saber quién debía checar— y quien checó aunque ya no lo esté.
-      const campos = 'id, nombre, paterno, materno, numero_empleado, schedule_id';
+      const campos = 'id, nombre, paterno, materno, numero_empleado, schedule_id, ubicacion';
       final activos = await _supabase.from('profiles').select(campos).eq('status_sys', 'ACTIVO');
       final perfiles = <String, Map<String, dynamic>>{
         for (final x in (activos as List).cast<Map<String, dynamic>>()) x['id'] as String: x,
@@ -1121,7 +1122,10 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
         children: [
       _kpis(c, todos),
       const SizedBox(height: SiSpace.x4),
-      Container(
+      // La tabla en 3/4 del ancho y, en el cuarto que sobra, la puntualidad por zona y el semáforo.
+      // Pedido del 29/09/2026. Por debajo de 1100 px no caben las dos columnas y se apilan.
+      LayoutBuilder(builder: (context, caja) {
+      final detalle = Container(
         padding: const EdgeInsets.all(SiSpace.x4),
         decoration: BoxDecoration(
           color: c.panel,
@@ -1252,11 +1256,212 @@ class _ChecadorRegistrosState extends State<ChecadorRegistros> {
               }),
           ],
         ),
-      ),
+      );
+      final lado = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _tarjetaZonas(c, todos),
+          const SizedBox(height: SiSpace.x4),
+          _tarjetaSemaforo(c, todos),
+        ],
+      );
+      if (caja.maxWidth < 1100) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [detalle, const SizedBox(height: SiSpace.x4), lado],
+        );
+      }
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(flex: 3, child: detalle),
+          const SizedBox(width: SiSpace.x4),
+          Expanded(flex: 1, child: lado),
+        ],
+      );
+      }),
         ],
       ),
     );
   }
+
+  Widget _tarjetaLado(SiColors c, IconData icono, String titulo, Widget cuerpo) => Container(
+        padding: const EdgeInsets.all(SiSpace.x4),
+        decoration: BoxDecoration(
+          color: c.panel,
+          borderRadius: SiRadius.rMd,
+          border: Border.all(color: c.line),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(children: [
+              Icon(icono, size: 16, color: c.brand),
+              const SizedBox(width: SiSpace.x2),
+              Expanded(
+                child: Text(titulo,
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: c.ink)),
+              ),
+            ]),
+            const SizedBox(height: SiSpace.x4),
+            cuerpo,
+          ],
+        ),
+      );
+
+  Widget _sinDatos(SiColors c) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: SiSpace.x5),
+        child: Center(
+          child: Text('Sin datos en el periodo', style: TextStyle(fontSize: 12.5, color: c.ink3)),
+        ),
+      );
+
+  /// «BONANZA_PRISMA» → «Bonanza Prisma». La zona es la ubicación del perfil.
+  static String _nombreZona(String? u) {
+    final t = (u ?? '').replaceAll('_', ' ').trim().toLowerCase();
+    if (t.isEmpty) return 'Sin zona';
+    return t
+        .split(RegExp(r'\s+'))
+        .where((p) => p.isNotEmpty)
+        .map((p) => p[0].toUpperCase() + p.substring(1))
+        .join(' ');
+  }
+
+  /// Puntualidad por zona, como la del Panel: PONDERADA por entradas —a tiempo entre evaluadas de la
+  /// zona—, no el promedio de las personas. La zona sale de la ubicación de cada perfil; appchecar
+  /// la traía en su reporte y aquí no hay reporte.
+  Widget _tarjetaZonas(SiColors c, List<ResumenChecador> todos) {
+    final aTiempo = <String, int>{};
+    final total = <String, int>{};
+    for (final r in todos) {
+      if (r.evaluadas == 0) continue;
+      final z = _nombreZona(_perfiles[r.profileId]?['ubicacion']?.toString());
+      total[z] = (total[z] ?? 0) + r.evaluadas;
+      aTiempo[z] = (aTiempo[z] ?? 0) + r.evaluadas - r.retardos;
+    }
+    final zonas = total.entries
+        .map((t) => (t.key, (aTiempo[t.key] ?? 0) / t.value * 100, t.value))
+        .toList()
+      ..sort((a, b) => a.$2.compareTo(b.$2));
+    return _tarjetaLado(
+      c,
+      Icons.bar_chart_outlined,
+      'Puntualidad por zona',
+      zonas.isEmpty
+          ? _sinDatos(c)
+          : Column(children: [
+              for (final z in zonas) ...[
+                _barraZona(c, z.$1, z.$2, z.$3),
+                const SizedBox(height: SiSpace.x3),
+              ],
+            ]),
+    );
+  }
+
+  Widget _barraZona(SiColors c, String zona, double pct, int entradas) {
+    final color = _colorEstatus(c, estatusDePuntualidad(pct, _criticoMax, _atencionMax));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          Expanded(
+            child: Text(zona,
+                overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12.5, color: c.ink)),
+          ),
+          Text('${pct.toStringAsFixed(1)}%',
+              style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                  fontFeatures: const [FontFeature.tabularFigures()])),
+          const SizedBox(width: 6),
+          Text('($entradas)', style: TextStyle(fontSize: 11, color: c.ink4)),
+        ]),
+        const SizedBox(height: 5),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: (pct / 100).clamp(0.0, 1.0),
+            minHeight: 7,
+            backgroundColor: c.line,
+            valueColor: AlwaysStoppedAnimation(color),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// El semáforo de seguimiento: cuántas personas van en crítico, atención y puntual, con los
+  /// cortes de Configuración. Quien no tiene días evaluados no entra.
+  Widget _tarjetaSemaforo(SiColors c, List<ResumenChecador> todos) {
+    final s = {'critico': 0, 'atencion': 0, 'puntual': 0};
+    for (final r in todos) {
+      final e = _estatus(r);
+      if (s.containsKey(e)) s[e] = s[e]! + 1;
+    }
+    final total = s.values.fold<int>(0, (a, b) => a + b);
+
+    Widget leyenda(String etiqueta, int n, Color color, String rango) => Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Row(children: [
+            Container(
+              width: 9,
+              height: 9,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 8),
+            Text(etiqueta, style: TextStyle(fontSize: 12.5, color: c.ink)),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(rango,
+                  overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11, color: c.ink4)),
+            ),
+            Text('$n', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: color)),
+          ]),
+        );
+
+    return _tarjetaLado(
+      c,
+      Icons.donut_large_outlined,
+      'Semáforo de seguimiento',
+      total == 0
+          ? _sinDatos(c)
+          : Column(children: [
+              SizedBox(
+                height: 150,
+                child: CustomPaint(
+                  painter: DonaPainter(
+                    valores: [
+                      (s['critico']!, c.danger),
+                      (s['atencion']!, c.warn),
+                      (s['puntual']!, c.success),
+                    ],
+                    fondo: c.line,
+                  ),
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text('$total',
+                            style: TextStyle(
+                                fontSize: 26, fontWeight: FontWeight.w700, color: c.ink)),
+                        Text('personas', style: TextStyle(fontSize: 11, color: c.ink3)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: SiSpace.x3),
+              leyenda('Crítico', s['critico']!, c.danger,
+                  'menos de ${_criticoMax.toStringAsFixed(0)}%'),
+              leyenda('Atención', s['atencion']!, c.warn,
+                  'hasta ${_atencionMax.toStringAsFixed(0)}%'),
+              leyenda('Puntual', s['puntual']!, c.success,
+                  'más de ${_atencionMax.toStringAsFixed(0)}%'),
+            ]),
+    );
+  }
+
 
   /// Las tarjetas de arriba, las mismas del Panel —puntualidad, retardos, faltas, justificados, días
   /// a descontar, días evaluados y empleados— con los datos del checador propio y del periodo
