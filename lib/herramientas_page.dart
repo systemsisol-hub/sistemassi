@@ -289,6 +289,7 @@ class _HerramientasPageState extends State<HerramientasPage> {
         getAsignados: _getAsignados,
         toggleAcceso: _toggleAcceso,
         toggleEdicion: _toggleEdicion,
+        esAdmin: _isAdmin,
         onSave: (data) async {
           if (herramienta != null) {
             await _supabase
@@ -521,21 +522,22 @@ class _HerramientasPageState extends State<HerramientasPage> {
             ),
           ),
           const Spacer(),
-          if (_isAdmin)
-            ElevatedButton.icon(
-              onPressed: () => _showForm(),
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('Nueva',
-                  style: TextStyle(fontWeight: FontWeight.w600)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: c.brand,
-                foregroundColor: Colors.white,
-                elevation: 0,
-                minimumSize: const Size(0, 36),
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                shape: const RoundedRectangleBorder(borderRadius: SiRadius.rMd),
-              ),
+          // Cualquiera con acceso a la página crea las suyas (29/09/2026): la base lo deja asignado
+          // como editor de la que crea (`tr_herramienta_creada`).
+          ElevatedButton.icon(
+            onPressed: () => _showForm(),
+            icon: const Icon(Icons.add, size: 16),
+            label: const Text('Nueva',
+                style: TextStyle(fontWeight: FontWeight.w600)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: c.brand,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              minimumSize: const Size(0, 36),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              shape: const RoundedRectangleBorder(borderRadius: SiRadius.rMd),
             ),
+          ),
         ],
       ),
     );
@@ -737,6 +739,10 @@ class _HerramientaFormSheet extends StatefulWidget {
   final Future<void> Function(String, String, bool) toggleEdicion;
   final Future<void> Function(Map<String, dynamic>) onSave;
 
+  /// Quien mantiene la herramienta sin ser administrador da y quita el acceso de LECTURA, pero no el
+  /// permiso de editarla: eso sigue siendo de administración, y la base lo exige igual.
+  final bool esAdmin;
+
   const _HerramientaFormSheet({
     required this.getUsers,
     required this.getAsignados,
@@ -744,6 +750,7 @@ class _HerramientaFormSheet extends StatefulWidget {
     required this.toggleEdicion,
     required this.onSave,
     this.herramienta,
+    this.esAdmin = false,
   });
 
   @override
@@ -891,7 +898,10 @@ class _HerramientaFormSheetState extends State<_HerramientaFormSheet> {
                   ),
                   const SizedBox(height: SiSpace.x2),
                   Text(
-                    'Sólo aparecen los usuarios que ya tienen el acceso «Herramientas» activado en su perfil.',
+                    widget.esAdmin
+                        ? 'Sólo aparecen los usuarios que ya tienen el acceso «Herramientas» activado en su perfil.'
+                        : 'Sólo aparecen los usuarios que ya tienen el acceso «Herramientas» activado en su perfil. '
+                            'El permiso de editarla lo da un administrador.',
                     style: TextStyle(fontSize: 12, color: c.ink3),
                   ),
                   const SizedBox(height: SiSpace.x3),
@@ -901,6 +911,7 @@ class _HerramientaFormSheetState extends State<_HerramientaFormSheet> {
                     getAsignados: widget.getAsignados,
                     toggleAcceso: widget.toggleAcceso,
                     toggleEdicion: widget.toggleEdicion,
+                    esAdmin: widget.esAdmin,
                   ),
                 ],
               ],
@@ -939,6 +950,7 @@ class _AsignarUsuarios extends StatefulWidget {
   final Future<Map<String, bool>> Function(String) getAsignados;
   final Future<void> Function(String, String, bool) toggleAcceso;
   final Future<void> Function(String, String, bool) toggleEdicion;
+  final bool esAdmin;
 
   const _AsignarUsuarios({
     required this.herramientaId,
@@ -946,6 +958,7 @@ class _AsignarUsuarios extends StatefulWidget {
     required this.getAsignados,
     required this.toggleAcceso,
     required this.toggleEdicion,
+    this.esAdmin = false,
   });
 
   @override
@@ -1047,7 +1060,7 @@ class _AsignarUsuariosState extends State<_AsignarUsuarios> {
             // —ver y poder BORRAR— y dos casillas iguales invitan a marcarlas de un pasada.
             secondary: tiene
                 ? IconButton(
-                    onPressed: () async {
+                    onPressed: !widget.esAdmin ? null : () async {
                       final ahora = !mantiene;
                       setState(() => _asignados[id] = ahora);
                       await widget.toggleEdicion(widget.herramientaId, id, ahora);
@@ -1063,7 +1076,9 @@ class _AsignarUsuariosState extends State<_AsignarUsuarios> {
                     visualDensity: VisualDensity.compact,
                   )
                 : null,
-            onChanged: (v) async {
+            // A un editor sólo lo quita un administrador: tampoco uno mismo, que se quedaría fuera
+            // de su propia herramienta.
+            onChanged: mantiene && !widget.esAdmin ? null : (v) async {
               final dar = v ?? false;
               // Se pinta primero y se guarda después: la lista tiene que responder al toque, y un
               // fallo se corrige al recargar la hoja.
