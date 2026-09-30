@@ -127,7 +127,7 @@ class _VentasConversacionesPageState extends State<VentasConversacionesPage> {
                 : ListView(
                     padding: const EdgeInsets.all(SiSpace.x5),
                     children: [
-                      Wrap(spacing: SiSpace.x3, runSpacing: SiSpace.x3, children: [
+                      FilaCifras(cifras: [
                         CifraVentas(
                             etiqueta: 'Conversaciones',
                             valor: _conversaciones.length,

@@ -385,15 +385,26 @@ class _FormDesarrolloState extends State<_FormDesarrollo> {
 }
 
 Widget _tituloSeccion(SiColors c, String texto, IconData icono, {List<Widget> acciones = const []}) {
-  return Row(children: [
+  final titulo = Row(children: [
     Icon(icono, size: 14, color: c.ink3),
     const SizedBox(width: SiSpace.x2),
     Expanded(
       child: Text(texto,
           style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: c.ink3, letterSpacing: .6)),
     ),
-    ...acciones,
   ]);
+  if (acciones.isEmpty) return titulo;
+  return LayoutBuilder(builder: (context, caja) {
+    if (caja.maxWidth >= 600) {
+      return Row(children: [Expanded(child: titulo), ...acciones]);
+    }
+    // En un telefono las acciones dejaban al titulo sin ancho y se partia letra por letra: van
+    // en el renglon de abajo.
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      titulo,
+      Wrap(crossAxisAlignment: WrapCrossAlignment.center, children: acciones),
+    ]);
+  });
 }
 
 // ── Brochures ────────────────────────────────────────────────────────────────

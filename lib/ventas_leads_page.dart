@@ -156,7 +156,7 @@ class _VentasLeadsPageState extends State<VentasLeadsPage> {
                 : ListView(
                     padding: const EdgeInsets.all(SiSpace.x5),
                     children: [
-                      Wrap(spacing: SiSpace.x3, runSpacing: SiSpace.x3, children: [
+                      FilaCifras(cifras: [
                         CifraVentas(
                             etiqueta: 'Leads totales',
                             valor: _leads.length,
@@ -177,7 +177,15 @@ class _VentasLeadsPageState extends State<VentasLeadsPage> {
                                   style: TextStyle(color: c.ink3))),
                         )
                       else
-                        _tabla(c, vistos, rep),
+                        LayoutBuilder(
+                          builder: (context, caja) => caja.maxWidth >= 720
+                              ? _tabla(c, vistos, rep)
+                              // En un telefono la tabla de diez columnas obligaba a deslizar de
+                              // lado para leer a quien era: ahi cada lead es una tarjeta.
+                              : Column(children: [
+                                  for (final l in vistos) _tarjeta(c, l, rep),
+                                ]),
+                        ),
                     ],
                   ),
           ),
@@ -262,6 +270,83 @@ class _VentasLeadsPageState extends State<VentasLeadsPage> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _tarjeta(SiColors c, Map<String, dynamic> l,
+      ({Map<String, int> emails, Map<String, int> telefonos}) rep) {
+    final nEmail = rep.emails['${l['email']}'.trim().toLowerCase()] ?? 0;
+    final nTel = rep.telefonos['${l['telefono']}'.replaceAll(RegExp(r'\D'), '')] ?? 0;
+    final desarrollo = _desarrolloDe(l);
+    final resumen = '${l['resumen'] ?? ''}'.trim();
+    final presupuesto = '${l['presupuesto'] ?? ''}'.trim();
+
+    Widget dato(IconData icono, Widget valor, int repetido) => Padding(
+          padding: const EdgeInsets.only(top: SiSpace.x1),
+          child: Row(children: [
+            Icon(icono, size: 14, color: c.ink4),
+            const SizedBox(width: SiSpace.x2),
+            Flexible(child: valor),
+            if (repetido > 1) ...[
+              const SizedBox(width: 6),
+              etiquetaVentas(c, '×$repetido', c.warn),
+            ],
+          ]),
+        );
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: SiSpace.x3),
+      padding: const EdgeInsets.all(SiSpace.x4),
+      decoration: BoxDecoration(
+        color: c.panel,
+        borderRadius: SiRadius.rLg,
+        border: Border.all(color: c.line),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(
+            child: Text('${l['nombre']}',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: c.ink)),
+          ),
+          Text(fechaCorta(l['created_at']), style: SiType.mono(size: 11, color: c.ink3)),
+        ]),
+        const SizedBox(height: SiSpace.x2),
+        Wrap(spacing: SiSpace.x2, runSpacing: SiSpace.x1, children: [
+          _etiquetaTipo(c, '${l['tipo'] ?? 'CLIENTE'}'),
+          if (desarrollo.isNotEmpty) etiquetaVentas(c, desarrollo, c.brand),
+        ]),
+        const SizedBox(height: SiSpace.x2),
+        dato(Icons.mail_outline, SelectableText('${l['email']}', style: const TextStyle(fontSize: 12.5)),
+            nEmail),
+        dato(Icons.phone_outlined,
+            SelectableText('${l['telefono']}', style: SiType.mono(size: 12.5)), nTel),
+        if (presupuesto.isNotEmpty)
+          dato(Icons.payments_outlined, Text(presupuesto, style: const TextStyle(fontSize: 12.5)), 0),
+        if (resumen.isNotEmpty) ...[
+          const SizedBox(height: SiSpace.x2),
+          Text(resumen,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12.5, color: c.ink2)),
+        ],
+        const SizedBox(height: SiSpace.x2),
+        Row(children: [
+          _celdaAsesor(c, l),
+          const Spacer(),
+          TextButton(
+            onPressed: () => abrirUrl(urlCotizacion('${l['folio']}')),
+            child: const Text('Ver PDF'),
+          ),
+          IconButton(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: urlCotizacion('${l['folio']}')));
+              avisoVentas(context, 'Enlace copiado.');
+            },
+            icon: const Icon(Icons.copy, size: 15),
+            tooltip: 'Copiar enlace',
+          ),
+        ]),
+      ]),
     );
   }
 

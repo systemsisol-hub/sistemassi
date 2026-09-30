@@ -381,14 +381,17 @@ class _VentasConfigPageState extends State<VentasConfigPage> {
         const SizedBox(height: SiSpace.x4),
         for (final k in presentes) _campo(c, k),
         if (_puedeEditar)
-          Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-            TextButton(onPressed: () => _restaurar(titulo, presentes), child: const Text('Restaurar predeterminados')),
-            const SizedBox(width: SiSpace.x2),
-            FilledButton(
-              onPressed: _guardandoGrupo == titulo ? null : () => _guardar(titulo, presentes),
-              child: const Text('Guardar cambios'),
-            ),
-          ]),
+          // Wrap: en un telefono los dos botones no caben juntos y «Guardar cambios» se salia.
+          SizedBox(
+            width: double.infinity,
+            child: Wrap(alignment: WrapAlignment.end, spacing: SiSpace.x2, runSpacing: SiSpace.x2, children: [
+              TextButton(onPressed: () => _restaurar(titulo, presentes), child: const Text('Restaurar predeterminados')),
+              FilledButton(
+                onPressed: _guardandoGrupo == titulo ? null : () => _guardar(titulo, presentes),
+                child: const Text('Guardar cambios'),
+              ),
+            ]),
+          ),
       ]),
     );
   }
