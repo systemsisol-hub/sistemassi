@@ -444,6 +444,9 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
   /// las cosas que peor se entienden. Lo que llegue por PEGAR con otros formatos, el servidor lo manda
   /// como texto normal.
   Widget _editorConBarra(SiColors c) {
+    // En un telefono los iconos de flutter_quill (15 x 1.6 = 24) con su boton de 48 llenaban
+    // cuatro renglones: ahi van mas chicos y juntos.
+    final compacta = MediaQuery.of(context).size.width < 600;
     return Container(
       decoration: BoxDecoration(
         border: Border.all(color: c.line),
@@ -452,10 +455,26 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          QuillSimpleToolbar(
+          Theme(
+            data: compacta
+                ? Theme.of(context).copyWith(
+                    iconButtonTheme: IconButtonThemeData(
+                      style: IconButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        padding: const EdgeInsets.all(6),
+                        minimumSize: const Size(34, 34),
+                      ),
+                    ),
+                  )
+                : Theme.of(context),
+            child: QuillSimpleToolbar(
             controller: _editor,
             config: QuillSimpleToolbarConfig(
               multiRowsDisplay: true,
+              // Los separadores miden 42 de alto y fijan la altura de cada renglon: en el
+              // telefono se quitan para que la barra no ocupe media pantalla.
+              showDividers: !compacta,
               showFontFamily: false,
               showFontSize: false,
               showSmallButton: false,
@@ -479,18 +498,22 @@ class _CorrespondenciaPageState extends State<CorrespondenciaPage> {
                   icon: _subiendoImagen
                       ? const SizedBox(
                           width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.image_outlined),
+                      : Icon(Icons.image_outlined, size: compacta ? 18 : null),
                   tooltip: 'Insertar imagen',
                   onPressed: _subiendoImagen ? null : _insertarImagen,
                 ),
               ],
               buttonOptions: QuillSimpleToolbarButtonOptions(
+                base: compacta
+                    ? const QuillToolbarBaseButtonOptions(iconSize: 13, iconButtonFactor: 1.4)
+                    : const QuillToolbarBaseButtonOptions(),
                 // Títulos 1 a 3 y normal: los que convierte la función. Del 4 al 6 no existen allí.
                 selectHeaderStyleDropdownButton: QuillToolbarSelectHeaderStyleDropdownButtonOptions(
                   attributes: [Attribute.h1, Attribute.h2, Attribute.h3, Attribute.header],
                 ),
               ),
             ),
+          ),
           ),
           Divider(height: 1, color: c.line),
           SizedBox(
