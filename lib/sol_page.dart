@@ -1034,45 +1034,71 @@ class _PanelDesarrollosState extends State<_PanelDesarrollos> {
   }
 
   Widget _cabecera(SiColors c) {
+    final buscador = TextField(
+      decoration: InputDecoration(
+        isDense: true,
+        hintText: 'Buscar por nombre, ubicación o etapa…',
+        prefixIcon: const Icon(Icons.search, size: 18),
+        border: OutlineInputBorder(borderRadius: SiRadius.rMd),
+      ),
+      onChanged: (v) => setState(() => _busqueda = v),
+    );
+    final botones = [
+      // El mapa de campos abarca a TODOS los desarrollos, asi que vive en la cabecera y no
+      // dentro del detalle de uno.
+      OutlinedButton.icon(
+        onPressed: _verCampos,
+        icon: const Icon(Icons.table_chart_outlined, size: 15),
+        label: const Text('Campos'),
+      ),
+      if (widget.puedeEditar)
+        ElevatedButton.icon(
+          onPressed: () => _formDesarrollo(),
+          icon: const Icon(Icons.add, size: 16),
+          label: const Text('Nuevo desarrollo'),
+        ),
+    ];
+
     return Container(
       padding: const EdgeInsets.all(SiSpace.x5),
       decoration: BoxDecoration(
         color: c.panel,
         border: Border(bottom: BorderSide(color: c.line)),
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 340),
-              child: TextField(
-                decoration: InputDecoration(
-                  isDense: true,
-                  hintText: 'Buscar por nombre, ubicación o etapa…',
-                  prefixIcon: const Icon(Icons.search, size: 18),
-                  border: OutlineInputBorder(borderRadius: SiRadius.rMd),
+      child: LayoutBuilder(builder: (context, caja) {
+        if (caja.maxWidth >= 600) {
+          return Row(
+            children: [
+              Expanded(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 340),
+                  child: buscador,
                 ),
-                onChanged: (v) => setState(() => _busqueda = v),
               ),
+              for (final b in botones) ...[
+                const SizedBox(width: SiSpace.x3),
+                b,
+              ],
+            ],
+          );
+        }
+        // En un telefono los dos botones dejaban al buscador en «B…»: va arriba, a todo lo
+        // ancho, y los botones abajo.
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            buscador,
+            const SizedBox(height: SiSpace.x3),
+            Wrap(
+              alignment: WrapAlignment.end,
+              spacing: SiSpace.x3,
+              runSpacing: SiSpace.x2,
+              children: botones,
             ),
-          ),
-          const SizedBox(width: SiSpace.x3),
-          // El mapa de campos abarca a TODOS los desarrollos, asi que vive en la cabecera y no
-          // dentro del detalle de uno.
-          OutlinedButton.icon(
-            onPressed: _verCampos,
-            icon: const Icon(Icons.table_chart_outlined, size: 15),
-            label: const Text('Campos'),
-          ),
-          const SizedBox(width: SiSpace.x3),
-          if (widget.puedeEditar)
-            ElevatedButton.icon(
-              onPressed: () => _formDesarrollo(),
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('Nuevo desarrollo'),
-            ),
-        ],
-      ),
+          ],
+        );
+      }),
     );
   }
 
