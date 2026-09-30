@@ -111,27 +111,58 @@ class BarraVentas extends StatelessWidget {
         color: c.panel,
         border: Border(bottom: BorderSide(color: c.line)),
       ),
-      child: Wrap(
-        spacing: SiSpace.x3,
-        runSpacing: SiSpace.x2,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          SizedBox(
-            width: 320,
-            child: TextField(
-              onChanged: onBuscar,
-              decoration: InputDecoration(
-                isDense: true,
-                prefixIcon: const Icon(Icons.search, size: 18),
-                hintText: pista,
-                border: const OutlineInputBorder(borderRadius: SiRadius.rMd),
+      child: LayoutBuilder(builder: (context, caja) {
+        // En un telefono la busqueda ocupa todo el ancho y las acciones van debajo.
+        final angosto = caja.maxWidth < 600;
+        return Wrap(
+          spacing: SiSpace.x3,
+          runSpacing: SiSpace.x2,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            SizedBox(
+              width: angosto ? caja.maxWidth : 320,
+              child: TextField(
+                onChanged: onBuscar,
+                decoration: InputDecoration(
+                  isDense: true,
+                  prefixIcon: const Icon(Icons.search, size: 18),
+                  hintText: pista,
+                  border: const OutlineInputBorder(borderRadius: SiRadius.rMd),
+                ),
               ),
             ),
-          ),
-          ...acciones,
-        ],
-      ),
+            ...acciones,
+          ],
+        );
+      }),
     );
+  }
+}
+
+/// Las cifras de arriba de una pagina. En pantalla ancha, tarjetas de 190 en fila; en un telefono,
+/// las tres en un renglon a partes iguales (a 190 cabia una sola y quedaban apiladas a medio ancho).
+class FilaCifras extends StatelessWidget {
+  final List<CifraVentas> cifras;
+  const FilaCifras({super.key, required this.cifras});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, caja) {
+      if (caja.maxWidth >= 600) {
+        return Wrap(spacing: SiSpace.x3, runSpacing: SiSpace.x3, children: cifras);
+      }
+      return IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var i = 0; i < cifras.length; i++) ...[
+              if (i > 0) const SizedBox(width: SiSpace.x2),
+              Expanded(child: cifras[i].compacta()),
+            ],
+          ],
+        ),
+      );
+    });
   }
 }
 
@@ -141,6 +172,7 @@ class CifraVentas extends StatelessWidget {
   final int valor;
   final IconData icono;
   final Color? color;
+  final bool _compacta;
 
   const CifraVentas({
     super.key,
@@ -148,12 +180,38 @@ class CifraVentas extends StatelessWidget {
     required this.valor,
     required this.icono,
     this.color,
-  });
+  }) : _compacta = false;
+
+  const CifraVentas._compacta(this.etiqueta, this.valor, this.icono, this.color)
+      : _compacta = true;
+
+  /// La misma cifra, en columna y sin ancho fijo, para repartir el renglon de un telefono.
+  CifraVentas compacta() => CifraVentas._compacta(etiqueta, valor, icono, color);
 
   @override
   Widget build(BuildContext context) {
     final c = SiColors.of(context);
     final tono = color ?? c.brand;
+    if (_compacta) {
+      return Container(
+        padding: const EdgeInsets.all(SiSpace.x3),
+        decoration: BoxDecoration(
+          color: c.panel,
+          borderRadius: SiRadius.rLg,
+          border: Border.all(color: c.line),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icono, size: 18, color: tono),
+            const SizedBox(height: SiSpace.x2),
+            Text('$valor',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: c.ink)),
+            Text(etiqueta, style: TextStyle(fontSize: 11, color: c.ink3)),
+          ],
+        ),
+      );
+    }
     return Container(
       width: 190,
       padding: const EdgeInsets.all(SiSpace.x4),
