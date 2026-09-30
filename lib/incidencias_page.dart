@@ -1127,13 +1127,22 @@ class _IncidenciasPageState extends State<_VistaIncidencias>
     final c = SiColors.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: Text(
-        text,
-        textAlign: align,
-        style: TextStyle(
-          color: color ?? c.ink,
-          fontWeight: weight,
-          fontSize: 12,
+      // En un telefono la columna queda angosta y «Solicitados» se partia en «Solicitado / s»:
+      // se encoge el texto en vez de partirlo.
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: align == TextAlign.left
+            ? Alignment.centerLeft
+            : Alignment.center,
+        child: Text(
+          text,
+          textAlign: align,
+          maxLines: 1,
+          style: TextStyle(
+            color: color ?? c.ink,
+            fontWeight: weight,
+            fontSize: 12,
+          ),
         ),
       ),
     );

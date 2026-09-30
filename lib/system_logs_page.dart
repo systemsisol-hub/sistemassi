@@ -352,7 +352,9 @@ class _SystemLogsPageState extends State<SystemLogsPage> {
         ),
         const SizedBox(height: 20),
         SizedBox(
-          height: 120,
+          // 120 no alcanzaba para la barra mas alta (84) mas sus dos textos y separaciones:
+          // en iPhone se desbordaba 6 px y tapaba el nombre del dia.
+          height: 132,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: _dailyLogins.entries.map((entry) {

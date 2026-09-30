@@ -369,10 +369,12 @@ class _BiPageState extends State<BiPage> {
       ),
       padding: const EdgeInsets.symmetric(
           horizontal: SiSpace.x6, vertical: SiSpace.x3),
-      child: Row(
-        children: [
-          Container(
-            width: 260,
+      child: LayoutBuilder(builder: (context, caja) {
+      // En un telefono el buscador de 260 y los dos botones con texto no caben:
+      // el buscador ocupa lo que sobra y los botones quedan solo con icono.
+      final compacto = caja.maxWidth < 600;
+      final buscador = Container(
+            width: compacto ? null : 260,
             height: 36,
             decoration: BoxDecoration(
               color: c.bg,
@@ -403,9 +405,30 @@ class _BiPageState extends State<BiPage> {
               ),
               onChanged: (v) => setState(() => _searchQuery = v),
             ),
-          ),
-          const Spacer(),
-          if (_isAdmin) ...[
+          );
+      return Row(
+        children: [
+          if (compacto) Expanded(child: buscador) else buscador,
+          if (!compacto) const Spacer(),
+          if (_isAdmin && compacto) ...[
+            IconButton(
+              onPressed: _showPapelera,
+              icon: Icon(Icons.delete_outline, size: 20, color: c.ink3),
+              tooltip: 'Papelera',
+            ),
+            IconButton(
+              onPressed: _showGruposManager,
+              icon: Icon(Icons.folder_outlined, size: 20, color: c.brand),
+              tooltip: 'Grupos',
+            ),
+            IconButton.filled(
+              onPressed: () => _showLinkForm(),
+              icon: const Icon(Icons.add, size: 18),
+              tooltip: 'Nuevo',
+              style: IconButton.styleFrom(backgroundColor: c.brand),
+            ),
+          ],
+          if (_isAdmin && !compacto) ...[
             IconButton(
               onPressed: _showPapelera,
               icon: Icon(Icons.delete_outline, size: 20, color: c.ink3),
@@ -445,7 +468,8 @@ class _BiPageState extends State<BiPage> {
             ),
           ],
         ],
-      ),
+      );
+      }),
     );
   }
 

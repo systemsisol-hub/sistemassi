@@ -206,18 +206,51 @@ class _WhatsappPageState extends State<WhatsappPage> {
         color: c.panel,
         border: Border(bottom: BorderSide(color: c.line)),
       ),
-      child: Row(
-        children: [
+      child: LayoutBuilder(builder: (context, caja) {
+        final titulo = [
           Icon(Icons.chat, size: 18, color: c.brand),
           const SizedBox(width: SiSpace.x2),
           Text('WhatsApp',
               style: TextStyle(
                   fontSize: 15, fontWeight: FontWeight.w700, color: c.ink)),
-          const SizedBox(width: SiSpace.x5),
+        ];
+        final pestanas = [
           _chip(c, 0, 'Autorizados', activos),
           const SizedBox(width: SiSpace.x2),
           _chip(c, 1, 'Bitácora', _bitacora.length),
-          const Spacer(),
+        ];
+        final botones = _botonesBarra();
+        if (caja.maxWidth >= 720) {
+          return Row(children: [
+            ...titulo,
+            const SizedBox(width: SiSpace.x5),
+            ...pestanas,
+            const Spacer(),
+            ...botones,
+          ]);
+        }
+        // En un telefono no cabe todo en una linea: titulo y pestanas arriba, botones abajo.
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(children: titulo),
+            const SizedBox(height: SiSpace.x3),
+            Row(children: pestanas),
+            const SizedBox(height: SiSpace.x3),
+            Wrap(
+              spacing: SiSpace.x2,
+              runSpacing: SiSpace.x2,
+              children: botones.where((w) => w is! SizedBox).toList(),
+            ),
+          ],
+        );
+      }),
+    );
+  }
+
+  List<Widget> _botonesBarra() {
+    return [
           // Activar la firma del webhook.
           //
           // Comprobado en los registros: al webhook le falta el campo `secret`, así que OpenWA no
@@ -249,9 +282,7 @@ class _WhatsappPageState extends State<WhatsappPage> {
               icon: const Icon(Icons.refresh, size: 16),
               label: const Text('Actualizar'),
             ),
-        ],
-      ),
-    );
+    ];
   }
 
   Widget _chip(SiColors c, int valor, String etiqueta, int n) {
@@ -325,20 +356,23 @@ class _WhatsappPageState extends State<WhatsappPage> {
           borderRadius: SiRadius.rMd,
           border: Border.all(color: c.line),
         ),
-        child: Row(
+        child: LayoutBuilder(builder: (context, caja) {
+        // En un telefono la columna fija del numero dejaba al nombre sin ancho y lo partia
+        // letra por letra: ahi el numero va bajo el nombre.
+        final angosto = caja.maxWidth < 480;
+        final telefono = Text(TelefonoWhatsApp.bonito(a['telefono'].toString()),
+            style: SiType.mono(size: 12.5, color: c.ink));
+        return Row(
           children: [
             Icon(activo ? Icons.check_circle : Icons.pause_circle_outline,
                 size: 20, color: activo ? c.success : c.ink4),
             const SizedBox(width: SiSpace.x3),
-            SizedBox(
-              width: 120,
-              child: Text(TelefonoWhatsApp.bonito(a['telefono'].toString()),
-                  style: SiType.mono(size: 12.5, color: c.ink)),
-            ),
+            if (!angosto) SizedBox(width: 120, child: telefono),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (angosto) telefono,
                   Text(nombre ?? 'Sin colaborador asociado',
                       style: TextStyle(
                           fontSize: 13,
@@ -372,7 +406,8 @@ class _WhatsappPageState extends State<WhatsappPage> {
               tooltip: 'Quitar',
             ),
           ],
-        ),
+        );
+        }),
       ),
     );
   }

@@ -220,6 +220,35 @@ class _AvisosPageState extends State<AvisosPage> {
   }
 
   Widget _barra(SiColors c) {
+    final filtros = SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(children: [
+        for (final (valor, etiqueta) in const [
+          ('todos', 'Todos'),
+          ('vigentes', 'Vigentes'),
+          ('programados', 'Programados'),
+          ('vencidos', 'Vencidos'),
+          ('apagados', 'Apagados'),
+        ])
+          Padding(
+            padding: const EdgeInsets.only(right: SiSpace.x2),
+            child: _chip(c, valor, etiqueta, _conFiltro(valor).length),
+          ),
+      ]),
+    );
+    final titulo = [
+      Icon(Icons.campaign_outlined, size: 18, color: c.brand),
+      const SizedBox(width: SiSpace.x2),
+      Text('Avisos',
+          style: TextStyle(
+              fontSize: 15, fontWeight: FontWeight.w700, color: c.ink)),
+    ];
+    final nuevo = FilledButton.icon(
+      onPressed: () => _abrirFormulario(),
+      icon: const Icon(Icons.add, size: 18),
+      label: const Text('Nuevo aviso'),
+    );
+
     return Container(
       padding: const EdgeInsets.fromLTRB(
           SiSpace.x5, SiSpace.x3, SiSpace.x5, SiSpace.x3),
@@ -227,40 +256,28 @@ class _AvisosPageState extends State<AvisosPage> {
         color: c.panel,
         border: Border(bottom: BorderSide(color: c.line)),
       ),
-      child: Row(
-        children: [
-          Icon(Icons.campaign_outlined, size: 18, color: c.brand),
-          const SizedBox(width: SiSpace.x2),
-          Text('Avisos',
-              style: TextStyle(
-                  fontSize: 15, fontWeight: FontWeight.w700, color: c.ink)),
-          const SizedBox(width: SiSpace.x5),
-          Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(children: [
-                for (final (valor, etiqueta) in const [
-                  ('todos', 'Todos'),
-                  ('vigentes', 'Vigentes'),
-                  ('programados', 'Programados'),
-                  ('vencidos', 'Vencidos'),
-                  ('apagados', 'Apagados'),
-                ])
-                  Padding(
-                    padding: const EdgeInsets.only(right: SiSpace.x2),
-                    child: _chip(c, valor, etiqueta, _conFiltro(valor).length),
-                  ),
-              ]),
-            ),
-          ),
-          const SizedBox(width: SiSpace.x3),
-          FilledButton.icon(
-            onPressed: () => _abrirFormulario(),
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('Nuevo aviso'),
-          ),
-        ],
-      ),
+      child: LayoutBuilder(builder: (context, caja) {
+        if (caja.maxWidth >= 600) {
+          return Row(children: [
+            ...titulo,
+            const SizedBox(width: SiSpace.x5),
+            Expanded(child: filtros),
+            const SizedBox(width: SiSpace.x3),
+            nuevo,
+          ]);
+        }
+        // En un telefono los filtros no caben junto al titulo y el boton: van abajo,
+        // a todo lo ancho.
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(children: [...titulo, const Spacer(), nuevo]),
+            const SizedBox(height: SiSpace.x3),
+            filtros,
+          ],
+        );
+      }),
     );
   }
 
@@ -403,26 +420,34 @@ class _AvisosPageState extends State<AvisosPage> {
                   const SizedBox(height: SiSpace.x3),
                   Row(
                     children: [
-                      TextButton.icon(
-                        onPressed: () => _vistaPrevia(aviso),
-                        icon: const Icon(Icons.visibility_outlined, size: 16),
-                        label: const Text('Vista previa'),
+                      // Wrap: en un telefono los tres botones no caben en una linea y
+                      // empujaban el de borrar fuera de la tarjeta.
+                      Expanded(
+                        child: Wrap(
+                          children: [
+                            TextButton.icon(
+                              onPressed: () => _vistaPrevia(aviso),
+                              icon: const Icon(Icons.visibility_outlined,
+                                  size: 16),
+                              label: const Text('Vista previa'),
+                            ),
+                            TextButton.icon(
+                              onPressed: () => _abrirFormulario(a),
+                              icon: const Icon(Icons.edit_outlined, size: 16),
+                              label: const Text('Editar'),
+                            ),
+                            TextButton.icon(
+                              onPressed: () => _alternarActivo(a),
+                              icon: Icon(
+                                  apagado
+                                      ? Icons.play_arrow_outlined
+                                      : Icons.pause_outlined,
+                                  size: 16),
+                              label: Text(apagado ? 'Prender' : 'Apagar'),
+                            ),
+                          ],
+                        ),
                       ),
-                      TextButton.icon(
-                        onPressed: () => _abrirFormulario(a),
-                        icon: const Icon(Icons.edit_outlined, size: 16),
-                        label: const Text('Editar'),
-                      ),
-                      TextButton.icon(
-                        onPressed: () => _alternarActivo(a),
-                        icon: Icon(
-                            apagado
-                                ? Icons.play_arrow_outlined
-                                : Icons.pause_outlined,
-                            size: 16),
-                        label: Text(apagado ? 'Prender' : 'Apagar'),
-                      ),
-                      const Spacer(),
                       IconButton(
                         onPressed: () => _borrar(a),
                         icon: const Icon(Icons.delete_outline, size: 18),

@@ -662,12 +662,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
           children: [
             busqueda,
             const SizedBox(height: SiSpace.x3),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: piezas.skip(2).toList(),
-              ),
+            // Wrap y no scroll horizontal: en un telefono «Rol» y «+ Usuario» quedaban
+            // cortados en el borde sin que se notara que habia mas.
+            Wrap(
+              spacing: SiSpace.x3,
+              runSpacing: SiSpace.x3,
+              crossAxisAlignment: WrapCrossAlignment.end,
+              children: piezas.skip(2).where((w) => w is! SizedBox).toList(),
             ),
           ],
         );
@@ -1112,7 +1113,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 Row(children: [
                   _RoleBadge(role: role, c: c),
                   const SizedBox(width: SiSpace.x2),
-                  _PermIcons(permissions: u['permissions'], c: c),
+                  // Expanded para que el Wrap de los permisos tenga ancho y baje de renglon.
+                  Expanded(
+                    child: _PermIcons(permissions: u['permissions'], c: c),
+                  ),
                 ]),
               ],
             ),
@@ -1408,6 +1412,7 @@ class _PermIcons extends StatelessWidget {
     ];
     return Wrap(
       spacing: 3,
+      runSpacing: 3,
       children: icons
           .map((pi) => Icon(pi.icon,
               size: 13,

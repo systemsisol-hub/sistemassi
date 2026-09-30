@@ -158,11 +158,8 @@ class _DirectorioPageState extends State<DirectorioPage> {
         color: c.panel,
         border: Border(bottom: BorderSide(color: c.line)),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Expanded(
-            child: TextField(
+      child: LayoutBuilder(builder: (context, caja) {
+        final buscador = TextField(
               controller: _buscarCtrl,
               onChanged: (v) => setState(() => _busqueda = v),
               style: const TextStyle(fontSize: 13.5),
@@ -189,11 +186,9 @@ class _DirectorioPageState extends State<DirectorioPage> {
                 contentPadding: relleno,
                 border: OutlineInputBorder(borderRadius: SiRadius.rMd),
               ),
-            ),
-          ),
-          const SizedBox(width: SiSpace.x3),
-          SizedBox(
-            width: 230,
+            );
+        final ubicacion = SizedBox(
+            width: caja.maxWidth >= 600 ? 230 : null,
             child: DropdownButtonFormField<String>(
               value: _ubicacion,
               isExpanded: true,
@@ -225,17 +220,41 @@ class _DirectorioPageState extends State<DirectorioPage> {
               onChanged: (v) =>
                   setState(() => _ubicacion = v ?? 'todas'),
             ),
-          ),
-          const SizedBox(width: SiSpace.x3),
-          Text(
+          );
+        final conteo = Text(
             visibles == total ? '$total' : '$visibles de $total',
             style: TextStyle(
                 fontSize: 12,
                 color: c.ink3,
                 fontFeatures: const [FontFeature.tabularFigures()]),
-          ),
-        ],
-      ),
+          );
+        if (caja.maxWidth >= 600) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(child: buscador),
+              const SizedBox(width: SiSpace.x3),
+              ubicacion,
+              const SizedBox(width: SiSpace.x3),
+              conteo,
+            ],
+          );
+        }
+        // En un telefono la ubicacion de ancho fijo dejaba al buscador en «Bu…»: baja al
+        // segundo renglon junto al conteo.
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            buscador,
+            const SizedBox(height: SiSpace.x2),
+            Row(children: [
+              Expanded(child: ubicacion),
+              const SizedBox(width: SiSpace.x3),
+              conteo,
+            ]),
+          ],
+        );
+      }),
     );
   }
 
