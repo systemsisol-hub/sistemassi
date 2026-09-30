@@ -1582,6 +1582,9 @@ class _IncidenciasPageState extends State<_VistaIncidencias>
                   )
                 else
                   DropdownButtonFormField<String>(
+                    // Sin esto cada opcion (un Row con Expanded) recibe ancho infinito y la hoja
+                    // entera no se dibuja: quedaba solo el fondo oscuro.
+                    isExpanded: true,
                     value: periodController.text.isEmpty
                         ? null
                         : periodController.text,
@@ -2666,6 +2669,22 @@ class _IncidenciasPageState extends State<_VistaIncidencias>
                       } else {
                         return Column(
                           children: [
+                            // En el telefono no hay tabla, y el boton de nueva solicitud (y en RH
+                            // el selector de colaborador) vivian en su encabezado: no se veian.
+                            Row(
+                              children: [
+                                if (_vistaRH && _adminUserList.isNotEmpty)
+                                  Expanded(child: _buildTableUserSelector(c))
+                                else
+                                  const Spacer(),
+                                SizedBox(width: SiSpace.x3),
+                                SizedBox(
+                                  height: 38,
+                                  child: _buildTableAddButton(c),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: SiSpace.x4),
                             _buildAntiguedadMobile(),
                             SizedBox(height: SiSpace.x4),
                             _buildIncidenciasCalendar(),
