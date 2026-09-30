@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth_errores.dart';
 import 'theme/si_theme.dart';
+import 'widgets/hoja_formulario.dart';
 import 'widgets/soporte_chat.dart';
 
 // Navy constants used only by the light visual panel
@@ -77,7 +78,7 @@ class _LoginPageState extends State<LoginPage>
   }
 
   void _showForgotPasswordDialog(SiColors c) {
-    showDialog(
+    mostrarHojaFormulario(
       context: context,
       builder: (_) => _ForgotPasswordDialog(
         c: c,
@@ -938,18 +939,14 @@ class _ForgotPasswordDialogState extends State<_ForgotPasswordDialog> {
   @override
   Widget build(BuildContext context) {
     final c = widget.c;
-    return Dialog(
-      backgroundColor: c.panel,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 380),
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 300),
-            child: _sent ? _buildSuccess(c) : _buildForm(c),
-          ),
-        ),
+    return HojaFormulario(
+      titulo: 'Recuperar contraseña',
+      textoGuardar: 'Enviar',
+      guardando: _loading,
+      onGuardar: _sent || _loading ? null : _send,
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 300),
+        child: _sent ? _buildSuccess(c) : _buildForm(c),
       ),
     );
   }
@@ -960,28 +957,6 @@ class _ForgotPasswordDialogState extends State<_ForgotPasswordDialog> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Icon header
-        Row(children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: c.brandTint,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(Icons.lock_reset_outlined, size: 22, color: c.brand),
-          ),
-          const Spacer(),
-          GestureDetector(
-            onTap: () => Navigator.pop(context),
-            child: Icon(Icons.close, size: 18, color: c.ink4),
-          ),
-        ]),
-        const SizedBox(height: 16),
-        Text('Recuperar contraseña',
-            style: SiType.sans(
-                size: 18, weight: FontWeight.w700,
-                color: c.ink, letterSpacing: -0.4)),
-        const SizedBox(height: 6),
         Text(
           'Ingresa tu correo y te enviaremos un enlace para restablecer tu contraseña.',
           style: SiType.sans(size: 13, color: c.ink3, height: 1.55),
@@ -1049,38 +1024,6 @@ class _ForgotPasswordDialogState extends State<_ForgotPasswordDialog> {
             ),
             const SizedBox(width: 8),
           ]),
-        ),
-        const SizedBox(height: 22),
-
-        // Send button
-        SizedBox(
-          width: double.infinity,
-          height: 42,
-          child: ElevatedButton(
-            onPressed: _loading ? null : _send,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: c.brand,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: SiRadius.rMd),
-              elevation: 0,
-            ),
-            child: _loading
-                ? const SizedBox(width: 18, height: 18,
-                    child: CircularProgressIndicator(
-                        color: Colors.white, strokeWidth: 2))
-                : Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Enviar enlace',
-                          style: SiType.sans(
-                              size: 14,
-                              weight: FontWeight.w600,
-                              color: Colors.white)),
-                      const Icon(Icons.send_rounded,
-                          size: 16, color: Colors.white),
-                    ],
-                  ),
-          ),
         ),
       ],
     );

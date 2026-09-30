@@ -6,6 +6,7 @@ import 'theme/si_theme.dart';
 import 'campos_globales.dart';
 import 'sol_drive_panel.dart';
 import 'unidades_panel.dart';
+import 'widgets/hoja_formulario.dart';
 import 'widgets/texto_con_enlaces.dart';
 
 /// SOL: el asistente comercial.
@@ -1360,182 +1361,173 @@ class _PanelDesarrollosState extends State<_PanelDesarrollos> {
     final notas = TextEditingController(text: desarrollo?['notas']?.toString());
     String? etapa = desarrollo?['etapa']?.toString();
     bool activo = desarrollo?['is_active'] != false;
+    // Lo que falta se dice dentro de la hoja: un SnackBar de la pagina quedaria tapado por ella.
+    String? falta;
 
-    await showDialog<void>(
+    await mostrarHojaFormulario<void>(
       context: context,
       builder: (ctx) {
         final c = SiColors.of(ctx);
         return StatefulBuilder(builder: (ctx, setD) {
-          return AlertDialog(
-            backgroundColor: c.panel,
-            title: Text(editando ? 'Editar desarrollo' : 'Nuevo desarrollo',
-                style: const TextStyle(fontSize: 17)),
-            content: SizedBox(
-              width: 560,
-              child: SingleChildScrollView(
-                child: Column(
-                  children: [
-                    TextField(
-                        controller: nombre,
-                        decoration: const InputDecoration(
-                            labelText: 'Nombre *',
-                            helperText: 'Como lo van a nombrar los asesores al preguntar')),
-                    const SizedBox(height: SiSpace.x4),
-                    Row(children: [
-                      Expanded(
-                          child: TextField(
-                              controller: ubicacion,
-                              decoration: const InputDecoration(
-                                  labelText: 'Ubicación'))),
-                      const SizedBox(width: SiSpace.x3),
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          value: etapa,
-                          decoration:
-                              const InputDecoration(labelText: 'Etapa'),
-                          items: etapas
-                              .map((e) => DropdownMenuItem(
-                                  value: e, child: Text(e)))
-                              .toList(),
-                          onChanged: (v) => setD(() => etapa = v),
-                        ),
-                      ),
-                    ]),
-                    const SizedBox(height: SiSpace.x4),
-                    // El rango va en la misma línea porque la base rechaza que el «hasta» sea menor
-                    // que el «desde», y verlos juntos evita el viaje de ida y vuelta.
-                    Row(children: [
-                      Expanded(
-                          child: TextField(
-                              controller: precioDesde,
-                              keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                  labelText: 'Precio desde',
-                                  prefixText: '\$ '))),
-                      const SizedBox(width: SiSpace.x3),
-                      Expanded(
-                          child: TextField(
-                              controller: precioHasta,
-                              keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                  labelText: 'Precio hasta',
-                                  prefixText: '\$ '))),
-                    ]),
-                    const SizedBox(height: SiSpace.x4),
-                    Row(children: [
-                      Expanded(
-                          child: TextField(
-                              controller: enganche,
-                              keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                  labelText: 'Enganche', suffixText: '%'))),
-                      const SizedBox(width: SiSpace.x3),
-                      Expanded(
-                          child: TextField(
-                              controller: mensualidades,
-                              keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                  labelText: 'Mensualidades'))),
-                    ]),
-                    const SizedBox(height: SiSpace.x4),
-                    Row(children: [
-                      Expanded(
-                          child: TextField(
-                              controller: supDesde,
-                              keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                  labelText: 'Superficie desde',
-                                  suffixText: 'm²'))),
-                      const SizedBox(width: SiSpace.x3),
-                      Expanded(
-                          child: TextField(
-                              controller: supHasta,
-                              keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                  labelText: 'Superficie hasta',
-                                  suffixText: 'm²'))),
-                    ]),
-                    const SizedBox(height: SiSpace.x4),
-                    TextField(
-                        controller: descripcion,
-                        minLines: 2,
-                        maxLines: 4,
-                        decoration:
-                            const InputDecoration(labelText: 'Descripción')),
-                    const SizedBox(height: SiSpace.x4),
-                    TextField(
-                        controller: amenidades,
-                        minLines: 1,
-                        maxLines: 3,
-                        decoration: const InputDecoration(
-                            labelText: 'Amenidades',
-                            helperText: 'Separadas por comas')),
-                    const SizedBox(height: SiSpace.x4),
-                    TextField(
-                        controller: folleto,
-                        decoration: const InputDecoration(
-                            labelText: 'Enlace al folleto',
-                            helperText:
-                                'Se pega el enlace del Drive. SOL lo manda, no lo lee')),
-                    const SizedBox(height: SiSpace.x4),
-                    TextField(
-                        controller: notas,
-                        minLines: 2,
-                        maxLines: 6,
-                        decoration: const InputDecoration(
-                            labelText: 'Notas para SOL',
-                            helperText:
-                                'Lo que no cabe en los campos y SOL debe saber igual')),
-                    const SizedBox(height: SiSpace.x4),
-                    SwitchListTile(
-                      value: activo,
-                      onChanged: (v) => setD(() => activo = v),
-                      title: const Text('Activo', style: TextStyle(fontSize: 14)),
-                      subtitle: Text(
-                          activo
-                              ? 'SOL lo puede mencionar'
-                              : 'SOL NO lo va a mencionar',
-                          style: TextStyle(fontSize: 11.5, color: c.ink3)),
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Cancelar')),
-              ElevatedButton(
-                onPressed: () async {
-                  if (nombre.text.trim().isEmpty) {
-                    _aviso('El nombre es obligatorio', error: true);
-                    return;
-                  }
-                  Navigator.pop(ctx);
-                  await _guardarDesarrollo(
-                    id: desarrollo?['id']?.toString(),
-                    datos: {
-                      'nombre': nombre.text.trim().toUpperCase(),
-                      'ubicacion': _oNulo(ubicacion.text),
-                      'etapa': etapa,
-                      'descripcion': _oNulo(descripcion.text),
-                      'precio_desde': _numero(precioDesde.text),
-                      'precio_hasta': _numero(precioHasta.text),
-                      'enganche_pct': _numero(enganche.text),
-                      'mensualidades': _entero(mensualidades.text),
-                      'superficie_desde': _numero(supDesde.text),
-                      'superficie_hasta': _numero(supHasta.text),
-                      'amenidades': _oNulo(amenidades.text),
-                      'url_folleto': _oNulo(folleto.text),
-                      'notas': _oNulo(notas.text),
-                      'is_active': activo,
-                    },
-                  );
+          return HojaFormulario(
+            titulo: editando ? 'Editar desarrollo' : 'Nuevo desarrollo',
+            pie: falta == null
+                ? null
+                : Text(falta!,
+                    style: TextStyle(fontSize: 12, color: c.danger)),
+            onGuardar: () async {
+              if (nombre.text.trim().isEmpty) {
+                setD(() => falta = 'El nombre es obligatorio');
+                return;
+              }
+              Navigator.pop(ctx);
+              await _guardarDesarrollo(
+                id: desarrollo?['id']?.toString(),
+                datos: {
+                  'nombre': nombre.text.trim().toUpperCase(),
+                  'ubicacion': _oNulo(ubicacion.text),
+                  'etapa': etapa,
+                  'descripcion': _oNulo(descripcion.text),
+                  'precio_desde': _numero(precioDesde.text),
+                  'precio_hasta': _numero(precioHasta.text),
+                  'enganche_pct': _numero(enganche.text),
+                  'mensualidades': _entero(mensualidades.text),
+                  'superficie_desde': _numero(supDesde.text),
+                  'superficie_hasta': _numero(supHasta.text),
+                  'amenidades': _oNulo(amenidades.text),
+                  'url_folleto': _oNulo(folleto.text),
+                  'notas': _oNulo(notas.text),
+                  'is_active': activo,
                 },
-                child: const Text('Guardar'),
-              ),
-            ],
+              );
+            },
+            child: Column(
+              children: [
+                TextField(
+                    controller: nombre,
+                    decoration: const InputDecoration(
+                        labelText: 'Nombre *',
+                        helperText: 'Como lo van a nombrar los asesores al preguntar')),
+                const SizedBox(height: SiSpace.x4),
+                Row(children: [
+                  Expanded(
+                      child: TextField(
+                          controller: ubicacion,
+                          decoration: const InputDecoration(
+                              labelText: 'Ubicación'))),
+                  const SizedBox(width: SiSpace.x3),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: etapa,
+                      decoration:
+                          const InputDecoration(labelText: 'Etapa'),
+                      items: etapas
+                          .map((e) => DropdownMenuItem(
+                              value: e, child: Text(e)))
+                          .toList(),
+                      onChanged: (v) => setD(() => etapa = v),
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: SiSpace.x4),
+                // El rango va en la misma línea porque la base rechaza que el «hasta» sea menor
+                // que el «desde», y verlos juntos evita el viaje de ida y vuelta.
+                Row(children: [
+                  Expanded(
+                      child: TextField(
+                          controller: precioDesde,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                              labelText: 'Precio desde',
+                              prefixText: '\$ '))),
+                  const SizedBox(width: SiSpace.x3),
+                  Expanded(
+                      child: TextField(
+                          controller: precioHasta,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                              labelText: 'Precio hasta',
+                              prefixText: '\$ '))),
+                ]),
+                const SizedBox(height: SiSpace.x4),
+                Row(children: [
+                  Expanded(
+                      child: TextField(
+                          controller: enganche,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                              labelText: 'Enganche', suffixText: '%'))),
+                  const SizedBox(width: SiSpace.x3),
+                  Expanded(
+                      child: TextField(
+                          controller: mensualidades,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                              labelText: 'Mensualidades'))),
+                ]),
+                const SizedBox(height: SiSpace.x4),
+                Row(children: [
+                  Expanded(
+                      child: TextField(
+                          controller: supDesde,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                              labelText: 'Superficie desde',
+                              suffixText: 'm²'))),
+                  const SizedBox(width: SiSpace.x3),
+                  Expanded(
+                      child: TextField(
+                          controller: supHasta,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                              labelText: 'Superficie hasta',
+                              suffixText: 'm²'))),
+                ]),
+                const SizedBox(height: SiSpace.x4),
+                TextField(
+                    controller: descripcion,
+                    minLines: 2,
+                    maxLines: 4,
+                    decoration:
+                        const InputDecoration(labelText: 'Descripción')),
+                const SizedBox(height: SiSpace.x4),
+                TextField(
+                    controller: amenidades,
+                    minLines: 1,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                        labelText: 'Amenidades',
+                        helperText: 'Separadas por comas')),
+                const SizedBox(height: SiSpace.x4),
+                TextField(
+                    controller: folleto,
+                    decoration: const InputDecoration(
+                        labelText: 'Enlace al folleto',
+                        helperText:
+                            'Se pega el enlace del Drive. SOL lo manda, no lo lee')),
+                const SizedBox(height: SiSpace.x4),
+                TextField(
+                    controller: notas,
+                    minLines: 2,
+                    maxLines: 6,
+                    decoration: const InputDecoration(
+                        labelText: 'Notas para SOL',
+                        helperText:
+                            'Lo que no cabe en los campos y SOL debe saber igual')),
+                const SizedBox(height: SiSpace.x4),
+                SwitchListTile(
+                  value: activo,
+                  onChanged: (v) => setD(() => activo = v),
+                  title: const Text('Activo', style: TextStyle(fontSize: 14)),
+                  subtitle: Text(
+                      activo
+                          ? 'SOL lo puede mencionar'
+                          : 'SOL NO lo va a mencionar',
+                      style: TextStyle(fontSize: 11.5, color: c.ink3)),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ],
+            ),
           );
         });
       },
@@ -1625,11 +1617,13 @@ class _PanelDesarrollosState extends State<_PanelDesarrollos> {
     DateTime? desde = DateTime.tryParse((promo?['vigente_desde'] ?? '').toString());
     DateTime? hasta = DateTime.tryParse((promo?['vigente_hasta'] ?? '').toString());
     bool activa = promo?['is_active'] != false;
+    // Lo que falta se dice dentro de la hoja: un SnackBar de la pagina quedaria tapado por ella.
+    String? falta;
 
     String texto(DateTime? d) =>
         d == null ? 'Elegir' : d.toIso8601String().substring(0, 10);
 
-    await showDialog<void>(
+    await mostrarHojaFormulario<void>(
       context: context,
       builder: (ctx) {
         final c = SiColors.of(ctx);
@@ -1645,102 +1639,91 @@ class _PanelDesarrollosState extends State<_PanelDesarrollos> {
             if (r != null) setD(() => esDesde ? desde = r : hasta = r);
           }
 
-          return AlertDialog(
-            backgroundColor: c.panel,
-            title: Text(editando ? 'Editar promoción' : 'Nueva promoción',
-                style: const TextStyle(fontSize: 17)),
-            content: SizedBox(
-              width: 480,
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      desarrolloId == null
-                          ? 'Aplica a TODOS los desarrollos'
-                          : 'Aplica a ${nombreDesarrollo ?? 'este desarrollo'}',
-                      style: TextStyle(fontSize: 12, color: c.ink3),
-                    ),
-                    const SizedBox(height: SiSpace.x4),
-                    TextField(
-                        controller: titulo,
-                        decoration:
-                            const InputDecoration(labelText: 'Título *')),
-                    const SizedBox(height: SiSpace.x4),
-                    TextField(
-                        controller: detalle,
-                        minLines: 2,
-                        maxLines: 5,
-                        decoration: const InputDecoration(
-                            labelText: 'Detalle',
-                            helperText: 'Condiciones, tal como se le pueden decir a un cliente')),
-                    const SizedBox(height: SiSpace.x4),
-                    // Las dos fechas son obligatorias, y no por rigor: sin fecha de fin, SOL
-                    // seguiría citando la promoción para siempre.
-                    Row(children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () => elegir(true),
-                          icon: const Icon(Icons.calendar_today, size: 14),
-                          label: Text('Desde: ${texto(desde)}',
-                              style: const TextStyle(fontSize: 12.5)),
-                        ),
-                      ),
-                      const SizedBox(width: SiSpace.x3),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () => elegir(false),
-                          icon: const Icon(Icons.calendar_today, size: 14),
-                          label: Text('Hasta: ${texto(hasta)}',
-                              style: const TextStyle(fontSize: 12.5)),
-                        ),
-                      ),
-                    ]),
-                    const SizedBox(height: SiSpace.x4),
-                    SwitchListTile(
-                      value: activa,
-                      onChanged: (v) => setD(() => activa = v),
-                      title:
-                          const Text('Activa', style: TextStyle(fontSize: 14)),
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Cancelar')),
-              ElevatedButton(
-                onPressed: () async {
-                  if (titulo.text.trim().isEmpty) {
-                    _aviso('El título es obligatorio', error: true);
-                    return;
-                  }
-                  if (desde == null || hasta == null) {
-                    _aviso('Las dos fechas de vigencia son obligatorias',
-                        error: true);
-                    return;
-                  }
-                  Navigator.pop(ctx);
-                  await _guardarPromo(
-                    id: promo?['id']?.toString(),
-                    datos: {
-                      'desarrollo_id': desarrolloId,
-                      'titulo': titulo.text.trim(),
-                      'detalle': _oNulo(detalle.text),
-                      'vigente_desde':
-                          desde!.toIso8601String().substring(0, 10),
-                      'vigente_hasta':
-                          hasta!.toIso8601String().substring(0, 10),
-                      'is_active': activa,
-                    },
-                  );
+          return HojaFormulario(
+            titulo: editando ? 'Editar promoción' : 'Nueva promoción',
+            pie: falta == null
+                ? null
+                : Text(falta!,
+                    style: TextStyle(fontSize: 12, color: c.danger)),
+            onGuardar: () async {
+              if (titulo.text.trim().isEmpty) {
+                setD(() => falta = 'El título es obligatorio');
+                return;
+              }
+              if (desde == null || hasta == null) {
+                setD(() =>
+                    falta = 'Las dos fechas de vigencia son obligatorias');
+                return;
+              }
+              Navigator.pop(ctx);
+              await _guardarPromo(
+                id: promo?['id']?.toString(),
+                datos: {
+                  'desarrollo_id': desarrolloId,
+                  'titulo': titulo.text.trim(),
+                  'detalle': _oNulo(detalle.text),
+                  'vigente_desde':
+                      desde!.toIso8601String().substring(0, 10),
+                  'vigente_hasta':
+                      hasta!.toIso8601String().substring(0, 10),
+                  'is_active': activa,
                 },
-                child: const Text('Guardar'),
-              ),
-            ],
+              );
+            },
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  desarrolloId == null
+                      ? 'Aplica a TODOS los desarrollos'
+                      : 'Aplica a ${nombreDesarrollo ?? 'este desarrollo'}',
+                  style: TextStyle(fontSize: 12, color: c.ink3),
+                ),
+                const SizedBox(height: SiSpace.x4),
+                TextField(
+                    controller: titulo,
+                    decoration:
+                        const InputDecoration(labelText: 'Título *')),
+                const SizedBox(height: SiSpace.x4),
+                TextField(
+                    controller: detalle,
+                    minLines: 2,
+                    maxLines: 5,
+                    decoration: const InputDecoration(
+                        labelText: 'Detalle',
+                        helperText: 'Condiciones, tal como se le pueden decir a un cliente')),
+                const SizedBox(height: SiSpace.x4),
+                // Las dos fechas son obligatorias, y no por rigor: sin fecha de fin, SOL
+                // seguiría citando la promoción para siempre.
+                Row(children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => elegir(true),
+                      icon: const Icon(Icons.calendar_today, size: 14),
+                      label: Text('Desde: ${texto(desde)}',
+                          style: const TextStyle(fontSize: 12.5)),
+                    ),
+                  ),
+                  const SizedBox(width: SiSpace.x3),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => elegir(false),
+                      icon: const Icon(Icons.calendar_today, size: 14),
+                      label: Text('Hasta: ${texto(hasta)}',
+                          style: const TextStyle(fontSize: 12.5)),
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: SiSpace.x4),
+                SwitchListTile(
+                  value: activa,
+                  onChanged: (v) => setD(() => activa = v),
+                  title:
+                      const Text('Activa', style: TextStyle(fontSize: 14)),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              ],
+            ),
           );
         });
       },

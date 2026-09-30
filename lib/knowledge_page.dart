@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'services/clave_almacenamiento.dart';
 import 'theme/si_theme.dart';
+import 'widgets/hoja_formulario.dart';
 import 'widgets/visor_html.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -612,13 +613,8 @@ class _KnowledgePageState extends State<KnowledgePage>
   }
 
   void _openForm(BuildContext context, SiColors c, {_Article? article}) {
-    showModalBottomSheet(
+    mostrarHojaFormulario(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: c.bg,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) => _ArticleFormSheet(
         c: c,
         article: article,
@@ -1349,402 +1345,321 @@ class _ArticleFormSheetState extends State<_ArticleFormSheet> {
   Widget build(BuildContext context) {
     final editing = widget.article != null;
 
-    return Padding(
-      padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.92,
-        minChildSize: 0.5,
-        maxChildSize: 0.97,
-        builder: (_, ctrl) => Column(
-          children: [
-            // Handle
+    return HojaFormulario(
+      titulo: editing ? 'Editar artículo' : 'Nuevo artículo',
+      textoGuardar: editing ? 'Guardar' : 'Publicar',
+      onGuardar: _saving ? null : _save,
+      guardando: _saving,
+      relleno: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (_error != null)
             Container(
-              margin: const EdgeInsets.only(top: 10, bottom: 4),
-              width: 40, height: 4,
+              margin: const EdgeInsets.only(bottom: 14),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                  color: c.line, borderRadius: BorderRadius.circular(2)),
+                color: c.dangerTint,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: c.danger.withOpacity(0.3)),
+              ),
+              child: Text(_error!,
+                  style: TextStyle(fontSize: 13, color: c.danger)),
             ),
-            // Header
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 8, 12),
-              child: Row(children: [
-                Container(
-                  padding: const EdgeInsets.all(7),
-                  decoration: BoxDecoration(
-                    color: c.brandTint,
-                    borderRadius: BorderRadius.circular(9),
-                  ),
-                  child: Icon(
-                    editing ? Icons.edit_outlined : Icons.add_circle_outline,
-                    size: 18, color: c.brand,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  editing ? 'Editar artículo' : 'Nuevo artículo',
-                  style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: c.ink),
-                ),
-                const Spacer(),
-                IconButton(
-                  icon: Icon(Icons.close, color: c.ink3),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ]),
-            ),
-            Divider(height: 1, color: c.line),
-            // Form body
-            Expanded(
-              child: ListView(
-                controller: ctrl,
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-                children: [
-                  if (_error != null)
+          // Title
+          _fieldLabel('Título *'),
+          _textField(_titleCtrl,
+              hint: 'Ej: Cómo usar el sistema de incidencias',
+              maxLines: 2),
+          const SizedBox(height: 16),
+          // Category + Audience row
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _fieldLabel('Categoría'),
                     Container(
-                      margin: const EdgeInsets.only(bottom: 14),
-                      padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: c.dangerTint,
+                        color: c.bg,
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: c.danger.withOpacity(0.3)),
+                        border: Border.all(color: c.line),
                       ),
-                      child: Text(_error!,
-                          style: TextStyle(fontSize: 13, color: c.danger)),
-                    ),
-                  // Title
-                  _fieldLabel('Título *'),
-                  _textField(_titleCtrl,
-                      hint: 'Ej: Cómo usar el sistema de incidencias',
-                      maxLines: 2),
-                  const SizedBox(height: 16),
-                  // Category + Audience row
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _fieldLabel('Categoría'),
-                            Container(
-                              decoration: BoxDecoration(
-                                color: c.bg,
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: c.line),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 2),
+                      child: DropdownButton<String>(
+                        value: _category,
+                        isExpanded: true,
+                        underline: const SizedBox.shrink(),
+                        dropdownColor: c.panel,
+                        style: TextStyle(
+                            fontSize: 13, color: c.ink),
+                        items: _kCategories.map((cat) {
+                          final meta = _kCatMeta[cat]!;
+                          return DropdownMenuItem(
+                            value: cat,
+                            child: Row(children: [
+                              Icon(meta.$1,
+                                  size: 14, color: meta.$2),
+                              const SizedBox(width: 8),
+                              // «Manuales y Procedimientos» no cabe en media fila de un teléfono.
+                              Flexible(
+                                child: Text(cat,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                        fontSize: 13, color: c.ink)),
                               ),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 2),
-                              child: DropdownButton<String>(
-                                value: _category,
-                                isExpanded: true,
-                                underline: const SizedBox.shrink(),
-                                dropdownColor: c.panel,
-                                style: TextStyle(
-                                    fontSize: 13, color: c.ink),
-                                items: _kCategories.map((cat) {
-                                  final meta = _kCatMeta[cat]!;
-                                  return DropdownMenuItem(
-                                    value: cat,
-                                    child: Row(children: [
-                                      Icon(meta.$1,
-                                          size: 14, color: meta.$2),
-                                      const SizedBox(width: 8),
-                                      // «Manuales y Procedimientos» no cabe en media fila de un teléfono.
-                                      Flexible(
-                                        child: Text(cat,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                                fontSize: 13, color: c.ink)),
-                                      ),
-                                    ]),
-                                  );
-                                }).toList(),
-                                onChanged: (v) =>
-                                    setState(() => _category = v!),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _fieldLabel('Visible para'),
-                            Container(
-                              decoration: BoxDecoration(
-                                color: c.bg,
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: c.line),
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 2),
-                              child: DropdownButton<String>(
-                                value: _audience,
-                                isExpanded: true,
-                                underline: const SizedBox.shrink(),
-                                dropdownColor: c.panel,
-                                style: TextStyle(fontSize: 13, color: c.ink),
-                                items: const [
-                                  DropdownMenuItem(
-                                    value: 'all',
-                                    child: Row(children: [
-                                      Icon(Icons.people_outline,
-                                          size: 14, color: Color(0xFF10B981)),
-                                      SizedBox(width: 8),
-                                      Text('Todos'),
-                                    ]),
-                                  ),
-                                  DropdownMenuItem(
-                                    value: 'admin',
-                                    child: Row(children: [
-                                      Icon(Icons.admin_panel_settings_outlined,
-                                          size: 14, color: Color(0xFF6366F1)),
-                                      SizedBox(width: 8),
-                                      Text('Solo admins'),
-                                    ]),
-                                  ),
-                                ],
-                                onChanged: (v) =>
-                                    setState(() => _audience = v!),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  // Description
-                  _fieldLabel('Descripción corta'),
-                  _textField(_descCtrl,
-                      hint: 'Breve resumen del contenido…', maxLines: 3),
-                  const SizedBox(height: 16),
-                  // Content
-                  _fieldLabel('Contenido'),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: c.bg,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: c.line),
-                    ),
-                    child: TextField(
-                      controller: _contentCtrl,
-                      maxLines: 12,
-                      minLines: 6,
-                      decoration: InputDecoration(
-                        hintText:
-                            'Escribe el contenido completo del artículo.\n\n'
-                            'Puedes usar:\n'
-                            '# Título grande\n'
-                            '## Subtítulo\n'
-                            '- Elemento de lista',
-                        hintStyle: TextStyle(
-                            color: c.ink4, fontSize: 13, height: 1.5),
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.all(12),
-                        isDense: true,
-                      ),
-                      style: TextStyle(
-                          fontSize: 13, color: c.ink, height: 1.5),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  // Tags
-                  _fieldLabel('Etiquetas'),
-                  if (_tags.isNotEmpty) ...[
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Wrap(
-                        spacing: 6, runSpacing: 6,
-                        children: _tags.map((tag) => Chip(
-                          label: Text(tag,
-                              style: TextStyle(
-                                  fontSize: 12, color: c.brand)),
-                          backgroundColor: c.brandTint,
-                          side: BorderSide(
-                              color: c.brand.withOpacity(0.3)),
-                          deleteIconColor: c.brand,
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
-                          onDeleted: () =>
-                              setState(() => _tags.remove(tag)),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 4, vertical: 0),
-                        )).toList(),
+                            ]),
+                          );
+                        }).toList(),
+                        onChanged: (v) =>
+                            setState(() => _category = v!),
                       ),
                     ),
                   ],
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _textField(
-                          _tagCtrl,
-                          hint: 'Escribe una etiqueta y presiona Enter',
-                          onSubmitted: _addTag,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      GestureDetector(
-                        onTap: () => _addTag(_tagCtrl.text),
-                        child: Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: c.brandTint,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                                color: c.brand.withOpacity(0.3)),
-                          ),
-                          child: Icon(Icons.add, size: 18, color: c.brand),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  // File attachment
-                  _fieldLabel('Archivo adjunto'),
-                  GestureDetector(
-                    onTap: _pickFile,
-                    child: Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: (_fileBytes != null || _existingFileUrl != null)
-                            ? c.brandTint
-                            : c.hover,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: (_fileBytes != null || _existingFileUrl != null)
-                              ? c.brand.withOpacity(0.4)
-                              : c.line,
-                          style: _fileBytes == null && _existingFileUrl == null
-                              ? BorderStyle.solid
-                              : BorderStyle.solid,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            _fileBytes != null
-                                ? _fileIcon(_mimeFromExt(_fileExt ?? ''))
-                                : _existingFileUrl != null
-                                    ? _fileIcon(_existingFileType)
-                                    : Icons.cloud_upload_outlined,
-                            size: 20,
-                            color: (_fileBytes != null || _existingFileUrl != null)
-                                ? c.brand
-                                : c.ink3,
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              _fileBytes != null
-                                  ? _fileName!
-                                  : _existingFileUrl != null
-                                      ? '${_existingFileName ?? 'Archivo actual'} (toca para cambiar)'
-                                      : 'Toca para adjuntar un archivo',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: (_fileBytes != null || _existingFileUrl != null)
-                                    ? c.brand
-                                    : c.ink3,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          if (_fileBytes != null)
-                            GestureDetector(
-                              onTap: () => setState(() {
-                                _fileBytes = null;
-                                _fileName  = null;
-                                _fileExt   = null;
-                              }),
-                              child: Icon(Icons.close, size: 16, color: c.brand),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  // Pinned toggle
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: c.hover,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: c.line),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.push_pin_outlined,
-                            size: 18, color: c.ink3),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Destacar artículo',
-                                  style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500,
-                                      color: c.ink)),
-                              Text('Aparecerá primero en la lista',
-                                  style: TextStyle(
-                                      fontSize: 11, color: c.ink4)),
-                            ],
-                          ),
-                        ),
-                        Switch(
-                          value: _pinned,
-                          onChanged: (v) => setState(() => _pinned = v),
-                          activeColor: c.brand,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 28),
-                ],
-              ),
-            ),
-            // Save button
-            Container(
-              padding: EdgeInsets.fromLTRB(
-                  20, 12, 20,
-                  MediaQuery.of(context).padding.bottom + 12),
-              decoration: BoxDecoration(
-                color: c.panel,
-                border: Border(top: BorderSide(color: c.line)),
-              ),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _saving ? null : _save,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: c.brand,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: _saving
-                      ? const SizedBox(
-                          width: 20, height: 20,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
-                      : Text(
-                          editing ? 'Guardar cambios' : 'Publicar artículo',
-                          style: const TextStyle(
-                              fontSize: 15, fontWeight: FontWeight.w600)),
                 ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _fieldLabel('Visible para'),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: c.bg,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: c.line),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 2),
+                      child: DropdownButton<String>(
+                        value: _audience,
+                        isExpanded: true,
+                        underline: const SizedBox.shrink(),
+                        dropdownColor: c.panel,
+                        style: TextStyle(fontSize: 13, color: c.ink),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'all',
+                            child: Row(children: [
+                              Icon(Icons.people_outline,
+                                  size: 14, color: Color(0xFF10B981)),
+                              SizedBox(width: 8),
+                              Text('Todos'),
+                            ]),
+                          ),
+                          DropdownMenuItem(
+                            value: 'admin',
+                            child: Row(children: [
+                              Icon(Icons.admin_panel_settings_outlined,
+                                  size: 14, color: Color(0xFF6366F1)),
+                              SizedBox(width: 8),
+                              Text('Solo admins'),
+                            ]),
+                          ),
+                        ],
+                        onChanged: (v) =>
+                            setState(() => _audience = v!),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // Description
+          _fieldLabel('Descripción corta'),
+          _textField(_descCtrl,
+              hint: 'Breve resumen del contenido…', maxLines: 3),
+          const SizedBox(height: 16),
+          // Content
+          _fieldLabel('Contenido'),
+          Container(
+            decoration: BoxDecoration(
+              color: c.bg,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: c.line),
+            ),
+            child: TextField(
+              controller: _contentCtrl,
+              maxLines: 12,
+              minLines: 6,
+              decoration: InputDecoration(
+                hintText:
+                    'Escribe el contenido completo del artículo.\n\n'
+                    'Puedes usar:\n'
+                    '# Título grande\n'
+                    '## Subtítulo\n'
+                    '- Elemento de lista',
+                hintStyle: TextStyle(
+                    color: c.ink4, fontSize: 13, height: 1.5),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.all(12),
+                isDense: true,
+              ),
+              style: TextStyle(
+                  fontSize: 13, color: c.ink, height: 1.5),
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Tags
+          _fieldLabel('Etiquetas'),
+          if (_tags.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Wrap(
+                spacing: 6, runSpacing: 6,
+                children: _tags.map((tag) => Chip(
+                  label: Text(tag,
+                      style: TextStyle(
+                          fontSize: 12, color: c.brand)),
+                  backgroundColor: c.brandTint,
+                  side: BorderSide(
+                      color: c.brand.withOpacity(0.3)),
+                  deleteIconColor: c.brand,
+                  materialTapTargetSize:
+                      MaterialTapTargetSize.shrinkWrap,
+                  onDeleted: () =>
+                      setState(() => _tags.remove(tag)),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 4, vertical: 0),
+                )).toList(),
               ),
             ),
           ],
-        ),
+          Row(
+            children: [
+              Expanded(
+                child: _textField(
+                  _tagCtrl,
+                  hint: 'Escribe una etiqueta y presiona Enter',
+                  onSubmitted: _addTag,
+                ),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () => _addTag(_tagCtrl.text),
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: c.brandTint,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                        color: c.brand.withOpacity(0.3)),
+                  ),
+                  child: Icon(Icons.add, size: 18, color: c.brand),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // File attachment
+          _fieldLabel('Archivo adjunto'),
+          GestureDetector(
+            onTap: _pickFile,
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: (_fileBytes != null || _existingFileUrl != null)
+                    ? c.brandTint
+                    : c.hover,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: (_fileBytes != null || _existingFileUrl != null)
+                      ? c.brand.withOpacity(0.4)
+                      : c.line,
+                  style: _fileBytes == null && _existingFileUrl == null
+                      ? BorderStyle.solid
+                      : BorderStyle.solid,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    _fileBytes != null
+                        ? _fileIcon(_mimeFromExt(_fileExt ?? ''))
+                        : _existingFileUrl != null
+                            ? _fileIcon(_existingFileType)
+                            : Icons.cloud_upload_outlined,
+                    size: 20,
+                    color: (_fileBytes != null || _existingFileUrl != null)
+                        ? c.brand
+                        : c.ink3,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      _fileBytes != null
+                          ? _fileName!
+                          : _existingFileUrl != null
+                              ? '${_existingFileName ?? 'Archivo actual'} (toca para cambiar)'
+                              : 'Toca para adjuntar un archivo',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: (_fileBytes != null || _existingFileUrl != null)
+                            ? c.brand
+                            : c.ink3,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (_fileBytes != null)
+                    GestureDetector(
+                      onTap: () => setState(() {
+                        _fileBytes = null;
+                        _fileName  = null;
+                        _fileExt   = null;
+                      }),
+                      child: Icon(Icons.close, size: 16, color: c.brand),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Pinned toggle
+          Container(
+            padding: const EdgeInsets.symmetric(
+                horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: c.hover,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: c.line),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.push_pin_outlined,
+                    size: 18, color: c.ink3),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Destacar artículo',
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: c.ink)),
+                      Text('Aparecerá primero en la lista',
+                          style: TextStyle(
+                              fontSize: 11, color: c.ink4)),
+                    ],
+                  ),
+                ),
+                Switch(
+                  value: _pinned,
+                  onChanged: (v) => setState(() => _pinned = v),
+                  activeColor: c.brand,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 28),
+        ],
       ),
     );
   }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'theme/si_theme.dart';
+import 'widgets/hoja_formulario.dart';
 import 'bi_web_iframe_stub.dart' if (dart.library.html) 'bi_web_iframe_web.dart';
 
 class BiPage extends StatefulWidget {
@@ -883,13 +884,14 @@ class _LinkFormSheetState extends State<_LinkFormSheet> {
   }
 
   Future<void> _createGrupo(BuildContext ctx) async {
-    final c = SiColors.of(ctx);
     final ctrl = TextEditingController();
-    final newName = await showDialog<String>(
+    final newName = await mostrarHojaFormulario<String>(
       context: ctx,
-      builder: (dctx) => AlertDialog(
-        title: const Text('Nuevo grupo'),
-        content: TextField(
+      builder: (dctx) => HojaFormulario(
+        titulo: 'Nuevo grupo',
+        textoGuardar: 'Crear',
+        onGuardar: () => Navigator.pop(dctx, ctrl.text.trim()),
+        child: TextField(
           controller: ctrl,
           autofocus: true,
           textCapitalization: TextCapitalization.words,
@@ -898,19 +900,10 @@ class _LinkFormSheetState extends State<_LinkFormSheet> {
             prefixIcon: Icon(Icons.folder_outlined),
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dctx),
-            child: Text('Cancelar', style: TextStyle(color: c.ink3)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(dctx, ctrl.text.trim()),
-            child: Text('Crear', style: TextStyle(color: c.brand)),
-          ),
-        ],
       ),
     );
-    ctrl.dispose();
+    // Se libera cuando la hoja termino de cerrarse: mientras baja, el campo aun lo usa.
+    Future.delayed(const Duration(milliseconds: 500), ctrl.dispose);
     if (newName == null || newName.isEmpty) return;
     try {
       final result = await Supabase.instance.client

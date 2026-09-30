@@ -9,6 +9,7 @@ import 'avisos_store.dart';
 import 'theme/si_theme.dart';
 import 'widgets/banner_avisos.dart';
 import 'widgets/dialogo_aviso.dart';
+import 'widgets/hoja_formulario.dart';
 import 'widgets/imagen_aviso.dart';
 import 'widgets/lista_avisos.dart';
 
@@ -183,9 +184,8 @@ class _AvisosPageState extends State<AvisosPage> {
   }
 
   Future<void> _abrirFormulario([Map<String, dynamic>? aviso]) async {
-    final guardado = await showDialog<bool>(
+    final guardado = await mostrarHojaFormulario<bool>(
       context: context,
-      barrierDismissible: false,
       builder: (_) => _FormularioAviso(
         aviso: aviso,
         ubicaciones: _ubicaciones,
@@ -847,37 +847,15 @@ class _FormularioAvisoState extends State<_FormularioAviso> {
   Widget build(BuildContext context) {
     final c = SiColors.of(context);
 
-    return Dialog(
-      backgroundColor: c.panel,
-      insetPadding: const EdgeInsets.all(SiSpace.x6),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxWidth: 620,
-          maxHeight: MediaQuery.of(context).size.height * 0.9,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(SiSpace.x5),
-              decoration: BoxDecoration(
-                border: Border(bottom: BorderSide(color: c.line)),
-              ),
-              child: Row(children: [
-                Icon(Icons.campaign_outlined, size: 18, color: c.brand),
-                const SizedBox(width: SiSpace.x2),
-                Text(widget.aviso == null ? 'Nuevo aviso' : 'Editar aviso',
-                    style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: c.ink)),
-              ]),
-            ),
-            Flexible(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(SiSpace.x5),
-                child: Column(
+    return HojaFormulario(
+      titulo: widget.aviso == null ? 'Nuevo aviso' : 'Editar aviso',
+      guardando: _guardando,
+      onGuardar: _problema != null ? null : _guardar,
+      pie: _problema == null
+          ? null
+          : Text(_problema!,
+              style: TextStyle(fontSize: 11.5, color: c.warn)),
+      child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     TextField(
@@ -904,13 +882,12 @@ class _FormularioAvisoState extends State<_FormularioAviso> {
                     _bloqueImagen(c),
                     const SizedBox(height: SiSpace.x5),
                     _rotulo(c, 'Nivel'),
-                    Row(
+                    // Wrap: en un telefono «Crítico» no cabia en la misma linea.
+                    Wrap(
+                      spacing: SiSpace.x2,
+                      runSpacing: SiSpace.x2,
                       children: [
-                        for (final n in NivelAviso.values)
-                          Padding(
-                            padding: const EdgeInsets.only(right: SiSpace.x2),
-                            child: _pastillaNivel(c, n),
-                          ),
+                        for (final n in NivelAviso.values) _pastillaNivel(c, n),
                       ],
                     ),
                     const SizedBox(height: SiSpace.x5),
@@ -1004,40 +981,6 @@ class _FormularioAvisoState extends State<_FormularioAviso> {
                     ]),
                   ],
                 ),
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.all(SiSpace.x4),
-              decoration: BoxDecoration(
-                border: Border(top: BorderSide(color: c.line)),
-              ),
-              child: Row(
-                children: [
-                  if (_problema != null)
-                    Expanded(
-                      child: Text(_problema!,
-                          style: TextStyle(fontSize: 11.5, color: c.warn)),
-                    )
-                  else
-                    const Spacer(),
-                  TextButton(
-                    onPressed: _guardando
-                        ? null
-                        : () => Navigator.pop(context, false),
-                    child: const Text('Cancelar'),
-                  ),
-                  const SizedBox(width: SiSpace.x2),
-                  FilledButton(
-                    onPressed:
-                        _guardando || _problema != null ? null : _guardar,
-                    child: Text(_guardando ? 'Guardando…' : 'Guardar'),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 

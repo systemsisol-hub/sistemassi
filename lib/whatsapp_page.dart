@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'services/telefono_whatsapp.dart';
 import 'theme/si_theme.dart';
+import 'widgets/hoja_formulario.dart';
 
 /// Panel del puente de WhatsApp: qué números atiende Soli y qué pasó con cada mensaje.
 ///
@@ -165,9 +166,8 @@ class _WhatsappPageState extends State<WhatsappPage> {
   }
 
   Future<void> _abrirAlta() async {
-    final guardado = await showDialog<bool>(
+    final guardado = await mostrarHojaFormulario<bool>(
       context: context,
-      barrierDismissible: false,
       builder: (_) => const _AltaNumero(),
     );
     if (guardado == true) await _cargar();
@@ -627,26 +627,15 @@ class _AltaNumeroState extends State<_AltaNumero> {
     final c = SiColors.of(context);
     final puedeGuardar = _normalizado != null && _coincidencias == 1;
 
-    return Dialog(
-      backgroundColor: c.panel,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 480),
-        child: Padding(
-          padding: const EdgeInsets.all(SiSpace.x5),
+    return HojaFormulario(
+      titulo: 'Autorizar número',
+      textoGuardar: 'Autorizar',
+      guardando: _guardando,
+      onGuardar: _guardando || !puedeGuardar ? null : _guardar,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(children: [
-                Icon(Icons.chat_outlined, size: 18, color: c.brand),
-                const SizedBox(width: SiSpace.x2),
-                Text('Autorizar número',
-                    style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: c.ink)),
-              ]),
-              const SizedBox(height: SiSpace.x4),
               TextField(
                 controller: _tel,
                 keyboardType: TextInputType.phone,
@@ -678,26 +667,8 @@ class _AltaNumeroState extends State<_AltaNumero> {
                   border: OutlineInputBorder(borderRadius: SiRadius.rMd),
                 ),
               ),
-              const SizedBox(height: SiSpace.x4),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                      onPressed: _guardando
-                          ? null
-                          : () => Navigator.pop(context, false),
-                      child: const Text('Cancelar')),
-                  const SizedBox(width: SiSpace.x2),
-                  FilledButton(
-                    onPressed: _guardando || !puedeGuardar ? null : _guardar,
-                    child: Text(_guardando ? 'Guardando…' : 'Autorizar'),
-                  ),
-                ],
-              ),
             ],
           ),
-        ),
-      ),
     );
   }
 

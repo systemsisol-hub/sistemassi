@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'theme/si_theme.dart';
 import 'unidades_pegado.dart';
+import 'widgets/hoja_formulario.dart';
 
 /// El inventario de un desarrollo: las unidades una por una.
 ///
@@ -400,71 +401,61 @@ class _InventarioDesarrolloState extends State<InventarioDesarrollo> {
     final notas = TextEditingController(text: (u['notas'] ?? '').toString());
     var estatus = (u['estatus'] ?? 'DISPONIBLE').toString();
 
-    final guardar = await showDialog<bool>(
+    final guardar = await mostrarHojaFormulario<bool>(
       context: context,
       builder: (ctx) {
         final c = SiColors.of(ctx);
         return StatefulBuilder(builder: (ctx, setD) {
-          return AlertDialog(
-            title: Text('${u['numero']} · ${u['depto'] ?? ''}',
-                style: const TextStyle(fontSize: 16)),
-            content: SizedBox(
-              width: 380,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    '${u['tipologia'] ?? ''} · ${u['torre'] ?? ''} '
-                    '${u['nivel'] ?? ''} · ${metros(u['m2_total'])}',
-                    style: TextStyle(fontSize: 12.5, color: c.ink3),
-                  ),
-                  const SizedBox(height: SiSpace.x4),
-                  DropdownButtonFormField<String>(
-                    initialValue: estatus,
-                    decoration: const InputDecoration(
-                        labelText: 'Estatus', isDense: true),
-                    items: estatuses
-                        .map((e) => DropdownMenuItem(
-                            value: e,
-                            child: Text(_bonito(e)
-                                .replaceAll('Disponibles', 'Disponible')
-                                .replaceAll('Apartadas', 'Apartada')
-                                .replaceAll('Vendidas', 'Vendida'))))
-                        .toList(),
-                    onChanged: (v) => setD(() => estatus = v ?? estatus),
-                  ),
-                  const SizedBox(height: SiSpace.x4),
-                  TextField(
-                    controller: precio,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                        labelText: 'Precio', isDense: true, prefixText: '\$ '),
-                  ),
-                  const SizedBox(height: SiSpace.x4),
-                  TextField(
-                    controller: notas,
-                    maxLines: 2,
-                    decoration: const InputDecoration(
-                        labelText: 'Notas', isDense: true),
-                  ),
-                  const SizedBox(height: SiSpace.x3),
-                  Text(
-                    'Los metros y el precio por m² no se editan aquí: los calcula la base a '
-                    'partir de las superficies de la lista.',
-                    style: TextStyle(fontSize: 11, color: c.ink3, height: 1.4),
-                  ),
-                ],
-              ),
+          return HojaFormulario(
+            titulo: '${u['numero']} · ${u['depto'] ?? ''}',
+            onCancelar: () => Navigator.pop(ctx, false),
+            onGuardar: () => Navigator.pop(ctx, true),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  '${u['tipologia'] ?? ''} · ${u['torre'] ?? ''} '
+                  '${u['nivel'] ?? ''} · ${metros(u['m2_total'])}',
+                  style: TextStyle(fontSize: 12.5, color: c.ink3),
+                ),
+                const SizedBox(height: SiSpace.x4),
+                DropdownButtonFormField<String>(
+                  initialValue: estatus,
+                  decoration: const InputDecoration(
+                      labelText: 'Estatus', isDense: true),
+                  items: estatuses
+                      .map((e) => DropdownMenuItem(
+                          value: e,
+                          child: Text(_bonito(e)
+                              .replaceAll('Disponibles', 'Disponible')
+                              .replaceAll('Apartadas', 'Apartada')
+                              .replaceAll('Vendidas', 'Vendida'))))
+                      .toList(),
+                  onChanged: (v) => setD(() => estatus = v ?? estatus),
+                ),
+                const SizedBox(height: SiSpace.x4),
+                TextField(
+                  controller: precio,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                      labelText: 'Precio', isDense: true, prefixText: '\$ '),
+                ),
+                const SizedBox(height: SiSpace.x4),
+                TextField(
+                  controller: notas,
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                      labelText: 'Notas', isDense: true),
+                ),
+                const SizedBox(height: SiSpace.x3),
+                Text(
+                  'Los metros y el precio por m² no se editan aquí: los calcula la base a '
+                  'partir de las superficies de la lista.',
+                  style: TextStyle(fontSize: 11, color: c.ink3, height: 1.4),
+                ),
+              ],
             ),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(ctx, false),
-                  child: const Text('Cancelar')),
-              FilledButton(
-                  onPressed: () => Navigator.pop(ctx, true),
-                  child: const Text('Guardar')),
-            ],
           );
         });
       },
@@ -492,77 +483,66 @@ class _InventarioDesarrolloState extends State<InventarioDesarrollo> {
     final texto = TextEditingController();
     var listaAl = DateTime.now();
 
-    final resultado = await showDialog<ResultadoPegado>(
+    final resultado = await mostrarHojaFormulario<ResultadoPegado>(
       context: context,
       builder: (ctx) {
         final c = SiColors.of(ctx);
         return StatefulBuilder(builder: (ctx, setD) {
-          return AlertDialog(
-            title: const Text('Pegar la lista del Excel',
-                style: TextStyle(fontSize: 16)),
-            content: SizedBox(
-              width: 560,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    'Selecciona las filas en Excel —con el encabezado, si puedes— y pégalas aquí. '
-                    'Antes de guardar nada te muestro qué cambia.',
-                    style: TextStyle(fontSize: 12.5, color: c.ink3, height: 1.4),
+          return HojaFormulario(
+            titulo: 'Pegar la lista del Excel',
+            textoGuardar: 'Revisar',
+            onGuardar: () => Navigator.pop(ctx, leerPegado(texto.text)),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Selecciona las filas en Excel —con el encabezado, si puedes— y pégalas aquí. '
+                  'Antes de guardar nada te muestro qué cambia.',
+                  style: TextStyle(fontSize: 12.5, color: c.ink3, height: 1.4),
+                ),
+                const SizedBox(height: SiSpace.x4),
+                TextField(
+                  controller: texto,
+                  maxLines: 10,
+                  minLines: 6,
+                  style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
+                  decoration: InputDecoration(
+                    hintText: 'Torre\tNivel\tTipo\t…',
+                    border: OutlineInputBorder(borderRadius: SiRadius.rSm),
                   ),
-                  const SizedBox(height: SiSpace.x4),
-                  TextField(
-                    controller: texto,
-                    maxLines: 10,
-                    minLines: 6,
-                    style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
-                    decoration: InputDecoration(
-                      hintText: 'Torre\tNivel\tTipo\t…',
-                      border: OutlineInputBorder(borderRadius: SiRadius.rSm),
+                ),
+                const SizedBox(height: SiSpace.x4),
+                Row(
+                  children: [
+                    Text('Fecha de la lista:',
+                        style: TextStyle(fontSize: 12.5, color: c.ink3)),
+                    const SizedBox(width: SiSpace.x3),
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.calendar_today, size: 14),
+                      label: Text(
+                          '${listaAl.day}/${listaAl.month}/${listaAl.year}',
+                          style: const TextStyle(fontSize: 12.5)),
+                      onPressed: () async {
+                        final d = await showDatePicker(
+                          context: ctx,
+                          initialDate: listaAl,
+                          firstDate: DateTime(2024),
+                          lastDate: DateTime.now().add(const Duration(days: 60)),
+                        );
+                        if (d != null) setD(() => listaAl = d);
+                      },
                     ),
-                  ),
-                  const SizedBox(height: SiSpace.x4),
-                  Row(
-                    children: [
-                      Text('Fecha de la lista:',
-                          style: TextStyle(fontSize: 12.5, color: c.ink3)),
-                      const SizedBox(width: SiSpace.x3),
-                      OutlinedButton.icon(
-                        icon: const Icon(Icons.calendar_today, size: 14),
-                        label: Text(
-                            '${listaAl.day}/${listaAl.month}/${listaAl.year}',
-                            style: const TextStyle(fontSize: 12.5)),
-                        onPressed: () async {
-                          final d = await showDatePicker(
-                            context: ctx,
-                            initialDate: listaAl,
-                            firstDate: DateTime(2024),
-                            lastDate: DateTime.now().add(const Duration(days: 60)),
-                          );
-                          if (d != null) setD(() => listaAl = d);
-                        },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: SiSpace.x2),
-                  Text(
-                    'Es la fecha del archivo, no la de hoy. Sin ella, un precio de hace cinco '
-                    'meses se ve igual que uno de ayer.',
-                    style: TextStyle(fontSize: 11, color: c.ink3, height: 1.4),
-                  ),
-                ],
-              ),
+                  ],
+                ),
+                const SizedBox(height: SiSpace.x2),
+                Text(
+                  'Es la fecha del archivo, no la de hoy. Sin ella, un precio de hace cinco '
+                  'meses se ve igual que uno de ayer.',
+                  style: TextStyle(fontSize: 11, color: c.ink3, height: 1.4),
+                ),
+              ],
             ),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Cancelar')),
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx, leerPegado(texto.text)),
-                child: const Text('Revisar'),
-              ),
-            ],
           );
         });
       },
@@ -587,111 +567,103 @@ class _InventarioDesarrolloState extends State<InventarioDesarrollo> {
     final cmp = compararInventario(r.unidades, _unidades);
     var marcarDesaparecidas = true;
 
-    final ok = await showDialog<bool>(
+    final ok = await mostrarHojaFormulario<bool>(
       context: context,
       builder: (ctx) {
         final c = SiColors.of(ctx);
         return StatefulBuilder(builder: (ctx, setD) {
-          return AlertDialog(
-            title: const Text('Qué va a cambiar', style: TextStyle(fontSize: 16)),
-            content: SizedBox(
-              width: 520,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text('Se leyeron ${r.unidades.length} unidades'
-                        '${r.traiaEncabezado ? " (con encabezado)" : " (sin encabezado, se usó el orden del archivo)"}.',
-                        style: TextStyle(fontSize: 12.5, color: c.ink3)),
-                    if (r.claveCompuestaDe.isNotEmpty) ...[
-                      const SizedBox(height: SiSpace.x2),
-                      Text(
-                          'La lista no trae una columna de clave propia, así que cada unidad se '
-                          'identifica por ${r.claveCompuestaDe} — la combinación más corta que no '
-                          'se repite en tu lista. Ejemplo: «${r.unidades.first.numero}».',
-                          style: TextStyle(fontSize: 11.5, color: c.ink3, height: 1.4)),
-                    ],
-                    if (r.columnasIgnoradas.isNotEmpty) ...[
-                      const SizedBox(height: SiSpace.x2),
-                      Text('Columnas que no se reconocieron y NO se guardan: '
-                          '${r.columnasIgnoradas.join(", ")}',
-                          style: TextStyle(fontSize: 11.5, color: c.warn)),
-                    ],
-                    const SizedBox(height: SiSpace.x4),
-                    _linea(c, 'Nuevas', cmp.nuevas.length, c.success,
-                        cmp.nuevas.take(8).map((u) => u.numero).join(', ')),
-                    _linea(
-                        c,
-                        'Cambian de precio',
-                        cmp.cambiosDePrecio.length,
-                        c.warn,
-                        cmp.cambiosDePrecio
-                            .take(6)
-                            .map((x) =>
-                                '${x.numero}: ${dinero(x.anterior)} → ${dinero(x.nuevo)}')
-                            .join('  ·  ')),
-                    _linea(c, 'Cambian otros datos', cmp.cambiosDeDatos.length,
-                        c.brand, cmp.cambiosDeDatos.take(8).map((u) => u.numero).join(', ')),
-                    _linea(c, 'Sin cambio', cmp.sinCambio, c.ink3, ''),
-                    if (cmp.desaparecidas.isNotEmpty) ...[
-                      const Divider(height: SiSpace.x6),
-                      Text(
-                          '${cmp.desaparecidas.length} unidades que hoy figuran disponibles '
-                          'YA NO vienen en la lista:',
-                          style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                              color: c.ink)),
-                      const SizedBox(height: 4),
-                      Text(
-                          cmp.desaparecidas
-                              .map((u) => u['numero'].toString())
-                              .join(', '),
-                          style: TextStyle(fontSize: 11.5, color: c.ink3)),
-                      const SizedBox(height: SiSpace.x2),
-                      CheckboxListTile(
-                        value: marcarDesaparecidas,
-                        onChanged: (v) =>
-                            setD(() => marcarDesaparecidas = v ?? true),
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        controlAffinity: ListTileControlAffinity.leading,
-                        title: const Text('Marcarlas como NO DISPONIBLE',
-                            style: TextStyle(fontSize: 12.5)),
-                        subtitle: Text(
-                            'No se borran: se conservan con su historia y dejan de aparecerle a '
-                            'SOL. Si crees que faltan por un error de copiado, desmárcalo.',
-                            style: TextStyle(fontSize: 11, color: c.ink3, height: 1.4)),
-                      ),
-                    ],
-                    if (r.errores.isNotEmpty) ...[
-                      const Divider(height: SiSpace.x6),
-                      Text('${r.errores.length} filas se van a omitir:',
-                          style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                              color: c.danger)),
-                      const SizedBox(height: 4),
-                      for (final e in r.errores.take(10))
-                        Text('  línea ${e.linea}: ${e.motivo}',
-                            style: TextStyle(fontSize: 11.5, color: c.ink3)),
-                    ],
-                  ],
-                ),
-              ),
+          return HojaFormulario(
+            titulo: 'Qué va a cambiar',
+            onCancelar: () => Navigator.pop(ctx, false),
+            onGuardar: cmp.sinNovedades && r.errores.isEmpty
+                ? null
+                : () => Navigator.pop(ctx, true),
+            pie: cmp.sinNovedades
+                ? Text('Nada que guardar',
+                    style: TextStyle(fontSize: 12.5, color: c.ink3))
+                : null,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Se leyeron ${r.unidades.length} unidades'
+                    '${r.traiaEncabezado ? " (con encabezado)" : " (sin encabezado, se usó el orden del archivo)"}.',
+                    style: TextStyle(fontSize: 12.5, color: c.ink3)),
+                if (r.claveCompuestaDe.isNotEmpty) ...[
+                  const SizedBox(height: SiSpace.x2),
+                  Text(
+                      'La lista no trae una columna de clave propia, así que cada unidad se '
+                      'identifica por ${r.claveCompuestaDe} — la combinación más corta que no '
+                      'se repite en tu lista. Ejemplo: «${r.unidades.first.numero}».',
+                      style: TextStyle(fontSize: 11.5, color: c.ink3, height: 1.4)),
+                ],
+                if (r.columnasIgnoradas.isNotEmpty) ...[
+                  const SizedBox(height: SiSpace.x2),
+                  Text('Columnas que no se reconocieron y NO se guardan: '
+                      '${r.columnasIgnoradas.join(", ")}',
+                      style: TextStyle(fontSize: 11.5, color: c.warn)),
+                ],
+                const SizedBox(height: SiSpace.x4),
+                _linea(c, 'Nuevas', cmp.nuevas.length, c.success,
+                    cmp.nuevas.take(8).map((u) => u.numero).join(', ')),
+                _linea(
+                    c,
+                    'Cambian de precio',
+                    cmp.cambiosDePrecio.length,
+                    c.warn,
+                    cmp.cambiosDePrecio
+                        .take(6)
+                        .map((x) =>
+                            '${x.numero}: ${dinero(x.anterior)} → ${dinero(x.nuevo)}')
+                        .join('  ·  ')),
+                _linea(c, 'Cambian otros datos', cmp.cambiosDeDatos.length,
+                    c.brand, cmp.cambiosDeDatos.take(8).map((u) => u.numero).join(', ')),
+                _linea(c, 'Sin cambio', cmp.sinCambio, c.ink3, ''),
+                if (cmp.desaparecidas.isNotEmpty) ...[
+                  const Divider(height: SiSpace.x6),
+                  Text(
+                      '${cmp.desaparecidas.length} unidades que hoy figuran disponibles '
+                      'YA NO vienen en la lista:',
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: c.ink)),
+                  const SizedBox(height: 4),
+                  Text(
+                      cmp.desaparecidas
+                          .map((u) => u['numero'].toString())
+                          .join(', '),
+                      style: TextStyle(fontSize: 11.5, color: c.ink3)),
+                  const SizedBox(height: SiSpace.x2),
+                  CheckboxListTile(
+                    value: marcarDesaparecidas,
+                    onChanged: (v) =>
+                        setD(() => marcarDesaparecidas = v ?? true),
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: const Text('Marcarlas como NO DISPONIBLE',
+                        style: TextStyle(fontSize: 12.5)),
+                    subtitle: Text(
+                        'No se borran: se conservan con su historia y dejan de aparecerle a '
+                        'SOL. Si crees que faltan por un error de copiado, desmárcalo.',
+                        style: TextStyle(fontSize: 11, color: c.ink3, height: 1.4)),
+                  ),
+                ],
+                if (r.errores.isNotEmpty) ...[
+                  const Divider(height: SiSpace.x6),
+                  Text('${r.errores.length} filas se van a omitir:',
+                      style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: c.danger)),
+                  const SizedBox(height: 4),
+                  for (final e in r.errores.take(10))
+                    Text('  línea ${e.linea}: ${e.motivo}',
+                        style: TextStyle(fontSize: 11.5, color: c.ink3)),
+                ],
+              ],
             ),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(ctx, false),
-                  child: const Text('Cancelar')),
-              FilledButton(
-                onPressed: cmp.sinNovedades && r.errores.isEmpty
-                    ? null
-                    : () => Navigator.pop(ctx, true),
-                child: Text(cmp.sinNovedades ? 'Nada que guardar' : 'Guardar'),
-              ),
-            ],
           );
         });
       },

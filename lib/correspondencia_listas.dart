@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'services/correspondencia.dart';
 import 'theme/si_theme.dart';
+import 'widgets/hoja_formulario.dart';
 
 /// La pestaña de listas de distribución de Correspondencia.
 ///
@@ -106,7 +107,7 @@ class ListasDistribucionTab extends StatelessWidget {
   }
 
   Future<void> _abrir(BuildContext context, Map<String, dynamic>? lista) async {
-    final guardada = await showDialog<bool>(
+    final guardada = await mostrarHojaFormulario<bool>(
       context: context,
       builder: (_) => _DialogoLista(lista: lista, colaboradores: colaboradores),
     );
@@ -315,11 +316,10 @@ class _DialogoListaState extends State<_DialogoLista> {
   Widget build(BuildContext context) {
     final c = SiColors.of(context);
     final alcanzan = _miembros.where((m) => m.alcanza).length;
-    return AlertDialog(
-      title: Text(_nueva ? 'Nueva lista' : 'Editar lista'),
-      content: SizedBox(
-        width: 520,
-        child: SingleChildScrollView(
+    return HojaFormulario(
+      titulo: _nueva ? 'Nueva lista' : 'Editar lista',
+      guardando: _guardando,
+      onGuardar: _guardando ? null : _guardar,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -399,18 +399,6 @@ class _DialogoListaState extends State<_DialogoLista> {
               ),
             ],
           ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _guardando ? null : () => Navigator.pop(context, false),
-          child: const Text('Cancelar'),
-        ),
-        FilledButton(
-          onPressed: _guardando ? null : _guardar,
-          child: Text(_guardando ? 'Guardando…' : 'Guardar'),
-        ),
-      ],
     );
   }
 }

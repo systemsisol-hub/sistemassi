@@ -9,6 +9,7 @@ import 'services/file_saver_util.dart';
 import 'services/ventas_datos.dart';
 import 'theme/si_theme.dart';
 import 'ventas_comun.dart';
+import 'widgets/hoja_formulario.dart';
 
 /// Lo que Sisol sabe de cada desarrollo: sus datos, su inventario, sus brochures y la información
 /// adicional que se le escribe a mano.
@@ -271,7 +272,7 @@ class _VentasDesarrollosPageState extends State<VentasDesarrollosPage> {
   }
 
   Future<void> _formDesarrollo(Map<String, dynamic>? d) async {
-    final guardado = await showDialog<bool>(
+    final guardado = await mostrarHojaFormulario<bool>(
       context: context,
       builder: (_) => _FormDesarrollo(desarrollo: d),
     );
@@ -359,33 +360,26 @@ class _FormDesarrolloState extends State<_FormDesarrollo> {
             ),
           ),
         );
-    return AlertDialog(
-      title: Text(widget.desarrollo == null ? 'Nuevo desarrollo' : 'Editar ${widget.desarrollo!['nombre']}'),
-      content: SizedBox(
-        width: 460,
-        child: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            campo(_estado, 'Estado'),
-            campo(_municipio, 'Municipio'),
-            campo(_nombre, 'Nombre'),
-            campo(_url, 'Página en sisol.com.mx', ayuda: 'Se abre en la tarjeta que muestra el chat.'),
-            campo(_alias, 'Otros nombres',
-                ayuda: 'Separados por coma. Cómo lo escriben los clientes, p. ej. «pp, punta».'),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _activo,
-              onChanged: (v) => setState(() => _activo = v),
-              title: const Text('Activo'),
-              subtitle: const Text('Si está inactivo, Sisol no lo ofrece ni cita su inventario.'),
-            ),
-            if (_error != null) Text(_error!, style: TextStyle(color: c.danger)),
-          ]),
+    return HojaFormulario(
+      titulo: widget.desarrollo == null ? 'Nuevo desarrollo' : 'Editar ${widget.desarrollo!['nombre']}',
+      onGuardar: _guardando ? null : _guardar,
+      guardando: _guardando,
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        campo(_estado, 'Estado'),
+        campo(_municipio, 'Municipio'),
+        campo(_nombre, 'Nombre'),
+        campo(_url, 'Página en sisol.com.mx', ayuda: 'Se abre en la tarjeta que muestra el chat.'),
+        campo(_alias, 'Otros nombres',
+            ayuda: 'Separados por coma. Cómo lo escriben los clientes, p. ej. «pp, punta».'),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          value: _activo,
+          onChanged: (v) => setState(() => _activo = v),
+          title: const Text('Activo'),
+          subtitle: const Text('Si está inactivo, Sisol no lo ofrece ni cita su inventario.'),
         ),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
-        FilledButton(onPressed: _guardando ? null : _guardar, child: const Text('Guardar')),
-      ],
+        if (_error != null) Text(_error!, style: TextStyle(color: c.danger)),
+      ]),
     );
   }
 }
@@ -556,35 +550,30 @@ class _ConocimientoState extends State<_Conocimiento> {
   Future<void> _editar(Map<String, dynamic>? f) async {
     final titulo = TextEditingController(text: f?['titulo'] ?? '');
     final contenido = TextEditingController(text: f?['contenido'] ?? '');
-    final ok = await showDialog<bool>(
+    final ok = await mostrarHojaFormulario<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(f == null ? 'Nuevo fragmento' : 'Editar fragmento'),
-        content: SizedBox(
-          width: 620,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(
-              controller: titulo,
-              decoration: const InputDecoration(labelText: 'Título', border: OutlineInputBorder()),
+      builder: (ctx) => HojaFormulario(
+        titulo: f == null ? 'Nuevo fragmento' : 'Editar fragmento',
+        onGuardar: () => Navigator.pop(ctx, true),
+        onCancelar: () => Navigator.pop(ctx, false),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(
+            controller: titulo,
+            decoration: const InputDecoration(labelText: 'Título', border: OutlineInputBorder()),
+          ),
+          const SizedBox(height: SiSpace.x3),
+          TextField(
+            controller: contenido,
+            minLines: 8,
+            maxLines: 18,
+            decoration: const InputDecoration(
+              labelText: 'Contenido',
+              alignLabelWithHint: true,
+              helperText: 'Sisol lo lee tal cual. Precios y disponibilidad van en el inventario, no aquí.',
+              border: OutlineInputBorder(),
             ),
-            const SizedBox(height: SiSpace.x3),
-            TextField(
-              controller: contenido,
-              minLines: 8,
-              maxLines: 18,
-              decoration: const InputDecoration(
-                labelText: 'Contenido',
-                alignLabelWithHint: true,
-                helperText: 'Sisol lo lee tal cual. Precios y disponibilidad van en el inventario, no aquí.',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ]),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Guardar')),
-        ],
+          ),
+        ]),
       ),
     );
     final t = titulo.text.trim(), co = contenido.text.trim();
@@ -748,47 +737,40 @@ class _InventarioState extends State<_Inventario> {
   Future<void> _pegar() async {
     final texto = TextEditingController();
     PegadoVentas? leido;
-    final ok = await showDialog<bool>(
+    final ok = await mostrarHojaFormulario<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(builder: (ctx, set) {
         final c = SiColors.of(ctx);
-        return AlertDialog(
-          title: Text('Cargar inventario de ${widget.desarrollo['nombre']}'),
-          content: SizedBox(
-            width: 720,
-            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Copia la tabla de Excel CON su fila de títulos y pégala aquí. '
-                  'Reemplaza TODO el inventario actual de este desarrollo (${_unidades.length} unidades).',
-                  style: TextStyle(fontSize: 12.5, color: c.ink2)),
-              const SizedBox(height: SiSpace.x3),
-              TextField(
-                controller: texto,
-                minLines: 8,
-                maxLines: 14,
-                style: SiType.mono(size: 12),
-                decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'Tipo\tNivel\tNúmero\t…'),
-                onChanged: (v) => set(() => leido = v.trim().isEmpty ? null : leerPegadoVentas(v)),
-              ),
-              const SizedBox(height: SiSpace.x3),
-              if (leido != null) ...[
-                Text('${leido!.filas.length} unidades listas para cargar.',
-                    style: TextStyle(fontWeight: FontWeight.w600, color: leido!.filas.isEmpty ? c.danger : c.success)),
-                if (leido!.ignoradas.isNotEmpty)
-                  Text('Columnas que no se guardan: ${leido!.ignoradas.join(', ')}',
-                      style: TextStyle(fontSize: 12, color: c.ink3)),
-                for (final e in leido!.errores.take(6)) Text(e, style: TextStyle(fontSize: 12, color: c.danger)),
-                if (leido!.errores.length > 6)
-                  Text('…y ${leido!.errores.length - 6} avisos más.', style: TextStyle(fontSize: 12, color: c.danger)),
-              ],
-            ]),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-            FilledButton(
-              onPressed: (leido?.filas.isNotEmpty ?? false) ? () => Navigator.pop(ctx, true) : null,
-              child: const Text('Reemplazar inventario'),
+        return HojaFormulario(
+          titulo: 'Cargar inventario de ${widget.desarrollo['nombre']}',
+          textoGuardar: 'Reemplazar',
+          onGuardar: (leido?.filas.isNotEmpty ?? false) ? () => Navigator.pop(ctx, true) : null,
+          onCancelar: () => Navigator.pop(ctx, false),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Copia la tabla de Excel CON su fila de títulos y pégala aquí. '
+                'Reemplaza TODO el inventario actual de este desarrollo (${_unidades.length} unidades).',
+                style: TextStyle(fontSize: 12.5, color: c.ink2)),
+            const SizedBox(height: SiSpace.x3),
+            TextField(
+              controller: texto,
+              minLines: 8,
+              maxLines: 14,
+              style: SiType.mono(size: 12),
+              decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'Tipo\tNivel\tNúmero\t…'),
+              onChanged: (v) => set(() => leido = v.trim().isEmpty ? null : leerPegadoVentas(v)),
             ),
-          ],
+            const SizedBox(height: SiSpace.x3),
+            if (leido != null) ...[
+              Text('${leido!.filas.length} unidades listas para cargar.',
+                  style: TextStyle(fontWeight: FontWeight.w600, color: leido!.filas.isEmpty ? c.danger : c.success)),
+              if (leido!.ignoradas.isNotEmpty)
+                Text('Columnas que no se guardan: ${leido!.ignoradas.join(', ')}',
+                    style: TextStyle(fontSize: 12, color: c.ink3)),
+              for (final e in leido!.errores.take(6)) Text(e, style: TextStyle(fontSize: 12, color: c.danger)),
+              if (leido!.errores.length > 6)
+                Text('…y ${leido!.errores.length - 6} avisos más.', style: TextStyle(fontSize: 12, color: c.danger)),
+            ],
+          ]),
         );
       }),
     );
@@ -809,7 +791,7 @@ class _InventarioState extends State<_Inventario> {
   }
 
   Future<void> _editar(Map<String, dynamic>? u) async {
-    final fila = await showDialog<Map<String, dynamic>>(
+    final fila = await mostrarHojaFormulario<Map<String, dynamic>>(
       context: context,
       builder: (_) => _FormUnidad(unidad: u),
     );
@@ -960,47 +942,36 @@ class _FormUnidadState extends State<_FormUnidad> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.unidad == null ? 'Nueva unidad' : 'Editar unidad'),
-      content: SizedBox(
-        width: 480,
-        child: SingleChildScrollView(
-          child: Wrap(spacing: SiSpace.x3, runSpacing: SiSpace.x3, children: [
-            for (final k in [..._texto, ..._numeros])
-              SizedBox(
-                width: 230,
-                child: TextField(
-                  controller: _c[k],
-                  keyboardType: _numeros.contains(k) ? const TextInputType.numberWithOptions(decimal: true) : null,
-                  decoration: InputDecoration(
-                      labelText: _etiquetas[k], isDense: true, border: const OutlineInputBorder()),
-                ),
-              ),
-            SizedBox(
-              width: 230,
-              child: DropdownButtonFormField<String>(
-                initialValue: _estatus,
-                decoration: const InputDecoration(labelText: 'Estatus', isDense: true, border: OutlineInputBorder()),
-                items: [
-                  for (final e in estatusVentas) DropdownMenuItem(value: e, child: Text(estatusTexto[e]!)),
-                ],
-                onChanged: (v) => setState(() => _estatus = v ?? _estatus),
-              ),
+    return HojaFormulario(
+      titulo: widget.unidad == null ? 'Nueva unidad' : 'Editar unidad',
+      onGuardar: () => Navigator.pop(context, {
+        for (final k in _texto) k: _c[k]!.text.trim().isEmpty ? null : _c[k]!.text.trim(),
+        for (final k in _numeros) k: numeroDe(_c[k]!.text),
+        'estatus': _estatus,
+      }),
+      child: Wrap(spacing: SiSpace.x3, runSpacing: SiSpace.x3, children: [
+        for (final k in [..._texto, ..._numeros])
+          SizedBox(
+            width: 230,
+            child: TextField(
+              controller: _c[k],
+              keyboardType: _numeros.contains(k) ? const TextInputType.numberWithOptions(decimal: true) : null,
+              decoration: InputDecoration(
+                  labelText: _etiquetas[k], isDense: true, border: const OutlineInputBorder()),
             ),
-          ]),
+          ),
+        SizedBox(
+          width: 230,
+          child: DropdownButtonFormField<String>(
+            initialValue: _estatus,
+            decoration: const InputDecoration(labelText: 'Estatus', isDense: true, border: OutlineInputBorder()),
+            items: [
+              for (final e in estatusVentas) DropdownMenuItem(value: e, child: Text(estatusTexto[e]!)),
+            ],
+            onChanged: (v) => setState(() => _estatus = v ?? _estatus),
+          ),
         ),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, {
-            for (final k in _texto) k: _c[k]!.text.trim().isEmpty ? null : _c[k]!.text.trim(),
-            for (final k in _numeros) k: numeroDe(_c[k]!.text),
-            'estatus': _estatus,
-          }),
-          child: const Text('Guardar'),
-        ),
-      ],
+      ]),
     );
   }
 }
