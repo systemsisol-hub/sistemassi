@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'theme/si_theme.dart';
+import 'widgets/hoja_formulario.dart';
 
 class PasswordsPage extends StatefulWidget {
   const PasswordsPage({super.key});
@@ -199,7 +200,7 @@ class _PasswordsPageState extends State<PasswordsPage>
   }
 
   void _showShareDialog(Map<String, dynamic> item) {
-    showDialog(
+    mostrarHojaFormulario(
       context: context,
       builder: (ctx) => _ShareDialog(
         item: item,
@@ -1436,17 +1437,11 @@ class _ShareDialogState extends State<_ShareDialog> {
   Widget build(BuildContext context) {
     final c = SiColors.of(context);
 
-    return AlertDialog(
-      title: Row(
-        children: [
-          Icon(Icons.people_alt_outlined, size: 20, color: c.brand),
-          const SizedBox(width: SiSpace.x2),
-          const Text('Compartir contraseña'),
-        ],
-      ),
-      content: SizedBox(
-        width: 360,
-        child: _loading
+    return HojaFormulario(
+      titulo: 'Compartir contraseña',
+      guardando: _saving,
+      onGuardar: _loading || _users.isEmpty || _saving ? null : _save,
+      child: _loading
             ? const Padding(
                 padding: EdgeInsets.symmetric(vertical: SiSpace.x8),
                 child: Center(child: CircularProgressIndicator()),
@@ -1467,56 +1462,30 @@ class _ShareDialogState extends State<_ShareDialog> {
                         style: TextStyle(fontSize: 13, color: c.ink3),
                       ),
                       const SizedBox(height: SiSpace.x3),
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxHeight: 320),
-                        child: SingleChildScrollView(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: _users.map((u) {
-                              final id = u['id'] as String;
-                              return CheckboxListTile(
-                                value: _selected.contains(id),
-                                onChanged: _saving
-                                    ? null
-                                    : (v) => setState(() {
-                                          if (v == true) {
-                                            _selected.add(id);
-                                          } else {
-                                            _selected.remove(id);
-                                          }
-                                        }),
-                                title: Text(_displayName(u),
-                                    style: TextStyle(
-                                        fontSize: 14, color: c.ink)),
-                                dense: true,
-                                controlAffinity:
-                                    ListTileControlAffinity.leading,
-                                activeColor: c.brand,
-                              );
-                            }).toList(),
-                          ),
-                        ),
-                      ),
+                      ..._users.map((u) {
+                        final id = u['id'] as String;
+                        return CheckboxListTile(
+                          value: _selected.contains(id),
+                          onChanged: _saving
+                              ? null
+                              : (v) => setState(() {
+                                    if (v == true) {
+                                      _selected.add(id);
+                                    } else {
+                                      _selected.remove(id);
+                                    }
+                                  }),
+                          title: Text(_displayName(u),
+                              style: TextStyle(
+                                  fontSize: 14, color: c.ink)),
+                          dense: true,
+                          controlAffinity:
+                              ListTileControlAffinity.leading,
+                          activeColor: c.brand,
+                        );
+                      }),
                     ],
                   ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancelar'),
-        ),
-        if (!_loading && _users.isNotEmpty)
-          ElevatedButton(
-            onPressed: _saving ? null : _save,
-            child: _saving
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white))
-                : const Text('Guardar'),
-          ),
-      ],
     );
   }
 }

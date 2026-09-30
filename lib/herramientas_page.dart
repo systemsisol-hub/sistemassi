@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'services/trash_service.dart';
 import 'theme/si_theme.dart';
+import 'widgets/hoja_formulario.dart';
 import 'widgets/visor_html.dart';
 
 /// Catálogo de herramientas HTML alojadas dentro del sistema.
@@ -279,10 +280,8 @@ class _HerramientasPageState extends State<HerramientasPage> {
   }
 
   void _showForm({Map<String, dynamic>? herramienta}) {
-    showModalBottomSheet(
+    mostrarHojaFormulario(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
       builder: (ctx) => _HerramientaFormSheet(
         herramienta: herramienta,
         getUsers: _getUsers,
@@ -818,126 +817,80 @@ class _HerramientaFormSheetState extends State<_HerramientaFormSheet> {
   Widget build(BuildContext context) {
     final c = SiColors.of(context);
 
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.85,
-      decoration: BoxDecoration(
-        color: c.panel,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+    return HojaFormulario(
+      titulo: _esNueva ? 'Nueva herramienta' : 'Editar herramienta',
+      textoGuardar: _esNueva ? 'Crear' : 'Guardar',
+      onGuardar: _guardando ? null : _submit,
+      guardando: _guardando,
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.all(SiSpace.x5),
-            child: Row(
-              children: [
-                Text(
-                  _esNueva ? 'Nueva herramienta' : 'Editar herramienta',
-                  style: TextStyle(
-                      fontSize: 17, fontWeight: FontWeight.w600, color: c.ink),
-                ),
-                const Spacer(),
-                IconButton(
-                  icon: Icon(Icons.close, size: 18, color: c.ink3),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ],
+          TextField(
+            controller: _titulo,
+            decoration: const InputDecoration(
+              labelText: 'Título',
+              border: OutlineInputBorder(),
             ),
           ),
-          Divider(height: 1, color: c.line),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(SiSpace.x5),
-              children: [
-                TextField(
-                  controller: _titulo,
-                  decoration: const InputDecoration(
-                    labelText: 'Título',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: SiSpace.x4),
-                TextField(
-                  controller: _descripcion,
-                  maxLines: 2,
-                  decoration: const InputDecoration(
-                    labelText: 'Descripción',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: SiSpace.x4),
-                TextField(
-                  controller: _grupo,
-                  decoration: const InputDecoration(
-                    labelText: 'Grupo',
-                    hintText: 'Ventas, Operación…',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: SiSpace.x4),
-                SwitchListTile(
-                  value: _activa,
-                  onChanged: (v) => setState(() => _activa = v),
-                  title: const Text('Activa'),
-                  subtitle: Text(
-                    'Si se desactiva deja de aparecer para los usuarios asignados.',
-                    style: TextStyle(fontSize: 12, color: c.ink3),
-                  ),
-                  activeColor: c.brand,
-                  contentPadding: EdgeInsets.zero,
-                ),
-                if (!_esNueva) ...[
-                  const SizedBox(height: SiSpace.x5),
-                  Text(
-                    'QUIÉN LA VE',
-                    style: TextStyle(
-                      fontSize: 11,
-                      letterSpacing: 1.2,
-                      fontWeight: FontWeight.w600,
-                      color: c.ink3,
-                    ),
-                  ),
-                  const SizedBox(height: SiSpace.x2),
-                  Text(
-                    widget.esAdmin
-                        ? 'Sólo aparecen los usuarios que ya tienen el acceso «Herramientas» activado en su perfil.'
-                        : 'Sólo aparecen los usuarios que ya tienen el acceso «Herramientas» activado en su perfil. '
-                            'El permiso de editarla lo da un administrador.',
-                    style: TextStyle(fontSize: 12, color: c.ink3),
-                  ),
-                  const SizedBox(height: SiSpace.x3),
-                  _AsignarUsuarios(
-                    herramientaId: widget.herramienta!['id'].toString(),
-                    getUsers: widget.getUsers,
-                    getAsignados: widget.getAsignados,
-                    toggleAcceso: widget.toggleAcceso,
-                    toggleEdicion: widget.toggleEdicion,
-                    esAdmin: widget.esAdmin,
-                  ),
-                ],
-              ],
+          const SizedBox(height: SiSpace.x4),
+          TextField(
+            controller: _descripcion,
+            maxLines: 2,
+            decoration: const InputDecoration(
+              labelText: 'Descripción',
+              border: OutlineInputBorder(),
             ),
           ),
-          Divider(height: 1, color: c.line),
-          Padding(
-            padding: const EdgeInsets.all(SiSpace.x5),
-            child: SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _guardando ? null : _submit,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: c.brand,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  minimumSize: const Size(0, 44),
-                  shape:
-                      const RoundedRectangleBorder(borderRadius: SiRadius.rMd),
-                ),
-                child: Text(_guardando
-                    ? 'Guardando…'
-                    : (_esNueva ? 'Crear' : 'Guardar')),
+          const SizedBox(height: SiSpace.x4),
+          TextField(
+            controller: _grupo,
+            decoration: const InputDecoration(
+              labelText: 'Grupo',
+              hintText: 'Ventas, Operación…',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: SiSpace.x4),
+          SwitchListTile(
+            value: _activa,
+            onChanged: (v) => setState(() => _activa = v),
+            title: const Text('Activa'),
+            subtitle: Text(
+              'Si se desactiva deja de aparecer para los usuarios asignados.',
+              style: TextStyle(fontSize: 12, color: c.ink3),
+            ),
+            activeColor: c.brand,
+            contentPadding: EdgeInsets.zero,
+          ),
+          if (!_esNueva) ...[
+            const SizedBox(height: SiSpace.x5),
+            Text(
+              'QUIÉN LA VE',
+              style: TextStyle(
+                fontSize: 11,
+                letterSpacing: 1.2,
+                fontWeight: FontWeight.w600,
+                color: c.ink3,
               ),
             ),
-          ),
+            const SizedBox(height: SiSpace.x2),
+            Text(
+              widget.esAdmin
+                  ? 'Sólo aparecen los usuarios que ya tienen el acceso «Herramientas» activado en su perfil.'
+                  : 'Sólo aparecen los usuarios que ya tienen el acceso «Herramientas» activado en su perfil. '
+                      'El permiso de editarla lo da un administrador.',
+              style: TextStyle(fontSize: 12, color: c.ink3),
+            ),
+            const SizedBox(height: SiSpace.x3),
+            _AsignarUsuarios(
+              herramientaId: widget.herramienta!['id'].toString(),
+              getUsers: widget.getUsers,
+              getAsignados: widget.getAsignados,
+              toggleAcceso: widget.toggleAcceso,
+              toggleEdicion: widget.toggleEdicion,
+              esAdmin: widget.esAdmin,
+            ),
+          ],
         ],
       ),
     );

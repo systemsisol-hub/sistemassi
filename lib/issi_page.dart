@@ -1123,7 +1123,11 @@ class _IssiPageState extends State<IssiPage> {
             ),
             subtitle: Padding(
               padding: const EdgeInsets.only(top: 4.0),
-              child: Row(
+              // Wrap y no Row: en un telefono el nombre largo del asignado empujaba
+              // la condicion fuera de la tarjeta.
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 4,
                 children: [
                   Container(
                     padding:
@@ -1135,6 +1139,8 @@ class _IssiPageState extends State<IssiPage> {
                     child: Text(
                       item['usuario_nombre']?.toString().toUpperCase() ??
                           'SIN USUARIO',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
@@ -1142,7 +1148,6 @@ class _IssiPageState extends State<IssiPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
                   Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 2),

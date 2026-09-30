@@ -1127,13 +1127,22 @@ class _IncidenciasPageState extends State<_VistaIncidencias>
     final c = SiColors.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: Text(
-        text,
-        textAlign: align,
-        style: TextStyle(
-          color: color ?? c.ink,
-          fontWeight: weight,
-          fontSize: 12,
+      // En un telefono la columna queda angosta y «Solicitados» se partia en «Solicitado / s»:
+      // se encoge el texto en vez de partirlo.
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: align == TextAlign.left
+            ? Alignment.centerLeft
+            : Alignment.center,
+        child: Text(
+          text,
+          textAlign: align,
+          maxLines: 1,
+          style: TextStyle(
+            color: color ?? c.ink,
+            fontWeight: weight,
+            fontSize: 12,
+          ),
         ),
       ),
     );
@@ -1573,6 +1582,9 @@ class _IncidenciasPageState extends State<_VistaIncidencias>
                   )
                 else
                   DropdownButtonFormField<String>(
+                    // Sin esto cada opcion (un Row con Expanded) recibe ancho infinito y la hoja
+                    // entera no se dibuja: quedaba solo el fondo oscuro.
+                    isExpanded: true,
                     value: periodController.text.isEmpty
                         ? null
                         : periodController.text,
@@ -2657,6 +2669,22 @@ class _IncidenciasPageState extends State<_VistaIncidencias>
                       } else {
                         return Column(
                           children: [
+                            // En el telefono no hay tabla, y el boton de nueva solicitud (y en RH
+                            // el selector de colaborador) vivian en su encabezado: no se veian.
+                            Row(
+                              children: [
+                                if (_vistaRH && _adminUserList.isNotEmpty)
+                                  Expanded(child: _buildTableUserSelector(c))
+                                else
+                                  const Spacer(),
+                                SizedBox(width: SiSpace.x3),
+                                SizedBox(
+                                  height: 38,
+                                  child: _buildTableAddButton(c),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: SiSpace.x4),
                             _buildAntiguedadMobile(),
                             SizedBox(height: SiSpace.x4),
                             _buildIncidenciasCalendar(),

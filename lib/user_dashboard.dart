@@ -459,23 +459,21 @@ class _PageHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = SiColors.of(context);
-    return Row(
+    final titulo = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Mi Perfil',
-                style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                    color: c.ink,
-                    letterSpacing: -0.3)),
-            Text(
-                'Resumen de tu información, equipo asignado y accesos a sistemas.',
-                style: TextStyle(fontSize: 13, color: c.ink2)),
-          ],
-        ),
-        const Spacer(),
+        Text('Mi Perfil',
+            style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+                color: c.ink,
+                letterSpacing: -0.3)),
+        Text(
+            'Resumen de tu información, equipo asignado y accesos a sistemas.',
+            style: TextStyle(fontSize: 13, color: c.ink2)),
+      ],
+    );
+    final botones = [
         _ActionButton(
           icon: Icons.lock_outline,
           label: 'Cambiar contraseña',
@@ -497,8 +495,26 @@ class _PageHeader extends StatelessWidget {
             await Supabase.instance.client.auth.signOut();
           },
         ),
-      ],
-    );
+    ];
+    return LayoutBuilder(builder: (context, caja) {
+      if (caja.maxWidth >= 720) {
+        return Row(children: [titulo, const Spacer(), ...botones]);
+      }
+      // En un telefono el subtitulo empujaba los botones fuera de la pantalla y
+      // «Cambiar contraseña» quedaba inalcanzable.
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          titulo,
+          const SizedBox(height: SiSpace.x3),
+          Wrap(
+            spacing: SiSpace.x2,
+            runSpacing: SiSpace.x2,
+            children: botones.where((w) => w is! SizedBox).toList(),
+          ),
+        ],
+      );
+    });
   }
 }
 

@@ -5,9 +5,11 @@
 *.swp
 .DS_Store
 .atom/
+.build/
 .buildlog/
 .history
 .svn/
+.swiftpm/
 migrate_working_dir/
 
 # IntelliJ related
@@ -64,8 +66,7 @@ app.*.map.json
 *.apk
 *.aab
 
-# iOS build artifacts
-ios/Flutter/
+# iOS build artifacts (lo generado de ios/Flutter/ lo cubre ios/.gitignore)
 ios/DerivedData/
 *.ipa
 

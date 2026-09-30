@@ -131,7 +131,7 @@ class _SignatureGeneratorPageState extends State<SignatureGeneratorPage> {
     if (image == null) return;
 
     final fileName = 'firma_${DateTime.now().millisecondsSinceEpoch}.png';
-    await FileSaverUtil.saveAndShare(image, fileName);
+    await FileSaverUtil.saveAndShare(image, fileName, text: 'Mi firma profesional');
   }
 
   @override

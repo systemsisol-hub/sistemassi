@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'theme/si_theme.dart';
+import 'widgets/hoja_formulario.dart';
 import 'bi_web_iframe_stub.dart' if (dart.library.html) 'bi_web_iframe_web.dart';
 
 class BiPage extends StatefulWidget {
@@ -369,10 +370,12 @@ class _BiPageState extends State<BiPage> {
       ),
       padding: const EdgeInsets.symmetric(
           horizontal: SiSpace.x6, vertical: SiSpace.x3),
-      child: Row(
-        children: [
-          Container(
-            width: 260,
+      child: LayoutBuilder(builder: (context, caja) {
+      // En un telefono el buscador de 260 y los dos botones con texto no caben:
+      // el buscador ocupa lo que sobra y los botones quedan solo con icono.
+      final compacto = caja.maxWidth < 600;
+      final buscador = Container(
+            width: compacto ? null : 260,
             height: 36,
             decoration: BoxDecoration(
               color: c.bg,
@@ -403,9 +406,30 @@ class _BiPageState extends State<BiPage> {
               ),
               onChanged: (v) => setState(() => _searchQuery = v),
             ),
-          ),
-          const Spacer(),
-          if (_isAdmin) ...[
+          );
+      return Row(
+        children: [
+          if (compacto) Expanded(child: buscador) else buscador,
+          if (!compacto) const Spacer(),
+          if (_isAdmin && compacto) ...[
+            IconButton(
+              onPressed: _showPapelera,
+              icon: Icon(Icons.delete_outline, size: 20, color: c.ink3),
+              tooltip: 'Papelera',
+            ),
+            IconButton(
+              onPressed: _showGruposManager,
+              icon: Icon(Icons.folder_outlined, size: 20, color: c.brand),
+              tooltip: 'Grupos',
+            ),
+            IconButton.filled(
+              onPressed: () => _showLinkForm(),
+              icon: const Icon(Icons.add, size: 18),
+              tooltip: 'Nuevo',
+              style: IconButton.styleFrom(backgroundColor: c.brand),
+            ),
+          ],
+          if (_isAdmin && !compacto) ...[
             IconButton(
               onPressed: _showPapelera,
               icon: Icon(Icons.delete_outline, size: 20, color: c.ink3),
@@ -445,7 +469,8 @@ class _BiPageState extends State<BiPage> {
             ),
           ],
         ],
-      ),
+      );
+      }),
     );
   }
 
@@ -859,13 +884,14 @@ class _LinkFormSheetState extends State<_LinkFormSheet> {
   }
 
   Future<void> _createGrupo(BuildContext ctx) async {
-    final c = SiColors.of(ctx);
     final ctrl = TextEditingController();
-    final newName = await showDialog<String>(
+    final newName = await mostrarHojaFormulario<String>(
       context: ctx,
-      builder: (dctx) => AlertDialog(
-        title: const Text('Nuevo grupo'),
-        content: TextField(
+      builder: (dctx) => HojaFormulario(
+        titulo: 'Nuevo grupo',
+        textoGuardar: 'Crear',
+        onGuardar: () => Navigator.pop(dctx, ctrl.text.trim()),
+        child: TextField(
           controller: ctrl,
           autofocus: true,
           textCapitalization: TextCapitalization.words,
@@ -874,19 +900,10 @@ class _LinkFormSheetState extends State<_LinkFormSheet> {
             prefixIcon: Icon(Icons.folder_outlined),
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dctx),
-            child: Text('Cancelar', style: TextStyle(color: c.ink3)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(dctx, ctrl.text.trim()),
-            child: Text('Crear', style: TextStyle(color: c.brand)),
-          ),
-        ],
       ),
     );
-    ctrl.dispose();
+    // Se libera cuando la hoja termino de cerrarse: mientras baja, el campo aun lo usa.
+    Future.delayed(const Duration(milliseconds: 500), ctrl.dispose);
     if (newName == null || newName.isEmpty) return;
     try {
       final result = await Supabase.instance.client

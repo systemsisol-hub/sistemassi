@@ -1,0 +1,242 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Arquitectura de sistemassi",
+    "output": "docs/arquitectura.html",
+    "quality_profile": "showcase",
+    "viewBox": [1320, 640],
+    "repository": {
+      "url": "https://github.com/systemsisol-hub/sistemassi",
+      "provider": "github",
+      "link_mode": "local-only",
+      "revision": "1384d5750f5759144eb61c864ce7b5ce70688bc8"
+    },
+    "views": [
+      {
+        "id": "ruta-principal",
+        "label": "Ruta principal",
+        "focus": ["app", "auth", "db"],
+        "note": "La aplicacion entra por la puerta de Supabase y RLS decide fila por fila."
+      },
+      {
+        "id": "asistentes",
+        "label": "Asistentes de IA",
+        "focus": ["auth", "soli", "sol", "ollama"],
+        "note": "Soli (RH) y SOL (comercial) comparten la cuenta de Ollama, nada mas."
+      },
+      {
+        "id": "power-bi",
+        "label": "Reportes de Power BI",
+        "focus": ["bi", "pbi", "powerbi"],
+        "note": "El modelo manda parametros; el servidor arma el DAX con el filtro de periodo."
+      },
+      {
+        "id": "whatsapp",
+        "label": "Puente de WhatsApp",
+        "focus": ["wa", "wa_fn", "soli"],
+        "note": "Cuatro puertas antes de contestar; lo rechazado queda en la bitacora."
+      },
+      {
+        "id": "herramientas",
+        "label": "Herramientas alojadas",
+        "focus": ["app", "herramientas_fn", "storage"],
+        "note": "Otro nombre de host es otro origen: el HTML ajeno no ve la sesion."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "wa",
+      "type": "external",
+      "label": "WhatsApp / OpenWA",
+      "sublabel": "numero de la empresa",
+      "pos": [30, 30],
+      "size": [150, 60]
+    },
+    {
+      "id": "app",
+      "type": "frontend",
+      "label": "App Flutter",
+      "sublabel": "web y Android",
+      "pos": [30, 270],
+      "size": [150, 60],
+      "sources": [{ "path": "lib/main.dart", "label": "arranque y Supabase" }]
+    },
+    {
+      "id": "appchecar",
+      "type": "external",
+      "label": "appchecar.com",
+      "sublabel": "checador externo",
+      "pos": [30, 460],
+      "size": [150, 60]
+    },
+    {
+      "id": "herramientas_fn",
+      "type": "cloud",
+      "label": "Pages Function /h",
+      "sublabel": "sirve el HTML",
+      "pos": [310, 80],
+      "size": [150, 60],
+      "sources": [{ "path": "functions/h/[[ruta]].js", "label": "entrega del HTML" }]
+    },
+    {
+      "id": "cdn",
+      "type": "cloud",
+      "label": "Cloudflare Workers",
+      "sublabel": "sirve build/web",
+      "pos": [310, 200],
+      "size": [150, 60],
+      "sources": [{ "path": "wrangler.jsonc", "label": "assets: build/web" }]
+    },
+    {
+      "id": "storage",
+      "type": "database",
+      "label": "Storage",
+      "sublabel": "buckets privados",
+      "pos": [590, 130],
+      "size": [150, 60]
+    },
+    {
+      "id": "auth",
+      "type": "security",
+      "label": "Puerta de Supabase",
+      "sublabel": "verify_jwt y RLS",
+      "pos": [590, 270],
+      "size": [150, 60]
+    },
+    {
+      "id": "db",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "RLS + Realtime",
+      "pos": [590, 460],
+      "size": [150, 60]
+    },
+    {
+      "id": "wa_fn",
+      "type": "backend",
+      "label": "whatsapp-openwa",
+      "sublabel": "cuatro puertas",
+      "pos": [870, 30],
+      "size": [160, 60],
+      "sources": [{ "path": "supabase/functions/whatsapp-openwa/index.ts", "label": "puente" }]
+    },
+    {
+      "id": "soli",
+      "type": "backend",
+      "label": "ai-assistant / Soli",
+      "sublabel": "RH, 12 herramientas",
+      "pos": [870, 122],
+      "size": [160, 60],
+      "sources": [{ "path": "supabase/functions/ai-assistant/index.ts", "label": "asistente de RH" }]
+    },
+    {
+      "id": "sol",
+      "type": "backend",
+      "label": "sol-assistant / SOL",
+      "sublabel": "comercial",
+      "pos": [870, 214],
+      "size": [160, 60],
+      "sources": [{ "path": "supabase/functions/sol-assistant/index.ts", "label": "asistente comercial" }]
+    },
+    {
+      "id": "bi",
+      "type": "backend",
+      "label": "bi-assistant",
+      "sublabel": "analista de reportes",
+      "pos": [870, 306],
+      "size": [160, 60],
+      "sources": [{ "path": "supabase/functions/bi-assistant/index.ts", "label": "analista BI" }]
+    },
+    {
+      "id": "pbi",
+      "type": "backend",
+      "label": "pbi-query",
+      "sublabel": "arma el DAX",
+      "pos": [870, 398],
+      "size": [160, 60],
+      "sources": [{ "path": "supabase/functions/pbi-query/index.ts", "label": "consulta DAX" }]
+    },
+    {
+      "id": "checador",
+      "type": "backend",
+      "label": "checador-import",
+      "sublabel": "solo admin",
+      "pos": [870, 490],
+      "size": [160, 60],
+      "sources": [{ "path": "supabase/functions/checador-import/index.ts", "label": "import de checadas" }]
+    },
+    {
+      "id": "ollama",
+      "type": "external",
+      "label": "Ollama Cloud",
+      "sublabel": "gpt-oss:120b-cloud",
+      "pos": [1150, 60],
+      "size": [150, 60]
+    },
+    {
+      "id": "powerbi",
+      "type": "external",
+      "label": "Power BI REST",
+      "sublabel": "Entra ID",
+      "pos": [1150, 398],
+      "size": [150, 60]
+    }
+  ],
+  "boundaries": [
+    { "kind": "security-group", "label": "Cloudflare", "wraps": ["cdn"], "pad": 12 },
+    { "kind": "security-group", "label": "otro origen", "wraps": ["herramientas_fn"], "pad": 12 },
+    { "kind": "region", "label": "Supabase / zkmbebybyyefmqcxjqrg", "wraps": ["storage", "auth", "db", "wa_fn", "soli", "sol", "bi", "pbi", "checador"], "pad": 20 },
+    { "kind": "security-group", "label": "service role", "wraps": ["wa_fn", "soli", "sol", "bi", "pbi", "checador"], "pad": 12 }
+  ],
+  "connections": [
+    { "from": "app", "to": "cdn", "label": "HTTPS", "labelDx": -30 },
+    { "from": "app", "to": "auth", "label": "JWT de sesion", "variant": "emphasis" },
+    { "from": "app", "to": "herramientas_fn", "label": "iframe", "variant": "dashed" },
+    { "from": "herramientas_fn", "to": "storage", "label": "GET firmado" },
+    { "from": "auth", "to": "storage", "label": "firma a 8 h" },
+    { "from": "auth", "to": "db", "label": "RLS por fila", "variant": "security", "labelDy": 60 },
+    { "from": "auth", "to": "soli", "label": "verify_jwt", "variant": "emphasis" },
+    { "from": "auth", "to": "sol" },
+    { "from": "auth", "to": "bi" },
+    { "from": "auth", "to": "checador", "label": "solo admin", "variant": "security" },
+    { "from": "appchecar", "to": "app", "label": "el .xls a mano", "variant": "dashed" },
+    { "from": "soli", "to": "ollama", "label": "hasta 15 llamadas", "variant": "emphasis", "labelDx": -60 },
+    { "from": "sol", "to": "ollama", "label": "otro modelo", "labelDy": 22 },
+    { "from": "bi", "to": "pbi", "label": "JWT del usuario", "labelDy": 32 },
+    { "from": "pbi", "to": "powerbi", "label": "DAX de solo lectura", "variant": "security" },
+    { "from": "checador", "to": "db", "label": "service role", "fromSide": "bottom", "toSide": "bottom", "via": [[950, 600], [665, 600]] },
+    { "from": "wa", "to": "wa_fn", "label": "webhook firmado" },
+    { "from": "wa_fn", "to": "soli", "label": "delega la conversacion", "labelDy": 32 }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Fronteras de confianza",
+      "items": [
+        "Todo lo que llega del cliente pasa por la misma puerta: verify_jwt antes de la funcion, RLS antes de la fila.",
+        "El service role solo existe dentro de la Edge Function; nunca viaja al cliente Flutter.",
+        "herramientas.sistemassi.com es otro host y por tanto otro origen: el HTML de terceros no alcanza el token de sesion."
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Lo que no esta en el repositorio",
+      "items": [
+        "Los secretos viven en Supabase (Edge Functions / Secrets), no en el repo ni en el cliente.",
+        "AZURE_CLIENT_SECRET caduca el 3 de agosto de 2028; al vencer, el error sera generico de Azure AD.",
+        "pbi-query esta desplegada pero inerte hasta que lleguen las tres credenciales AZURE_*: responde 503."
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Detalle que el mapa no dibuja",
+      "items": [
+        "Las seis Edge Functions leen y escriben con service role tras comprobar permisos; el mapa lo dibuja solo en checador-import.",
+        "pbi-query resuelve workspace y dataset desde powerbi_links y cachea el esquema 24 h en pbi_model_cache.",
+        "Las notificaciones se alimentan de Realtime sobre la misma base, desde lib/services/notification_service.dart."
+      ]
+    }
+  ]
+}
