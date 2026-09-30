@@ -74,7 +74,8 @@ dependency_overrides:
 flutter_launcher_icons:
   image_path: "assets/sisolok.png"
   android: true
-  ios: false
+  ios: true
+  remove_alpha_ios: true
   web:
     generate: true
     image_path: "assets/sisolok.png"

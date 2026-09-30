@@ -721,6 +721,10 @@ class _CamaraChecadorState extends State<_CamaraChecador> with WidgetsBindingObs
       );
     } else if (_camara == null) {
       vista = const Center(child: CircularProgressIndicator());
+    } else if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) {
+      // En iOS, CameraPreview ya invierte la proporcion cuando el telefono esta vertical; envolverlo
+      // en otro AspectRatio con la proporcion del sensor (horizontal) lo estiraba a lo ancho.
+      vista = Center(child: CameraPreview(_camara!));
     } else {
       vista = Center(
         child: AspectRatio(
