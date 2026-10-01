@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'theme/si_theme.dart';
+import 'services/trash_service.dart';
+import 'widgets/boton_flotante.dart';
 import 'widgets/hoja_formulario.dart';
 import 'bi_web_iframe_stub.dart' if (dart.library.html) 'bi_web_iframe_web.dart';
 
@@ -287,22 +289,36 @@ class _BiPageState extends State<BiPage> {
     );
     if (confirmed != true) return;
     try {
-      await _supabase
+      // A la papelera general (la de la barra lateral), con quienes lo podian ver: la asignacion se
+      // borra en cascada con el enlace y sin esto volveria sin usuarios al restaurarlo.
+      final enlace = await _supabase
           .from('powerbi_links')
-          .update({'is_active': false})
-          .eq('id', id);
+          .select()
+          .eq('id', id)
+          .single();
+      final usuarios = await _supabase
+          .from('powerbi_link_users')
+          .select('user_id')
+          .eq('link_id', id);
+      final idPapelera = await TrashService.moveToTrash(
+        originTable: 'powerbi_links',
+        originId: id,
+        data: {
+          ...Map<String, dynamic>.from(enlace),
+          '_usuarios': [for (final u in usuarios) u['user_id']],
+        },
+        label: '${enlace['title'] ?? 'Reporte BI'}',
+      );
+      await _supabase.from('powerbi_links').delete().eq('id', id);
       _fetchData();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Enlace movido a papelera'),
+            content: const Text('Enlace movido a la papelera'),
             action: SnackBarAction(
               label: 'Deshacer',
               onPressed: () async {
-                await _supabase
-                    .from('powerbi_links')
-                    .update({'is_active': true})
-                    .eq('id', id);
+                await TrashService.restore(idPapelera);
                 _fetchData();
               },
             ),
@@ -317,18 +333,6 @@ class _BiPageState extends State<BiPage> {
         ));
       }
     }
-  }
-
-  void _showPapelera() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => _PapeleraSheet(
-        supabase: _supabase,
-        onChanged: _fetchData,
-      ),
-    );
   }
 
   @override
@@ -353,6 +357,19 @@ class _BiPageState extends State<BiPage> {
 
     return Scaffold(
       backgroundColor: c.bg,
+      floatingActionButton: esPantallaTelefono(context) && _isAdmin
+          ? BotonesFlotantes(
+              secundario: BotonFlotanteSecundario(
+                onPressed: _showGruposManager,
+                tooltip: 'Grupos',
+                icono: Icons.folder_outlined,
+              ),
+              principal: BotonFlotanteNuevo(
+                onPressed: () => _showLinkForm(),
+                tooltip: 'Nuevo',
+              ),
+            )
+          : null,
       body: Column(
         children: [
           _buildToolbar(c),
@@ -412,30 +429,23 @@ class _BiPageState extends State<BiPage> {
           if (compacto) Expanded(child: buscador) else buscador,
           if (!compacto) const Spacer(),
           if (_isAdmin && compacto) ...[
-            IconButton(
-              onPressed: _showPapelera,
-              icon: Icon(Icons.delete_outline, size: 20, color: c.ink3),
-              tooltip: 'Papelera',
-            ),
-            IconButton(
-              onPressed: _showGruposManager,
-              icon: Icon(Icons.folder_outlined, size: 20, color: c.brand),
-              tooltip: 'Grupos',
-            ),
-            IconButton.filled(
-              onPressed: () => _showLinkForm(),
-              icon: const Icon(Icons.add, size: 18),
-              tooltip: 'Nuevo',
-              style: IconButton.styleFrom(backgroundColor: c.brand),
-            ),
+            // En el telefono «Grupos» tambien va en un boton flotante.
+            if (!esPantallaTelefono(context))
+              IconButton(
+                onPressed: _showGruposManager,
+                icon: Icon(Icons.folder_outlined, size: 20, color: c.brand),
+                tooltip: 'Grupos',
+              ),
+            // En el telefono «Nuevo» es el boton flotante.
+            if (!esPantallaTelefono(context))
+              IconButton.filled(
+                onPressed: () => _showLinkForm(),
+                icon: const Icon(Icons.add, size: 18),
+                tooltip: 'Nuevo',
+                style: IconButton.styleFrom(backgroundColor: c.brand),
+              ),
           ],
           if (_isAdmin && !compacto) ...[
-            IconButton(
-              onPressed: _showPapelera,
-              icon: Icon(Icons.delete_outline, size: 20, color: c.ink3),
-              tooltip: 'Papelera',
-            ),
-            const SizedBox(width: SiSpace.x1),
             OutlinedButton.icon(
               onPressed: _showGruposManager,
               icon: const Icon(Icons.folder_outlined, size: 16),
@@ -527,7 +537,8 @@ class _BiPageState extends State<BiPage> {
 
   Widget _buildList(SiColors c, List<Map<String, dynamic>> items) {
     return ListView.separated(
-      padding: const EdgeInsets.all(SiSpace.x4),
+      padding: EdgeInsets.fromLTRB(SiSpace.x4, SiSpace.x4, SiSpace.x4,
+          SiSpace.x4 + (esPantallaTelefono(context) ? kEspacioBotonFlotante : 0)),
       itemCount: items.length,
       separatorBuilder: (_, __) => const SizedBox(height: SiSpace.x3),
       itemBuilder: (context, i) {
@@ -1333,192 +1344,6 @@ class _UserAssignListState extends State<_UserAssignList> {
                 ),
         ),
       ],
-    );
-  }
-}
-
-// ── Papelera sheet ────────────────────────────────────────────────────────────
-
-class _PapeleraSheet extends StatefulWidget {
-  final SupabaseClient supabase;
-  final VoidCallback onChanged;
-
-  const _PapeleraSheet({required this.supabase, required this.onChanged});
-
-  @override
-  State<_PapeleraSheet> createState() => _PapeleraSheetState();
-}
-
-class _PapeleraSheetState extends State<_PapeleraSheet> {
-  List<Map<String, dynamic>>? _items;
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    setState(() => _loading = true);
-    try {
-      final data = await widget.supabase
-          .from('powerbi_links')
-          .select('id, title, descripcion, grupo_id, bi_grupos(name)')
-          .eq('is_active', false)
-          .order('title', ascending: true);
-      if (mounted) {
-        setState(() {
-          _items = (data as List)
-              .map((e) => Map<String, dynamic>.from(e))
-              .toList();
-          _loading = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _restore(String id) async {
-    await widget.supabase
-        .from('powerbi_links')
-        .update({'is_active': true})
-        .eq('id', id);
-    widget.onChanged();
-    _load();
-  }
-
-  Future<void> _deletePermanent(String id, BuildContext ctx) async {
-    final c = SiColors.of(ctx);
-    final confirmed = await showDialog<bool>(
-      context: ctx,
-      builder: (dctx) => AlertDialog(
-        title: const Text('Eliminar permanentemente'),
-        content: const Text('Esta acción no se puede deshacer.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dctx, false),
-            child: const Text('Cancelar'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(dctx, true),
-            style: TextButton.styleFrom(foregroundColor: c.danger),
-            child: const Text('Eliminar'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    await widget.supabase.from('powerbi_links').delete().eq('id', id);
-    widget.onChanged();
-    _load();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final c = SiColors.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: c.panel,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      padding: EdgeInsets.only(
-        left: SiSpace.x6,
-        right: SiSpace.x6,
-        top: SiSpace.x4,
-        bottom: MediaQuery.of(context).viewInsets.bottom + SiSpace.x10,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: SiSpace.x4),
-              decoration:
-                  BoxDecoration(color: c.line, borderRadius: SiRadius.rPill),
-            ),
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text('Cerrar', style: TextStyle(color: c.ink3, fontSize: 15)),
-              ),
-              Text('Papelera',
-                  style: TextStyle(
-                      fontSize: 17, fontWeight: FontWeight.w600, color: c.ink)),
-              const SizedBox(width: 72),
-            ],
-          ),
-          const SizedBox(height: SiSpace.x4),
-          if (_loading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: SiSpace.x8),
-              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-            )
-          else if (_items == null || _items!.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: SiSpace.x8),
-              child: Center(
-                child: Column(
-                  children: [
-                    Icon(Icons.delete_outline, size: 48, color: c.line),
-                    const SizedBox(height: SiSpace.x3),
-                    Text('La papelera está vacía',
-                        style: TextStyle(color: c.ink3, fontSize: 14)),
-                  ],
-                ),
-              ),
-            )
-          else
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 400),
-              child: ListView.separated(
-                shrinkWrap: true,
-                itemCount: _items!.length,
-                separatorBuilder: (_, __) => Divider(color: c.line2, height: 1),
-                itemBuilder: (ctx, i) {
-                  final item = _items![i];
-                  final grupoName =
-                      (item['bi_grupos'] as Map?)?['name']?.toString();
-                  return ListTile(
-                    dense: true,
-                    leading: Icon(Icons.assessment_outlined,
-                        size: 20, color: c.ink3),
-                    title: Text(item['title']?.toString() ?? 'Sin título',
-                        style: TextStyle(fontSize: 13, color: c.ink)),
-                    subtitle: grupoName != null
-                        ? Text(grupoName,
-                            style: TextStyle(fontSize: 11, color: c.ink4))
-                        : null,
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: Icon(Icons.restore, size: 18, color: c.brand),
-                          tooltip: 'Restaurar',
-                          onPressed: () => _restore(item['id'] as String),
-                        ),
-                        IconButton(
-                          icon: Icon(Icons.delete_forever_outlined,
-                              size: 18, color: c.danger),
-                          tooltip: 'Eliminar permanentemente',
-                          onPressed: () =>
-                              _deletePermanent(item['id'] as String, context),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-        ],
-      ),
     );
   }
 }

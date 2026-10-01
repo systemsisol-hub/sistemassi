@@ -126,6 +126,7 @@ class _TrashPageState extends State<TrashPage> {
       case 'profiles': return 'Perfil';
       case 'issi_inventory': return 'Inventario';
       case 'external_contacts': return 'Contacto';
+      case 'powerbi_links': return 'BI';
       default: return originTable;
     }
   }
@@ -135,6 +136,7 @@ class _TrashPageState extends State<TrashPage> {
       case 'profiles': return Icons.person_outline;
       case 'issi_inventory': return Icons.inventory_2_outlined;
       case 'external_contacts': return Icons.contact_phone_outlined;
+      case 'powerbi_links': return Icons.bar_chart_outlined;
       default: return Icons.delete_outline;
     }
   }
