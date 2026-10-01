@@ -9,22 +9,18 @@ rootProject.buildDir = "../build"
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
 }
+// share_plus 7.2.2 fija compileSdk 33 y sus dependencias de androidx piden 34 o mas. Se compila
+// contra la del proyecto hasta actualizar el plugin (su API cambio en la 10 y hay que probarlo en
+// iPhone otra vez). Va antes de evaluationDependsOn y en afterEvaluate para ganarle a su build.gradle.
 subprojects {
-    project.evaluationDependsOn(":app")
-}
-
-subprojects {
-    plugins.withType(com.android.build.gradle.BasePlugin).configureEach {
-        project.android {
-            if (project.android.extensions.findByName("flutter") == null) {
-                project.android.extensions.add("flutter", [
-                    compileSdkVersion: 34,
-                    minSdkVersion: 21,
-                    targetSdkVersion: 34
-                ])
-            }
+    if (project.name == "share_plus") {
+        project.afterEvaluate {
+            project.android.compileSdkVersion 36
         }
     }
+}
+subprojects {
+    project.evaluationDependsOn(":app")
 }
 
 tasks.register("clean", Delete) {
