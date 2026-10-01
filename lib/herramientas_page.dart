@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'services/trash_service.dart';
 import 'theme/si_theme.dart';
+import 'widgets/boton_flotante.dart';
 import 'widgets/hoja_formulario.dart';
 import 'widgets/visor_html.dart';
 
@@ -468,6 +469,9 @@ class _HerramientasPageState extends State<HerramientasPage> {
 
     return Scaffold(
       backgroundColor: c.bg,
+      floatingActionButton: esPantallaTelefono(context)
+          ? BotonFlotanteNuevo(onPressed: () => _showForm(), tooltip: 'Nueva herramienta')
+          : null,
       body: Column(
         children: [
           _buildToolbar(c),
@@ -488,7 +492,10 @@ class _HerramientasPageState extends State<HerramientasPage> {
       child: Row(
         children: [
           Container(
-            width: 260,
+            // En el telefono, sin el boton al lado, la busqueda ocupa todo el ancho.
+            width: esPantallaTelefono(context)
+                ? MediaQuery.sizeOf(context).width - SiSpace.x6 * 2
+                : 260,
             height: 36,
             decoration: BoxDecoration(
               color: c.bg,
@@ -520,23 +527,25 @@ class _HerramientasPageState extends State<HerramientasPage> {
               onChanged: (v) => setState(() => _searchQuery = v),
             ),
           ),
-          const Spacer(),
           // Cualquiera con acceso a la página crea las suyas (29/09/2026): la base lo deja asignado
-          // como editor de la que crea (`tr_herramienta_creada`).
-          ElevatedButton.icon(
-            onPressed: () => _showForm(),
-            icon: const Icon(Icons.add, size: 16),
-            label: const Text('Nueva',
-                style: TextStyle(fontWeight: FontWeight.w600)),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: c.brand,
-              foregroundColor: Colors.white,
-              elevation: 0,
-              minimumSize: const Size(0, 36),
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              shape: const RoundedRectangleBorder(borderRadius: SiRadius.rMd),
+          // como editor de la que crea (`tr_herramienta_creada`). En el telefono va en el flotante.
+          if (!esPantallaTelefono(context)) ...[
+            const Spacer(),
+            ElevatedButton.icon(
+              onPressed: () => _showForm(),
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('Nueva',
+                  style: TextStyle(fontWeight: FontWeight.w600)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: c.brand,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                minimumSize: const Size(0, 36),
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                shape: const RoundedRectangleBorder(borderRadius: SiRadius.rMd),
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -581,7 +590,8 @@ class _HerramientasPageState extends State<HerramientasPage> {
       });
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(SiSpace.x6),
+      padding: EdgeInsets.fromLTRB(SiSpace.x6, SiSpace.x6, SiSpace.x6,
+          SiSpace.x6 + (esPantallaTelefono(context) ? kEspacioBotonFlotante : 0)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:flutter/services.dart';
 import 'colaborador_detail_page.dart';
 import 'theme/si_theme.dart';
+import 'widgets/boton_flotante.dart';
 import 'services/notification_service.dart';
 import 'services/trash_service.dart';
 
@@ -108,10 +109,14 @@ Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
     return _buildGlassPill(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize: esPantallaTelefono(context) ? MainAxisSize.max : MainAxisSize.min,
         children: [
+          // En el telefono, sin el «+» al lado, la busqueda ocupa todo el ancho.
           ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 200),
+            constraints: BoxConstraints(
+                maxWidth: esPantallaTelefono(context)
+                    ? MediaQuery.sizeOf(context).width - 56
+                    : 200),
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
@@ -147,15 +152,18 @@ Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
               }),
             ),
           ),
-          const VerticalDivider(
-              width: 1, thickness: 1, indent: 8, endIndent: 8),
-          GestureDetector(
-            onTap: () => _showForm(),
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Icon(Icons.add, size: 22, color: c.ink),
+          // En el telefono el «+» es el boton flotante.
+          if (!esPantallaTelefono(context)) ...[
+            const VerticalDivider(
+                width: 1, thickness: 1, indent: 8, endIndent: 8),
+            GestureDetector(
+              onTap: () => _showForm(),
+              child: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Icon(Icons.add, size: 22, color: c.ink),
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -1784,7 +1792,8 @@ Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
     return RefreshIndicator(
       onRefresh: _fetchItems,
       child: ListView.separated(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.fromLTRB(16, 16, 16,
+            16 + (esPantallaTelefono(context) ? kEspacioBotonFlotante : 0)),
         itemCount: filtered.length,
         separatorBuilder: (_, __) => const SizedBox(height: 12),
         itemBuilder: (context, index) {
@@ -1976,6 +1985,12 @@ Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
     final filtered = _filteredItems;
 
     return Scaffold(
+      floatingActionButton: esPantallaTelefono(context)
+          ? BotonFlotanteNuevo(
+              onPressed: () => _showForm(),
+              tooltip: 'Colaborador',
+            )
+          : null,
       body: CustomScrollView(
         slivers: [
           if (MediaQuery.of(context).size.width <= 800)
@@ -1985,7 +2000,9 @@ Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    _buildControls(theme),
+                    esPantallaTelefono(context)
+                        ? Expanded(child: _buildControls(theme))
+                        : _buildControls(theme),
                   ],
                 ),
               ),

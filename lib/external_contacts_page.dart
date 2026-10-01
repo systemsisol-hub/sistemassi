@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/services.dart';
 import 'theme/si_theme.dart';
+import 'widgets/boton_flotante.dart';
 import 'services/trash_service.dart';
 
 class ExternalContactsPage extends StatefulWidget {
@@ -317,13 +318,11 @@ class _ExternalContactsPageState extends State<ExternalContactsPage> {
 
     return Scaffold(
       backgroundColor: c.bg,
-      floatingActionButton: isNarrow
-          ? FloatingActionButton(
+      floatingActionButton: esPantallaTelefono(context)
+          ? BotonFlotanteNuevo(
               onPressed: () => _showContactForm(),
-              backgroundColor: c.brand,
-              foregroundColor: Colors.white,
-              elevation: 2,
-              child: const Icon(Icons.person_add),
+              tooltip: 'Nuevo contacto',
+              icono: Icons.person_add,
             )
           : null,
       body: _isLoading

@@ -994,6 +994,14 @@ class _MobileShell extends StatelessWidget {
                 icon: Icon(Icons.logout, size: 18, color: c.ink3),
                 onPressed: () async {
                   Navigator.pop(context);
+                  // Igual que en el menu de escritorio: la salida queda en Logs.
+                  try {
+                    final user = Supabase.instance.client.auth.currentUser;
+                    await Supabase.instance.client.rpc('log_event', params: {
+                      'action_type_param': 'CIERRE DE SESIÓN',
+                      'target_info_param': 'Usuario: ${user?.email ?? '---'}',
+                    });
+                  } catch (_) {}
                   await Supabase.instance.client.auth.signOut();
                 },
               ),

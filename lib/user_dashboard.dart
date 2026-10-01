@@ -473,82 +473,31 @@ class _PageHeader extends StatelessWidget {
             style: TextStyle(fontSize: 13, color: c.ink2)),
       ],
     );
-    final botones = [
-        _ActionButton(
-          icon: Icons.lock_outline,
-          label: 'Cambiar contraseña',
-          onPressed: onChangePassword,
-        ),
-        const SizedBox(width: SiSpace.x2),
-        _ActionButton(
-          icon: Icons.logout,
-          label: 'Cerrar sesión',
-          danger: true,
-          onPressed: () async {
-            try {
-              final user = Supabase.instance.client.auth.currentUser;
-              await Supabase.instance.client.rpc('log_event', params: {
-                'action_type_param': 'CIERRE DE SESIÓN',
-                'target_info_param': 'Usuario: ${user?.email ?? '---'}',
-              });
-            } catch (_) {}
-            await Supabase.instance.client.auth.signOut();
-          },
-        ),
-    ];
+    // «Cerrar sesión» ya esta en el menu lateral: aqui solo queda cambiar la contraseña.
+    final boton = FilledButton.icon(
+      onPressed: onChangePassword,
+      icon: const Icon(Icons.lock_outline, size: 16),
+      label: const Text('Cambiar contraseña'),
+      style: FilledButton.styleFrom(
+        backgroundColor: c.brand,
+        foregroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(borderRadius: SiRadius.rMd),
+      ),
+    );
     return LayoutBuilder(builder: (context, caja) {
       if (caja.maxWidth >= 720) {
-        return Row(children: [titulo, const Spacer(), ...botones]);
+        return Row(children: [titulo, const Spacer(), boton]);
       }
-      // En un telefono el subtitulo empujaba los botones fuera de la pantalla y
-      // «Cambiar contraseña» quedaba inalcanzable.
+      // En un telefono el subtitulo empujaba el boton fuera de la pantalla.
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           titulo,
           const SizedBox(height: SiSpace.x3),
-          Wrap(
-            spacing: SiSpace.x2,
-            runSpacing: SiSpace.x2,
-            children: botones.where((w) => w is! SizedBox).toList(),
-          ),
+          boton,
         ],
       );
     });
-  }
-}
-
-class _ActionButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onPressed;
-  final bool danger;
-
-  const _ActionButton({
-    required this.icon,
-    required this.label,
-    required this.onPressed,
-    this.danger = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = SiColors.of(context);
-    final fgColor = danger ? c.danger : c.ink2;
-    return OutlinedButton.icon(
-      onPressed: onPressed,
-      icon: Icon(icon, size: 14, color: fgColor),
-      label: Text(label,
-          style: TextStyle(fontSize: 12, color: fgColor)),
-      style: OutlinedButton.styleFrom(
-        side: BorderSide(
-            color: danger ? c.danger.withOpacity(0.4) : c.line, width: 1),
-        padding:
-            const EdgeInsets.symmetric(horizontal: SiSpace.x3, vertical: 6),
-        minimumSize: Size.zero,
-        shape: const RoundedRectangleBorder(borderRadius: SiRadius.rMd),
-      ),
-    );
   }
 }
 

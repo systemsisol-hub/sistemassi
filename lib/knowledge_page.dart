@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'services/clave_almacenamiento.dart';
 import 'theme/si_theme.dart';
+import 'widgets/boton_flotante.dart';
 import 'widgets/hoja_formulario.dart';
 import 'widgets/visor_html.dart';
 
@@ -321,6 +322,10 @@ class _KnowledgePageState extends State<KnowledgePage>
 
     return Scaffold(
       backgroundColor: c.bg,
+      floatingActionButton: esPantallaTelefono(context) && _isAdmin
+          ? BotonFlotanteNuevo(
+              onPressed: () => _openForm(context, c), tooltip: 'Nuevo artículo')
+          : null,
       body: Column(
         children: [
           _buildHeader(c),
@@ -391,8 +396,8 @@ class _KnowledgePageState extends State<KnowledgePage>
                   icon: Icon(Icons.search, color: c.ink3),
                   onPressed: () => setState(() => _showSearch = true),
                 ),
-          // El mismo botón que Herramientas y BI, en lugar del botón flotante.
-          if (_isAdmin) ...[
+          // El mismo botón que Herramientas y BI; en el telefono va en el botón flotante.
+          if (_isAdmin && !esPantallaTelefono(context)) ...[
             const SizedBox(width: SiSpace.x2),
             ElevatedButton.icon(
               onPressed: () => _openForm(context, c),

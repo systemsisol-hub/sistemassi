@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'calendar_event_form_dialog.dart';
 import 'calendar_event_search_dialog.dart';
 import 'theme/si_theme.dart';
+import 'widgets/boton_flotante.dart';
 
 class CalendarPage extends StatefulWidget {
   final String? initialEventId;
@@ -643,6 +644,12 @@ class _CalendarPageState extends State<CalendarPage> {
 
     return Scaffold(
       backgroundColor: c.bg,
+      floatingActionButton: esPantallaTelefono(context)
+          ? BotonFlotanteNuevo(
+              onPressed: _showAddEventDialog,
+              tooltip: 'Nuevo evento',
+            )
+          : null,
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -767,19 +774,22 @@ class _CalendarPageState extends State<CalendarPage> {
                                       minWidth: 36, minHeight: 36),
                                   padding: EdgeInsets.zero,
                                 ),
-                                const SizedBox(width: 4),
-                                GestureDetector(
-                                  onTap: _showAddEventDialog,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                        color: c.brand,
-                                        borderRadius:
-                                            BorderRadius.circular(8)),
-                                    child: const Icon(Icons.add,
-                                        size: 18, color: Colors.white),
+                                // En el telefono el «+» es el boton flotante.
+                                if (!esPantallaTelefono(context)) ...[
+                                  const SizedBox(width: 4),
+                                  GestureDetector(
+                                    onTap: _showAddEventDialog,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                          color: c.brand,
+                                          borderRadius:
+                                              BorderRadius.circular(8)),
+                                      child: const Icon(Icons.add,
+                                          size: 18, color: Colors.white),
+                                    ),
                                   ),
-                                ),
+                                ],
                               ],
                             ),
                           ],
