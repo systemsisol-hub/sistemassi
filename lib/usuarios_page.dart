@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth_errores.dart';
 import 'theme/si_theme.dart';
+import 'services/credenciales.dart';
 import 'services/trash_service.dart';
 import 'widgets/boton_flotante.dart';
 import 'utils/webmail_utils.dart';
@@ -219,11 +220,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
       // Cada palabra debe aparecer en al menos uno de los campos (AND entre palabras)
       final words = q.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
 
-      // `perfiles_completos` y no `profiles`: la lista lleva `mail_pass`, que `profiles` ya no da a una
-      // sesion normal. La vista se la da a admin y a quien tiene `show_users`.
+      // `perfiles_completos`: solo admin y quien tiene `show_users` ven la lista completa. Las
+      // credenciales ya no vienen aqui; el formulario y el acceso las leen con `Credenciales.leer`.
       var dataQuery = Supabase.instance.client
           .from('perfiles_completos')
-          .select('id, nombre, paterno, materno, email, numero_empleado, role, is_blocked, status_sys, status_rh, permissions, full_name, has_auth_account, mail_user, mail_pass, schedule_id');
+          .select('id, nombre, paterno, materno, email, numero_empleado, role, is_blocked, status_sys, status_rh, permissions, full_name, has_auth_account, mail_user, schedule_id');
       var countQuery =
           Supabase.instance.client.from('perfiles_completos').count(CountOption.exact);
 
@@ -1498,6 +1499,25 @@ class _UserFormSheetState extends State<_UserFormSheet> {
     }
   }
 
+  // Las credenciales van cifradas aparte del perfil (`credenciales_de`, migracion 20261002090000).
+  Future<void> _cargarCredenciales(String id) async {
+    try {
+      final cred = await Credenciales.leer(id);
+      if (!mounted) return;
+      final ctrls = {
+        'mail_pass': _mailPass, 'drp_user': _drpUser, 'drp_pass': _drpPass,
+        'gp_user': _gpUser, 'gp_pass': _gpPass, 'bitrix_user': _bitrixUser,
+        'bitrix_pass': _bitrixPass, 'ek_user': _ekUser, 'ek_pass': _ekPass,
+        'otro_user': _otroUser, 'otro_pass': _otroPass,
+      };
+      ctrls.forEach((col, ctrl) {
+        ctrl.text = cred[col] ?? '';
+      });
+    } catch (e) {
+      debugPrint('Error al leer las credenciales: $e');
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -1525,6 +1545,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
     _statusRh = u?['status_rh'] ?? 'ACTIVO';
     _scheduleId = u?['schedule_id'] as String?;
     _cargarHorarios();
+    if (u?['id'] != null) _cargarCredenciales(u!['id'] as String);
     _isBlocked = u?['is_blocked'] ?? false;
     _permissions = Map<String, bool>.from(u?['permissions'] ?? {
       'show_calendar': false,
@@ -1607,6 +1628,8 @@ class _UserFormSheetState extends State<_UserFormSheet> {
           'is_blocked': _isBlocked,
           'permissions': _permissions,
           'mail_user': _mailUser.text.trim(),
+        }).eq('id', widget.user!['id']);
+        await Credenciales.guardar(widget.user!['id'] as String, {
           'mail_pass': _mailPass.text.trim(),
           'drp_user': _drpUser.text.trim(),
           'drp_pass': _drpPass.text.trim(),
@@ -1618,7 +1641,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
           'ek_pass': _ekPass.text.trim(),
           'otro_user': _otroUser.text.trim(),
           'otro_pass': _otroPass.text.trim(),
-        }).eq('id', widget.user!['id']);
+        });
       } else {
         // Nuevo usuario desde botón +: crea cuenta auth + perfil
         final res = await Supabase.instance.client
@@ -1636,8 +1659,8 @@ class _UserFormSheetState extends State<_UserFormSheet> {
             'permissions': _permissions,
             'role': _role,
             'mail_user': _mailUser.text.trim(),
-            'mail_pass': _mailPass.text.trim(),
           }).eq('id', res);
+          await Credenciales.guardar(res as String, {'mail_pass': _mailPass.text.trim()});
           // El rol y la pestaña RH de Incidencias se leen del TOKEN, no del perfil, y este camino
           // no pasa por `update_user_admin`, que es quien los copia. Sin esto un usuario nuevo con
           // el interruptor encendido no veía nada hasta que alguien lo volviera a guardar.
@@ -2379,9 +2402,16 @@ class _AccessSheetState extends State<_AccessSheet> {
     _emailCtrl = TextEditingController(
       text: widget.user['mail_user'] ?? widget.user['email'] ?? '',
     );
-    _passCtrl = TextEditingController(
-      text: widget.user['mail_pass'] ?? '',
-    );
+    // Se propone la contraseña del correo, que va cifrada aparte del perfil.
+    _passCtrl = TextEditingController();
+    final id = widget.user['id'] as String?;
+    if (!_hasAuth && id != null) {
+      Credenciales.leer(id).then((cred) {
+        if (mounted && _passCtrl.text.isEmpty) _passCtrl.text = cred['mail_pass'] ?? '';
+      }).catchError((e) {
+        debugPrint('Error al leer las credenciales: $e');
+      });
+    }
   }
 
   @override
