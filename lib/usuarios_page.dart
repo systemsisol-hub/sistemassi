@@ -219,11 +219,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
       // Cada palabra debe aparecer en al menos uno de los campos (AND entre palabras)
       final words = q.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
 
+      // `perfiles_completos` y no `profiles`: la lista lleva `mail_pass`, que `profiles` ya no da a una
+      // sesion normal. La vista se la da a admin y a quien tiene `show_users`.
       var dataQuery = Supabase.instance.client
-          .from('profiles')
+          .from('perfiles_completos')
           .select('id, nombre, paterno, materno, email, numero_empleado, role, is_blocked, status_sys, status_rh, permissions, full_name, has_auth_account, mail_user, mail_pass, schedule_id');
       var countQuery =
-          Supabase.instance.client.from('profiles').count(CountOption.exact);
+          Supabase.instance.client.from('perfiles_completos').count(CountOption.exact);
 
       if (_filterStatusSys != null) {
         dataQuery  = dataQuery.eq('status_sys', _filterStatusSys!);
@@ -327,7 +329,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       // Fetch full profile before deletion for trash snapshot
       try {
         final profileData = await Supabase.instance.client
-            .from('profiles')
+            .from('perfiles_completos')
             .select()
             .eq('id', id)
             .single();
@@ -361,7 +363,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     if (user != null) {
       try {
         final data = await Supabase.instance.client
-            .from('profiles')
+            .from('perfiles_completos')
             .select()
             .eq('id', user['id'])
             .single();

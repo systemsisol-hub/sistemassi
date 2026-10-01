@@ -328,7 +328,7 @@ class _IncidenciasPageState extends State<_VistaIncidencias>
     try {
       // Fetch role and name
       final profile = await Supabase.instance.client
-          .from('profiles')
+          .from('perfiles_completos')
           .select(
               '*, role, nombre, paterno, materno, fecha_ingreso, fecha_reingreso, area, ubicacion, puesto, jefe_inmediato, foto_url, numero_empleado')
           .eq('id', user.id)
@@ -370,7 +370,7 @@ class _IncidenciasPageState extends State<_VistaIncidencias>
       final response = await Supabase.instance.client
           .from('profiles')
           .select(
-              '*, id, nombre, paterno, materno, role, fecha_ingreso, fecha_reingreso, area, ubicacion, puesto, jefe_inmediato, foto_url, numero_empleado')
+              'id, nombre, paterno, materno, full_name, email, role, status_sys, fecha_ingreso, fecha_reingreso, area, ubicacion, puesto, jefe_inmediato, foto_url, numero_empleado')
           .eq('status_sys', 'ACTIVO')
           .order('nombre', ascending: true);
 

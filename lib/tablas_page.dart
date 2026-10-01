@@ -114,8 +114,10 @@ class _NominaTableState extends State<_NominaTable> {
       const int limit = 1000;
 
       while (true) {
+        // Banco, cuenta y CLABE ya no salen de `profiles` para una sesion normal: `nomina_perfiles` los
+        // da a admin y a quien tiene `show_tablas`.
         final data = await Supabase.instance.client
-            .from('profiles')
+            .from('nomina_perfiles')
             .select('nombre, paterno, materno, numero_empleado, fecha_ingreso, mail_user, ubicacion, banco, cuenta, clabe, puesto, status_rh')
             .not('nombre', 'is', null)
             .order('numero_empleado', ascending: true, nullsFirst: false)
