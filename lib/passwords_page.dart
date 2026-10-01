@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'theme/si_theme.dart';
+import 'widgets/boton_flotante.dart';
 import 'widgets/hoja_formulario.dart';
 
 class PasswordsPage extends StatefulWidget {
@@ -213,7 +214,6 @@ class _PasswordsPageState extends State<PasswordsPage>
   @override
   Widget build(BuildContext context) {
     final c = SiColors.of(context);
-    final isNarrow = MediaQuery.of(context).size.width < 600;
     if (_isLoading) {
       return Scaffold(
         backgroundColor: c.bg,
@@ -226,13 +226,10 @@ class _PasswordsPageState extends State<PasswordsPage>
 
     return Scaffold(
       backgroundColor: c.bg,
-      floatingActionButton: isNarrow
-          ? FloatingActionButton(
+      floatingActionButton: esPantallaTelefono(context)
+          ? BotonFlotanteNuevo(
               onPressed: () => _showPasswordForm(),
-              backgroundColor: c.brand,
-              foregroundColor: Colors.white,
-              elevation: 2,
-              child: const Icon(Icons.add),
+              tooltip: 'Nueva contraseña',
             )
           : null,
       body: Column(

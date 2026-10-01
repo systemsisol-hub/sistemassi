@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'avisos_store.dart';
 import 'theme/si_theme.dart';
 import 'widgets/banner_avisos.dart';
+import 'widgets/boton_flotante.dart';
 import 'widgets/dialogo_aviso.dart';
 import 'widgets/hoja_formulario.dart';
 import 'widgets/imagen_aviso.dart';
@@ -202,6 +203,10 @@ class _AvisosPageState extends State<AvisosPage> {
 
     return Scaffold(
       backgroundColor: c.bg,
+      floatingActionButton: esPantallaTelefono(context)
+          ? BotonFlotanteNuevo(
+              onPressed: () => _abrirFormulario(), tooltip: 'Nuevo aviso')
+          : null,
       body: _cargando
           ? Center(child: CircularProgressIndicator(color: c.brand))
           : _error != null
@@ -272,7 +277,11 @@ class _AvisosPageState extends State<AvisosPage> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Row(children: [...titulo, const Spacer(), nuevo]),
+            Row(children: [
+              ...titulo,
+              // En el telefono el aviso nuevo se crea desde el boton flotante.
+              if (!esPantallaTelefono(context)) ...[const Spacer(), nuevo],
+            ]),
             const SizedBox(height: SiSpace.x3),
             filtros,
           ],
@@ -326,7 +335,8 @@ class _AvisosPageState extends State<AvisosPage> {
     }
 
     return ListView.separated(
-      padding: const EdgeInsets.all(SiSpace.x5),
+      padding: EdgeInsets.fromLTRB(SiSpace.x5, SiSpace.x5, SiSpace.x5,
+          SiSpace.x5 + (esPantallaTelefono(context) ? kEspacioBotonFlotante : 0)),
       itemCount: filas.length,
       separatorBuilder: (_, __) => const SizedBox(height: SiSpace.x3),
       itemBuilder: (_, i) => _tarjeta(c, filas[i]),

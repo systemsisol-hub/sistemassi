@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'services/correspondencia.dart';
 import 'theme/si_theme.dart';
+import 'widgets/boton_flotante.dart';
 import 'widgets/hoja_formulario.dart';
 
 /// La pestaña de listas de distribución de Correspondencia.
@@ -30,8 +31,17 @@ class ListasDistribucionTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = SiColors.of(context);
-    return SingleChildScrollView(
-      padding: EdgeInsets.symmetric(horizontal: SiSpace.x6, vertical: SiSpace.x4),
+    final telefono = esPantallaTelefono(context);
+    // Scaffold propio para que el boton flotante solo salga en esta pestaña.
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      floatingActionButton: telefono
+          ? BotonFlotanteNuevo(
+              onPressed: () => _abrir(context, null), tooltip: 'Nueva lista')
+          : null,
+      body: SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(SiSpace.x6, SiSpace.x4, SiSpace.x6,
+          SiSpace.x4 + (telefono ? kEspacioBotonFlotante : 0)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -44,12 +54,14 @@ class ListasDistribucionTab extends StatelessWidget {
                 style: TextStyle(fontSize: 13, color: c.ink3),
               ),
             ),
-            SizedBox(width: SiSpace.x4),
-            FilledButton.icon(
-              onPressed: () => _abrir(context, null),
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('Nueva lista'),
-            ),
+            if (!telefono) ...[
+              SizedBox(width: SiSpace.x4),
+              FilledButton.icon(
+                onPressed: () => _abrir(context, null),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Nueva lista'),
+              ),
+            ],
           ]),
           SizedBox(height: SiSpace.x4),
           if (cargando)
@@ -66,6 +78,7 @@ class ListasDistribucionTab extends StatelessWidget {
           else
             for (final l in listas) _tarjeta(context, c, l),
         ],
+      ),
       ),
     );
   }

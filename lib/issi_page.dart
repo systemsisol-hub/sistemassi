@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'theme/si_theme.dart';
+import 'widgets/boton_flotante.dart';
 import 'services/issi_pdf_service.dart';
 import 'services/trash_service.dart';
 
@@ -125,10 +126,14 @@ class _IssiPageState extends State<IssiPage> {
     return _buildGlassPill(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize: esPantallaTelefono(context) ? MainAxisSize.max : MainAxisSize.min,
         children: [
+          // En el telefono, sin el «+» al lado, la busqueda ocupa todo el ancho.
           ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 200),
+            constraints: BoxConstraints(
+                maxWidth: esPantallaTelefono(context)
+                    ? MediaQuery.sizeOf(context).width - 56
+                    : 200),
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
@@ -164,15 +169,18 @@ class _IssiPageState extends State<IssiPage> {
               }),
             ),
           ),
-          const VerticalDivider(
-              width: 1, thickness: 1, indent: 8, endIndent: 8),
-          GestureDetector(
-            onTap: () => _showItemForm(),
-            child: Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Icon(Icons.add, size: 22, color: c.ink),
+          // En el telefono el «+» es el boton flotante.
+          if (!esPantallaTelefono(context)) ...[
+            const VerticalDivider(
+                width: 1, thickness: 1, indent: 8, endIndent: 8),
+            GestureDetector(
+              onTap: () => _showItemForm(),
+              child: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Icon(Icons.add, size: 22, color: c.ink),
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -1095,7 +1103,8 @@ class _IssiPageState extends State<IssiPage> {
       );
     }
     return ListView.separated(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.fromLTRB(16, 16, 16,
+          16 + (esPantallaTelefono(context) ? kEspacioBotonFlotante : 0)),
       itemCount: items.length,
       separatorBuilder: (context, index) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
@@ -1397,6 +1406,12 @@ class _IssiPageState extends State<IssiPage> {
     final filtered = _filteredItems;
 
     return Scaffold(
+      floatingActionButton: esPantallaTelefono(context)
+          ? BotonFlotanteNuevo(
+              onPressed: () => _showItemForm(),
+              tooltip: 'Inventario',
+            )
+          : null,
       body: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(
@@ -1408,7 +1423,9 @@ class _IssiPageState extends State<IssiPage> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      _buildControls(theme),
+                      esPantallaTelefono(context)
+                        ? Expanded(child: _buildControls(theme))
+                        : _buildControls(theme),
                     ],
                   ),
                 );

@@ -9,6 +9,7 @@ import 'services/trash_service.dart';
 import 'incidencias_por_periodo.dart';
 import 'services/quincena.dart';
 import 'theme/si_theme.dart';
+import 'widgets/boton_flotante.dart';
 import 'widgets/calendario_incidencias.dart';
 import 'widgets/grafica_vacaciones_mes.dart';
 
@@ -2601,6 +2602,12 @@ class _IncidenciasPageState extends State<_VistaIncidencias>
 
     return Scaffold(
       backgroundColor: c.bg,
+      floatingActionButton: esPantallaTelefono(context)
+          ? BotonFlotanteNuevo(
+              onPressed: () => _showIncidenciaForm(),
+              tooltip: 'Nuevo',
+            )
+          : null,
       body: _isLoading
           ? Center(
               child: Image.asset(
@@ -2671,20 +2678,29 @@ class _IncidenciasPageState extends State<_VistaIncidencias>
                           children: [
                             // En el telefono no hay tabla, y el boton de nueva solicitud (y en RH
                             // el selector de colaborador) vivian en su encabezado: no se veian.
-                            Row(
-                              children: [
-                                if (_vistaRH && _adminUserList.isNotEmpty)
-                                  Expanded(child: _buildTableUserSelector(c))
-                                else
-                                  const Spacer(),
-                                SizedBox(width: SiSpace.x3),
-                                SizedBox(
-                                  height: 38,
-                                  child: _buildTableAddButton(c),
-                                ),
-                              ],
-                            ),
-                            SizedBox(height: SiSpace.x4),
+                            // En el telefono el boton es el flotante y aqui solo queda el selector.
+                            if (!esPantallaTelefono(context))
+                              Row(
+                                children: [
+                                  if (_vistaRH && _adminUserList.isNotEmpty)
+                                    Expanded(child: _buildTableUserSelector(c))
+                                  else
+                                    const Spacer(),
+                                  SizedBox(width: SiSpace.x3),
+                                  SizedBox(
+                                    height: 38,
+                                    child: _buildTableAddButton(c),
+                                  ),
+                                ],
+                              )
+                            else if (_vistaRH && _adminUserList.isNotEmpty)
+                              SizedBox(
+                                width: double.infinity,
+                                child: _buildTableUserSelector(c),
+                              ),
+                            if (!esPantallaTelefono(context) ||
+                                (_vistaRH && _adminUserList.isNotEmpty))
+                              SizedBox(height: SiSpace.x4),
                             _buildAntiguedadMobile(),
                             SizedBox(height: SiSpace.x4),
                             _buildIncidenciasCalendar(),
@@ -2723,7 +2739,9 @@ class _IncidenciasPageState extends State<_VistaIncidencias>
                     _buildResumenMensual(c),
                   ],
 
-                  const SizedBox(height: 80),
+                  SizedBox(
+                      height: 80 +
+                          (esPantallaTelefono(context) ? kEspacioBotonFlotante : 0)),
                 ],
               ),
             ),

@@ -6,6 +6,7 @@ import 'theme/si_theme.dart';
 import 'campos_globales.dart';
 import 'sol_drive_panel.dart';
 import 'unidades_panel.dart';
+import 'widgets/boton_flotante.dart';
 import 'widgets/hoja_formulario.dart';
 import 'widgets/texto_con_enlaces.dart';
 
@@ -762,6 +763,23 @@ class _PanelDesarrollosState extends State<_PanelDesarrollos> {
 
   @override
   Widget build(BuildContext context) {
+    // En el telefono «Nuevo desarrollo» es el boton flotante, solo sobre la lista: en el detalle
+    // taparia lo ultimo del desarrollo abierto.
+    final telefono = esPantallaTelefono(context);
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      floatingActionButton:
+          telefono && widget.puedeEditar && !_cargando && _filaElegida == null
+              ? BotonFlotanteNuevo(
+                  onPressed: () => _formDesarrollo(),
+                  tooltip: 'Nuevo desarrollo',
+                )
+              : null,
+      body: _contenido(context),
+    );
+  }
+
+  Widget _contenido(BuildContext context) {
     final c = SiColors.of(context);
     final q = _busqueda.trim().toLowerCase();
     final vistos = _desarrollos.where((d) {
@@ -848,7 +866,11 @@ class _PanelDesarrollosState extends State<_PanelDesarrollos> {
     }
     final elegida = _filaElegida ?? vistos.first;
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(vertical: SiSpace.x2),
+      padding: EdgeInsets.only(
+        top: SiSpace.x2,
+        bottom: SiSpace.x2 +
+            (esPantallaTelefono(context) && widget.puedeEditar ? kEspacioBotonFlotante : 0),
+      ),
       itemCount: vistos.length,
       itemBuilder: (_, i) => _renglonLista(c, vistos[i],
           activo: vistos[i]['id'].toString() == elegida['id'].toString()),
@@ -1051,7 +1073,7 @@ class _PanelDesarrollosState extends State<_PanelDesarrollos> {
         icon: const Icon(Icons.table_chart_outlined, size: 15),
         label: const Text('Campos'),
       ),
-      if (widget.puedeEditar)
+      if (widget.puedeEditar && !esPantallaTelefono(context))
         ElevatedButton.icon(
           onPressed: () => _formDesarrollo(),
           icon: const Icon(Icons.add, size: 16),

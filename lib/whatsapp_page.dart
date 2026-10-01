@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'services/telefono_whatsapp.dart';
 import 'theme/si_theme.dart';
+import 'widgets/boton_flotante.dart';
 import 'widgets/hoja_formulario.dart';
 
 /// Panel del puente de WhatsApp: qué números atiende Soli y qué pasó con cada mensaje.
@@ -179,6 +180,9 @@ class _WhatsappPageState extends State<WhatsappPage> {
 
     return Scaffold(
       backgroundColor: c.bg,
+      floatingActionButton: esPantallaTelefono(context) && _pestana == 0
+          ? BotonFlotanteNuevo(onPressed: _abrirAlta, tooltip: 'Autorizar número')
+          : null,
       body: _cargando
           ? Center(child: CircularProgressIndicator(color: c.brand))
           : _error != null
@@ -270,13 +274,15 @@ class _WhatsappPageState extends State<WhatsappPage> {
             ),
           ),
           const SizedBox(width: SiSpace.x2),
-          if (_pestana == 0)
-            FilledButton.icon(
-              onPressed: _abrirAlta,
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('Autorizar número'),
-            )
-          else
+          // En el telefono «Autorizar número» es el boton flotante.
+          if (_pestana == 0) ...[
+            if (!esPantallaTelefono(context))
+              FilledButton.icon(
+                onPressed: _abrirAlta,
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Autorizar número'),
+              ),
+          ] else
             OutlinedButton.icon(
               onPressed: _cargar,
               icon: const Icon(Icons.refresh, size: 16),
@@ -329,7 +335,8 @@ class _WhatsappPageState extends State<WhatsappPage> {
     }
 
     return ListView.separated(
-      padding: const EdgeInsets.all(SiSpace.x5),
+      padding: EdgeInsets.fromLTRB(SiSpace.x5, SiSpace.x5, SiSpace.x5,
+          SiSpace.x5 + (esPantallaTelefono(context) ? kEspacioBotonFlotante : 0)),
       itemCount: _autorizados.length,
       separatorBuilder: (_, __) => const SizedBox(height: SiSpace.x2),
       itemBuilder: (_, i) => _tarjetaAutorizado(c, _autorizados[i]),

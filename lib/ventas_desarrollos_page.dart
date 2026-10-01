@@ -9,6 +9,7 @@ import 'services/file_saver_util.dart';
 import 'services/ventas_datos.dart';
 import 'theme/si_theme.dart';
 import 'ventas_comun.dart';
+import 'widgets/boton_flotante.dart';
 import 'widgets/hoja_formulario.dart';
 
 /// Lo que Sisol sabe de cada desarrollo: sus datos, su inventario, sus brochures y la información
@@ -95,15 +96,20 @@ class _VentasDesarrollosPageState extends State<VentasDesarrollosPage> {
       return const Center(child: CircularProgressIndicator());
     }
     final vistos = _vistos;
+    final telefono = esPantallaTelefono(context);
     return Scaffold(
       backgroundColor: c.bg,
+      // En el telefono «Nuevo desarrollo» es el boton flotante, solo sobre la lista.
+      floatingActionButton: telefono && _puedeEditar && _elegido == null
+          ? BotonFlotanteNuevo(onPressed: () => _formDesarrollo(null), tooltip: 'Nuevo desarrollo')
+          : null,
       body: Column(
         children: [
           BarraVentas(
             pista: 'Buscar desarrollo',
             onBuscar: (v) => setState(() => _busqueda = v),
             acciones: [
-              if (_puedeEditar)
+              if (_puedeEditar && !telefono)
                 FilledButton.icon(
                   onPressed: () => _formDesarrollo(null),
                   icon: const Icon(Icons.add, size: 16),
@@ -172,7 +178,9 @@ class _VentasDesarrollosPageState extends State<VentasDesarrollosPage> {
         inactivo: d['is_active'] != true,
       ));
     }
-    return ListView(padding: const EdgeInsets.symmetric(vertical: SiSpace.x2), children: hijos);
+    final extra = esPantallaTelefono(context) && _puedeEditar ? kEspacioBotonFlotante : 0.0;
+    return ListView(
+        padding: EdgeInsets.only(top: SiSpace.x2, bottom: SiSpace.x2 + extra), children: hijos);
   }
 
   Widget _renglon(SiColors c, String id, String titulo, String sub,

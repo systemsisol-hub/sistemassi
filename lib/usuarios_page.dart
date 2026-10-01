@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'auth_errores.dart';
 import 'theme/si_theme.dart';
 import 'services/trash_service.dart';
+import 'widgets/boton_flotante.dart';
 import 'utils/webmail_utils.dart';
 
 /// Los estatus que existen, en UN solo sitio.
@@ -410,6 +411,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
     return Scaffold(
       backgroundColor: c.bg,
+      floatingActionButton: esPantallaTelefono(context) && _isAdmin
+          ? BotonFlotanteNuevo(
+              onPressed: () => _showUserForm(), tooltip: 'Nuevo usuario')
+          : null,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -635,7 +640,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
             },
           ),
           const SizedBox(width: SiSpace.x3),
-          if (_isAdmin)
+          // En el telefono «+ Usuario» es el boton flotante.
+          if (_isAdmin && !esPantallaTelefono(context))
             ElevatedButton.icon(
               onPressed: () => _showUserForm(),
               icon: const Icon(Icons.add, size: 16),
@@ -1025,7 +1031,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   Widget _buildMobileList(SiColors c, List<Map<String, dynamic>> items) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(SiSpace.x4),
+      padding: EdgeInsets.fromLTRB(SiSpace.x4, SiSpace.x4, SiSpace.x4,
+          SiSpace.x4 + (esPantallaTelefono(context) ? kEspacioBotonFlotante : 0)),
       child: Card(
         clipBehavior: Clip.antiAlias,
         margin: EdgeInsets.zero,
