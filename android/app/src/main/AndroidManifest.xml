@@ -5,11 +5,13 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <!-- CAMERA y las de ubicación se retiraron junto con el checador: eran las únicas que las
-         necesitaban. image_picker sólo usa ImageSource.gallery. Declarar permisos sin usar
-         provoca preguntas innecesarias en la revisión de Play Store. -->
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <!-- Almacenamiento solo donde Android aun lo pide: elegir fotos y archivos usa el selector del
+         sistema y compartir pasa por la carpeta temporal de la app. Declarar permisos de mas provoca
+         preguntas en la revision de Google Play (01/10/2026). -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
 
     <application
         android:label="Sistemassi"
