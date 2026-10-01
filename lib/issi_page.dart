@@ -376,7 +376,7 @@ class _IssiPageState extends State<IssiPage> {
       if (userId != null) {
         final result = await Supabase.instance.client
             .from('profiles')
-            .select('*, nombre, paterno, materno, area, puesto, ubicacion, foto_url, numero_empleado, email')
+            .select('id, full_name, nombre, paterno, materno, area, puesto, ubicacion, jefe_inmediato, foto_url, numero_empleado, email, role')
             .eq('id', userId)
             .maybeSingle();
         if (result != null) profile = result;

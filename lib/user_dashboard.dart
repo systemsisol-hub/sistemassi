@@ -91,8 +91,10 @@ class _UserDashboardState extends State<UserDashboard> {
     try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user != null && user.id.isNotEmpty) {
+        // `perfiles_completos`: `profiles` ya no le da a una sesion normal las columnas sensibles
+        // (credenciales, CLABE, CURP, salud); la vista si, del propio perfil.
         final data = await Supabase.instance.client
-            .from('profiles')
+            .from('perfiles_completos')
             .select('*')
             .eq('id', user.id)
             .maybeSingle();

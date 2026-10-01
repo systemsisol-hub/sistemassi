@@ -96,7 +96,7 @@ class _SignatureGeneratorPageState extends State<SignatureGeneratorPage> {
       final user = Supabase.instance.client.auth.currentUser;
       if (user != null) {
         final data = await Supabase.instance.client
-            .from('profiles')
+            .from('perfiles_completos')
             .select('*')
             .eq('id', user.id)
             .maybeSingle();

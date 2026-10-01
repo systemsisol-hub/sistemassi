@@ -177,8 +177,10 @@ Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
       const int limit = 1000;
 
       while (true) {
+        // El expediente completo sale de `perfiles_completos` (admin / show_users / show_cssi):
+        // `profiles` ya no da las columnas sensibles a una sesion normal.
         final data = await Supabase.instance.client
-            .from('profiles')
+            .from('perfiles_completos')
             .select()
             .or('nombre.not.is.null,full_name.not.is.null')
             .order('created_at', ascending: false)
