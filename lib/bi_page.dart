@@ -315,6 +315,11 @@ class _BiPageState extends State<BiPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text('Enlace movido a la papelera'),
+            // Con boton, Flutter deja el aviso fijo hasta tocarlo, y el unico boton era «Deshacer»:
+            // se cierra solo y la X lo cierra sin regresar el enlace.
+            persist: false,
+            duration: const Duration(seconds: 5),
+            showCloseIcon: true,
             action: SnackBarAction(
               label: 'Deshacer',
               onPressed: () async {
