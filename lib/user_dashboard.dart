@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'auth_errores.dart';
+import 'services/credenciales.dart';
 import 'theme/si_theme.dart';
 
 class UserDashboard extends StatefulWidget {
@@ -98,6 +99,14 @@ class _UserDashboardState extends State<UserDashboard> {
             .select('*')
             .eq('id', user.id)
             .maybeSingle();
+        // Las credenciales de sistemas ya no estan en el perfil: van cifradas aparte.
+        if (data != null) {
+          try {
+            data.addAll(await Credenciales.leer(user.id));
+          } catch (e) {
+            debugPrint('Error al leer credenciales: $e');
+          }
+        }
         if (mounted) setState(() => _profile = data);
 
         final equipmentData = await Supabase.instance.client

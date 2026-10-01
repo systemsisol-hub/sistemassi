@@ -5,6 +5,7 @@ import 'package:printing/printing.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'services/credenciales.dart';
 import 'theme/si_theme.dart';
 
 class CollaboratorDetailPage extends StatefulWidget {
@@ -21,12 +22,26 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
   String? _scheduleName;
   bool _isLoadingEquipment = true;
   bool _isLoadingSchedule = true;
+  // Van cifradas aparte del perfil (`credenciales_de`); se mezclan sobre `widget.colab`.
+  Map<String, String?> _credenciales = {};
 
   @override
   void initState() {
     super.initState();
     _fetchEquipment();
     _fetchSchedule();
+    _fetchCredenciales();
+  }
+
+  Future<void> _fetchCredenciales() async {
+    final userId = widget.colab['id'] as String?;
+    if (userId == null) return;
+    try {
+      final data = await Credenciales.leer(userId);
+      if (mounted) setState(() => _credenciales = data);
+    } catch (e) {
+      debugPrint('Error fetching credenciales: $e');
+    }
   }
 
   Future<void> _fetchEquipment() async {
@@ -476,7 +491,7 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
   }
 
   bool _hasAccessData() {
-    final colab = widget.colab;
+    final colab = {...widget.colab, ..._credenciales};
     const keys = [
       'mail_user', 'mail_pass',
       'drp_user',  'drp_pass',
@@ -489,7 +504,7 @@ class _CollaboratorDetailPageState extends State<CollaboratorDetailPage> {
   }
 
   Widget _buildAccessCard(BuildContext context) {
-    final colab = widget.colab;
+    final colab = {...widget.colab, ..._credenciales};
 
     final systems = <Map<String, Object?>>[
       {'label': 'Correo',  'icon': Icons.email_outlined,        'user': colab['mail_user'],    'pass': colab['mail_pass']},

@@ -43,16 +43,29 @@ class _PasswordsPageState extends State<PasswordsPage>
       final userId = Supabase.instance.client.auth.currentUser?.id;
       if (userId == null) return;
 
+      // `boveda` y no `passwords`: la contraseña se guarda cifrada y la vista la entrega descifrada,
+      // solo de las propias y las compartidas contigo (migracion 20261002090000).
       final myData = await Supabase.instance.client
-          .from('passwords')
+          .from('boveda')
           .select()
           .eq('owner_id', userId)
           .order('name', ascending: true);
 
-      final sharedRaw = await Supabase.instance.client
+      final shares = await Supabase.instance.client
           .from('password_shares')
-          .select('*, passwords(*)')
+          .select()
           .eq('shared_with_id', userId);
+      final sharedIds = [for (final s in shares) s['password_id'] as String];
+      final sharedPw = sharedIds.isEmpty
+          ? <Map<String, dynamic>>[]
+          : List<Map<String, dynamic>>.from(await Supabase.instance.client
+              .from('boveda')
+              .select()
+              .inFilter('id', sharedIds));
+      final pwById = {for (final p in sharedPw) p['id'] as String: p};
+      final sharedRaw = [
+        for (final s in shares) {...s, 'passwords': pwById[s['password_id']]},
+      ];
 
       final myIds = (myData as List).map((p) => p['id'] as String).toList();
       Map<String, int> shareCountMap = {};
