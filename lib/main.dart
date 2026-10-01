@@ -233,12 +233,31 @@ class _AuthRouterState extends State<AuthRouter> {
 
     // Only show loading spinner on the very first load (no role yet)
     if (_role == null) setState(() => _isLoading = true);
+    final auth = Supabase.instance.client.auth;
+    // Al abrir la app despues de una hora, la sesion guardada trae el token vencido y Supabase lo
+    // renueva por su lado, sin esperar. Si se consulta antes, la base contesta «JWT expired», el
+    // perfil cae a 'usuario' sin permisos y asi se queda (visto en Android el 01/10/2026). Se
+    // renueva aqui primero; las paginas cargan despues y ya usan el token nuevo.
+    Future<Map<String, dynamic>> leerPerfil() => Supabase.instance.client
+        .from('profiles')
+        .select('role, permissions')
+        .eq('id', userId)
+        .single();
     try {
-      final data = await Supabase.instance.client
-          .from('profiles')
-          .select('role, permissions')
-          .eq('id', userId)
-          .single();
+      if (auth.currentSession?.isExpired ?? false) await auth.refreshSession();
+    } catch (e) {
+      debugPrint('No se pudo renovar la sesion: $e');
+    }
+    try {
+      Map<String, dynamic> data;
+      try {
+        data = await leerPerfil();
+      } on PostgrestException catch (e) {
+        // Vencio entre la revision y la consulta: se renueva y se intenta una vez mas.
+        if (e.code != 'PGRST303' && e.code != '401') rethrow;
+        await auth.refreshSession();
+        data = await leerPerfil();
+      }
       if (mounted) {
         setState(() {
           _role = data['role'];
