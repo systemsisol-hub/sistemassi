@@ -82,6 +82,6 @@ publicidad, audio, calendario del teléfono.
 
 ## Versión
 
-Paquete: `build/app/outputs/bundle/release/app-release.aab`, versión 2.4.1 (código 3), firmado con
+Paquete: `build/app/outputs/bundle/release/app-release.aab`, versión 2.4.2 (código 4), firmado con
 la llave de subida de SI SOL. Al subir el primero, aceptar «Firma de apps de Play»: Google guarda la
 llave con la que firma para los teléfonos y la nuestra queda como llave de subida.

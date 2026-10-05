@@ -528,6 +528,7 @@ class _CamaraChecador extends StatefulWidget {
 class _CamaraChecadorState extends State<_CamaraChecador> with WidgetsBindingObserver {
   CameraController? _camara;
   String? _errorCamara;
+  bool _abriendoCamara = false;
 
   /// La foto recién tomada, esperando confirmación, y para qué checada es.
   Uint8List? _foto;
@@ -544,9 +545,15 @@ class _CamaraChecadorState extends State<_CamaraChecador> with WidgetsBindingObs
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // Las dos a la vez: el GPS tarda unos segundos, y así está listo cuando se pulsa el botón.
-    _abrirCamara();
-    _ubicar();
+    _arrancar();
+  }
+
+  /// Primero la cámara y después la ubicación, no a la vez: Android muestra un solo permiso a la
+  /// vez, y mientras preguntaba por la ubicación le contestaba «rechazado» a la cámara aunque la
+  /// persona aceptara. El GPS sigue teniendo tiempo de sobra mientras se encuadra la foto.
+  Future<void> _arrancar() async {
+    await _abrirCamara();
+    if (mounted) _ubicar();
   }
 
   @override
@@ -564,7 +571,9 @@ class _CamaraChecadorState extends State<_CamaraChecador> with WidgetsBindingObs
         setState(() => _camara = null);
         cam.dispose();
       }
-    } else if (estado == AppLifecycleState.resumed && _camara == null && _errorCamara == null) {
+    } else if (estado == AppLifecycleState.resumed && _camara == null && !_abriendoCamara) {
+      // También después de un error: si la persona fue a la configuración a dar el permiso, al
+      // volver la cámara ya abre sin tener que salir de la página.
       _abrirCamara();
     }
   }
@@ -572,6 +581,12 @@ class _CamaraChecadorState extends State<_CamaraChecador> with WidgetsBindingObs
   /// La cámara EN VIVO, nunca un selector de archivos: una foto guardada no demuestra que la
   /// persona estaba ahí a esa hora. En el teléfono se prefiere la frontal.
   Future<void> _abrirCamara() async {
+    // El diálogo de permisos pausa la app y al cerrarse la reanuda: sin esto se abría una segunda
+    // cámara mientras la primera seguía arrancando.
+    if (_abriendoCamara) return;
+    _abriendoCamara = true;
+    if (_errorCamara != null && mounted) setState(() => _errorCamara = null);
+    CameraController? ctrl;
     try {
       final camaras = await availableCameras();
       if (camaras.isEmpty) {
@@ -582,13 +597,11 @@ class _CamaraChecadorState extends State<_CamaraChecador> with WidgetsBindingObs
         (x) => x.lensDirection == CameraLensDirection.front,
         orElse: () => camaras.first,
       );
-      final ctrl = CameraController(frontal, ResolutionPreset.medium, enableAudio: false);
+      ctrl = CameraController(frontal, ResolutionPreset.medium, enableAudio: false);
       await ctrl.initialize();
-      if (!mounted) {
-        await ctrl.dispose();
-        return;
-      }
+      if (!mounted) return; // la cierra el finally
       setState(() { _camara = ctrl; _errorCamara = null; });
+      ctrl = null;
     } on CameraException catch (e) {
       debugPrint('checador: cámara: ${e.code} ${e.description}');
       if (mounted) {
@@ -600,6 +613,11 @@ class _CamaraChecadorState extends State<_CamaraChecador> with WidgetsBindingObs
     } catch (e) {
       debugPrint('checador: cámara: $e');
       if (mounted) setState(() => _errorCamara = 'No se pudo abrir la cámara: $e');
+    } finally {
+      // Un intento que falló deja la cámara ocupada; al reintentar, Android se negaba con «too
+      // many use cases» hasta salir de la página.
+      await ctrl?.dispose();
+      _abriendoCamara = false;
     }
   }
 
@@ -709,10 +727,7 @@ class _CamaraChecadorState extends State<_CamaraChecador> with WidgetsBindingObs
                   style: TextStyle(color: Colors.red.shade200, fontSize: 13)),
               const SizedBox(height: SiSpace.x2),
               TextButton(
-                onPressed: () {
-                  setState(() => _errorCamara = null);
-                  _abrirCamara();
-                },
+                onPressed: _abrirCamara,
                 child: const Text('Reintentar'),
               ),
             ],
