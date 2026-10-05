@@ -477,17 +477,16 @@ class _BrandMarkMin extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 10),
-        // Mismo tratamiento que en login_page: el Row es MainAxisSize.min y el descriptor mide
-        // 42 caracteres, así que sin acotarlo se desborda del panel del formulario, que sólo
-        // ocupa el 40% del ancho menos 104px de padding.
+        // Mismo tratamiento que en login_page: el Row es MainAxisSize.min y sin acotarlo un
+        // descriptor largo se desborda del panel del formulario.
         Flexible(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('SITE SI SOL',
+              Text('SistemasSI',
                   style: SiType.sans(
                       size: 13.5, weight: FontWeight.w600, letterSpacing: -0.2)),
-              Text('Sistema Integral de Tecnología y Empleados',
+              Text('SI SOL Inmobiliarias',
                   style: SiType.mono(size: 9, letterSpacing: 0.3)),
             ],
           ),

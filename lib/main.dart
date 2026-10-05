@@ -75,7 +75,7 @@ class _MyAppState extends State<MyApp> {
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: _themeMode,
       builder: (_, mode, __) => MaterialApp(
-        title: 'Sistemassi',
+        title: 'SistemasSI',
         debugShowCheckedModeBanner: false,
         localizationsDelegates: const [
           GlobalMaterialLocalizations.delegate,

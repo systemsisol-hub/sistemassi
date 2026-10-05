@@ -1,4 +1,4 @@
-# Google Play · ficha y formularios de SITE
+# Google Play · ficha y formularios de SistemasSI
 
 Lo que va en cada sección de Play Console para `com.sistemassi.app`. Preparado el 01/10/2026.
 Las imágenes están en esta misma carpeta.
@@ -7,7 +7,7 @@ Las imágenes están en esta misma carpeta.
 
 | Campo | Valor |
 |---|---|
-| Nombre de la app (máx. 30) | SITE SI SOL |
+| Nombre de la app (máx. 30) | SistemasSI |
 | Descripción breve (máx. 80) | La herramienta interna de los colaboradores de SI SOL Inmobiliarias. |
 | Ícono (512 × 512) | `icono-512.png` |
 | Imagen destacada (1024 × 500) | `imagen-destacada-1024x500.png` |
@@ -19,10 +19,10 @@ Las imágenes están en esta misma carpeta.
 
 ### Descripción completa (máx. 4000)
 
-SITE (Sistema Integral de Tecnología y Empleados) es la aplicación interna de SI SOL Inmobiliarias
+SistemasSI es la aplicación interna de SI SOL Inmobiliarias
 para sus colaboradores. El acceso es solo con la cuenta que entrega la empresa.
 
-Con SITE puedes:
+Con SistemasSI puedes:
 
 • Checar tu entrada y salida con foto y ubicación.
 • Solicitar vacaciones e incidencias y consultar tu saldo de días.
