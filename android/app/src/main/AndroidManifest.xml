@@ -1,4 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     package="com.sistemassi.app">
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- El Checador de Asistencia: foto en vivo y ubicacion por GPS (28/09/2026). -->
@@ -12,11 +13,18 @@
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
+    <!-- Los agregan los plugins y no se usan: geolocator trae un servicio para seguir la ubicacion
+         en segundo plano (el checador la pide una vez, con la pagina abierta) y camera pide el
+         microfono aunque abrimos la camara sin audio. Google Play pide justificar cada uno
+         (05/10/2026). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" tools:node="remove" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" tools:node="remove" />
 
     <application
         android:label="SistemasSI"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <service android:name="com.baseflow.geolocator.GeolocatorLocationService" tools:node="remove" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
