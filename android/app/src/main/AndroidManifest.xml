@@ -14,7 +14,7 @@
         android:maxSdkVersion="28" />
 
     <application
-        android:label="Sistemassi"
+        android:label="SistemasSI"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
