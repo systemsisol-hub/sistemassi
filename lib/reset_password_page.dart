@@ -113,7 +113,9 @@ class _ResetPasswordPageState extends State<ResetPasswordPage>
 
             if (widget.themeNotifier != null)
               Positioned(
-                top: 18, right: 22,
+                // Más la barra de estado: en tablets y teléfonos quedaba encima de la hora y la batería.
+                top: 18 + MediaQuery.of(context).padding.top,
+                right: 22 + MediaQuery.of(context).padding.right,
                 child: _ThemeToggleMin(isDark: isDark, c: c, onTap: _toggleTheme),
               ),
           ],
