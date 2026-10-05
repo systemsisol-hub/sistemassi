@@ -168,8 +168,9 @@ class _LoginPageState extends State<LoginPage>
 
             if (widget.themeNotifier != null)
               Positioned(
-                top: 18,
-                right: 22,
+                // Más la barra de estado: en tablets y teléfonos quedaba encima de la hora y la batería.
+                top: 18 + MediaQuery.of(context).padding.top,
+                right: 22 + MediaQuery.of(context).padding.right,
                 child: _ThemeToggle(isDark: isDark, c: c, onTap: _toggleTheme),
               ),
 
@@ -310,7 +311,7 @@ class _LoginPageState extends State<LoginPage>
           Text('Acceso seguro',
               style: SiType.mono(size: 10, color: c.success)),
         ]),
-        Text('v2.4.0', style: SiType.mono(size: 10, color: c.ink4)),
+        Text('v2.4.3', style: SiType.mono(size: 10, color: c.ink4)),
       ],
     );
   }

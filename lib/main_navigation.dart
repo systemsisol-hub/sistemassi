@@ -511,6 +511,9 @@ class _DesktopShellState extends State<_DesktopShell>
     super.dispose();
   }
 
+  void _alternarMenu() =>
+      _railCtrl.value > 0.5 ? _railCtrl.reverse() : _railCtrl.forward();
+
   List<Widget> _buildGroupedItems(bool labelVisible, double labelOpacity,
       {bool onDark = true}) {
     final items = <Widget>[];
@@ -543,7 +546,11 @@ class _DesktopShellState extends State<_DesktopShell>
           isActive: isActive,
           showLabel: labelVisible,
           labelOpacity: labelOpacity,
-          onTap: () => widget.onSelect(i),
+          onTap: () {
+            widget.onSelect(i);
+            // Abierto con un toque (sin mouse que salga del menú), se cierra al elegir página.
+            if (_railCtrl.value > 0) _railCtrl.reverse();
+          },
           onDark: onDark,
         ));
       }
@@ -626,10 +633,18 @@ class _DesktopShellState extends State<_DesktopShell>
                       ),
                     ),
                   ),
-                  child: Column(
+                  // SafeArea: desde Android 15 la app dibuja debajo de la barra de estado y de la
+                  // de navegación; en una tablet tapaban el logo, la foto y cerrar sesión.
+                  child: SafeArea(
+                    right: false,
+                    child: Column(
                     children: [
-                      // Brand row
-                      SizedBox(
+                      // Brand row: en pantallas táctiles no hay «pasar el mouse», así que tocar el
+                      // logo abre y cierra el menú para ver el nombre de cada página.
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: _alternarMenu,
+                        child: SizedBox(
                         height: SiLayout.headerHeight,
                         child: Padding(
                           padding: const EdgeInsets.symmetric(
@@ -679,6 +694,7 @@ class _DesktopShellState extends State<_DesktopShell>
                             ),
                           ),
                         ),
+                      ),
                       ),
                       Container(
                           height: 1,
@@ -783,6 +799,7 @@ class _DesktopShellState extends State<_DesktopShell>
                       ),
                     ],
                   ),
+                  ),
                 );
               },
             ),
@@ -790,7 +807,9 @@ class _DesktopShellState extends State<_DesktopShell>
 
           // ── Main content ──────────────────────────────────────
           Expanded(
-            child: Column(
+            child: SafeArea(
+              left: false,
+              child: Column(
               children: [
                 _Header(
                   pageTitle: currentPage['title'],
@@ -840,6 +859,7 @@ class _DesktopShellState extends State<_DesktopShell>
                   ),
                 ),
               ],
+            ),
             ),
           ),
         ],
