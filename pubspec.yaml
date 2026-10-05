@@ -46,6 +46,10 @@ dev_dependencies:
   flutter_launcher_icons: ^0.13.1
 
 flutter:
+  # Plugins de iOS por CocoaPods y no por Swift Package Manager: asi el Podfile puede silenciar las
+  # alertas de Xcode que vienen del codigo de los plugins (APIs viejas de iOS), no de la app.
+  config:
+    enable-swift-package-manager: false
   uses-material-design: true
   assets:
     - assets/
