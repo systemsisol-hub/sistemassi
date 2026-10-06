@@ -27,6 +27,9 @@ class _CalendarPageState extends State<CalendarPage> {
   CalendarView _currentView = CalendarView.month;
   DateTime _currentDisplayDate = DateTime.now();
   DateTime _selectedDate = DateTime.now();
+  // Alto de una celda del mes, medido al dibujarla: decide cuántas barras caben (ver
+  // `_renglonesPorDia`).
+  double _altoCelda = 0;
 
   // ── Index helpers ──────────────────────────────────────────────────────────
 
@@ -87,6 +90,8 @@ class _CalendarPageState extends State<CalendarPage> {
   void initState() {
     super.initState();
     _dataSource = EventDataSource([]);
+    // Hoy elegido de entrada: en el teléfono la lista de abajo decía «Sin fecha seleccionada».
+    _calendarController.selectedDate = _selectedDate;
     _fetchEvents();
 
     if (widget.initialEventId != null) {
@@ -468,11 +473,98 @@ class _CalendarPageState extends State<CalendarPage> {
     );
   }
 
+  /// Renglones de eventos por día según el alto de la celda: el calendario reparte ese alto entre
+  /// ellos, así que con un número fijo las barras salían gruesas en pantallas altas (web, tablet).
+  /// Se apunta a barras de unos 18 px; en el teléfono salen 2, como antes.
+  int get _renglonesPorDia {
+    if (_altoCelda <= 0) return 2;
+    return ((_altoCelda - 34) / 18).floor().clamp(2, 6);
+  }
+
+  /// Tarjeta con los datos del evento al pasar el ratón por encima (web y tablet con ratón). En
+  /// pantallas táctiles no se activa: ahí se toca el evento y se abre su detalle.
+  Widget _conDetalle(SiColors c, Appointment ap, Widget child) {
+    final notas = (ap.notes ?? '').split('\n');
+    final creador = notas
+        .where((l) => l.startsWith('Creado por:'))
+        .map((l) => l.replaceAll('Creado por:', '').trim())
+        .firstOrNull;
+    var descripcion =
+        notas.where((l) => !l.startsWith('Creado por:')).join('\n').trim();
+    if (descripcion.length > 240) descripcion = '${descripcion.substring(0, 240)}…';
+
+    final dia = DateFormat("EEE d 'de' MMM", 'es');
+    final hora = DateFormat('HH:mm');
+    final mismoDia = ap.startTime.year == ap.endTime.year &&
+        ap.startTime.month == ap.endTime.month &&
+        ap.startTime.day == ap.endTime.day;
+    final cuando = ap.isAllDay
+        ? (mismoDia
+            ? '${dia.format(ap.startTime)} · Todo el día'
+            : '${dia.format(ap.startTime)} – ${dia.format(ap.endTime)}')
+        : mismoDia
+            ? '${dia.format(ap.startTime)} · ${hora.format(ap.startTime)} – ${hora.format(ap.endTime)}'
+            : '${dia.format(ap.startTime)} ${hora.format(ap.startTime)} – ${dia.format(ap.endTime)} ${hora.format(ap.endTime)}';
+
+    return Tooltip(
+      triggerMode: TooltipTriggerMode.manual,
+      waitDuration: const Duration(milliseconds: 300),
+      preferBelow: true,
+      padding: const EdgeInsets.all(12),
+      constraints: const BoxConstraints(maxWidth: 300),
+      decoration: BoxDecoration(
+        color: c.panel,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: c.line),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.12),
+              blurRadius: 16,
+              offset: const Offset(0, 6)),
+        ],
+      ),
+      richMessage: TextSpan(
+        style: TextStyle(fontSize: 12, color: c.ink2, height: 1.4),
+        children: [
+          WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: Container(
+              width: 8,
+              height: 8,
+              margin: const EdgeInsets.only(right: 6),
+              decoration: BoxDecoration(color: ap.color, shape: BoxShape.circle),
+            ),
+          ),
+          TextSpan(
+              text: ap.subject,
+              style: TextStyle(
+                  fontSize: 13, fontWeight: FontWeight.w700, color: c.ink)),
+          TextSpan(text: '\n$cuando'),
+          if (creador != null && creador.isNotEmpty)
+            TextSpan(
+                text: '\nCreado por $creador',
+                style: TextStyle(color: c.ink3)),
+          if (descripcion.isNotEmpty) TextSpan(text: '\n\n$descripcion'),
+        ],
+      ),
+      child: child,
+    );
+  }
+
+  /// Panel derecho del diseño ancho (web y tablet): los eventos del día elegido en la cuadrícula
+  /// (hoy al entrar) y debajo los próximos. Antes solo tenía los próximos: si los eventos del mes
+  /// ya habían pasado, el panel salía vacío y al elegir un día no había dónde ver los suyos.
   Widget _buildSideAgenda(SiColors c, double width) {
     final now = DateTime.now();
     final appointments = List<Appointment>.from(_dataSource.appointments ?? []);
+    final diaIni = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
+    final diaFin = diaIni.add(const Duration(days: 1));
+    final delDia = appointments
+        .where((a) => a.startTime.isBefore(diaFin) && a.endTime.isAfter(diaIni))
+        .toList()
+      ..sort((a, b) => a.startTime.compareTo(b.startTime));
     final upcoming = appointments
-        .where((a) => !a.endTime.isBefore(now))
+        .where((a) => !a.endTime.isBefore(now) && !delDia.contains(a))
         .toList()
       ..sort((a, b) => a.startTime.compareTo(b.startTime));
     final toShow = upcoming.take(10).toList();
@@ -481,6 +573,128 @@ class _CalendarPageState extends State<CalendarPage> {
       'ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN',
       'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'
     ];
+    final esHoy = diaIni == DateTime(now.year, now.month, now.day);
+    final tituloDia = esHoy
+        ? 'HOY'
+        : DateFormat("EEEE d 'de' MMMM", 'es').format(diaIni).toUpperCase();
+
+    Widget encabezado(String texto, int cuantos) => Padding(
+          padding: const EdgeInsets.fromLTRB(24, 20, 20, 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  texto,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: c.ink3,
+                      letterSpacing: 1.5),
+                ),
+              ),
+              if (cuantos > 0)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: c.brand.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '$cuantos',
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: c.brand),
+                  ),
+                ),
+            ],
+          ),
+        );
+
+    Widget vacio(String texto) => Padding(
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+          child: Text(texto,
+              style: TextStyle(
+                  color: c.ink3, fontSize: 13, fontStyle: FontStyle.italic)),
+        );
+
+    Widget evento(Appointment app) {
+      final monthAbbr = monthsAbbr[app.startTime.month - 1];
+      final notes = app.notes ?? '';
+      final creatorLine = notes
+          .split('\n')
+          .where((l) => l.startsWith('Creado por:'))
+          .firstOrNull;
+      final creatorName = creatorLine?.replaceAll('Creado por: ', '').trim();
+
+      return _conDetalle(c, app, InkWell(
+        onTap: () => _showEventDetails(app.id.toString()),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 38,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text(
+                      monthAbbr,
+                      style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: app.color,
+                          letterSpacing: 0.5),
+                    ),
+                    Text(
+                      app.startTime.day.toString(),
+                      style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: c.ink,
+                          height: 1.1),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      app.subject,
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: c.ink),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      DateFormat('HH:mm', 'es').format(app.startTime) +
+                          (creatorName != null ? ' · $creatorName' : ''),
+                      style: TextStyle(fontSize: 11, color: c.ink3),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ));
+    }
+
+    List<Widget> lista(List<Appointment> apps) => [
+          for (var i = 0; i < apps.length; i++) ...[
+            if (i > 0)
+              Divider(height: 1, color: c.line, indent: 24, endIndent: 24),
+            evento(apps[i]),
+          ],
+        ];
 
     return Container(
       width: width,
@@ -488,141 +702,20 @@ class _CalendarPageState extends State<CalendarPage> {
         color: c.panel,
         border: Border(left: BorderSide(color: c.line)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: ListView(
+        padding: const EdgeInsets.only(bottom: 16),
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 20, 20, 16),
-            child: Row(
-              children: [
-                Text(
-                  'PRÓXIMOS EVENTOS',
-                  style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      color: c.ink3,
-                      letterSpacing: 1.5),
-                ),
-                const Spacer(),
-                if (toShow.isNotEmpty)
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: c.brand.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      '${toShow.length}',
-                      style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: c.brand),
-                    ),
-                  ),
-              ],
-            ),
-          ),
+          encabezado(tituloDia, delDia.length),
+          if (delDia.isEmpty)
+            vacio('Sin eventos este día')
+          else
+            ...lista(delDia),
           Divider(height: 1, color: c.line),
-          Expanded(
-            child: toShow.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.event_available, size: 48, color: c.line2),
-                        const SizedBox(height: 12),
-                        Text(
-                          'Sin próximos eventos',
-                          style: TextStyle(
-                              color: c.ink3,
-                              fontWeight: FontWeight.w500,
-                              fontSize: 13),
-                        ),
-                      ],
-                    ),
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    itemCount: toShow.length,
-                    separatorBuilder: (_, __) => Divider(
-                        height: 1, color: c.line, indent: 24, endIndent: 24),
-                    itemBuilder: (ctx, i) {
-                      final app = toShow[i];
-                      final monthAbbr = monthsAbbr[app.startTime.month - 1];
-                      final notes = app.notes ?? '';
-                      final creatorLine = notes
-                          .split('\n')
-                          .where((l) => l.startsWith('Creado por:'))
-                          .firstOrNull;
-                      final creatorName =
-                          creatorLine?.replaceAll('Creado por: ', '').trim();
-
-                      return InkWell(
-                        onTap: () => _showEventDetails(app.id.toString()),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 24, vertical: 12),
-                          child: Row(
-                            children: [
-                              SizedBox(
-                                width: 38,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      monthAbbr,
-                                      style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w700,
-                                          color: app.color,
-                                          letterSpacing: 0.5),
-                                    ),
-                                    Text(
-                                      app.startTime.day.toString(),
-                                      style: TextStyle(
-                                          fontSize: 24,
-                                          fontWeight: FontWeight.bold,
-                                          color: c.ink,
-                                          height: 1.1),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      app.subject,
-                                      style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                          color: c.ink),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const SizedBox(height: 3),
-                                    Text(
-                                      DateFormat('HH:mm', 'es')
-                                              .format(app.startTime) +
-                                          (creatorName != null
-                                              ? ' · $creatorName'
-                                              : ''),
-                                      style: TextStyle(
-                                          fontSize: 11, color: c.ink3),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-          ),
+          encabezado('PRÓXIMOS EVENTOS', toShow.length),
+          if (toShow.isEmpty)
+            vacio('Sin próximos eventos')
+          else
+            ...lista(toShow),
         ],
       ),
     );
@@ -748,7 +841,7 @@ class _CalendarPageState extends State<CalendarPage> {
                               children: [
                                 _buildSegmentedToggle(
                                   c,
-                                  ['G', 'P'],
+                                  ['Grupal', 'Personal'],
                                   _toggleModeIndex,
                                   (idx) {
                                     setState(() =>
@@ -935,12 +1028,19 @@ class _CalendarPageState extends State<CalendarPage> {
                                 dayFormat: 'EEE',
                                 showAgenda: !isDesktop,
                                 showTrailingAndLeadingDates: false,
+                                // Los dibuja el calendario y no la celda: así un evento de varios
+                                // días es una sola barra que cruza los días, no un pedazo por día.
                                 appointmentDisplayMode:
-                                    MonthAppointmentDisplayMode.none,
+                                    MonthAppointmentDisplayMode.appointment,
+                                appointmentDisplayCount: _renglonesPorDia,
                                 agendaStyle: AgendaStyle(
                                   backgroundColor: c.panel,
-                                  appointmentTextStyle:
-                                      TextStyle(color: c.ink, fontSize: 13),
+                                  // Blanco como en las etiquetas del mes: el fondo es el color del
+                                  // evento y el texto oscuro casi no se leía sobre el verde.
+                                  appointmentTextStyle: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600),
                                   dateTextStyle:
                                       TextStyle(color: c.ink3, fontSize: 11),
                                   dayTextStyle: TextStyle(
@@ -954,7 +1054,58 @@ class _CalendarPageState extends State<CalendarPage> {
                                   endHour: 24,
                                   timeTextStyle:
                                       TextStyle(color: c.ink3, fontSize: 11)),
+                              appointmentBuilder: (context, details) {
+                                if (details.isMoreAppointmentRegion) {
+                                  return Center(
+                                    child: Text(
+                                      '+${details.appointments.length}',
+                                      style: TextStyle(
+                                          color: c.ink3,
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w600),
+                                    ),
+                                  );
+                                }
+                                final ap = details.appointments.first as Appointment;
+                                // En celdas altas el 90% del renglón y el resto de aire entre
+                                // eventos; en el teléfono (celdas chicas) la barra completa.
+                                final barra = Container(
+                                  width: details.bounds.width,
+                                  height: details.bounds.height * (_altoCelda < 90 ? 1.0 : 0.9),
+                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                  alignment: Alignment.centerLeft,
+                                  decoration: BoxDecoration(
+                                    color: ap.color.withValues(alpha: 0.9),
+                                    borderRadius: BorderRadius.circular(3),
+                                  ),
+                                  child: Text(
+                                    '${DateFormat('HH:mm').format(ap.startTime)} ${ap.subject}',
+                                    style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 9,
+                                        height: 1.0,
+                                        fontWeight: FontWeight.w600),
+                                    textHeightBehavior: const TextHeightBehavior(
+                                        applyHeightToFirstAscent: false,
+                                        applyHeightToLastDescent: false),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                );
+                                return Align(
+                                  alignment: Alignment.center,
+                                  child: isDesktop ? _conDetalle(c, ap, barra) : barra,
+                                );
+                              },
                               monthCellBuilder: (context, details) {
+                                final alto = details.bounds.height;
+                                if ((alto - _altoCelda).abs() > 1) {
+                                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                                    if (mounted && (alto - _altoCelda).abs() > 1) {
+                                      setState(() => _altoCelda = alto);
+                                    }
+                                  });
+                                }
                                 final isSelected =
                                     details.date.year == _selectedDate.year &&
                                         details.date.month ==
@@ -993,6 +1144,11 @@ class _CalendarPageState extends State<CalendarPage> {
                                                 ? c.brand
                                                 : Colors.transparent,
                                             shape: BoxShape.circle,
+                                            // En el teléfono la lista de abajo es la del día
+                                            // elegido: sin este aro no se sabía de qué día era.
+                                            border: isSelected && !isToday && !isDesktop
+                                                ? Border.all(color: c.brand, width: 1.5)
+                                                : null,
                                           ),
                                           child: Center(
                                             child: Text(
@@ -1010,45 +1166,6 @@ class _CalendarPageState extends State<CalendarPage> {
                                           ),
                                         ),
                                       ),
-                                      if (details.appointments.isNotEmpty)
-                                        Flexible(
-                                          child: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: details.appointments
-                                                .take(2)
-                                                .map((app) {
-                                              final ap = app as Appointment;
-                                              return Container(
-                                                width: double.infinity,
-                                                margin:
-                                                    const EdgeInsets.symmetric(
-                                                        horizontal: 3,
-                                                        vertical: 1),
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                        horizontal: 4,
-                                                        vertical: 1),
-                                                decoration: BoxDecoration(
-                                                  color: ap.color
-                                                      .withValues(alpha: 0.9),
-                                                  borderRadius:
-                                                      BorderRadius.circular(3),
-                                                ),
-                                                child: Text(
-                                                  '${DateFormat('HH:mm').format(ap.startTime)} ${ap.subject}',
-                                                  style: const TextStyle(
-                                                      color: Colors.white,
-                                                      fontSize: 9,
-                                                      fontWeight:
-                                                          FontWeight.w600),
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                              );
-                                            }).toList(),
-                                          ),
-                                        ),
                                     ],
                                   ),
                                   ),

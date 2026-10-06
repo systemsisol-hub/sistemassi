@@ -96,6 +96,13 @@ String _fechaLarga(DateTime d) {
   return t[0].toUpperCase() + t.substring(1);
 }
 
+/// «Vie 2 oct»: en la lista de 14 días la fecha larga se comía el ancho de las cuatro horas.
+String _fechaCorta(DateTime d) {
+  const dias = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+  const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  return '${dias[d.weekday - 1]} ${d.day} ${meses[d.month - 1]}';
+}
+
 String _hoyISO() => DateFormat('yyyy-MM-dd').format(DateTime.now());
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -378,8 +385,8 @@ class _ChecadorPropioState extends State<ChecadorPropio> {
       child: Row(
         children: [
           SizedBox(
-            width: 150,
-            child: Text(_fechaLarga(d),
+            width: 76,
+            child: Text(_fechaCorta(d),
                 style: TextStyle(fontSize: 12.5, color: c.ink2),
                 overflow: TextOverflow.ellipsis),
           ),
