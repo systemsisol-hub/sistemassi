@@ -783,7 +783,14 @@ class _TorneosPageState extends State<TorneosPage> {
     if (x.esLibre && x.pendiente && (soyCreador || _esOrganizador)) {
       acciones.add(TextButton(onPressed: () => _cancelarLibre(x), child: const Text('Cancelar')));
     }
-    if (x.completada && _esOrganizador && !x.esLibre) {
+    // Corregir solo mientras ese resultado no haya armado ya la fase siguiente: la base lo rechaza.
+    final corregible = switch (x.tipo) {
+      'grupo' => liga?.fase == 'grupos',
+      'final' => liga?.fase == 'finales' &&
+          !_carreras.any((o) => o.torneoId == x.torneoId && o.tipo == 'final' && o.ronda > x.ronda),
+      _ => false,
+    };
+    if (x.completada && _esOrganizador && corregible) {
       acciones.add(TextButton(onPressed: () => _capturar(x), child: const Text('Corregir')));
     }
 
