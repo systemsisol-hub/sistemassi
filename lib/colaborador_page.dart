@@ -28,6 +28,9 @@ class ColaboradorPage extends StatefulWidget {
 
 class _ColaboradorPageState extends State<ColaboradorPage> {
   List<Map<String, dynamic>> _items = [];
+  // El catálogo de `puestos`. Antes era una lista fija en el código: agregar un puesto pedía una
+  // versión nueva de la app. Ver 20261006170000_catalogo_puestos.sql.
+  List<String> _puestos = [];
   Map<String, List<String>> _userDevices = {};
   bool _isLoading = true;
   final _searchController = TextEditingController();
@@ -47,6 +50,7 @@ class _ColaboradorPageState extends State<ColaboradorPage> {
   @override
   void initState() {
     super.initState();
+    _fetchPuestos();
     _fetchItems().then((_) {
       if (widget.pendingEditId != null && mounted) {
         final found = _items.firstWhere(
@@ -304,6 +308,131 @@ Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
             SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
       }
     }
+  }
+
+  Future<void> _fetchPuestos() async {
+    try {
+      final data = await Supabase.instance.client
+          .from('puestos')
+          .select('nombre')
+          .order('nombre', ascending: true);
+      if (mounted) {
+        setState(() => _puestos =
+            [for (final r in data) r['nombre'] as String]);
+      }
+    } catch (e) {
+      debugPrint('Error al cargar puestos: $e');
+    }
+  }
+
+  /// La ficha para agregar un puesto al catálogo. Devuelve el puesto agregado (o el que ya
+  /// existía con ese nombre) para dejarlo elegido en el formulario; `null` si se canceló.
+  Future<String?> _agregarPuesto() async {
+    final ctrl = TextEditingController();
+    String? error;
+    bool guardando = false;
+
+    final resultado = await showDialog<String>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setFicha) {
+        // Mayúsculas y sin espacios de más, como el resto del catálogo: así
+        // «Recepcionista » no sale como un puesto aparte de RECEPCIONISTA.
+        final nombre =
+            ctrl.text.trim().toUpperCase().replaceAll(RegExp(r'\s+'), ' ');
+        final palabras = nombre.split(' ').where((w) => w.isNotEmpty);
+        final parecidos = nombre.isEmpty
+            ? <String>[]
+            : _puestos
+                .where((p) => palabras.every((w) => p.contains(w)))
+                .take(6)
+                .toList();
+        final yaExiste = _puestos.contains(nombre);
+
+        Future<void> guardar() async {
+          if (nombre.isEmpty) return;
+          if (yaExiste) {
+            Navigator.pop(ctx, nombre);
+            return;
+          }
+          setFicha(() {
+            guardando = true;
+            error = null;
+          });
+          try {
+            await Supabase.instance.client
+                .from('puestos')
+                .insert({'nombre': nombre});
+            if (mounted) {
+              setState(() => _puestos = [..._puestos, nombre]..sort());
+            }
+            if (ctx.mounted) Navigator.pop(ctx, nombre);
+          } catch (e) {
+            debugPrint('Error al agregar puesto: $e');
+            setFicha(() {
+              guardando = false;
+              error = 'No se pudo agregar el puesto: $e';
+            });
+          }
+        }
+
+        return AlertDialog(
+          title: const Text('Agregar puesto'),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: ctrl,
+                  autofocus: true,
+                  textCapitalization: TextCapitalization.characters,
+                  decoration: InputDecoration(
+                    labelText: 'Nombre del puesto',
+                    prefixIcon: const Icon(Icons.work_outline),
+                    helperText: yaExiste
+                        ? 'Ya existe: se elegirá el que está en la lista.'
+                        : null,
+                    errorText: error,
+                  ),
+                  onChanged: (_) => setFicha(() => error = null),
+                  onSubmitted: (_) => guardar(),
+                ),
+                if (parecidos.isNotEmpty && !yaExiste) ...[
+                  const SizedBox(height: 16),
+                  Text('Puestos parecidos que ya existen:',
+                      style: Theme.of(ctx).textTheme.labelMedium),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final p in parecidos)
+                        ActionChip(
+                          label: Text(p, style: const TextStyle(fontSize: 12)),
+                          onPressed: () => Navigator.pop(ctx, p),
+                        ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: guardando ? null : () => Navigator.pop(ctx),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: guardando || nombre.isEmpty ? null : guardar,
+              child: Text(yaExiste ? 'Elegir' : 'Agregar'),
+            ),
+          ],
+        );
+      }),
+    );
+    ctrl.dispose();
+    return resultado;
   }
 
   void _showForm({Map<String, dynamic>? item}) {
@@ -962,184 +1091,39 @@ Widget _buildGlassPill({required Widget child, EdgeInsetsGeometry? padding}) {
                 'TITULACION MS'
               ].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
               onChanged: (v) => setDialogState(() => area = v))),
-          fieldColumn(DropdownButtonFormField<String>(
-              value: puesto,
-              decoration: const InputDecoration(labelText: 'Puesto'),
-              items: [
-                'ABOGADO',
-                'ABOGADO FREELANCE',
-                'ADMINISTRACIÓN DE VENTAS',
-                'ADMINISTRADOR DE CREDITOS Y AVALUOS',
-                'ADMINISTRADOR DE OBRA',
-                'ADMINISTRADOR DE REDES SOCIALES',
-                'ADMINISTRADOR DE VENTAS',
-                'ADMINISTRADORA',
-                'AGENTE INMOBILIARIO',
-                'ALMACEN',
-                'ANALISTA ADMINISTRATIVO',
-                'ANALISTA CONTABLE',
-                'ANALISTA DE BASES DE DATOS',
-                'ANALISTA DE CONTROL PRESUPUESTAL',
-                'ANALISTA DE DESARROLLO HUMANO',
-                'ANALISTA DE DISEÑO Y MARKETING',
-                'ANALISTA DE GESTIONES Y TRAMITES',
-                'ANALISTA DE OBRA SOLIDA',
-                'ANALISTA DE SISTEMAS',
-                'ANALISTA DE TI',
-                'ANALISTA DE TITULACION',
-                'ANALISTA MERCADO SECUNDARIO',
-                'ASESOR DE CALL CENTER',
-                'ASESOR LEGAL',
-                'ASISTENTE DE DIRECCION',
-                'ATENCION A CLIENTES',
-                'AUXILIAR ADMINISTRATIVO',
-                'AUXILIAR ADMINISTRATIVO CONTABLE',
-                'AUXILIAR CONTABLE',
-                'AUXILIAR DE ALMACEN',
-                'AUXILIAR DE CONTROL DE OBRA',
-                'AUXILIAR DE CONTROL PRESUPUESTAL',
-                'AUXILIAR DE MANTENIMIENTO',
-                'AUXILIAR DE NOMINA',
-                'AUXILIAR DE OBRA',
-                'AUXILIAR DE SUPERVISION',
-                'AUXILIAR DE TITULACION',
-                'AUXILIAR DE TOPOGRAFO',
-                'AUXILIAR GENERAL',
-                'AUXILIAR OAP',
-                'AUXILIAR RH',
-                'AUXILIAR TECNICO',
-                'BECARIA DE MERCADOTECNIA',
-                'BECARIO ADMINISTRACION',
-                'BECARIO DE FINANZAS',
-                'BECARIO DESARROLLO HUMANO',
-                'BECARIO MKT',
-                'BECARIO RH',
-                'CADENERO',
-                'COMERCIALIZADOR EXTERNO',
-                'COMISIONISTA EXTERNO',
-                'COMISIONISTA INTERNO',
-                'COMMUNITY MANAGER',
-                'COMPRAS',
-                'CONTADOR',
-                'CONTADOR GENERAL',
-                'CONTADOR JR.',
-                'CONTADORA',
-                'CONTRALOR',
-                'CONTRALORA',
-                'CONTROL DE ALMACEN',
-                'CONTROL DE AVANCES FISCALES FINANCIEROS',
-                'CONTROL PRESUPUESTAL',
-                'COORDINACIÓN DE PROYECTOS',
-                'COORDINADOR ADMINISTRATIVO',
-                'COORDINADOR DE ACABADOS',
-                'COORDINADOR DE ESTRUCTURA ALTAMAR',
-                'COORDINADOR DE ESTRUCTURA SOLIDA',
-                'COORDINADOR DE MERCADOTECNIA',
-                'COORDINADOR DE OFICINA DE ADMINISTRACION DE PROYECTOS',
-                'COORDINADOR DE PROYECTO',
-                'COORDINADOR DE TESORERIA',
-                'COORDINADOR DE TITULACION',
-                'COORDINADOR DE URBANIZACION',
-                'COORDINADOR DE VENTAS',
-                'COORDINADOR DESARROLLO HUMANO',
-                'COORDINADOR JURIDICO MS',
-                'COORDINADOR MERCADO SECUNDARIO',
-                'COORDINADOR OAP',
-                'COORDINADORA DE INFORMACION',
-                'COORDINADORA DE OBRA',
-                'CUANTIFICADOR',
-                'CUBRE TURNOS',
-                'DESALOJADOR EXTERNO',
-                'DESARROLLO HUMANO',
-                'DETALLISTA DE POSVENTA',
-                'DIRECTOR COMERCIAL',
-                'DIRECTOR DE ADMINISTRACION Y FINANZAS',
-                'DIRECTOR DE ÁREA TECNICA',
-                'DIRECTOR DE OPERACIONES',
-                'DIRECTOR DE PROYECTOS',
-                'DIRECTOR GENERAL',
-                'DIRECTOR JURIDICO',
-                'DIRECTORA DE PROYECTO',
-                'DISEÑADOR GRAFICO',
-                'EJECUTIVA DE POSVENTA',
-                'ENCARGADA DE OBRA',
-                'ENCARGADA DE POSTVENTA',
-                'ENCARGADO DE COCINA',
-                'ENCARGADO DE COMISIONES',
-                'ENCARGADO DE GESTIONES',
-                'ENCARGADO DE TURNO',
-                'ENTREGA DE OBRA',
-                'ENTREGA DE VIVIENDA Y VICIOS OCULTOS',
-                'FACTURACION',
-                'FRANQUICIA EXTERNA',
-                'FREELANCE MK',
-                'GERENTE COMERCIAL',
-                'GERENTE CONTROL PRESUPUESTAL',
-                'GERENTE DE ADMINISTRACION DE VENTAS',
-                'GERENTE DE ADMINISTRACION Y FINANZAS',
-                'GERENTE DE CONSTRUCCION',
-                'GERENTE DE DESARROLLO HUMANO',
-                'GERENTE DE IMPLEMENTACION Y SOPORTE',
-                'GERENTE DE MERCADO SECUNDARIO',
-                'GERENTE DE OBRA',
-                'GERENTE DE OPERACIONES',
-                'GERENTE DE POSVENTA',
-                'GERENTE DE PROMOTORIAS',
-                'GERENTE DE PROYECTO',
-                'GERENTE DE SISTEMAS Y MANTENIMIENTO',
-                'GERENTE DE TIENDA',
-                'GERENTE DE TITULACION',
-                'GERENTE REGIONAL DE VENTAS',
-                'GERENTE T.I.',
-                'GERENTE TECNICO',
-                'GERENTE TECNICO DE OBRA',
-                'GESTOR',
-                'GESTOR ADMINISTRATIVO',
-                'INTENDENTE',
-                'INTENDENTE DE ESTRUCTURA',
-                'INTENDENTE DE OBRA',
-                'INTENDENTE DE OBRA SOLIDA',
-                'JEFE DE ALMACEN',
-                'JEFE DE MANTENIMIENTO',
-                'JEFE DE OBRA',
-                'JEFE DE TITULACION',
-                'JEFE DE TRADE MARKETING',
-                'JEFE DE VENTAS',
-                'LIDER DE VENTAS',
-                'LIMPIEZA',
-                'LOCALIZADOR DE VIVIENDA',
-                'MANTENIMIENTO GENERAL',
-                'MARKETING',
-                'MERCADO SECUNDARIO',
-                'OFICIAL DE ACABADOS',
-                'OPERACIONES',
-                'PLOMERO',
-                'POSVENTA',
-                'RECEPCIONISTA',
-                'RESIDENTE DE ACABADOS',
-                'RESIDENTE DE ALBAÑILERIAS Y ACABADOS',
-                'RESIDENTE DE CALIDAD',
-                'RESIDENTE DE OBRA',
-                'RESIDENTE DE POSTVENTA',
-                'RESIDENTE DE URBANIZACION',
-                'RESPONSABLE DE ADMINISTRACION DE VENTAS Y TITULACION',
-                'RESPONSABLE DE OBRA SOLIDA',
-                'RESPONSABLE OPERATIVO DE RESTAURANTE',
-                'SALVAVIDAS',
-                'SUP. DE REHABILITACION Y ENTREGAS',
-                'SUPERINTENDENTE DE ACABADOS',
-                'SUPERINTENDENTE DE OBRA',
-                'SUPERINTENDENTE DE URBANIZACIÓN',
-                'SUPERVISORA DE OBRA',
-                'TESORERIA',
-                'TITULACION',
-                'TITULACION MS',
-                'TOPOGRAFO',
-                'TRAMITES Y PERMISOS',
-                'VELADOR',
-                'VIGILANTE'
-              ].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-              onChanged: (v) => setDialogState(() => puesto = v))),
+          fieldColumn(Row(children: [
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                  // La llave cambia al agregar un puesto: sin ella el campo se queda con el
+                  // valor de antes aunque `puesto` ya sea el nuevo.
+                  key: ValueKey('puesto-$puesto-${_puestos.length}'),
+                  value: puesto,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Puesto'),
+                  items: [
+                    // Un expediente con un puesto que ya no está en el catálogo lo sigue
+                    // mostrando: el desplegable revienta si su valor no está entre las opciones.
+                    if (puesto != null && !_puestos.contains(puesto)) puesto!,
+                    ..._puestos,
+                  ]
+                      .map((e) => DropdownMenuItem(
+                          value: e,
+                          child: Text(e, overflow: TextOverflow.ellipsis)))
+                      .toList(),
+                  onChanged: (v) => setDialogState(() => puesto = v)),
+            ),
+            if (widget.role == 'admin') ...[
+              const SizedBox(width: 8),
+              IconButton.filledTonal(
+                tooltip: 'Agregar puesto',
+                icon: const Icon(Icons.add),
+                onPressed: () async {
+                  final nuevo = await _agregarPuesto();
+                  if (nuevo != null) setDialogState(() => puesto = nuevo);
+                },
+              ),
+            ],
+          ])),
           fieldColumn(DropdownButtonFormField<String>(
               value: ubicacion,
               decoration: const InputDecoration(labelText: 'Ubicación'),
