@@ -1017,8 +1017,11 @@ class _CalendarPageState extends State<CalendarPage> {
                                 dayFormat: 'EEE',
                                 showAgenda: !isDesktop,
                                 showTrailingAndLeadingDates: false,
+                                // Los dibuja el calendario y no la celda: así un evento de varios
+                                // días es una sola barra que cruza los días, no un pedazo por día.
                                 appointmentDisplayMode:
-                                    MonthAppointmentDisplayMode.none,
+                                    MonthAppointmentDisplayMode.appointment,
+                                appointmentDisplayCount: isDesktop ? 3 : 2,
                                 agendaStyle: AgendaStyle(
                                   backgroundColor: c.panel,
                                   // Blanco como en las etiquetas del mes: el fondo es el color del
@@ -1040,6 +1043,40 @@ class _CalendarPageState extends State<CalendarPage> {
                                   endHour: 24,
                                   timeTextStyle:
                                       TextStyle(color: c.ink3, fontSize: 11)),
+                              appointmentBuilder: (context, details) {
+                                if (details.isMoreAppointmentRegion) {
+                                  return Center(
+                                    child: Text(
+                                      '+${details.appointments.length}',
+                                      style: TextStyle(
+                                          color: c.ink3,
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w600),
+                                    ),
+                                  );
+                                }
+                                final ap = details.appointments.first as Appointment;
+                                final barra = Container(
+                                  width: details.bounds.width,
+                                  height: details.bounds.height,
+                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                  alignment: Alignment.centerLeft,
+                                  decoration: BoxDecoration(
+                                    color: ap.color.withValues(alpha: 0.9),
+                                    borderRadius: BorderRadius.circular(3),
+                                  ),
+                                  child: Text(
+                                    '${DateFormat('HH:mm').format(ap.startTime)} ${ap.subject}',
+                                    style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w600),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                );
+                                return isDesktop ? _conDetalle(c, ap, barra) : barra;
+                              },
                               monthCellBuilder: (context, details) {
                                 final isSelected =
                                     details.date.year == _selectedDate.year &&
@@ -1101,60 +1138,6 @@ class _CalendarPageState extends State<CalendarPage> {
                                           ),
                                         ),
                                       ),
-                                      if (details.appointments.isNotEmpty)
-                                        Flexible(
-                                          child: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            // En el teléfono uno y «+N»: con dos etiquetas la celda
-                                            // se desbordaba. Todos se ven en la lista del día.
-                                            children: [
-                                              ...details.appointments
-                                                .take(isDesktop ? 2 : 1)
-                                                .map((app) {
-                                              final ap = app as Appointment;
-                                              final chip = Container(
-                                                width: double.infinity,
-                                                margin:
-                                                    const EdgeInsets.symmetric(
-                                                        horizontal: 3,
-                                                        vertical: 1),
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                        horizontal: 4,
-                                                        vertical: 1),
-                                                decoration: BoxDecoration(
-                                                  color: ap.color
-                                                      .withValues(alpha: 0.9),
-                                                  borderRadius:
-                                                      BorderRadius.circular(3),
-                                                ),
-                                                child: Text(
-                                                  '${DateFormat('HH:mm').format(ap.startTime)} ${ap.subject}',
-                                                  style: const TextStyle(
-                                                      color: Colors.white,
-                                                      fontSize: 9,
-                                                      fontWeight:
-                                                          FontWeight.w600),
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                              );
-                                              return isDesktop
-                                                  ? _conDetalle(c, ap, chip)
-                                                  : chip;
-                                            }),
-                                              if (details.appointments.length > (isDesktop ? 2 : 1))
-                                                Text(
-                                                  '+${details.appointments.length - (isDesktop ? 2 : 1)}',
-                                                  style: TextStyle(
-                                                      color: c.ink3,
-                                                      fontSize: 9,
-                                                      fontWeight: FontWeight.w600),
-                                                ),
-                                            ],
-                                          ),
-                                        ),
                                     ],
                                   ),
                                   ),
