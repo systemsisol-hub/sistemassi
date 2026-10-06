@@ -476,7 +476,7 @@ class _TorneosPageState extends State<TorneosPage> {
         const SizedBox(height: 16),
         if (fase == 'inscripcion')
           _Nota(
-            texto: 'Inscripciones abiertas: ${_jugadores.length} jugadores. La Liga se arma cuando el '
+            texto: 'Inscripciones abiertas: ${_jugadoresTexto(_jugadores.length)}. La Liga se arma cuando el '
                 'organizador sortea los grupos (de 4 a 8, carreras de 4). Pasan a finales los 2 '
                 'mejores de cada grupo.',
           )
@@ -778,6 +778,8 @@ class _TorneosPageState extends State<TorneosPage> {
   }
 }
 
+String _jugadoresTexto(int n) => n == 1 ? '1 jugador inscrito' : '$n jugadores inscritos';
+
 // ── Inscripcion ─────────────────────────────────────────────────────────────────────────────────
 
 class _Inscripcion extends StatelessWidget {
@@ -837,7 +839,7 @@ class _Inscripcion extends StatelessWidget {
                 const SizedBox(height: 8),
                 Text(
                   'Inscríbete con un apodo y un avatar. Tus puntos se guardan en sistemassi y todos ven '
-                  'el mismo ranking. Ya hay $inscritos ${inscritos == 1 ? 'jugador inscrito' : 'jugadores inscritos'}.',
+                  'el mismo ranking. Ya hay ${_jugadoresTexto(inscritos)}.',
                   style: TextStyle(fontSize: 13, color: c.ink2, height: 1.5),
                 ),
                 const SizedBox(height: 20),
@@ -986,7 +988,7 @@ class _Hero extends StatelessWidget {
           const SizedBox(height: 6),
           Text(titulo, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w600, color: Colors.white)),
           const SizedBox(height: 4),
-          Text('$inscritos jugadores inscritos · ${etiquetaFase(fase)}',
+          Text('${_jugadoresTexto(inscritos)} · ${etiquetaFase(fase)}',
               style: const TextStyle(fontSize: 13, color: Color(0xFFEDF0FF))),
           if (campeon != null) ...[
             const SizedBox(height: 14),
@@ -1676,7 +1678,12 @@ class _NuevaCarreraDialogState extends State<_NuevaCarreraDialog> {
                           }),
                         ),
                       if (visibles.isEmpty)
-                        Text('Nadie más inscrito con ese nombre.', style: TextStyle(fontSize: 12, color: c.ink3)),
+                        Text(
+                          widget.jugadores.isEmpty
+                              ? 'Todavía no hay nadie más inscrito.'
+                              : 'Nadie más inscrito con ese nombre.',
+                          style: TextStyle(fontSize: 12, color: c.ink3),
+                        ),
                     ],
                   ),
                 ),
