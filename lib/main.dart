@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'main_navigation.dart';
+import 'utils/enlace_inicial.dart';
 import 'login_page.dart';
 import 'reset_password_page.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -27,6 +28,9 @@ void main() {
 
 Future<void> _init() async {
   if (kIsWeb) {
+    // Antes de que Flutter reescriba la dirección a `/` (ver enlace_inicial.dart).
+    final inv = Uri.base.queryParameters['inv'];
+    if (inv != null && inv.isNotEmpty) equipoDelEnlace = inv.toUpperCase();
     usePathUrlStrategy();
   }
   WidgetsFlutterBinding.ensureInitialized();
