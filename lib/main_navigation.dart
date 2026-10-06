@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -7,6 +6,7 @@ import 'user_dashboard.dart';
 import 'usuarios_page.dart';
 import 'system_logs_page.dart';
 import 'issi_page.dart';
+import 'utils/enlace_inicial.dart';
 import 'colaborador_page.dart';
 import 'incidencias_page.dart';
 import 'social_page.dart';
@@ -100,15 +100,15 @@ class _MainNavigationState extends State<MainNavigation> {
   /// El QR de la etiqueta de un equipo abre `sistemassi.com/?inv=INV-0001`: lleva a Inventario con
   /// la ficha de ese equipo (si quien entra tiene permiso de ver inventario).
   void _abrirEquipoDelEnlace() {
-    if (!kIsWeb) return;
-    final inv = Uri.base.queryParameters['inv'];
-    if (inv == null || inv.isEmpty) return;
+    final inv = equipoDelEnlace;
+    if (inv == null) return;
+    equipoDelEnlace = null;
     final pages = _availablePages;
     final idx = pages.indexWhere((p) => p['title'] == 'Inventario');
     if (idx == -1) return;
     setState(() {
       _selectedIndex = idx;
-      _pendingInventarioQuery = inv.toUpperCase();
+      _pendingInventarioQuery = inv;
     });
   }
 
