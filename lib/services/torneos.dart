@@ -9,6 +9,77 @@ const puntosGarage = [10, 7, 5, 3, 2, 1, 0, 0];
 /// Avatares para elegir al inscribirse.
 const avataresTorneo = ['🏎️', '🍄', '⭐', '🐢', '🍌', '👑', '🔥', '⚡', '🦖', '👻', '🐸', '🚀'];
 
+const diasSemana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+
+/// «Viernes 14:00 · Constituyentes». Lo mismo que `torneo_horario` en la base, para los avisos.
+/// `hora` llega de Postgres como «14:00:00».
+String horarioLiga({int? diaSemana, String? hora, String? lugar}) {
+  final dia = diaSemana != null && diaSemana >= 1 && diaSemana <= 7 ? diasSemana[diaSemana - 1] : null;
+  final hhmm = hora == null || hora.length < 5 ? null : hora.substring(0, 5);
+  final cuando = [dia, hhmm].whereType<String>().join(' ');
+  return [cuando, lugar?.trim()].where((s) => s != null && s.isNotEmpty).join(' · ');
+}
+
+/// Una liga (`torneos`): su horario, su lugar y su ventana de inscripcion.
+class Liga {
+  final String id;
+  final String nombre;
+  final String fase; // inscripcion | grupos | finales | terminado | cancelado
+  final String? lugar;
+  final int? diaSemana;
+  final String? hora;
+  final DateTime? inscripcionCierra;
+  final DateTime? sorteoFallidoAt;
+  final String? campeon;
+  final List<int> puntos;
+  final DateTime? createdAt;
+
+  const Liga({
+    required this.id,
+    required this.nombre,
+    required this.fase,
+    this.lugar,
+    this.diaSemana,
+    this.hora,
+    this.inscripcionCierra,
+    this.sorteoFallidoAt,
+    this.campeon,
+    this.puntos = const [10, 7, 5, 3],
+    this.createdAt,
+  });
+
+  factory Liga.fromMap(Map<String, dynamic> m) {
+    DateTime? fecha(String k) =>
+        m[k] == null ? null : DateTime.tryParse(m[k] as String)?.toLocal();
+    return Liga(
+      id: m['id'] as String,
+      nombre: m['nombre'] as String? ?? '',
+      fase: m['fase'] as String? ?? 'inscripcion',
+      lugar: m['lugar'] as String?,
+      diaSemana: m['dia_semana'] as int?,
+      hora: m['hora'] as String?,
+      inscripcionCierra: fecha('inscripcion_cierra'),
+      sorteoFallidoAt: fecha('sorteo_fallido_at'),
+      campeon: m['campeon'] as String?,
+      puntos: List<int>.from((m['puntos'] as List?) ?? const [10, 7, 5, 3]),
+      createdAt: fecha('created_at'),
+    );
+  }
+
+  String get horario => horarioLiga(diaSemana: diaSemana, hora: hora, lugar: lugar);
+
+  /// Se puede inscribir uno: en fase de inscripcion y antes del cierre.
+  bool inscripcionAbierta([DateTime? ahora]) =>
+      fase == 'inscripcion' &&
+      (inscripcionCierra == null || inscripcionCierra!.isAfter(ahora ?? DateTime.now()));
+
+  /// Ya paso el cierre y sigue sin sortearse: o el cron no ha corrido, o faltaron jugadores.
+  bool inscripcionVencida([DateTime? ahora]) => fase == 'inscripcion' && !inscripcionAbierta(ahora);
+
+  bool get enJuego => fase == 'grupos' || fase == 'finales';
+  bool get cerrada => fase == 'terminado' || fase == 'cancelado';
+}
+
 class Jugador {
   final String userId;
   final String apodo;
@@ -120,6 +191,7 @@ class Carrera {
 
 /// Una fila de `torneo_tabla`: un jugador en un grupo (o en una carrera de finales).
 class FilaTabla {
+  final String torneoId;
   final String userId;
   final String tipo;
   final String grupo;
@@ -131,6 +203,7 @@ class FilaTabla {
   final double? posicionMedia;
 
   const FilaTabla({
+    this.torneoId = '',
     required this.userId,
     required this.tipo,
     required this.grupo,
@@ -143,6 +216,7 @@ class FilaTabla {
   });
 
   factory FilaTabla.fromMap(Map<String, dynamic> m) => FilaTabla(
+        torneoId: m['torneo_id'] as String? ?? '',
         userId: m['user_id'] as String,
         tipo: m['tipo'] as String,
         grupo: m['grupo'] as String? ?? '',
@@ -202,7 +276,8 @@ String etiquetaFase(String fase) => switch (fase) {
       'inscripcion' => 'Inscripción',
       'grupos' => 'Fase de grupos',
       'finales' => 'Finales',
-      'terminado' => 'Terminado',
+      'terminado' => 'Terminada',
+      'cancelado' => 'Cancelada',
       _ => fase,
     };
 
