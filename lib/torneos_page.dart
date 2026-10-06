@@ -1170,29 +1170,54 @@ class _FormJugadorState extends State<_FormJugador> {
           ),
         ),
         const SizedBox(height: 8),
-        Text('Avatar', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: c.ink3)),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
+        Row(
           children: [
-            for (final a in avataresTorneo)
-              InkWell(
-                onTap: () => setState(() => _avatar = a),
-                borderRadius: SiRadius.rMd,
-                child: Container(
-                  width: 44,
-                  height: 44,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: _avatar == a ? c.brandTint : c.hover,
-                    borderRadius: SiRadius.rMd,
-                    border: Border.all(color: _avatar == a ? c.brand : Colors.transparent, width: 2),
-                  ),
-                  child: Text(a, style: const TextStyle(fontSize: 22)),
-                ),
-              ),
+            Text('Avatar', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: c.ink3)),
+            const SizedBox(width: 8),
+            Text(_avatar, style: const TextStyle(fontSize: 18)),
           ],
+        ),
+        const SizedBox(height: 8),
+        // Con su propio scroll: son muchos y el boton de guardar tiene que seguir a la vista.
+        Container(
+          constraints: const BoxConstraints(maxHeight: 260),
+          decoration: BoxDecoration(border: Border.all(color: c.line), borderRadius: SiRadius.rMd),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final g in gruposAvatares) ...[
+                  Text(g.$1.toUpperCase(),
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1, color: c.ink4)),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final a in g.$2)
+                        InkWell(
+                          onTap: () => setState(() => _avatar = a),
+                          borderRadius: SiRadius.rMd,
+                          child: Container(
+                            width: 42,
+                            height: 42,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: _avatar == a ? c.brandTint : c.hover,
+                              borderRadius: SiRadius.rMd,
+                              border: Border.all(color: _avatar == a ? c.brand : Colors.transparent, width: 2),
+                            ),
+                            child: Text(a, style: const TextStyle(fontSize: 21)),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                ],
+              ],
+            ),
+          ),
         ),
         const SizedBox(height: 20),
         FilledButton(
