@@ -101,4 +101,34 @@ void main() {
       ('b', 17, 2, 1),
     ]);
   });
+
+  group('horarioLiga', () {
+    test('día, hora de Postgres y lugar', () {
+      expect(horarioLiga(diaSemana: 5, hora: '14:00:00', lugar: 'Constituyentes'),
+          'Viernes 14:00 · Constituyentes');
+    });
+
+    test('lo que falte no deja separadores sueltos', () {
+      expect(horarioLiga(diaSemana: 1), 'Lunes');
+      expect(horarioLiga(lugar: ' AG117 '), 'AG117');
+      expect(horarioLiga(), '');
+    });
+  });
+
+  group('Liga.inscripcionAbierta', () {
+    final ahora = DateTime(2026, 10, 10, 12);
+    Liga liga({String fase = 'inscripcion', DateTime? cierre}) =>
+        Liga(id: 'l', nombre: 'Liga', fase: fase, inscripcionCierra: cierre);
+
+    test('abierta antes del cierre, vencida después', () {
+      expect(liga(cierre: DateTime(2026, 10, 11)).inscripcionAbierta(ahora), isTrue);
+      expect(liga(cierre: DateTime(2026, 10, 9)).inscripcionAbierta(ahora), isFalse);
+      expect(liga(cierre: DateTime(2026, 10, 9)).inscripcionVencida(ahora), isTrue);
+    });
+
+    test('ya sorteada no está abierta aunque la fecha no haya llegado', () {
+      expect(liga(fase: 'grupos', cierre: DateTime(2026, 10, 11)).inscripcionAbierta(ahora), isFalse);
+      expect(liga(fase: 'grupos', cierre: DateTime(2026, 10, 11)).inscripcionVencida(ahora), isFalse);
+    });
+  });
 }

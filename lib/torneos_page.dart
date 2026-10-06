@@ -7,11 +7,13 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'services/torneos.dart';
 import 'theme/si_theme.dart';
 
-/// Torneos: la SiSol Mario Kart Cup. Ver supabase/migrations/20261006200000_torneos.sql.
+/// Torneos: la SiSol Mario Kart Cup. Ver supabase/migrations/20261006200000_torneos.sql y
+/// 20261006230000_ligas_con_inscripcion.sql.
 ///
-/// Quien no se ha inscrito ve primero la tarjeta de inscripcion (como en el HTML original); ya
-/// inscrito, entra a Liga, Ranking, Kart Garage y su perfil. Los puntos viven en la base y se
-/// calculan de los resultados, asi que todos ven lo mismo y se actualiza solo (Realtime).
+/// Quien entra por primera vez crea su perfil de piloto (apodo y avatar). Luego ve las ligas que
+/// creo el organizador —cada una con su horario, lugar y fecha de cierre— y se inscribe solo a las
+/// que le acomodan. Al cerrar la inscripcion se sortean los grupos. Kart Garage son carreras
+/// libres aparte. Todo vive en la base y se actualiza solo (Realtime).
 class TorneosPage extends StatefulWidget {
   final Map<String, dynamic> permissions;
 
@@ -26,12 +28,19 @@ class _TorneosPageState extends State<TorneosPage> {
 
   bool _isLoading = true;
   String? _error;
-  Map<String, dynamic>? _torneo;
+  List<Liga> _ligas = [];
   Map<String, Jugador> _jugadores = {};
-  Map<String, String> _grupoDe = {};
+  Map<String, Set<String>> _inscritos = {};
+  Map<String, Map<String, String>> _grupos = {};
   List<Carrera> _carreras = [];
   List<FilaTabla> _tabla = [];
   String _miNombre = '';
+
+  /// La liga abierta en la pestaña Ligas; `null` es la lista.
+  String? _ligaAbierta;
+
+  /// La liga elegida en Ranking.
+  String? _ligaRanking;
 
   RealtimeChannel? _canal;
   Timer? _recarga;
@@ -39,6 +48,7 @@ class _TorneosPageState extends State<TorneosPage> {
   String get _yo => _db.auth.currentUser?.id ?? '';
   bool get _esOrganizador => widget.permissions['show_torneos_admin'] == true;
   Jugador? get _miJugador => _jugadores[_yo];
+  Liga? _liga(String? id) => _ligas.where((l) => l.id == id).firstOrNull;
 
   @override
   void initState() {
@@ -54,8 +64,8 @@ class _TorneosPageState extends State<TorneosPage> {
     super.dispose();
   }
 
-  /// Cualquier cambio en carreras o torneos vuelve a cargar todo. Se juntan los avisos de medio
-  /// segundo: capturar un resultado toca la carrera y a sus 4 jugadores, y serian 5 recargas.
+  /// Cualquier cambio vuelve a cargar todo. Se juntan los avisos de medio segundo: capturar un
+  /// resultado toca la carrera y a sus 4 jugadores, y serian 5 recargas.
   void _escuchar() {
     void alCambiar(PostgresChangePayload _) {
       _recarga?.cancel();
@@ -64,68 +74,66 @@ class _TorneosPageState extends State<TorneosPage> {
       });
     }
 
-    _canal = _db.channel('torneos')
-      ..onPostgresChanges(
-          event: PostgresChangeEvent.all, schema: 'public', table: 'torneo_carreras', callback: alCambiar)
-      ..onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'torneo_carrera_jugadores',
-          callback: alCambiar)
-      ..onPostgresChanges(
-          event: PostgresChangeEvent.all, schema: 'public', table: 'torneos', callback: alCambiar)
-      ..subscribe();
+    final canal = _db.channel('torneos');
+    for (final tabla in ['torneo_carreras', 'torneo_carrera_jugadores', 'torneos', 'torneo_inscritos']) {
+      canal.onPostgresChanges(
+          event: PostgresChangeEvent.all, schema: 'public', table: tabla, callback: alCambiar);
+    }
+    _canal = canal..subscribe();
   }
 
   Future<void> _fetchData({bool silencioso = false}) async {
     if (!silencioso) setState(() => _isLoading = true);
     try {
-      // El torneo en curso; si todos terminaron, el ultimo.
-      final torneos = await _db
-          .from('torneos')
-          .select()
-          .order('created_at', ascending: false)
-          .limit(10);
-      final lista = List<Map<String, dynamic>>.from(torneos);
-      final torneo = lista.firstWhere((t) => t['fase'] != 'terminado',
-          orElse: () => lista.isEmpty ? <String, dynamic>{} : lista.first);
-      final torneoId = torneo['id'] as String?;
+      // Si alguna liga ya vencio y el cron no ha pasado, se sortea aqui. Es idempotente; si falla
+      // no importa: lo hara el cron.
+      if (!silencioso) {
+        try {
+          await _db.rpc('torneo_sortear_vencidas');
+        } catch (e) {
+          debugPrint('torneo_sortear_vencidas: $e');
+        }
+      }
 
+      final ligasF = _db.from('torneos').select().order('created_at', ascending: false).limit(50);
       final jugadoresF = _db
           .from('torneo_jugadores')
           .select('user_id, apodo, avatar, profiles(full_name)')
           .order('apodo', ascending: true);
       final perfilF = _db.from('profiles').select('full_name').eq('id', _yo).maybeSingle();
+      final inscritosF = _db.from('torneo_inscritos').select('torneo_id, user_id');
+      final gruposF = _db.from('torneo_grupos').select('torneo_id, user_id, grupo');
       final carrerasF = _db
           .from('torneo_carreras')
           .select('*, torneo_carrera_jugadores(user_id, posicion, puntos)')
-          .or(torneoId == null ? 'torneo_id.is.null' : 'torneo_id.eq.$torneoId,torneo_id.is.null')
           .order('created_at', ascending: true);
-      final gruposF = torneoId == null
-          ? Future.value(<Map<String, dynamic>>[])
-          : _db.from('torneo_grupos').select('user_id, grupo').eq('torneo_id', torneoId);
-      final tablaF = torneoId == null
-          ? Future.value(<Map<String, dynamic>>[])
-          : _db.from('torneo_tabla').select().eq('torneo_id', torneoId);
+      final tablaF = _db.from('torneo_tabla').select();
 
+      final ligas = await ligasF;
       final jugadores = await jugadoresF;
       final perfil = await perfilF;
-      final carreras = await carrerasF;
+      final inscritos = await inscritosF;
       final grupos = await gruposF;
+      final carreras = await carrerasF;
       final tabla = await tablaF;
 
       if (!mounted) return;
       setState(() {
-        _torneo = torneoId == null ? null : torneo;
-        _jugadores = {
-          for (final j in jugadores.map(Jugador.fromMap)) j.userId: j,
-        };
-        _grupoDe = {
-          for (final g in grupos) g['user_id'] as String: g['grupo'] as String,
-        };
+        _ligas = ligas.map(Liga.fromMap).toList();
+        _jugadores = {for (final j in jugadores.map(Jugador.fromMap)) j.userId: j};
+        _inscritos = {};
+        for (final i in inscritos) {
+          _inscritos.putIfAbsent(i['torneo_id'] as String, () => {}).add(i['user_id'] as String);
+        }
+        _grupos = {};
+        for (final g in grupos) {
+          _grupos.putIfAbsent(g['torneo_id'] as String, () => {})[g['user_id'] as String] =
+              g['grupo'] as String;
+        }
         _carreras = carreras.map(Carrera.fromMap).toList();
         _tabla = tabla.map(FilaTabla.fromMap).toList();
         _miNombre = perfil?['full_name'] as String? ?? '';
+        if (_ligaAbierta != null && _liga(_ligaAbierta) == null) _ligaAbierta = null;
         _error = null;
       });
     } catch (e) {
@@ -162,52 +170,69 @@ class _TorneosPageState extends State<TorneosPage> {
     );
   }
 
-  Future<void> _armarLiga() async {
-    final yaArmada = _carreras.any((c) => !c.esLibre);
-    final n = _jugadores.length;
+  Future<bool> _confirmarAccion(String titulo, String texto, String boton) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(yaArmada ? '¿Volver a sortear la Liga?' : '¿Armar la Liga?'),
-        content: Text(yaArmada
-            ? 'Se borran los grupos, el calendario y TODOS los resultados de la Liga, y se sortea de '
-                'nuevo con los $n inscritos. Kart Garage no se toca.'
-            : 'Se sortean los grupos con los $n inscritos y se arma el calendario completo. A cada '
-                'jugador le llega un aviso con su grupo.'),
+        title: Text(titulo),
+        content: Text(texto),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(yaArmada ? 'Sortear de nuevo' : 'Armar Liga'),
-          ),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(boton)),
         ],
       ),
     );
-    if (ok != true || _torneo == null) return;
-    await _rpc('torneo_generar_liga', {'p_torneo': _torneo!['id']}, ok: 'Liga armada.');
+    return ok == true;
   }
 
-  Future<void> _nuevoTorneo() async {
-    final ctrl = TextEditingController(text: 'SiSol Mario Kart Cup');
-    final nombre = await showDialog<String>(
+  Future<void> _formLiga([Liga? liga]) async {
+    final datos = await showDialog<_DatosLiga>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Nuevo torneo'),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: 'Nombre'),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: const Text('Crear')),
-        ],
-      ),
+      builder: (ctx) => _LigaDialog(liga: liga),
     );
-    ctrl.dispose();
-    if (nombre == null || nombre.isEmpty) return;
-    await _rpc('torneo_crear', {'p_nombre': nombre}, ok: 'Torneo creado.');
+    if (datos == null) return;
+    final params = {
+      'p_nombre': datos.nombre,
+      'p_lugar': datos.lugar,
+      'p_dia_semana': datos.diaSemana,
+      'p_hora': datos.hora == null
+          ? null
+          : '${datos.hora!.hour.toString().padLeft(2, '0')}:${datos.hora!.minute.toString().padLeft(2, '0')}',
+      'p_cierre': datos.cierre?.toUtc().toIso8601String(),
+    };
+    if (liga == null) {
+      await _rpc('torneo_crear', params, ok: 'Liga creada. Se avisó a todos para que se inscriban.');
+    } else {
+      await _rpc('torneo_editar', {'p_torneo': liga.id, ...params}, ok: 'Liga guardada.');
+    }
   }
+
+  Future<void> _sortear(Liga l) async {
+    final n = _inscritos[l.id]?.length ?? 0;
+    final ya = l.fase != 'inscripcion';
+    final ok = await _confirmarAccion(
+      ya ? '¿Volver a sortear ${l.nombre}?' : '¿Cerrar la inscripción y sortear?',
+      ya
+          ? 'Se borran los grupos, el calendario y TODOS los resultados de esta liga, y se sortea de '
+              'nuevo con los $n inscritos.'
+          : 'Nadie más podrá inscribirse. Se sortean los grupos con los $n inscritos y a cada uno le '
+              'llega un aviso con su grupo.',
+      ya ? 'Sortear de nuevo' : 'Cerrar y sortear',
+    );
+    if (ok) await _rpc('torneo_generar_liga', {'p_torneo': l.id}, ok: 'Liga sorteada.');
+  }
+
+  Future<void> _cancelarLiga(Liga l) async {
+    final ok = await _confirmarAccion('¿Cancelar ${l.nombre}?',
+        'La liga queda cancelada y a los inscritos les llega un aviso. No se puede deshacer.', 'Cancelar liga');
+    if (ok) await _rpc('torneo_cancelar', {'p_torneo': l.id}, ok: 'Liga cancelada.');
+  }
+
+  Future<void> _inscribir(Liga l, bool si) => _rpc(
+        'torneo_inscribirme',
+        {'p_torneo': l.id, 'p_inscribir': si},
+        ok: si ? '¡Listo! Estás inscrito en ${l.nombre}.' : 'Saliste de ${l.nombre}.',
+      );
 
   Future<void> _capturar(Carrera c) async {
     final orden = await showDialog<List<String>>(
@@ -215,9 +240,7 @@ class _TorneosPageState extends State<TorneosPage> {
       builder: (ctx) => _CapturaDialog(
         carrera: c,
         jugadores: _jugadores,
-        puntos: c.esLibre
-            ? puntosGarage
-            : List<int>.from((_torneo?['puntos'] as List?) ?? const [10, 7, 5, 3]),
+        puntos: c.esLibre ? puntosGarage : (_liga(c.torneoId)?.puntos ?? const [10, 7, 5, 3]),
         directo: _esOrganizador,
       ),
     );
@@ -232,17 +255,8 @@ class _TorneosPageState extends State<TorneosPage> {
   }
 
   Future<void> _programar(Carrera c) async {
-    final base = c.fechaHora ?? DateTime.now();
-    final dia = await showDatePicker(
-      context: context,
-      initialDate: base,
-      firstDate: DateTime.now().subtract(const Duration(days: 30)),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-    );
-    if (dia == null || !mounted) return;
-    final hora = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(base));
-    if (hora == null) return;
-    final fecha = DateTime(dia.year, dia.month, dia.day, hora.hour, hora.minute);
+    final fecha = await _elegirFechaHora(context, c.fechaHora);
+    if (fecha == null) return;
     await _rpc('torneo_programar', {'p_carrera': c.id, 'p_fecha': fecha.toUtc().toIso8601String()},
         ok: 'Horario guardado.');
   }
@@ -268,18 +282,9 @@ class _TorneosPageState extends State<TorneosPage> {
   }
 
   Future<void> _cancelarLibre(Carrera c) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('¿Cancelar la carrera?'),
-        content: const Text('A los demás jugadores les llega un aviso.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('No')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Cancelar carrera')),
-        ],
-      ),
-    );
-    if (ok == true) await _rpc('garage_cancelar', {'p_carrera': c.id}, ok: 'Carrera cancelada.');
+    final ok = await _confirmarAccion(
+        '¿Cancelar la carrera?', 'A los demás jugadores les llega un aviso.', 'Cancelar carrera');
+    if (ok) await _rpc('garage_cancelar', {'p_carrera': c.id}, ok: 'Carrera cancelada.');
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────────────────────────
@@ -319,13 +324,14 @@ class _TorneosPageState extends State<TorneosPage> {
       return Scaffold(
         backgroundColor: c.bg,
         body: _Inscripcion(
-          inscritos: _jugadores.length,
+          pilotos: _jugadores.length,
+          ligasAbiertas: _ligas.where((l) => l.inscripcionAbierta()).length,
           nombreSugerido: _miNombre,
           apodosOcupados: _jugadores.values.map((j) => j.apodo.toLowerCase()).toSet(),
           onInscribir: (apodo, avatar) => _rpc(
             'torneo_registrarme',
             {'p_apodo': apodo, 'p_avatar': avatar},
-            ok: '¡Listo! Ya estás inscrito.',
+            ok: '¡Listo! Ahora elige las ligas en las que quieres jugar.',
           ),
         ),
       );
@@ -342,7 +348,9 @@ class _TorneosPageState extends State<TorneosPage> {
               child: TabBarView(
                 physics: const NeverScrollableScrollPhysics(),
                 children: [
-                  _conRecarga(_buildLiga(c)),
+                  _conRecarga(_ligaAbierta == null
+                      ? _buildListaLigas(c)
+                      : _buildLiga(c, _liga(_ligaAbierta)!)),
                   _conRecarga(_buildRanking(c)),
                   _conRecarga(_buildGarage(c)),
                   _conRecarga(_buildPerfil(c)),
@@ -375,7 +383,7 @@ class _TorneosPageState extends State<TorneosPage> {
           labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
           unselectedLabelStyle: const TextStyle(fontSize: 13),
           tabs: const [
-            Tab(height: 42, text: '🏆  Liga'),
+            Tab(height: 42, text: '🏆  Ligas'),
             Tab(height: 42, text: '📊  Ranking'),
             Tab(height: 42, text: '🔥  Kart Garage'),
             Tab(height: 42, text: '🏎️  Mi perfil'),
@@ -403,28 +411,161 @@ class _TorneosPageState extends State<TorneosPage> {
 
   bool get _esAncho => MediaQuery.of(context).size.width >= 900;
 
-  // ── Liga ──────────────────────────────────────────────────────────────────────────────────────
+  // ── Lista de ligas ────────────────────────────────────────────────────────────────────────────
 
-  Widget _buildLiga(SiColors c) {
-    final t = _torneo;
-    if (t == null) {
-      return Column(
-        children: [
-          _Vacio(texto: 'Todavía no hay un torneo.'),
-          if (_esOrganizador) ...[
+  Widget _buildListaLigas(SiColors c) {
+    final abiertas = _ligas.where((l) => l.fase == 'inscripcion').toList()
+      ..sort((a, b) => (a.inscripcionCierra ?? DateTime(2100)).compareTo(b.inscripcionCierra ?? DateTime(2100)));
+    final enJuego = _ligas.where((l) => l.enJuego).toList();
+    final cerradas = _ligas.where((l) => l.cerrada).take(10).toList();
+    final mias = _carreras
+        .where((x) => !x.esLibre && x.pendiente && x.corre(_yo) && (_liga(x.torneoId)?.enJuego ?? false))
+        .toList()
+      ..sort((a, b) => (a.fechaHora ?? DateTime(2100)).compareTo(b.fechaHora ?? DateTime(2100)));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Inscríbete solo en las ligas cuyo horario te acomode. Al cerrar la inscripción se '
+                'sortean los grupos (de 4 a 8, carreras de 4) y pasan a finales los 2 mejores de cada grupo.',
+                style: TextStyle(fontSize: 13, color: c.ink2, height: 1.5),
+              ),
+            ),
+            if (_esOrganizador) ...[
+              const SizedBox(width: 12),
+              FilledButton.icon(
+                onPressed: () => _formLiga(),
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('Nueva liga'),
+              ),
+            ],
+          ],
+        ),
+        if (mias.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          const _Seccion(titulo: 'Mis carreras pendientes'),
+          _rejilla([for (final x in mias) _tarjetaCarrera(x, mostrarLiga: true)]),
+        ],
+        const SizedBox(height: 20),
+        const _Seccion(titulo: 'Inscripciones abiertas'),
+        if (abiertas.isEmpty)
+          _Vacio(
+            texto: _esOrganizador
+                ? 'No hay ligas abiertas. Crea una con «Nueva liga».'
+                : 'No hay ligas abiertas por ahora. Cuando el organizador cree una te llega un aviso.',
+          )
+        else
+          _rejilla([for (final l in abiertas) _tarjetaLiga(c, l)]),
+        if (enJuego.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          const _Seccion(titulo: 'En juego'),
+          _rejilla([for (final l in enJuego) _tarjetaLiga(c, l)]),
+        ],
+        if (cerradas.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          const _Seccion(titulo: 'Terminadas'),
+          _rejilla([for (final l in cerradas) _tarjetaLiga(c, l)]),
+        ],
+      ],
+    );
+  }
+
+  String _textoCierre(Liga l) {
+    final cierre = l.inscripcionCierra;
+    if (l.fase != 'inscripcion') return etiquetaFase(l.fase);
+    if (l.sorteoFallidoAt != null) return 'Inscripción cerrada: faltan jugadores para sortear';
+    if (cierre == null) return 'Inscripción abierta';
+    final f = DateFormat("EEE d 'de' MMM · HH:mm", 'es').format(cierre);
+    return l.inscripcionAbierta() ? 'Inscripción hasta el $f' : 'Inscripción cerrada el $f · sorteando…';
+  }
+
+  Widget _tarjetaLiga(SiColors c, Liga l) {
+    final inscritos = _inscritos[l.id] ?? {};
+    final estoy = inscritos.contains(_yo);
+    final campeon = l.campeon == null ? null : _jugadores[l.campeon];
+    final (fondo, tinta) = switch (l.fase) {
+      'inscripcion' => (c.brandTint, c.brand),
+      'grupos' || 'finales' => (c.warnTint, c.warn),
+      'terminado' => (c.successTint, c.success),
+      _ => (c.dangerTint, c.danger),
+    };
+
+    return InkWell(
+      onTap: () => setState(() => _ligaAbierta = l.id),
+      borderRadius: SiRadius.rXl,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: c.panel,
+          borderRadius: SiRadius.rXl,
+          border: Border.all(color: estoy && !l.cerrada ? c.brand : c.line),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(l.nombre, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: c.ink)),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(color: fondo, borderRadius: SiRadius.rPill),
+                  child: Text(etiquetaFase(l.fase).toUpperCase(),
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: tinta)),
+                ),
+              ],
+            ),
+            if (l.horario.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text('🕑 ${l.horario}', style: TextStyle(fontSize: 13, color: c.ink2)),
+            ],
+            const SizedBox(height: 4),
+            Text(
+              '${_jugadoresTexto(inscritos.length)} · ${_textoCierre(l)}',
+              style: TextStyle(
+                fontSize: 12,
+                color: l.sorteoFallidoAt != null && l.fase == 'inscripcion' ? c.danger : c.ink3,
+              ),
+            ),
+            if (campeon != null) ...[
+              const SizedBox(height: 4),
+              Text('🏆 ${campeon.avatar} ${campeon.apodo}',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.success)),
+            ],
             const SizedBox(height: 12),
-            FilledButton.icon(
-              onPressed: _nuevoTorneo,
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('Crear torneo'),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                if (l.inscripcionAbierta() && !estoy)
+                  FilledButton(onPressed: () => _inscribir(l, true), child: const Text('Inscribirme')),
+                if (estoy && l.fase == 'inscripcion')
+                  Text('✓ Estás inscrito', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.success)),
+                if (estoy && l.inscripcionAbierta())
+                  TextButton(onPressed: () => _inscribir(l, false), child: const Text('Salirme')),
+                if (estoy && l.enJuego && _grupos[l.id]?[_yo] != null)
+                  Text('Juegas en el Grupo ${_grupos[l.id]![_yo]}',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.brand)),
+                OutlinedButton(onPressed: () => setState(() => _ligaAbierta = l.id), child: const Text('Ver liga')),
+              ],
             ),
           ],
-        ],
-      );
-    }
+        ),
+      ),
+    );
+  }
 
-    final fase = t['fase'] as String;
-    final liga = _carreras.where((x) => !x.esLibre).toList();
+  // ── Detalle de una liga ───────────────────────────────────────────────────────────────────────
+
+  Widget _buildLiga(SiColors c, Liga t) {
+    final fase = t.fase;
+    final liga = _carreras.where((x) => x.torneoId == t.id).toList();
     final grupos = liga.where((x) => x.tipo == 'grupo').toList()
       ..sort((a, b) => (a.numero ?? 0).compareTo(b.numero ?? 0));
     final finales = liga.where((x) => x.tipo == 'final').toList()
@@ -432,19 +573,31 @@ class _TorneosPageState extends State<TorneosPage> {
     final mias = liga.where((x) => x.pendiente && x.corre(_yo)).toList()
       ..sort((a, b) => (a.numero ?? 0).compareTo(b.numero ?? 0));
     final hechas = grupos.where((x) => x.completada).length;
-    final tablas = tablasDeGrupos(_tabla);
-    final campeon = t['campeon'] == null ? null : _jugadores[t['campeon']];
+    final tablas = tablasDeGrupos(_tabla.where((f) => f.torneoId == t.id).toList());
+    final campeon = t.campeon == null ? null : _jugadores[t.campeon];
+    final inscritos = (_inscritos[t.id] ?? {}).map((id) => _jugadores[id]).whereType<Jugador>().toList()
+      ..sort((a, b) => a.apodo.toLowerCase().compareTo(b.apodo.toLowerCase()));
+    final estoy = _inscritos[t.id]?.contains(_yo) ?? false;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+            onPressed: () => setState(() => _ligaAbierta = null),
+            child: const Text('←  Todas las ligas'),
+          ),
+        ),
+        const SizedBox(height: 8),
         _Hero(
-          titulo: t['nombre'] as String,
+          titulo: t.nombre,
+          horario: t.horario,
           fase: fase,
-          inscritos: _jugadores.length,
+          inscritos: inscritos.length,
           campeon: campeon,
         ),
-        if (_esOrganizador) ...[
+        if (_esOrganizador && !t.cerrada) ...[
           const SizedBox(height: 16),
           _Tarjeta(
             titulo: 'Organizador',
@@ -453,34 +606,64 @@ class _TorneosPageState extends State<TorneosPage> {
               runSpacing: 8,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                if (fase != 'terminado')
+                if (fase == 'inscripcion')
                   FilledButton.icon(
-                    onPressed: _armarLiga,
+                    onPressed: inscritos.length >= 4 ? () => _sortear(t) : null,
                     icon: const Icon(Icons.bolt, size: 16),
-                    label: Text(liga.isEmpty ? 'Armar Liga' : 'Volver a sortear'),
+                    label: const Text('Cerrar inscripción y sortear'),
                   ),
-                if (fase == 'terminado')
-                  FilledButton.icon(
-                    onPressed: _nuevoTorneo,
-                    icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Nuevo torneo'),
+                if (fase == 'grupos')
+                  OutlinedButton.icon(
+                    onPressed: () => _sortear(t),
+                    icon: const Icon(Icons.bolt, size: 16),
+                    label: const Text('Volver a sortear'),
                   ),
-                Text(
-                  'Pones horarios desde cada carrera y lo que capturas cuenta sin confirmación.',
-                  style: TextStyle(fontSize: 12, color: c.ink3),
+                OutlinedButton.icon(
+                  onPressed: () => _formLiga(t),
+                  icon: const Icon(Icons.edit_outlined, size: 16),
+                  label: Text(fase == 'inscripcion' ? 'Editar / ampliar fecha' : 'Editar'),
                 ),
+                TextButton(onPressed: () => _cancelarLiga(t), child: const Text('Cancelar liga')),
+                if (fase == 'inscripcion' && inscritos.length < 4)
+                  Text('Para sortear se necesitan al menos 4 inscritos.',
+                      style: TextStyle(fontSize: 12, color: c.ink3)),
+                if (fase != 'inscripcion')
+                  Text('Pon la fecha de cada carrera con «Horario». Lo que capturas cuenta sin confirmación.',
+                      style: TextStyle(fontSize: 12, color: c.ink3)),
               ],
             ),
           ),
         ],
         const SizedBox(height: 16),
-        if (fase == 'inscripcion')
-          _Nota(
-            texto: 'Inscripciones abiertas: ${_jugadoresTexto(_jugadores.length)}. La Liga se arma cuando el '
-                'organizador sortea los grupos (de 4 a 8, carreras de 4). Pasan a finales los 2 '
-                'mejores de cada grupo.',
-          )
-        else if (fase == 'grupos')
+        if (fase == 'inscripcion') ...[
+          _Nota(texto: '${_textoCierre(t)}. Al cerrar se sortean los grupos solos.'),
+          const SizedBox(height: 12),
+          if (t.inscripcionAbierta())
+            Align(
+              alignment: Alignment.centerLeft,
+              child: estoy
+                  ? OutlinedButton(onPressed: () => _inscribir(t, false), child: const Text('Salirme de la liga'))
+                  : FilledButton(onPressed: () => _inscribir(t, true), child: const Text('Inscribirme')),
+            ),
+          const SizedBox(height: 16),
+          _Tarjeta(
+            titulo: 'Inscritos',
+            trailing: Text('${inscritos.length}', style: TextStyle(fontSize: 13, color: c.ink3)),
+            child: inscritos.isEmpty
+                ? Text('Todavía no se inscribe nadie.', style: TextStyle(fontSize: 13, color: c.ink3))
+                : Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final j in inscritos)
+                        Chip(
+                          label: Text('${j.avatar} ${j.apodo}'),
+                          backgroundColor: j.userId == _yo ? c.brandTint : null,
+                        ),
+                    ],
+                  ),
+          ),
+        ] else if (fase == 'grupos')
           _Nota(
             texto: 'Fase de grupos: $hechas de ${grupos.length} carreras completadas. Al confirmarse la '
                 'última, los 2 mejores de cada grupo pasan solos a finales.',
@@ -491,17 +674,17 @@ class _TorneosPageState extends State<TorneosPage> {
           ),
         if (mias.isNotEmpty) ...[
           const SizedBox(height: 16),
-          _Seccion(titulo: 'Mis carreras pendientes'),
-          _rejilla([for (final x in mias) _tarjetaCarrera(x, liga)]),
+          const _Seccion(titulo: 'Mis carreras pendientes'),
+          _rejilla([for (final x in mias) _tarjetaCarrera(x)]),
         ],
         if (finales.isNotEmpty) ...[
           const SizedBox(height: 20),
-          _Seccion(titulo: '🏁 Finales'),
-          _rejilla([for (final x in finales) _tarjetaCarrera(x, liga)]),
+          const _Seccion(titulo: '🏁 Finales'),
+          _rejilla([for (final x in finales) _tarjetaCarrera(x)]),
         ],
         if (tablas.isNotEmpty) ...[
           const SizedBox(height: 20),
-          _Seccion(titulo: 'Grupos'),
+          const _Seccion(titulo: 'Grupos'),
           _rejilla([
             for (final e in tablas.entries)
               _TablaGrupo(
@@ -509,14 +692,14 @@ class _TorneosPageState extends State<TorneosPage> {
                 filas: e.value,
                 jugadores: _jugadores,
                 yo: _yo,
-                marcarClasificados: fase == 'grupos' || fase == 'finales' || fase == 'terminado',
+                marcarClasificados: fase != 'cancelado',
               ),
           ]),
         ],
         if (grupos.isNotEmpty) ...[
           const SizedBox(height: 20),
-          _Seccion(titulo: 'Calendario de grupos'),
-          _rejilla([for (final x in grupos) _tarjetaCarrera(x, liga)]),
+          const _Seccion(titulo: 'Calendario de grupos'),
+          _rejilla([for (final x in grupos) _tarjetaCarrera(x)]),
         ],
       ],
     );
@@ -544,9 +727,10 @@ class _TorneosPageState extends State<TorneosPage> {
     );
   }
 
-  Widget _tarjetaCarrera(Carrera x, List<Carrera> todas) {
+  Widget _tarjetaCarrera(Carrera x, {bool mostrarLiga = false}) {
+    final liga = _liga(x.torneoId);
     final enRonda = x.tipo == 'final'
-        ? todas.where((o) => o.tipo == 'final' && o.ronda == x.ronda).length
+        ? _carreras.where((o) => o.torneoId == x.torneoId && o.tipo == 'final' && o.ronda == x.ronda).length
         : 1;
     final soyParticipante = x.corre(_yo);
     final soyCreador = x.creadaPor == _yo;
@@ -603,9 +787,11 @@ class _TorneosPageState extends State<TorneosPage> {
       nota = 'Capturado por ${quien ?? 'un jugador'}. Falta que otro lo confirme.';
     }
 
+    final nombre = nombreCarrera(x, carrerasEnRonda: enRonda);
     return _CarreraCard(
-      titulo: nombreCarrera(x, carrerasEnRonda: enRonda),
+      titulo: mostrarLiga && liga != null ? '${liga.nombre} · $nombre' : nombre,
       carrera: x,
+      horarioLiga: liga?.horario,
       jugadores: _jugadores,
       yo: _yo,
       nota: nota,
@@ -616,31 +802,35 @@ class _TorneosPageState extends State<TorneosPage> {
   // ── Ranking ───────────────────────────────────────────────────────────────────────────────────
 
   Widget _buildRanking(SiColors c) {
-    // Liga: lo de la fase de grupos, que es donde todos corren lo mismo. Las finales se ven en Liga.
-    final liga = <String, ({int puntos, int carreras, int victorias, double? media})>{};
-    for (final f in _tabla.where((f) => f.tipo == 'grupo')) {
-      liga[f.userId] = (puntos: f.puntos, carreras: f.carreras, victorias: f.victorias, media: f.posicionMedia);
-    }
-    final filasLiga = liga.entries.toList()
-      ..sort((a, b) => compararFilas(
-            FilaTabla(userId: a.key, tipo: 'grupo', grupo: '', ronda: 1, puntos: a.value.puntos,
-                carreras: a.value.carreras, carrerasTotal: 0, victorias: a.value.victorias,
-                posicionMedia: a.value.media),
-            FilaTabla(userId: b.key, tipo: 'grupo', grupo: '', ronda: 1, puntos: b.value.puntos,
-                carreras: b.value.carreras, carrerasTotal: 0, victorias: b.value.victorias,
-                posicionMedia: b.value.media),
-          ));
+    // Solo las ligas que ya tienen grupos; por omision la mas reciente.
+    final conTabla = _ligas.where((l) => _tabla.any((f) => f.torneoId == l.id)).toList();
+    final elegida = conTabla.where((l) => l.id == _ligaRanking).firstOrNull ?? conTabla.firstOrNull;
+
+    // Liga: lo de la fase de grupos, que es donde todos corren lo mismo. Las finales se ven en la liga.
+    final filasLiga = _tabla.where((f) => f.tipo == 'grupo' && f.torneoId == elegida?.id).toList()
+      ..sort(compararFilas);
     final garage = rankingGarage(_carreras);
 
     final tablaLiga = _TablaRanking(
-      titulo: '🏆 Liga · fase de grupos',
-      vacio: 'La Liga todavía no empieza.',
+      titulo: '🏆 ${elegida?.nombre ?? 'Liga'} · fase de grupos',
+      vacio: 'Todavía no se sortea ninguna liga.',
       yo: _yo,
       jugadores: _jugadores,
+      selector: conTabla.length < 2
+          ? null
+          : DropdownButton<String>(
+              value: elegida?.id,
+              isDense: true,
+              underline: const SizedBox.shrink(),
+              style: TextStyle(fontSize: 12, color: c.ink2),
+              items: [
+                for (final l in conTabla) DropdownMenuItem(value: l.id, child: Text(l.nombre)),
+              ],
+              onChanged: (v) => setState(() => _ligaRanking = v),
+            ),
       filas: [
-        for (final e in filasLiga)
-          (userId: e.key, puntos: e.value.puntos, carreras: e.value.carreras, victorias: e.value.victorias,
-              extra: _grupoDe[e.key]),
+        for (final f in filasLiga)
+          (userId: f.userId, puntos: f.puntos, carreras: f.carreras, victorias: f.victorias, extra: f.grupo),
       ],
     );
     final tablaGarage = _TablaRanking(
@@ -682,7 +872,7 @@ class _TorneosPageState extends State<TorneosPage> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const _Nota(
-          texto: 'Kart Garage: carreras libres de 2 a 8 jugadores. No cuentan para la Liga; tienen su '
+          texto: 'Kart Garage: carreras libres de 2 a 8 jugadores. No cuentan para las ligas; tienen su '
               'propio ranking (10, 7, 5, 3, 2, 1 puntos por lugar). Ábrela a todos o reta a quien quieras.',
         ),
         const SizedBox(height: 12),
@@ -695,17 +885,17 @@ class _TorneosPageState extends State<TorneosPage> {
           ),
         ),
         const SizedBox(height: 20),
-        _Seccion(titulo: 'Próximas'),
+        const _Seccion(titulo: 'Próximas'),
         if (proximas.isEmpty)
           const _Vacio(texto: 'No hay carreras libres pendientes.')
         else
-          _rejilla([for (final x in proximas) _tarjetaCarrera(x, libres)]),
+          _rejilla([for (final x in proximas) _tarjetaCarrera(x)]),
         const SizedBox(height: 20),
-        _Seccion(titulo: 'Historial'),
+        const _Seccion(titulo: 'Historial'),
         if (historial.isEmpty)
           const _Vacio(texto: 'Todavía no se ha corrido ninguna.')
         else
-          _rejilla([for (final x in historial.take(20)) _tarjetaCarrera(x, libres)]),
+          _rejilla([for (final x in historial.take(20)) _tarjetaCarrera(x)]),
       ],
     );
   }
@@ -719,6 +909,8 @@ class _TorneosPageState extends State<TorneosPage> {
     final ligaCarreras = misFilas.fold<int>(0, (s, f) => s + f.carreras);
     final ligaVictorias = misFilas.fold<int>(0, (s, f) => s + f.victorias);
     final garage = rankingGarage(_carreras).where((g) => g.userId == _yo).firstOrNull;
+    final misLigas = _ligas.where((l) => _inscritos[l.id]?.contains(_yo) ?? false).toList();
+    final titulos = _ligas.where((l) => l.campeon == _yo).length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -734,8 +926,9 @@ class _TorneosPageState extends State<TorneosPage> {
                   children: [
                     Text(yo.apodo, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: c.ink)),
                     Text(yo.nombre, style: TextStyle(fontSize: 12, color: c.ink3)),
-                    if (_grupoDe[_yo] != null)
-                      Text('Grupo ${_grupoDe[_yo]}', style: TextStyle(fontSize: 12, color: c.brand)),
+                    if (misLigas.isNotEmpty)
+                      Text(misLigas.map((l) => l.nombre).join(' · '),
+                          style: TextStyle(fontSize: 12, color: c.brand)),
                   ],
                 ),
               ),
@@ -750,6 +943,7 @@ class _TorneosPageState extends State<TorneosPage> {
             _Dato(etiqueta: 'PUNTOS LIGA', valor: '$ligaPts'),
             _Dato(etiqueta: 'CARRERAS LIGA', valor: '$ligaCarreras'),
             _Dato(etiqueta: 'VICTORIAS LIGA', valor: '$ligaVictorias'),
+            _Dato(etiqueta: 'TÍTULOS', valor: '$titulos'),
             _Dato(etiqueta: 'KART SCORE', valor: '${garage?.puntos ?? 0}'),
             _Dato(etiqueta: 'CARRERAS LIBRES', valor: '${garage?.carreras ?? 0}'),
             _Dato(etiqueta: 'VICTORIAS LIBRES', valor: '${garage?.victorias ?? 0}'),
@@ -778,18 +972,35 @@ class _TorneosPageState extends State<TorneosPage> {
   }
 }
 
+/// Fecha y luego hora, con los selectores de Material.
+Future<DateTime?> _elegirFechaHora(BuildContext context, DateTime? inicial) async {
+  final base = inicial ?? DateTime.now();
+  final dia = await showDatePicker(
+    context: context,
+    initialDate: base,
+    firstDate: DateTime.now().subtract(const Duration(days: 30)),
+    lastDate: DateTime.now().add(const Duration(days: 365)),
+  );
+  if (dia == null || !context.mounted) return null;
+  final hora = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(base));
+  if (hora == null) return null;
+  return DateTime(dia.year, dia.month, dia.day, hora.hour, hora.minute);
+}
+
 String _jugadoresTexto(int n) => n == 1 ? '1 jugador inscrito' : '$n jugadores inscritos';
 
 // ── Inscripcion ─────────────────────────────────────────────────────────────────────────────────
 
 class _Inscripcion extends StatelessWidget {
-  final int inscritos;
+  final int pilotos;
+  final int ligasAbiertas;
   final String nombreSugerido;
   final Set<String> apodosOcupados;
   final Future<bool> Function(String apodo, String avatar) onInscribir;
 
   const _Inscripcion({
-    required this.inscritos,
+    required this.pilotos,
+    required this.ligasAbiertas,
     required this.nombreSugerido,
     required this.apodosOcupados,
     required this.onInscribir,
@@ -838,15 +1049,17 @@ class _Inscripcion extends StatelessWidget {
                 Text('Mario Kart Cup', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w500, color: c.ink)),
                 const SizedBox(height: 8),
                 Text(
-                  'Inscríbete con un apodo y un avatar. Tus puntos se guardan en sistemassi y todos ven '
-                  'el mismo ranking. Ya hay ${_jugadoresTexto(inscritos)}.',
+                  'Crea tu perfil de piloto con un apodo y un avatar; después eliges las ligas cuyo '
+                  'horario te acomode. Tus puntos se guardan en sistemassi y todos ven el mismo ranking. '
+                  '${ligasAbiertas == 0 ? 'Por ahora no hay ligas abiertas' : ligasAbiertas == 1 ? 'Hay 1 liga abierta' : 'Hay $ligasAbiertas ligas abiertas'}'
+                  ' y $pilotos ${pilotos == 1 ? 'piloto' : 'pilotos'}.',
                   style: TextStyle(fontSize: 13, color: c.ink2, height: 1.5),
                 ),
                 const SizedBox(height: 20),
                 _FormJugador(
                   apodoInicial: apodo,
                   avatarInicial: avataresTorneo.first,
-                  textoBoton: 'Inscribirme',
+                  textoBoton: 'Crear mi perfil de piloto',
                   apodosOcupados: apodosOcupados,
                   onGuardar: onInscribir,
                 ),
@@ -965,15 +1178,27 @@ class _FormJugadorState extends State<_FormJugador> {
 
 class _Hero extends StatelessWidget {
   final String titulo;
+  final String horario;
   final String fase;
   final int inscritos;
   final Jugador? campeon;
 
-  const _Hero({required this.titulo, required this.fase, required this.inscritos, this.campeon});
+  const _Hero({
+    required this.titulo,
+    required this.horario,
+    required this.fase,
+    required this.inscritos,
+    this.campeon,
+  });
 
   @override
   Widget build(BuildContext context) {
-    const pasos = [('inscripcion', '1 · Inscripción'), ('grupos', '2 · Grupos'), ('finales', '3 · Finales'), ('terminado', '🏆 Campeón')];
+    const pasos = [
+      ('inscripcion', '1 · Inscripción'),
+      ('grupos', '2 · Grupos'),
+      ('finales', '3 · Finales'),
+      ('terminado', '🏆 Campeón'),
+    ];
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -983,10 +1208,14 @@ class _Hero extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('CAMPEONATO OFICIAL',
+          const Text('LIGA SISOL',
               style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 2, color: Color(0xFFD8F5FF))),
           const SizedBox(height: 6),
           Text(titulo, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w600, color: Colors.white)),
+          if (horario.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text('🕑 $horario', style: const TextStyle(fontSize: 14, color: Colors.white)),
+          ],
           const SizedBox(height: 4),
           Text('${_jugadoresTexto(inscritos)} · ${etiquetaFase(fase)}',
               style: const TextStyle(fontSize: 13, color: Color(0xFFEDF0FF))),
@@ -1032,6 +1261,7 @@ class _Hero extends StatelessWidget {
 class _CarreraCard extends StatelessWidget {
   final String titulo;
   final Carrera carrera;
+  final String? horarioLiga;
   final Map<String, Jugador> jugadores;
   final String yo;
   final String? nota;
@@ -1043,6 +1273,7 @@ class _CarreraCard extends StatelessWidget {
     required this.jugadores,
     required this.yo,
     required this.acciones,
+    this.horarioLiga,
     this.nota,
   });
 
@@ -1057,8 +1288,11 @@ class _CarreraCard extends StatelessWidget {
       _ => (c.brandTint, c.brand),
     };
     final conResultado = x.participantes.any((p) => p.posicion != null);
+    // Sin fecha propia, la referencia es el horario de la liga.
     final fecha = x.fechaHora == null
-        ? 'Horario por definir'
+        ? (horarioLiga == null || horarioLiga!.isEmpty
+            ? 'Fecha por definir'
+            : 'Fecha por definir · $horarioLiga')
         : DateFormat("EEE d 'de' MMM · HH:mm", 'es').format(x.fechaHora!);
 
     return Container(
@@ -1231,6 +1465,7 @@ class _TablaGrupo extends StatelessWidget {
 class _TablaRanking extends StatelessWidget {
   final String titulo;
   final String vacio;
+  final Widget? selector;
   final String yo;
   final Map<String, Jugador> jugadores;
   final List<({String userId, int puntos, int carreras, int victorias, String? extra})> filas;
@@ -1241,6 +1476,7 @@ class _TablaRanking extends StatelessWidget {
     required this.yo,
     required this.jugadores,
     required this.filas,
+    this.selector,
   });
 
   @override
@@ -1249,6 +1485,7 @@ class _TablaRanking extends StatelessWidget {
     final cab = TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: c.ink3);
     return _Tarjeta(
       titulo: titulo,
+      trailing: selector,
       child: filas.isEmpty
           ? Padding(
               padding: const EdgeInsets.symmetric(vertical: 16),
@@ -1706,6 +1943,187 @@ class _NuevaCarreraDialogState extends State<_NuevaCarreraDialog> {
                     _NuevaCarrera(fecha: _fecha, abierta: _abierta, cupo: _cupo, invitados: _invitados.toList()),
                   ),
           child: const Text('Crear'),
+        ),
+      ],
+    );
+  }
+}
+
+class _DatosLiga {
+  final String nombre;
+  final String lugar;
+  final int? diaSemana;
+  final TimeOfDay? hora;
+  final DateTime? cierre;
+
+  const _DatosLiga({required this.nombre, required this.lugar, this.diaSemana, this.hora, this.cierre});
+}
+
+/// Crear o editar una liga: nombre, lugar, dia y hora de juego, y hasta cuando hay inscripcion.
+class _LigaDialog extends StatefulWidget {
+  final Liga? liga;
+
+  const _LigaDialog({this.liga});
+
+  @override
+  State<_LigaDialog> createState() => _LigaDialogState();
+}
+
+class _LigaDialogState extends State<_LigaDialog> {
+  late final _nombre = TextEditingController(text: widget.liga?.nombre ?? '');
+  late final _lugar = TextEditingController(text: widget.liga?.lugar ?? '');
+  late int? _dia = widget.liga?.diaSemana;
+  late TimeOfDay? _hora = _horaDe(widget.liga?.hora);
+  late DateTime? _cierre = widget.liga?.inscripcionCierra;
+
+  bool get _enInscripcion => widget.liga == null || widget.liga!.fase == 'inscripcion';
+
+  static TimeOfDay? _horaDe(String? h) {
+    if (h == null || h.length < 5) return null;
+    final p = h.split(':');
+    return TimeOfDay(hour: int.tryParse(p[0]) ?? 0, minute: int.tryParse(p[1]) ?? 0);
+  }
+
+  @override
+  void dispose() {
+    _nombre.dispose();
+    _lugar.dispose();
+    super.dispose();
+  }
+
+  String? get _problema {
+    if (_nombre.text.trim().isEmpty) return 'Ponle nombre a la liga.';
+    if (_enInscripcion && _cierre == null) return 'Elige hasta cuándo hay inscripción.';
+    if (_enInscripcion && !_cierre!.isAfter(DateTime.now())) {
+      return 'El cierre de inscripción tiene que ser en el futuro.';
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = SiColors.of(context);
+    final vista = horarioLiga(
+      diaSemana: _dia,
+      hora: _hora == null ? null : '${_hora!.hour.toString().padLeft(2, '0')}:${_hora!.minute.toString().padLeft(2, '0')}',
+      lugar: _lugar.text,
+    );
+
+    return AlertDialog(
+      title: Text(widget.liga == null ? 'Nueva liga' : 'Editar liga'),
+      content: SizedBox(
+        width: 420,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: _nombre,
+                autofocus: widget.liga == null,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(
+                  labelText: 'Nombre',
+                  hintText: 'Liga Constituyentes',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _lugar,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(
+                  labelText: 'Lugar',
+                  hintText: 'Constituyentes',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<int>(
+                      initialValue: _dia,
+                      decoration: const InputDecoration(labelText: 'Día', border: OutlineInputBorder(), isDense: true),
+                      items: [
+                        for (var i = 0; i < diasSemana.length; i++)
+                          DropdownMenuItem(value: i + 1, child: Text(diasSemana[i])),
+                      ],
+                      onChanged: (v) => setState(() => _dia = v),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(44)),
+                      onPressed: () async {
+                        final h = await showTimePicker(
+                          context: context,
+                          initialTime: _hora ?? const TimeOfDay(hour: 14, minute: 0),
+                        );
+                        if (h != null) setState(() => _hora = h);
+                      },
+                      icon: const Icon(Icons.schedule, size: 16),
+                      label: Text(_hora == null ? 'Hora' : _hora!.format(context)),
+                    ),
+                  ),
+                ],
+              ),
+              if (vista.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text('Se verá así: 🕑 $vista', style: TextStyle(fontSize: 12, color: c.ink3)),
+              ],
+              if (_enInscripcion) ...[
+                const SizedBox(height: 16),
+                Text('Cierre de inscripción', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: c.ink3)),
+                const SizedBox(height: 6),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final f = await _elegirFechaHora(context, _cierre ?? DateTime.now().add(const Duration(days: 3)));
+                    if (f != null) setState(() => _cierre = f);
+                  },
+                  icon: const Icon(Icons.event_outlined, size: 16),
+                  label: Text(_cierre == null
+                      ? 'Elegir fecha y hora'
+                      : DateFormat("EEEE d 'de' MMMM · HH:mm", 'es').format(_cierre!)),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Al llegar esa fecha se sortean los grupos solos (si hay al menos 4 inscritos). '
+                  'También puedes cerrarla antes desde la liga.',
+                  style: TextStyle(fontSize: 12, color: c.ink3),
+                ),
+              ],
+              if (widget.liga == null) ...[
+                const SizedBox(height: 12),
+                _Nota(texto: 'Al crearla se avisa a todos para que se inscriban los que puedan a ese horario.'),
+              ],
+              if (_problema != null && _nombre.text.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(_problema!, style: TextStyle(fontSize: 12, color: c.danger)),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
+        FilledButton(
+          onPressed: _problema != null
+              ? null
+              : () => Navigator.pop(
+                    context,
+                    _DatosLiga(
+                      nombre: _nombre.text.trim(),
+                      lugar: _lugar.text.trim(),
+                      diaSemana: _dia,
+                      hora: _hora,
+                      cierre: _cierre,
+                    ),
+                  ),
+          child: Text(widget.liga == null ? 'Crear liga' : 'Guardar'),
         ),
       ],
     );
