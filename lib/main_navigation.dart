@@ -10,6 +10,7 @@ import 'utils/enlace_inicial.dart';
 import 'colaborador_page.dart';
 import 'incidencias_page.dart';
 import 'social_page.dart';
+import 'torneos_page.dart';
 import 'external_contacts_page.dart';
 import 'directorio_page.dart';
 import 'avisos_page.dart';
@@ -49,7 +50,7 @@ class _OpenSearchIntent extends Intent {
 final _navGroups = <(String, List<String>)>[
   // Los dos asistentes van en GENERAL y JUNTOS, arriba: son de uso diario y se preguntan entre
   // ellos. Estaban en ADMINISTRACIÓN, que es donde se configura el sistema, no donde se trabaja.
-  ('GENERAL',        ['Mi Perfil', 'IA', 'SOL', 'Social', 'Avisos', 'Correspondencia', 'Directorio', 'Conocimientos', 'Contraseñas', 'Contactos Ext.', 'Firmas', 'Convertidor', 'Herramientas', 'Calendario']),
+  ('GENERAL',        ['Mi Perfil', 'IA', 'SOL', 'Social', 'Torneos', 'Avisos', 'Correspondencia', 'Directorio', 'Conocimientos', 'Contraseñas', 'Contactos Ext.', 'Firmas', 'Convertidor', 'Herramientas', 'Calendario']),
   ('OPERACIÓN',      ['Incidencias', 'Inventario', 'Colaborador', 'Asistencia']),
   // Sisol, el agente de ventas PÚBLICO de sisol.com.mx (chat.sisol.red). Su propia sección y no una
   // pestaña de SOL: le habla a clientes, no a asesores, y tiene su propio catálogo de desarrollos.
@@ -139,6 +140,15 @@ class _MainNavigationState extends State<MainNavigation> {
       'icon': Icons.diversity_3_outlined,
       'activeIcon': Icons.diversity_3,
       'widget': const SocialPage(),
+    });
+    // Para todos, como Social: cualquiera con sesión se inscribe. Organizar es `show_torneos_admin`.
+    // `flag` en los dos estados: ya se usa en la app, así que está en la fuente recortada que
+    // algunos tienen en caché. Un glifo nuevo (`flag_outlined`) les saldría en blanco.
+    pages.add({
+      'title': 'Torneos',
+      'icon': Icons.flag,
+      'activeIcon': Icons.flag,
+      'widget': TorneosPage(permissions: widget.permissions),
     });
     if (widget.permissions['show_whatsapp'] == true) {
       pages.add({
@@ -413,6 +423,9 @@ class _MainNavigationState extends State<MainNavigation> {
       }
     } else if (type == 'usuario') {
       _onNavigateToEditUser(id, pages);
+    } else if (type == 'torneo') {
+      final idx = pages.indexWhere((p) => p['title'] == 'Torneos');
+      if (idx != -1) setState(() => _selectedIndex = idx);
     } else if (type == 'inventario') {
       final idx = pages.indexWhere((p) => p['title'] == 'Inventario');
       if (idx != -1) {
@@ -471,6 +484,7 @@ class _MainNavigationState extends State<MainNavigation> {
                     _onNavigateToCalendar(id, pages),
                 onNavigateToEditUser: (id) =>
                     _onNavigateToEditUser(id, pages),
+                onOpenRecord: (type, id) => _onOpenRecord(type, id, pages),
               );
       },
     );
@@ -897,6 +911,7 @@ class _MobileShell extends StatelessWidget {
   final ValueChanged<int> onSelect;
   final ValueChanged<String?> onNavigateToCalendar;
   final ValueChanged<String?> onNavigateToEditUser;
+  final Function(String type, String id)? onOpenRecord;
 
   const _MobileShell({
     required this.pages,
@@ -908,6 +923,7 @@ class _MobileShell extends StatelessWidget {
     required this.onSelect,
     required this.onNavigateToCalendar,
     required this.onNavigateToEditUser,
+    this.onOpenRecord,
   });
 
   @override
@@ -947,6 +963,7 @@ class _MobileShell extends StatelessWidget {
                 Supabase.instance.client.auth.currentUser?.id ?? '',
             onNavigateToCalendar: onNavigateToCalendar,
             onNavigateToEditUser: onNavigateToEditUser,
+            onNavigateToTorneos: onOpenRecord == null ? null : () => onOpenRecord!('torneo', ''),
           ),
         ],
       ),
@@ -1185,6 +1202,7 @@ class _Header extends StatelessWidget {
                 Supabase.instance.client.auth.currentUser?.id ?? '',
             onNavigateToCalendar: onNavigateToCalendar,
             onNavigateToEditUser: onNavigateToEditUser,
+            onNavigateToTorneos: onOpenRecord == null ? null : () => onOpenRecord!('torneo', ''),
           ),
           const SizedBox(width: SiSpace.x3),
         ],

@@ -8,6 +8,7 @@ class NotificationBell extends StatelessWidget {
   final String currentUserId;
   final Function(String?)? onNavigateToCalendar;
   final Function(String?)? onNavigateToEditUser;
+  final VoidCallback? onNavigateToTorneos;
 
   const NotificationBell({
     super.key,
@@ -16,6 +17,7 @@ class NotificationBell extends StatelessWidget {
     required this.currentUserId,
     this.onNavigateToCalendar,
     this.onNavigateToEditUser,
+    this.onNavigateToTorneos,
   });
 
   @override
@@ -57,6 +59,7 @@ class NotificationBell extends StatelessWidget {
                     currentUserId: currentUserId,
                     onNavigateToCalendar: onNavigateToCalendar,
                     onNavigateToEditUser: onNavigateToEditUser,
+                    onNavigateToTorneos: onNavigateToTorneos,
                   ),
                 );
               },

@@ -1569,6 +1569,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
       'show_trash': false,
       'show_ventas': false,
       'edit_ventas': false,
+      'show_torneos_admin': false,
     });
   }
 
@@ -2114,6 +2115,9 @@ class _UserFormSheetState extends State<_UserFormSheet> {
     // conversaciones no es lo mismo que cambiar precios o apagar el chat.
     ('Ventas (Sisol)', 'show_ventas', Icons.person_add_alt_1),
     ('Editar ventas', 'edit_ventas', Icons.support_agent_outlined),
+    // Torneos lo ven todos; este permiso es solo para ORGANIZAR: sortear la Liga, poner horarios y
+    // corregir resultados. Ver 20261006200000_torneos.sql.
+    ('Organizar torneos', 'show_torneos_admin', Icons.flag),
   ];
 
   /// `dosColumnas` sólo en escritorio: en un teléfono la columna quedaría tan angosta que las
