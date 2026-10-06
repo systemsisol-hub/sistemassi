@@ -7,7 +7,19 @@
 const puntosGarage = [10, 7, 5, 3, 2, 1, 0, 0];
 
 /// Avatares para elegir al inscribirse.
-const avataresTorneo = ['🏎️', '🍄', '⭐', '🐢', '🍌', '👑', '🔥', '⚡', '🦖', '👻', '🐸', '🚀'];
+/// Grupos de avatares para elegir. Solo emojis que existen desde hace años (nada de Unicode 13 en
+/// adelante): en un Android viejo uno nuevo sale como un cuadro vacio. Cada uno cabe en la
+/// restriccion de la base (`char_length(avatar) <= 8`).
+const gruposAvatares = <(String, List<String>)>[
+  ('Carrera', ['🏎️', '🏁', '🏆', '👑', '🍄', '⭐', '🍌', '💣', '🎮', '🕹️', '🚗', '🚙', '🏍️', '🚲', '🛹', '🚀', '🚁', '✈️', '🛸']),
+  ('Poder', ['🔥', '⚡', '💥', '🌈', '🌪️', '❄️', '🌟', '💎', '🎯', '🍀']),
+  ('Animales', ['🐢', '🦖', '🐸', '🐱', '🐶', '🦊', '🐼', '🐵', '🐧', '🦁', '🐯', '🐨', '🐙', '🦄', '🐉', '🦅', '🐝', '🦈', '🐻']),
+  ('Comida', ['🌵', '🍒', '🍉', '🍕', '🌮', '🍩', '🍔']),
+  ('Personajes', ['👻', '🤖', '👽', '💀', '🤠', '😎']),
+];
+
+/// Todos los avatares, en el orden en que se muestran.
+final avataresTorneo = [for (final g in gruposAvatares) ...g.$2];
 
 const diasSemana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
 
