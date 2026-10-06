@@ -470,6 +470,76 @@ class _CalendarPageState extends State<CalendarPage> {
     );
   }
 
+  /// Tarjeta con los datos del evento al pasar el ratón por encima (web y tablet con ratón). En
+  /// pantallas táctiles no se activa: ahí se toca el evento y se abre su detalle.
+  Widget _conDetalle(SiColors c, Appointment ap, Widget child) {
+    final notas = (ap.notes ?? '').split('\n');
+    final creador = notas
+        .where((l) => l.startsWith('Creado por:'))
+        .map((l) => l.replaceAll('Creado por:', '').trim())
+        .firstOrNull;
+    var descripcion =
+        notas.where((l) => !l.startsWith('Creado por:')).join('\n').trim();
+    if (descripcion.length > 240) descripcion = '${descripcion.substring(0, 240)}…';
+
+    final dia = DateFormat("EEE d 'de' MMM", 'es');
+    final hora = DateFormat('HH:mm');
+    final mismoDia = ap.startTime.year == ap.endTime.year &&
+        ap.startTime.month == ap.endTime.month &&
+        ap.startTime.day == ap.endTime.day;
+    final cuando = ap.isAllDay
+        ? (mismoDia
+            ? '${dia.format(ap.startTime)} · Todo el día'
+            : '${dia.format(ap.startTime)} – ${dia.format(ap.endTime)}')
+        : mismoDia
+            ? '${dia.format(ap.startTime)} · ${hora.format(ap.startTime)} – ${hora.format(ap.endTime)}'
+            : '${dia.format(ap.startTime)} ${hora.format(ap.startTime)} – ${dia.format(ap.endTime)} ${hora.format(ap.endTime)}';
+
+    return Tooltip(
+      triggerMode: TooltipTriggerMode.manual,
+      waitDuration: const Duration(milliseconds: 300),
+      preferBelow: true,
+      padding: const EdgeInsets.all(12),
+      constraints: const BoxConstraints(maxWidth: 300),
+      decoration: BoxDecoration(
+        color: c.panel,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: c.line),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.12),
+              blurRadius: 16,
+              offset: const Offset(0, 6)),
+        ],
+      ),
+      richMessage: TextSpan(
+        style: TextStyle(fontSize: 12, color: c.ink2, height: 1.4),
+        children: [
+          WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: Container(
+              width: 8,
+              height: 8,
+              margin: const EdgeInsets.only(right: 6),
+              decoration: BoxDecoration(color: ap.color, shape: BoxShape.circle),
+            ),
+          ),
+          TextSpan(
+              text: ap.subject,
+              style: TextStyle(
+                  fontSize: 13, fontWeight: FontWeight.w700, color: c.ink)),
+          TextSpan(text: '\n$cuando'),
+          if (creador != null && creador.isNotEmpty)
+            TextSpan(
+                text: '\nCreado por $creador',
+                style: TextStyle(color: c.ink3)),
+          if (descripcion.isNotEmpty) TextSpan(text: '\n\n$descripcion'),
+        ],
+      ),
+      child: child,
+    );
+  }
+
   /// Panel derecho del diseño ancho (web y tablet): los eventos del día elegido en la cuadrícula
   /// (hoy al entrar) y debajo los próximos. Antes solo tenía los próximos: si los eventos del mes
   /// ya habían pasado, el panel salía vacío y al elegir un día no había dónde ver los suyos.
@@ -548,7 +618,7 @@ class _CalendarPageState extends State<CalendarPage> {
           .firstOrNull;
       final creatorName = creatorLine?.replaceAll('Creado por: ', '').trim();
 
-      return InkWell(
+      return _conDetalle(c, app, InkWell(
         onTap: () => _showEventDetails(app.id.toString()),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
@@ -604,7 +674,7 @@ class _CalendarPageState extends State<CalendarPage> {
             ],
           ),
         ),
-      );
+      ));
     }
 
     List<Widget> lista(List<Appointment> apps) => [
@@ -1042,7 +1112,7 @@ class _CalendarPageState extends State<CalendarPage> {
                                                 .take(isDesktop ? 2 : 1)
                                                 .map((app) {
                                               final ap = app as Appointment;
-                                              return Container(
+                                              final chip = Container(
                                                 width: double.infinity,
                                                 margin:
                                                     const EdgeInsets.symmetric(
@@ -1070,6 +1140,9 @@ class _CalendarPageState extends State<CalendarPage> {
                                                       TextOverflow.ellipsis,
                                                 ),
                                               );
+                                              return isDesktop
+                                                  ? _conDetalle(c, ap, chip)
+                                                  : chip;
                                             }),
                                               if (details.appointments.length > (isDesktop ? 2 : 1))
                                                 Text(
