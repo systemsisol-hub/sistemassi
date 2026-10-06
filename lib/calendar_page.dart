@@ -1056,9 +1056,11 @@ class _CalendarPageState extends State<CalendarPage> {
                                   );
                                 }
                                 final ap = details.appointments.first as Appointment;
+                                // El calendario da el alto del renglón; la barra usa el 85% y el
+                                // resto queda de aire entre barras.
                                 final barra = Container(
                                   width: details.bounds.width,
-                                  height: details.bounds.height,
+                                  height: details.bounds.height * 0.85,
                                   padding: const EdgeInsets.symmetric(horizontal: 4),
                                   alignment: Alignment.centerLeft,
                                   decoration: BoxDecoration(
@@ -1070,12 +1072,19 @@ class _CalendarPageState extends State<CalendarPage> {
                                     style: const TextStyle(
                                         color: Colors.white,
                                         fontSize: 9,
+                                        height: 1.0,
                                         fontWeight: FontWeight.w600),
+                                    textHeightBehavior: const TextHeightBehavior(
+                                        applyHeightToFirstAscent: false,
+                                        applyHeightToLastDescent: false),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 );
-                                return isDesktop ? _conDetalle(c, ap, barra) : barra;
+                                return Align(
+                                  alignment: Alignment.center,
+                                  child: isDesktop ? _conDetalle(c, ap, barra) : barra,
+                                );
                               },
                               monthCellBuilder: (context, details) {
                                 final isSelected =
