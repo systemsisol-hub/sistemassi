@@ -27,6 +27,9 @@ class _CalendarPageState extends State<CalendarPage> {
   CalendarView _currentView = CalendarView.month;
   DateTime _currentDisplayDate = DateTime.now();
   DateTime _selectedDate = DateTime.now();
+  // Alto de una celda del mes, medido al dibujarla: decide cuántas barras caben (ver
+  // `_renglonesPorDia`).
+  double _altoCelda = 0;
 
   // ── Index helpers ──────────────────────────────────────────────────────────
 
@@ -468,6 +471,14 @@ class _CalendarPageState extends State<CalendarPage> {
               ))
           .toList(),
     );
+  }
+
+  /// Renglones de eventos por día según el alto de la celda: el calendario reparte ese alto entre
+  /// ellos, así que con un número fijo las barras salían gruesas en pantallas altas (web, tablet).
+  /// Se apunta a barras de unos 18 px; en el teléfono salen 2, como antes.
+  int get _renglonesPorDia {
+    if (_altoCelda <= 0) return 2;
+    return ((_altoCelda - 34) / 18).floor().clamp(2, 6);
   }
 
   /// Tarjeta con los datos del evento al pasar el ratón por encima (web y tablet con ratón). En
@@ -1021,7 +1032,7 @@ class _CalendarPageState extends State<CalendarPage> {
                                 // días es una sola barra que cruza los días, no un pedazo por día.
                                 appointmentDisplayMode:
                                     MonthAppointmentDisplayMode.appointment,
-                                appointmentDisplayCount: isDesktop ? 3 : 2,
+                                appointmentDisplayCount: _renglonesPorDia,
                                 agendaStyle: AgendaStyle(
                                   backgroundColor: c.panel,
                                   // Blanco como en las etiquetas del mes: el fondo es el color del
@@ -1056,11 +1067,11 @@ class _CalendarPageState extends State<CalendarPage> {
                                   );
                                 }
                                 final ap = details.appointments.first as Appointment;
-                                // El calendario da el alto del renglón. En pantalla ancha la barra
-                                // usa el 85% (completa se veía muy gruesa) y el resto queda de aire.
+                                // En celdas altas el 90% del renglón y el resto de aire entre
+                                // eventos; en el teléfono (celdas chicas) la barra completa.
                                 final barra = Container(
                                   width: details.bounds.width,
-                                  height: details.bounds.height * (isDesktop ? 0.85 : 1.0),
+                                  height: details.bounds.height * (_altoCelda < 90 ? 1.0 : 0.9),
                                   padding: const EdgeInsets.symmetric(horizontal: 4),
                                   alignment: Alignment.centerLeft,
                                   decoration: BoxDecoration(
@@ -1087,6 +1098,14 @@ class _CalendarPageState extends State<CalendarPage> {
                                 );
                               },
                               monthCellBuilder: (context, details) {
+                                final alto = details.bounds.height;
+                                if ((alto - _altoCelda).abs() > 1) {
+                                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                                    if (mounted && (alto - _altoCelda).abs() > 1) {
+                                      setState(() => _altoCelda = alto);
+                                    }
+                                  });
+                                }
                                 final isSelected =
                                     details.date.year == _selectedDate.year &&
                                         details.date.month ==
