@@ -470,11 +470,20 @@ class _CalendarPageState extends State<CalendarPage> {
     );
   }
 
+  /// Panel derecho del diseño ancho (web y tablet): los eventos del día elegido en la cuadrícula
+  /// (hoy al entrar) y debajo los próximos. Antes solo tenía los próximos: si los eventos del mes
+  /// ya habían pasado, el panel salía vacío y al elegir un día no había dónde ver los suyos.
   Widget _buildSideAgenda(SiColors c, double width) {
     final now = DateTime.now();
     final appointments = List<Appointment>.from(_dataSource.appointments ?? []);
+    final diaIni = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
+    final diaFin = diaIni.add(const Duration(days: 1));
+    final delDia = appointments
+        .where((a) => a.startTime.isBefore(diaFin) && a.endTime.isAfter(diaIni))
+        .toList()
+      ..sort((a, b) => a.startTime.compareTo(b.startTime));
     final upcoming = appointments
-        .where((a) => !a.endTime.isBefore(now))
+        .where((a) => !a.endTime.isBefore(now) && !delDia.contains(a))
         .toList()
       ..sort((a, b) => a.startTime.compareTo(b.startTime));
     final toShow = upcoming.take(10).toList();
@@ -483,6 +492,128 @@ class _CalendarPageState extends State<CalendarPage> {
       'ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN',
       'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'
     ];
+    final esHoy = diaIni == DateTime(now.year, now.month, now.day);
+    final tituloDia = esHoy
+        ? 'HOY'
+        : DateFormat("EEEE d 'de' MMMM", 'es').format(diaIni).toUpperCase();
+
+    Widget encabezado(String texto, int cuantos) => Padding(
+          padding: const EdgeInsets.fromLTRB(24, 20, 20, 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  texto,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: c.ink3,
+                      letterSpacing: 1.5),
+                ),
+              ),
+              if (cuantos > 0)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: c.brand.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '$cuantos',
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: c.brand),
+                  ),
+                ),
+            ],
+          ),
+        );
+
+    Widget vacio(String texto) => Padding(
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+          child: Text(texto,
+              style: TextStyle(
+                  color: c.ink3, fontSize: 13, fontStyle: FontStyle.italic)),
+        );
+
+    Widget evento(Appointment app) {
+      final monthAbbr = monthsAbbr[app.startTime.month - 1];
+      final notes = app.notes ?? '';
+      final creatorLine = notes
+          .split('\n')
+          .where((l) => l.startsWith('Creado por:'))
+          .firstOrNull;
+      final creatorName = creatorLine?.replaceAll('Creado por: ', '').trim();
+
+      return InkWell(
+        onTap: () => _showEventDetails(app.id.toString()),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 38,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text(
+                      monthAbbr,
+                      style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: app.color,
+                          letterSpacing: 0.5),
+                    ),
+                    Text(
+                      app.startTime.day.toString(),
+                      style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: c.ink,
+                          height: 1.1),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      app.subject,
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: c.ink),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      DateFormat('HH:mm', 'es').format(app.startTime) +
+                          (creatorName != null ? ' · $creatorName' : ''),
+                      style: TextStyle(fontSize: 11, color: c.ink3),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    List<Widget> lista(List<Appointment> apps) => [
+          for (var i = 0; i < apps.length; i++) ...[
+            if (i > 0)
+              Divider(height: 1, color: c.line, indent: 24, endIndent: 24),
+            evento(apps[i]),
+          ],
+        ];
 
     return Container(
       width: width,
@@ -490,141 +621,20 @@ class _CalendarPageState extends State<CalendarPage> {
         color: c.panel,
         border: Border(left: BorderSide(color: c.line)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: ListView(
+        padding: const EdgeInsets.only(bottom: 16),
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 20, 20, 16),
-            child: Row(
-              children: [
-                Text(
-                  'PRÓXIMOS EVENTOS',
-                  style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      color: c.ink3,
-                      letterSpacing: 1.5),
-                ),
-                const Spacer(),
-                if (toShow.isNotEmpty)
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: c.brand.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      '${toShow.length}',
-                      style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: c.brand),
-                    ),
-                  ),
-              ],
-            ),
-          ),
+          encabezado(tituloDia, delDia.length),
+          if (delDia.isEmpty)
+            vacio('Sin eventos este día')
+          else
+            ...lista(delDia),
           Divider(height: 1, color: c.line),
-          Expanded(
-            child: toShow.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.event_available, size: 48, color: c.line2),
-                        const SizedBox(height: 12),
-                        Text(
-                          'Sin próximos eventos',
-                          style: TextStyle(
-                              color: c.ink3,
-                              fontWeight: FontWeight.w500,
-                              fontSize: 13),
-                        ),
-                      ],
-                    ),
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    itemCount: toShow.length,
-                    separatorBuilder: (_, __) => Divider(
-                        height: 1, color: c.line, indent: 24, endIndent: 24),
-                    itemBuilder: (ctx, i) {
-                      final app = toShow[i];
-                      final monthAbbr = monthsAbbr[app.startTime.month - 1];
-                      final notes = app.notes ?? '';
-                      final creatorLine = notes
-                          .split('\n')
-                          .where((l) => l.startsWith('Creado por:'))
-                          .firstOrNull;
-                      final creatorName =
-                          creatorLine?.replaceAll('Creado por: ', '').trim();
-
-                      return InkWell(
-                        onTap: () => _showEventDetails(app.id.toString()),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 24, vertical: 12),
-                          child: Row(
-                            children: [
-                              SizedBox(
-                                width: 38,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      monthAbbr,
-                                      style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w700,
-                                          color: app.color,
-                                          letterSpacing: 0.5),
-                                    ),
-                                    Text(
-                                      app.startTime.day.toString(),
-                                      style: TextStyle(
-                                          fontSize: 24,
-                                          fontWeight: FontWeight.bold,
-                                          color: c.ink,
-                                          height: 1.1),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      app.subject,
-                                      style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                          color: c.ink),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const SizedBox(height: 3),
-                                    Text(
-                                      DateFormat('HH:mm', 'es')
-                                              .format(app.startTime) +
-                                          (creatorName != null
-                                              ? ' · $creatorName'
-                                              : ''),
-                                      style: TextStyle(
-                                          fontSize: 11, color: c.ink3),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-          ),
+          encabezado('PRÓXIMOS EVENTOS', toShow.length),
+          if (toShow.isEmpty)
+            vacio('Sin próximos eventos')
+          else
+            ...lista(toShow),
         ],
       ),
     );
@@ -1025,11 +1035,11 @@ class _CalendarPageState extends State<CalendarPage> {
                                         Flexible(
                                           child: Column(
                                             mainAxisSize: MainAxisSize.min,
-                                            // Uno y «+N»: con dos etiquetas la celda del teléfono
+                                            // En el teléfono uno y «+N»: con dos etiquetas la celda
                                             // se desbordaba. Todos se ven en la lista del día.
                                             children: [
                                               ...details.appointments
-                                                .take(1)
+                                                .take(isDesktop ? 2 : 1)
                                                 .map((app) {
                                               final ap = app as Appointment;
                                               return Container(
@@ -1061,9 +1071,9 @@ class _CalendarPageState extends State<CalendarPage> {
                                                 ),
                                               );
                                             }),
-                                              if (details.appointments.length > 1)
+                                              if (details.appointments.length > (isDesktop ? 2 : 1))
                                                 Text(
-                                                  '+${details.appointments.length - 1}',
+                                                  '+${details.appointments.length - (isDesktop ? 2 : 1)}',
                                                   style: TextStyle(
                                                       color: c.ink3,
                                                       fontSize: 9,
