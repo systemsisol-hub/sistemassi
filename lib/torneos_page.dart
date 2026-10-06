@@ -12,7 +12,8 @@ import 'theme/si_theme.dart';
 ///
 /// Quien entra por primera vez crea su perfil de piloto (apodo y avatar). Luego ve las ligas que
 /// creo el organizador —cada una con su horario, lugar y fecha de cierre— y se inscribe solo a las
-/// que le acomodan. Al cerrar la inscripcion se sortean los grupos. Kart Garage son carreras
+/// que le acomodan. Al cerrar la inscripcion se arma la clasificacion (todos contra todos) y
+/// despues las eliminatorias por nivel. Kart Garage son carreras
 /// libres aparte. Todo vive en la base y se actualiza solo (Realtime).
 class TorneosPage extends StatefulWidget {
   final Map<String, dynamic> permissions;
@@ -221,10 +222,10 @@ class _TorneosPageState extends State<TorneosPage> {
     final ok = await _confirmarAccion(
       ya ? '¿Volver a sortear ${l.nombre}?' : '¿Cerrar la inscripción y sortear?',
       ya
-          ? 'Se borran los grupos, el calendario y TODOS los resultados de esta liga, y se sortea de '
-              'nuevo con los $n inscritos.'
-          : 'Nadie más podrá inscribirse. Se sortean los grupos con los $n inscritos y a cada uno le '
-              'llega un aviso con su grupo.',
+          ? 'Se borran el calendario y TODOS los resultados de esta liga, y se sortea de nuevo con '
+              'los $n inscritos.'
+          : 'Nadie más podrá inscribirse. Se arma la clasificación con los $n inscritos (todos contra '
+              'todos) y a cada uno le llega un aviso.',
       ya ? 'Sortear de nuevo' : 'Cerrar y sortear',
     );
     if (ok) await _rpc('torneo_generar_liga', {'p_torneo': l.id}, ok: 'Liga sorteada.');
@@ -438,8 +439,9 @@ class _TorneosPageState extends State<TorneosPage> {
           children: [
             Expanded(
               child: Text(
-                'Inscríbete solo en las ligas cuyo horario te acomode. Al cerrar la inscripción se '
-                'sortean los grupos (de 4 a 8, carreras de 4) y pasan a finales los 2 mejores de cada grupo.',
+                'Inscríbete solo en las ligas cuyo horario te acomode. Al cerrar la inscripción se juega '
+                'una clasificación de todos contra todos (carreras de 4). Con esa tabla se arman carreras '
+                'por nivel —1.º a 4.º, 5.º a 8.º…— y pasan los 2 primeros de cada una hasta la Gran Final.',
                 style: TextStyle(fontSize: 13, color: c.ink2, height: 1.5),
               ),
             ),
@@ -558,7 +560,7 @@ class _TorneosPageState extends State<TorneosPage> {
                 if (estoy && l.inscripcionAbierta())
                   TextButton(onPressed: () => _inscribir(l, false), child: const Text('Salirme')),
                 if (estoy && l.enJuego && _grupos[l.id]?[_yo] != null)
-                  Text('Juegas en el Grupo ${_grupos[l.id]![_yo]}',
+                  Text('Estás jugando',
                       style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c.brand)),
                 OutlinedButton(onPressed: () => setState(() => _ligaAbierta = l.id), child: const Text('Ver liga')),
               ],
@@ -644,7 +646,7 @@ class _TorneosPageState extends State<TorneosPage> {
         ],
         const SizedBox(height: 16),
         if (fase == 'inscripcion') ...[
-          _Nota(texto: '${_textoCierre(t)}. Al cerrar se sortean los grupos solos.'),
+          _Nota(texto: '${_textoCierre(t)}. Al cerrar se arma la clasificación sola.'),
           const SizedBox(height: 12),
           if (t.inscripcionAbierta())
             Align(
@@ -673,40 +675,56 @@ class _TorneosPageState extends State<TorneosPage> {
           ),
         ] else if (fase == 'grupos')
           _Nota(
-            texto: 'Fase de grupos: $hechas de ${grupos.length} carreras completadas. Al confirmarse la '
-                'última, los 2 mejores de cada grupo pasan solos a finales.',
+            texto: 'Clasificación: $hechas de ${grupos.length} carreras completadas. Al confirmarse la '
+                'última se arman solas las carreras por nivel (1.º a 4.º, 5.º a 8.º…); de cada una pasan '
+                'los 2 primeros.',
           )
         else if (fase == 'finales')
           const _Nota(
-            texto: 'Finales: carreras de hasta 4. Pasan los 2 mejores de cada carrera hasta la Gran Final.',
+            texto: 'Eliminatorias por nivel: de cada carrera pasan los 2 primeros y se vuelven a juntar '
+                'por nivel hasta la Gran Final.',
           ),
         if (mias.isNotEmpty) ...[
           const SizedBox(height: 16),
           const _Seccion(titulo: 'Mis carreras pendientes'),
           _rejilla([for (final x in mias) _tarjetaCarrera(x)]),
         ],
-        if (finales.isNotEmpty) ...[
+        // Eliminatorias de la ronda mas reciente a la primera: arriba lo que se esta jugando.
+        for (final r in (finales.map((x) => x.ronda).toSet().toList()..sort((a, b) => b.compareTo(a)))) ...[
           const SizedBox(height: 20),
-          const _Seccion(titulo: '🏁 Finales'),
-          _rejilla([for (final x in finales) _tarjetaCarrera(x)]),
+          _Seccion(
+            titulo: finales.where((x) => x.ronda == r).length == 1
+                ? '🏁 Gran Final'
+                : '🏁 Eliminatorias · Ronda $r',
+          ),
+          _rejilla([for (final x in finales.where((x) => x.ronda == r)) _tarjetaCarrera(x)]),
         ],
         if (tablas.isNotEmpty) ...[
           const SizedBox(height: 20),
-          const _Seccion(titulo: 'Grupos'),
-          _rejilla([
-            for (final e in tablas.entries)
-              _TablaGrupo(
-                grupo: e.key,
-                filas: e.value,
-                jugadores: _jugadores,
-                yo: _yo,
-                marcarClasificados: fase != 'cancelado',
-              ),
-          ]),
+          _Seccion(titulo: tablas.length == 1 ? 'Clasificación general' : 'Grupos'),
+          // Ligas de antes del formato nuevo pueden tener varios grupos.
+          if (tablas.length == 1)
+            _TablaGrupo(
+              titulo: 'Tabla',
+              filas: tablas.values.first,
+              jugadores: _jugadores,
+              yo: _yo,
+              niveles: fase != 'cancelado',
+            )
+          else
+            _rejilla([
+              for (final e in tablas.entries)
+                _TablaGrupo(
+                  titulo: 'Grupo ${e.key}',
+                  filas: e.value,
+                  jugadores: _jugadores,
+                  yo: _yo,
+                ),
+            ]),
         ],
         if (grupos.isNotEmpty) ...[
           const SizedBox(height: 20),
-          const _Seccion(titulo: 'Calendario de grupos'),
+          const _Seccion(titulo: 'Calendario de clasificación'),
           _rejilla([for (final x in grupos) _tarjetaCarrera(x)]),
         ],
       ],
@@ -817,17 +835,17 @@ class _TorneosPageState extends State<TorneosPage> {
   // ── Ranking ───────────────────────────────────────────────────────────────────────────────────
 
   Widget _buildRanking(SiColors c) {
-    // Solo las ligas que ya tienen grupos; por omision la mas reciente.
+    // Solo las ligas que ya tienen tabla; por omision la mas reciente.
     final conTabla = _ligas.where((l) => _tabla.any((f) => f.torneoId == l.id)).toList();
     final elegida = conTabla.where((l) => l.id == _ligaRanking).firstOrNull ?? conTabla.firstOrNull;
 
-    // Liga: lo de la fase de grupos, que es donde todos corren lo mismo. Las finales se ven en la liga.
+    // Liga: la clasificacion, que es donde todos corren lo mismo. Las eliminatorias se ven en la liga.
     final filasLiga = _tabla.where((f) => f.tipo == 'grupo' && f.torneoId == elegida?.id).toList()
       ..sort(compararFilas);
     final garage = rankingGarage(_carreras);
 
     final tablaLiga = _TablaRanking(
-      titulo: '🏆 ${elegida?.nombre ?? 'Liga'} · fase de grupos',
+      titulo: '🏆 ${elegida?.nombre ?? 'Liga'} · clasificación',
       vacio: 'Todavía no se sortea ninguna liga.',
       yo: _yo,
       jugadores: _jugadores,
@@ -845,7 +863,7 @@ class _TorneosPageState extends State<TorneosPage> {
             ),
       filas: [
         for (final f in filasLiga)
-          (userId: f.userId, puntos: f.puntos, carreras: f.carreras, victorias: f.victorias, extra: f.grupo),
+          (userId: f.userId, puntos: f.puntos, carreras: f.carreras, victorias: f.victorias, extra: null),
       ],
     );
     final tablaGarage = _TablaRanking(
@@ -1210,8 +1228,8 @@ class _Hero extends StatelessWidget {
   Widget build(BuildContext context) {
     const pasos = [
       ('inscripcion', '1 · Inscripción'),
-      ('grupos', '2 · Grupos'),
-      ('finales', '3 · Finales'),
+      ('grupos', '2 · Clasificación'),
+      ('finales', '3 · Eliminatorias'),
       ('terminado', '🏆 Campeón'),
     ];
     return Container(
@@ -1383,19 +1401,21 @@ class _CarreraCard extends StatelessWidget {
   }
 }
 
+/// Una tabla de posiciones. Con `niveles`, la clasificacion general partida en los tramos con que
+/// se arman las carreras por nivel (los mismos que `torneo_crear_ronda`: 10 → 4, 3, 3).
 class _TablaGrupo extends StatelessWidget {
-  final String grupo;
+  final String titulo;
   final List<FilaTabla> filas;
   final Map<String, Jugador> jugadores;
   final String yo;
-  final bool marcarClasificados;
+  final bool niveles;
 
   const _TablaGrupo({
-    required this.grupo,
+    required this.titulo,
     required this.filas,
     required this.jugadores,
     required this.yo,
-    required this.marcarClasificados,
+    this.niveles = false,
   });
 
   @override
@@ -1403,35 +1423,43 @@ class _TablaGrupo extends StatelessWidget {
     final c = SiColors.of(context);
     final hechas = filas.isEmpty ? 0 : filas.map((f) => f.carreras).reduce((a, b) => a + b);
     final total = filas.isEmpty ? 0 : filas.map((f) => f.carrerasTotal).reduce((a, b) => a + b);
-    TextStyle cab = TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: c.ink3);
+    final cab = TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: c.ink3);
+    final nivel = nivelesDeClasificacion(filas.length);
 
     return _Tarjeta(
-      titulo: 'Grupo $grupo',
+      titulo: titulo,
       trailing: Text(total == 0 ? '' : '${(hechas / 4).round()}/${(total / 4).round()} carreras',
           style: TextStyle(fontSize: 11, color: c.ink3)),
       child: Column(
         children: [
           Row(children: [
-            SizedBox(width: 24, child: Text('#', style: cab)),
+            SizedBox(width: 28, child: Text('#', style: cab)),
             Expanded(child: Text('JUGADOR', style: cab)),
             SizedBox(width: 40, child: Text('PJ', style: cab, textAlign: TextAlign.right)),
             SizedBox(width: 32, child: Text('V', style: cab, textAlign: TextAlign.right)),
             SizedBox(width: 44, child: Text('PTS', style: cab, textAlign: TextAlign.right)),
           ]),
           const SizedBox(height: 4),
-          for (var i = 0; i < filas.length; i++)
+          for (var i = 0; i < filas.length; i++) ...[
+            if (niveles && (i == 0 || nivel[i] != nivel[i - 1]))
+              Container(
+                width: double.infinity,
+                margin: EdgeInsets.only(top: i == 0 ? 0 : 8),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(color: c.brandTint, borderRadius: SiRadius.rSm),
+                child: Text(
+                  'NIVEL ${nivel[i] + 1} · ${i + 1}.º a ${nivel.lastIndexOf(nivel[i]) + 1}.º',
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.5, color: c.brand),
+                ),
+              ),
             Container(
               padding: const EdgeInsets.symmetric(vertical: 7),
               decoration: BoxDecoration(border: Border(top: BorderSide(color: c.line2))),
               child: Row(children: [
                 SizedBox(
-                  width: 24,
+                  width: 28,
                   child: Text('${i + 1}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: marcarClasificados && i < 2 ? c.success : c.ink3,
-                      )),
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: c.ink3)),
                 ),
                 Text(jugadores[filas[i].userId]?.avatar ?? '🏎️', style: const TextStyle(fontSize: 14)),
                 const SizedBox(width: 6),
@@ -1464,11 +1492,15 @@ class _TablaGrupo extends StatelessWidget {
                 ),
               ]),
             ),
-          if (marcarClasificados) ...[
-            const SizedBox(height: 6),
+          ],
+          if (niveles) ...[
+            const SizedBox(height: 8),
             Align(
               alignment: Alignment.centerLeft,
-              child: Text('Los 2 primeros pasan a finales.', style: TextStyle(fontSize: 11, color: c.success)),
+              child: Text(
+                'Al terminar la clasificación, cada nivel corre su carrera y pasan los 2 primeros.',
+                style: TextStyle(fontSize: 11, color: c.ink3),
+              ),
             ),
           ],
         ],
@@ -2107,7 +2139,7 @@ class _LigaDialogState extends State<_LigaDialog> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Al llegar esa fecha se sortean los grupos solos (si hay al menos 4 inscritos). '
+                  'Al llegar esa fecha se arma la clasificación sola (si hay al menos 4 inscritos). '
                   'También puedes cerrarla antes desde la liga.',
                   style: TextStyle(fontSize: 12, color: c.ink3),
                 ),

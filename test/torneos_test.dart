@@ -69,14 +69,14 @@ void main() {
           participantes: const [],
         );
 
-    test('grupos', () {
-      expect(nombreCarrera(carrera('grupo', grupo: 'B', numero: 3)), 'Carrera 3 · Grupo B');
+    test('clasificación', () {
+      expect(nombreCarrera(carrera('grupo', grupo: 'A', numero: 3)), 'Carrera 3 · Clasificación');
     });
 
     test('la única carrera de su ronda es la Gran Final', () {
       expect(nombreCarrera(carrera('final', grupo: '2-1', ronda: 2), carrerasEnRonda: 1), 'Gran Final');
       expect(nombreCarrera(carrera('final', grupo: '1-2', ronda: 1), carrerasEnRonda: 2),
-          'Ronda 1 · Carrera 2');
+          'Ronda 1 · Nivel 2');
     });
   });
 
@@ -130,5 +130,18 @@ void main() {
       expect(liga(fase: 'grupos', cierre: DateTime(2026, 10, 11)).inscripcionAbierta(ahora), isFalse);
       expect(liga(fase: 'grupos', cierre: DateTime(2026, 10, 11)).inscripcionVencida(ahora), isFalse);
     });
+  });
+
+  test('nivelesDeClasificacion parte en tramos de hasta 4, parejos y consecutivos', () {
+    List<int> tamanos(int n) {
+      final niv = nivelesDeClasificacion(n);
+      return [for (var k = 0; k <= (niv.isEmpty ? -1 : niv.last); k++) niv.where((x) => x == k).length];
+    }
+
+    expect(tamanos(16), [4, 4, 4, 4]);
+    expect(tamanos(10), [4, 3, 3]);
+    expect(tamanos(6), [3, 3]);
+    expect(tamanos(5), [3, 2]);
+    expect(nivelesDeClasificacion(8), [0, 0, 0, 0, 1, 1, 1, 1]);
   });
 }
