@@ -9,6 +9,7 @@ class NotificationListModal extends StatefulWidget {
   final String currentUserId;
   final Function(String?)? onNavigateToCalendar;
   final Function(String?)? onNavigateToEditUser;
+  final VoidCallback? onNavigateToTorneos;
 
   const NotificationListModal({
     super.key,
@@ -17,6 +18,7 @@ class NotificationListModal extends StatefulWidget {
     required this.currentUserId,
     this.onNavigateToCalendar,
     this.onNavigateToEditUser,
+    this.onNavigateToTorneos,
   });
 
   @override
@@ -140,6 +142,9 @@ class _NotificationListModalState extends State<NotificationListModal>
     }
     if (type == 'new_incidencia') {
       return (icon: Icons.add_circle_outline, color: Colors.teal.shade600);
+    }
+    if (type == 'torneo') {
+      return (icon: Icons.flag, color: const Color(0xFF344092));
     }
     return (icon: Icons.notifications, color: Colors.grey.shade600);
   }
@@ -265,6 +270,9 @@ class _NotificationListModalState extends State<NotificationListModal>
       final meta = (n['metadata'] as Map<String, dynamic>?) ?? {};
       Navigator.pop(context);
       widget.onNavigateToEditUser?.call(meta['user_id'] as String?);
+    } else if (type == 'torneo' && mounted) {
+      Navigator.pop(context);
+      widget.onNavigateToTorneos?.call();
     }
   }
 
