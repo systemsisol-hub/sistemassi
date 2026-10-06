@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'theme/si_theme.dart';
 import 'widgets/boton_flotante.dart';
+import 'widgets/fotos_equipo.dart';
 import 'services/issi_pdf_service.dart';
 import 'services/trash_service.dart';
 
@@ -37,6 +38,9 @@ class _IssiPageState extends State<IssiPage> {
     'DISCO DURO',
     'MONITOR',
     'MOUSE',
+    'USB',
+    'ADAPTADOR',
+    'OTRO',
   ];
 
   static const List<String> _condiciones = [
@@ -44,6 +48,7 @@ class _IssiPageState extends State<IssiPage> {
     'USADO',
     'DAÑADO',
     'SIN REPARACION',
+    'DESECHADO',
   ];
 
   static const List<String> _marcas = [
@@ -496,8 +501,84 @@ class _IssiPageState extends State<IssiPage> {
     String marca = item?['marca']?.toString().toUpperCase() ?? _marcas.first;
     if (!_marcas.contains(marca)) marca = _marcas.first;
 
+    // Hay registros viejos con valores que ya no están en las listas (LAP-TOP, TEL. CELULAR,
+    // BUENO, MALO…): se agregan a las opciones de ese equipo, porque el desplegable truena si su
+    // valor no está entre las opciones y el equipo no se podía editar.
+    final tiposDelEquipo = [..._tipos, if (!_tipos.contains(tipo)) tipo];
+    final condicionesDelEquipo = [
+      ..._condiciones,
+      if (!_condiciones.contains(condicion)) condicion,
+    ];
+    final fotos = FotosPendientes();
     String? selectedUsuarioId = item?['usuario_id'];
     String? selectedUsuarioNombre = item?['usuario_nombre'];
+
+    /// Valida y guarda; true si se guardó. Lo usan el diálogo de escritorio y la hoja del teléfono.
+    Future<bool> guardar(BuildContext ctx) async {
+      if (ubicacionController.text.isEmpty ||
+          marca.isEmpty ||
+          modeloController.text.isEmpty ||
+          selectedUsuarioId == null) {
+        ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+            content: Text('Completa los campos obligatorios (*)')));
+        return false;
+      }
+      String? texto(TextEditingController t) =>
+          t.text.trim().isEmpty ? null : t.text.trim().toUpperCase();
+      try {
+        final data = {
+          'ubicacion': ubicacionController.text.trim().toUpperCase(),
+          'tipo': tipo,
+          'marca': marca,
+          'modelo': modeloController.text.trim().toUpperCase(),
+          'n_s': texto(nsController),
+          'imei': texto(imeiController),
+          'cpu': texto(cpuController),
+          'ssd': texto(ssdController),
+          'ram': texto(ramController),
+          'gpu': texto(gpuController),
+          'fecha_actualizacion':
+              fechaActController.text.isEmpty ? null : fechaActController.text,
+          'valor': valorController.text.trim().isEmpty
+              ? null
+              : double.tryParse(valorController.text.trim()),
+          'condicion': condicion,
+          'observaciones': texto(observacionesController),
+          'usuario_id': selectedUsuarioId,
+          'usuario_nombre': selectedUsuarioNombre,
+        };
+        final String id;
+        if (isEditing) {
+          id = item['id'] as String;
+          await Supabase.instance.client
+              .from('issi_inventory')
+              .update(data)
+              .eq('id', id);
+        } else {
+          final nuevo = await Supabase.instance.client
+              .from('issi_inventory')
+              .insert(data)
+              .select('id')
+              .single();
+          id = nuevo['id'] as String;
+        }
+        await fotos.aplicar(id);
+        if (mounted) {
+          _fetchItems();
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(
+                  isEditing ? 'Elemento actualizado' : 'Elemento creado con éxito'),
+              backgroundColor: const Color(0xFFB1CB34)));
+        }
+        return true;
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('Error: $e'), backgroundColor: Colors.red));
+        }
+        return false;
+      }
+    }
 
     Widget buildContent(StateSetter setDialogState) {
       Widget fieldColumn(Widget child) => Column(
@@ -572,7 +653,7 @@ class _IssiPageState extends State<IssiPage> {
             decoration: const InputDecoration(
                 labelText: 'Tipo *', prefixIcon: Icon(Icons.devices_outlined)),
             isExpanded: true,
-            items: _tipos
+            items: tiposDelEquipo
                 .map((t) => DropdownMenuItem(value: t, child: Text(t)))
                 .toList(),
             onChanged: (val) => setDialogState(() => tipo = val!),
@@ -646,9 +727,16 @@ class _IssiPageState extends State<IssiPage> {
         fieldColumn(
           TextField(
             controller: fechaActController,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
                 labelText: 'Fecha Actualización',
-                prefixIcon: Icon(Icons.calendar_today_outlined)),
+                prefixIcon: const Icon(Icons.calendar_today_outlined),
+                // Como la varita del correo en Usuarios: pone la fecha de hoy de un toque.
+                suffixIcon: IconButton(
+                  tooltip: 'Poner la fecha de hoy',
+                  icon: const Icon(Icons.auto_fix_high_outlined, size: 18),
+                  onPressed: () => setDialogState(() => fechaActController.text =
+                      DateTime.now().toString().split(' ').first),
+                )),
             readOnly: true,
             onTap: () async {
               final d = await showDatePicker(
@@ -669,7 +757,7 @@ class _IssiPageState extends State<IssiPage> {
                 labelText: 'Condición *',
                 prefixIcon: Icon(Icons.health_and_safety_outlined)),
             isExpanded: true,
-            items: _condiciones
+            items: condicionesDelEquipo
                 .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                 .toList(),
             onChanged: (val) => setDialogState(() => condicion = val!),
@@ -680,10 +768,18 @@ class _IssiPageState extends State<IssiPage> {
               controller: observacionesController,
               decoration: const InputDecoration(
                   labelText: 'Observaciones',
+                  alignLabelWithHint: true,
                   prefixIcon: Icon(Icons.notes_outlined)),
-              maxLines: 2),
+              minLines: 4,
+              maxLines: 4),
         ),
       ];
+      // Las fotos van a todo el ancho, debajo de los campos.
+      final seccionFotos = Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: FotosEquipoEditor(
+            itemId: item?['id'] as String?, pendientes: fotos),
+      );
 
       if (isDesktop) {
         final rows = <Widget>[];
@@ -699,9 +795,11 @@ class _IssiPageState extends State<IssiPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: rowChildren));
         }
-        return Column(mainAxisSize: MainAxisSize.min, children: rows);
+        return Column(
+            mainAxisSize: MainAxisSize.min, children: [...rows, seccionFotos]);
       } else {
-        return Column(mainAxisSize: MainAxisSize.min, children: fields);
+        return Column(
+            mainAxisSize: MainAxisSize.min, children: [...fields, seccionFotos]);
       }
     }
 
@@ -763,107 +861,11 @@ class _IssiPageState extends State<IssiPage> {
                                       color: c.ink)),
                               TextButton(
                                 onPressed: () async {
-                                  if (ubicacionController.text.isEmpty ||
-                                      marca.isEmpty ||
-                                      modeloController.text.isEmpty ||
-                                      selectedUsuarioId == null) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(
-                                            content: Text(
-                                                'Completa los campos obligatorios (*)')));
-                                    return;
-                                  }
-                                  try {
-                                    final data = {
-                                      'ubicacion': ubicacionController.text
-                                          .trim()
-                                          .toUpperCase(),
-                                      'tipo': tipo,
-                                      'marca': marca,
-                                      'modelo': modeloController.text
-                                          .trim()
-                                          .toUpperCase(),
-                                      'n_s': nsController.text.trim().isEmpty
-                                          ? null
-                                          : nsController.text
-                                              .trim()
-                                              .toUpperCase(),
-                                      'imei': imeiController.text.trim().isEmpty
-                                          ? null
-                                          : imeiController.text
-                                              .trim()
-                                              .toUpperCase(),
-                                      'cpu': cpuController.text.trim().isEmpty
-                                          ? null
-                                          : cpuController.text
-                                              .trim()
-                                              .toUpperCase(),
-                                      'ssd': ssdController.text.trim().isEmpty
-                                          ? null
-                                          : ssdController.text
-                                              .trim()
-                                              .toUpperCase(),
-                                      'ram': ramController.text.trim().isEmpty
-                                          ? null
-                                          : ramController.text
-                                              .trim()
-                                              .toUpperCase(),
-                                      'gpu': gpuController.text.trim().isEmpty
-                                          ? null
-                                          : gpuController.text
-                                              .trim()
-                                              .toUpperCase(),
-                                      'fecha_actualizacion':
-                                          fechaActController.text.isEmpty
-                                              ? null
-                                              : fechaActController.text,
-                                      'valor':
-                                          valorController.text.trim().isEmpty
-                                              ? null
-                                              : double.tryParse(
-                                                  valorController.text.trim()),
-                                      'condicion': condicion,
-                                      'observaciones': observacionesController
-                                              .text
-                                              .trim()
-                                              .isEmpty
-                                          ? null
-                                          : observacionesController.text
-                                              .trim()
-                                              .toUpperCase(),
-                                      'usuario_id': selectedUsuarioId,
-                                      'usuario_nombre': selectedUsuarioNombre,
-                                    };
-                                    if (isEditing) {
-                                      await Supabase.instance.client
-                                          .from('issi_inventory')
-                                          .update(data)
-                                          .eq('id', item['id']);
-                                    } else {
-                                      await Supabase.instance.client
-                                          .from('issi_inventory')
-                                          .insert(data);
-                                    }
-                                    if (mounted) {
-                                      Navigator.pop(dialogContext);
-                                      _fetchItems();
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(SnackBar(
-                                              content: Text(isEditing
-                                                  ? 'Elemento actualizado'
-                                                  : 'Elemento creado con éxito'),
-                                              backgroundColor:
-                                                  const Color(0xFFB1CB34)));
-                                    }
-                                  } catch (e) {
-                                    if (mounted)
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(SnackBar(
-                                              content: Text('Error: $e'),
-                                              backgroundColor: Colors.red));
+                                  if (await guardar(context) && dialogContext.mounted) {
+                                    Navigator.pop(dialogContext);
                                   }
                                 },
-                                child: Text(isEditing ? 'Guardar' : 'Guardar',
+                                child: Text('Guardar',
                                     style: TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.bold,
@@ -932,90 +934,11 @@ class _IssiPageState extends State<IssiPage> {
                               color: c.ink)),
                       TextButton(
                         onPressed: () async {
-                          if (ubicacionController.text.isEmpty ||
-                              marca.isEmpty ||
-                              modeloController.text.isEmpty ||
-                              selectedUsuarioId == null) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                    content: Text(
-                                        'Completa los campos obligatorios (*)')));
-                            return;
-                          }
-                          try {
-                            final data = {
-                              'ubicacion':
-                                  ubicacionController.text.trim().toUpperCase(),
-                              'tipo': tipo,
-                              'marca': marca,
-                              'modelo':
-                                  modeloController.text.trim().toUpperCase(),
-                              'n_s': nsController.text.trim().isEmpty
-                                  ? null
-                                  : nsController.text.trim().toUpperCase(),
-                              'imei': imeiController.text.trim().isEmpty
-                                  ? null
-                                  : imeiController.text.trim().toUpperCase(),
-                              'cpu': cpuController.text.trim().isEmpty
-                                  ? null
-                                  : cpuController.text.trim().toUpperCase(),
-                              'ssd': ssdController.text.trim().isEmpty
-                                  ? null
-                                  : ssdController.text.trim().toUpperCase(),
-                              'ram': ramController.text.trim().isEmpty
-                                  ? null
-                                  : ramController.text.trim().toUpperCase(),
-                              'gpu': gpuController.text.trim().isEmpty
-                                  ? null
-                                  : gpuController.text.trim().toUpperCase(),
-                              'fecha_actualizacion':
-                                  fechaActController.text.isEmpty
-                                      ? null
-                                      : fechaActController.text,
-                              'valor': valorController.text.trim().isEmpty
-                                  ? null
-                                  : double.tryParse(
-                                      valorController.text.trim()),
-                              'condicion': condicion,
-                              'observaciones':
-                                  observacionesController.text.trim().isEmpty
-                                      ? null
-                                      : observacionesController.text
-                                          .trim()
-                                          .toUpperCase(),
-                              'usuario_id': selectedUsuarioId,
-                              'usuario_nombre': selectedUsuarioNombre,
-                            };
-                            if (isEditing) {
-                              await Supabase.instance.client
-                                  .from('issi_inventory')
-                                  .update(data)
-                                  .eq('id', item['id']);
-                            } else {
-                              await Supabase.instance.client
-                                  .from('issi_inventory')
-                                  .insert(data);
-                            }
-                            if (mounted) {
-                              Navigator.pop(sheetContext);
-                              _fetchItems();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                      content: Text(isEditing
-                                          ? 'Elemento actualizado'
-                                          : 'Elemento creado con éxito'),
-                                      backgroundColor:
-                                          const Color(0xFFB1CB34)));
-                            }
-                          } catch (e) {
-                            if (mounted)
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                      content: Text('Error: $e'),
-                                      backgroundColor: Colors.red));
+                          if (await guardar(context) && sheetContext.mounted) {
+                            Navigator.pop(sheetContext);
                           }
                         },
-                        child: Text(isEditing ? 'Guardar' : 'Guardar',
+                        child: Text('Guardar',
                             style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
@@ -1189,7 +1112,9 @@ class _IssiPageState extends State<IssiPage> {
                     ),
                   PopupMenuButton<String>(
                     onSelected: (value) {
-                      if (value == 'edit') {
+                      if (value == 'ficha') {
+                        _showFicha(item);
+                      } else if (value == 'edit') {
                         _showItemForm(item: item);
                       } else if (value == 'delete') {
                         _deleteItem(item['id']);
@@ -1202,6 +1127,14 @@ class _IssiPageState extends State<IssiPage> {
                       }
                     },
                     itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'ficha',
+                        child: ListTile(
+                          leading: Icon(Icons.badge_outlined, color: Colors.indigo),
+                          title: Text('Ficha'),
+                          dense: true,
+                        ),
+                      ),
                       if (_isAdmin) ...[
                         const PopupMenuItem(
                           value: 'edit',
@@ -1361,6 +1294,7 @@ class _IssiPageState extends State<IssiPage> {
                     theme: theme,
                     isAdmin: _isAdmin,
                     siColors: c,
+                    onFicha: (item) => _showFicha(item),
                     onEdit: (item) => _showItemForm(item: item),
                     onDelete: (id) => _deleteItem(id),
                     onPdf: (item) => _downloadPdf(item),
@@ -1784,12 +1718,14 @@ class _IssiPageState extends State<IssiPage> {
   IconData _getIconForType(String tipo) {
     switch (tipo.toUpperCase()) {
       case 'LAPTOP':
+      case 'LAP-TOP':
         return Icons.laptop_mac;
       case 'PC':
         return Icons.desktop_mac;
       case 'IMPRESORA':
         return Icons.print;
       case 'CELULAR':
+      case 'TEL. CELULAR':
         return Icons.smartphone;
       case 'TELEFONO':
         return Icons.phone;
@@ -1799,9 +1735,168 @@ class _IssiPageState extends State<IssiPage> {
         return Icons.monitor;
       case 'MOUSE':
         return Icons.mouse;
+      case 'USB':
+        return Icons.usb;
+      case 'ADAPTADOR':
+        return Icons.power;
       default:
         return Icons.devices_other;
     }
+  }
+
+  /// Ficha del equipo: todas sus características y sus fotos, en una hoja que sube desde abajo.
+  void _showFicha(Map<String, dynamic> item) {
+    final campos = <(String, String?)>[
+      ('Usuario', item['usuario_nombre']?.toString()),
+      ('Ubicación', item['ubicacion']?.toString()),
+      ('Tipo', item['tipo']?.toString()),
+      ('Marca', item['marca']?.toString()),
+      ('Modelo', item['modelo']?.toString()),
+      ('N/S', item['n_s']?.toString()),
+      ('IMEI', item['imei']?.toString()),
+      ('CPU', item['cpu']?.toString()),
+      ('SSD', item['ssd']?.toString()),
+      ('RAM', item['ram']?.toString()),
+      ('GPU', item['gpu']?.toString()),
+      ('Valor', item['valor'] == null ? null : '\$${item['valor']}'),
+      ('Fecha actualización', item['fecha_actualizacion']?.toString()),
+      ('Resguardo firmado', item['documento_pdf'] == null ? 'No cargado' : 'Cargado'),
+    ];
+    final condicion = (item['condicion'] ?? '').toString();
+    final observaciones = item['observaciones']?.toString();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        final c = SiColors.of(sheetContext);
+        return Container(
+          decoration: BoxDecoration(
+              color: c.panel,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20))),
+          constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(sheetContext).size.height * 0.9,
+              maxWidth: 760),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(sheetContext),
+                    child: Text('Cerrar', style: TextStyle(fontSize: 16, color: c.ink3)),
+                  ),
+                  Text('Ficha del equipo',
+                      style: TextStyle(
+                          fontSize: 18, fontWeight: FontWeight.bold, color: c.ink)),
+                  _isAdmin
+                      ? TextButton(
+                          onPressed: () {
+                            Navigator.pop(sheetContext);
+                            _showItemForm(item: item);
+                          },
+                          child: Text('Editar',
+                              style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: c.brand)),
+                        )
+                      : const SizedBox(width: 64),
+                ],
+              ),
+            ),
+            Divider(height: 1, color: c.line),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                              color: c.brand.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(12)),
+                          child: Icon(_getIconForType(item['tipo']?.toString() ?? ''),
+                              color: c.brand, size: 28),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                  '${item['marca'] ?? ''} ${item['modelo'] ?? ''}'.trim(),
+                                  style: TextStyle(
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.bold,
+                                      color: c.ink)),
+                              Text(item['tipo']?.toString() ?? '',
+                                  style: TextStyle(color: c.ink3, fontSize: 13)),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding:
+                              const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _getColorForCondition(condicion).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(condicion.toUpperCase(),
+                              style: TextStyle(
+                                  color: _getColorForCondition(condicion),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 11)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    for (final (etiqueta, valor) in campos)
+                      if (valor != null && valor.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(
+                                width: 150,
+                                child: Text(etiqueta,
+                                    style: TextStyle(color: c.ink3, fontSize: 13)),
+                              ),
+                              Expanded(
+                                child: SelectableText(valor,
+                                    style: TextStyle(color: c.ink, fontSize: 13)),
+                              ),
+                            ],
+                          ),
+                        ),
+                    if (observaciones != null && observaciones.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text('Observaciones',
+                          style: TextStyle(color: c.ink3, fontSize: 13)),
+                      const SizedBox(height: 4),
+                      SelectableText(observaciones,
+                          style: TextStyle(color: c.ink, fontSize: 13)),
+                    ],
+                    const SizedBox(height: 20),
+                    Text('Fotos',
+                        style: TextStyle(
+                            color: c.ink2, fontWeight: FontWeight.w600, fontSize: 14)),
+                    const SizedBox(height: 8),
+                    FotosEquipoGaleria(itemId: item['id'] as String),
+                  ],
+                ),
+              ),
+            ),
+          ]),
+        );
+      },
+    );
   }
 
   Color _getColorForCondition(String condicion) {
@@ -1814,6 +1909,8 @@ class _IssiPageState extends State<IssiPage> {
         return Colors.red;
       case 'SIN REPARACION':
         return Colors.grey;
+      case 'DESECHADO':
+        return Colors.brown;
       default:
         return Colors.blueGrey;
     }
@@ -1825,6 +1922,7 @@ class _IssiDataSource extends DataTableSource {
   final ThemeData theme;
   final bool isAdmin;
   final SiColors siColors;
+  final Function(Map<String, dynamic>) onFicha;
   final Function(Map<String, dynamic>) onEdit;
   final Function(String) onDelete;
   final Function(Map<String, dynamic>) onPdf;
@@ -1840,6 +1938,7 @@ class _IssiDataSource extends DataTableSource {
     required this.theme,
     required this.isAdmin,
     required this.siColors,
+    required this.onFicha,
     required this.onEdit,
     required this.onDelete,
     required this.onPdf,
@@ -1929,6 +2028,7 @@ class _IssiDataSource extends DataTableSource {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               elevation: 4,
               onSelected: (value) {
+                if (value == 'ficha') onFicha(item);
                 if (value == 'edit') onEdit(item);
                 if (value == 'delete') onDelete(item['id']);
                 if (value == 'pdf') onPdf(item);
@@ -1936,6 +2036,12 @@ class _IssiDataSource extends DataTableSource {
                 if (value == 'view') onViewPdf(item);
               },
               itemBuilder: (context) => [
+                const PopupMenuItem(
+                    value: 'ficha',
+                    child: ListTile(
+                        leading: Icon(Icons.badge_outlined, color: Colors.indigo),
+                        title: Text('Ficha'),
+                        dense: true)),
                 if (isAdmin) ...[
                   const PopupMenuItem(
                       value: 'edit',
