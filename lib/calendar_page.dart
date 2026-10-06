@@ -87,6 +87,8 @@ class _CalendarPageState extends State<CalendarPage> {
   void initState() {
     super.initState();
     _dataSource = EventDataSource([]);
+    // Hoy elegido de entrada: en el teléfono la lista de abajo decía «Sin fecha seleccionada».
+    _calendarController.selectedDate = _selectedDate;
     _fetchEvents();
 
     if (widget.initialEventId != null) {
@@ -748,7 +750,7 @@ class _CalendarPageState extends State<CalendarPage> {
                               children: [
                                 _buildSegmentedToggle(
                                   c,
-                                  ['G', 'P'],
+                                  ['Grupal', 'Personal'],
                                   _toggleModeIndex,
                                   (idx) {
                                     setState(() =>
@@ -939,8 +941,12 @@ class _CalendarPageState extends State<CalendarPage> {
                                     MonthAppointmentDisplayMode.none,
                                 agendaStyle: AgendaStyle(
                                   backgroundColor: c.panel,
-                                  appointmentTextStyle:
-                                      TextStyle(color: c.ink, fontSize: 13),
+                                  // Blanco como en las etiquetas del mes: el fondo es el color del
+                                  // evento y el texto oscuro casi no se leía sobre el verde.
+                                  appointmentTextStyle: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600),
                                   dateTextStyle:
                                       TextStyle(color: c.ink3, fontSize: 11),
                                   dayTextStyle: TextStyle(
@@ -993,6 +999,11 @@ class _CalendarPageState extends State<CalendarPage> {
                                                 ? c.brand
                                                 : Colors.transparent,
                                             shape: BoxShape.circle,
+                                            // En el teléfono la lista de abajo es la del día
+                                            // elegido: sin este aro no se sabía de qué día era.
+                                            border: isSelected && !isToday && !isDesktop
+                                                ? Border.all(color: c.brand, width: 1.5)
+                                                : null,
                                           ),
                                           child: Center(
                                             child: Text(
@@ -1014,8 +1025,11 @@ class _CalendarPageState extends State<CalendarPage> {
                                         Flexible(
                                           child: Column(
                                             mainAxisSize: MainAxisSize.min,
-                                            children: details.appointments
-                                                .take(2)
+                                            // Uno y «+N»: con dos etiquetas la celda del teléfono
+                                            // se desbordaba. Todos se ven en la lista del día.
+                                            children: [
+                                              ...details.appointments
+                                                .take(1)
                                                 .map((app) {
                                               final ap = app as Appointment;
                                               return Container(
@@ -1046,7 +1060,16 @@ class _CalendarPageState extends State<CalendarPage> {
                                                       TextOverflow.ellipsis,
                                                 ),
                                               );
-                                            }).toList(),
+                                            }),
+                                              if (details.appointments.length > 1)
+                                                Text(
+                                                  '+${details.appointments.length - 1}',
+                                                  style: TextStyle(
+                                                      color: c.ink3,
+                                                      fontSize: 9,
+                                                      fontWeight: FontWeight.w600),
+                                                ),
+                                            ],
                                           ),
                                         ),
                                     ],
