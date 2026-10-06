@@ -1056,11 +1056,11 @@ class _CalendarPageState extends State<CalendarPage> {
                                   );
                                 }
                                 final ap = details.appointments.first as Appointment;
-                                // El calendario da el alto del renglón; la barra usa el 85% y el
-                                // resto queda de aire entre barras.
+                                // El calendario da el alto del renglón. En pantalla ancha la barra
+                                // usa el 85% (completa se veía muy gruesa) y el resto queda de aire.
                                 final barra = Container(
                                   width: details.bounds.width,
-                                  height: details.bounds.height * 0.85,
+                                  height: details.bounds.height * (isDesktop ? 0.85 : 1.0),
                                   padding: const EdgeInsets.symmetric(horizontal: 4),
                                   alignment: Alignment.centerLeft,
                                   decoration: BoxDecoration(
