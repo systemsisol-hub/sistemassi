@@ -36,6 +36,10 @@ class _TorneosPageState extends State<TorneosPage> {
   List<FilaTabla> _tabla = [];
   String _miNombre = '';
 
+  /// `torneo_ajustes.avisar_liga_nueva`: si al crear una liga se avisa a todos. Apagado mientras
+  /// se prueba con un grupo (20261007000000_torneos_aviso_liga_nueva_apagado.sql).
+  bool _avisarLigaNueva = false;
+
   /// La liga abierta en la pestaña Ligas; `null` es la lista.
   String? _ligaAbierta;
 
@@ -108,6 +112,7 @@ class _TorneosPageState extends State<TorneosPage> {
           .select('*, torneo_carrera_jugadores(user_id, posicion, puntos)')
           .order('created_at', ascending: true);
       final tablaF = _db.from('torneo_tabla').select();
+      final ajustesF = _db.from('torneo_ajustes').select('avisar_liga_nueva').maybeSingle();
 
       final ligas = await ligasF;
       final jugadores = await jugadoresF;
@@ -116,6 +121,7 @@ class _TorneosPageState extends State<TorneosPage> {
       final grupos = await gruposF;
       final carreras = await carrerasF;
       final tabla = await tablaF;
+      final ajustes = await ajustesF;
 
       if (!mounted) return;
       setState(() {
@@ -133,6 +139,7 @@ class _TorneosPageState extends State<TorneosPage> {
         _carreras = carreras.map(Carrera.fromMap).toList();
         _tabla = tabla.map(FilaTabla.fromMap).toList();
         _miNombre = perfil?['full_name'] as String? ?? '';
+        _avisarLigaNueva = ajustes?['avisar_liga_nueva'] == true;
         if (_ligaAbierta != null && _liga(_ligaAbierta) == null) _ligaAbierta = null;
         _error = null;
       });
@@ -188,7 +195,7 @@ class _TorneosPageState extends State<TorneosPage> {
   Future<void> _formLiga([Liga? liga]) async {
     final datos = await showDialog<_DatosLiga>(
       context: context,
-      builder: (ctx) => _LigaDialog(liga: liga),
+      builder: (ctx) => _LigaDialog(liga: liga, avisaATodos: _avisarLigaNueva),
     );
     if (datos == null) return;
     final params = {
@@ -201,7 +208,8 @@ class _TorneosPageState extends State<TorneosPage> {
       'p_cierre': datos.cierre?.toUtc().toIso8601String(),
     };
     if (liga == null) {
-      await _rpc('torneo_crear', params, ok: 'Liga creada. Se avisó a todos para que se inscriban.');
+      await _rpc('torneo_crear', params,
+          ok: _avisarLigaNueva ? 'Liga creada. Se avisó a todos para que se inscriban.' : 'Liga creada.');
     } else {
       await _rpc('torneo_editar', {'p_torneo': liga.id, ...params}, ok: 'Liga guardada.');
     }
@@ -456,7 +464,7 @@ class _TorneosPageState extends State<TorneosPage> {
           _Vacio(
             texto: _esOrganizador
                 ? 'No hay ligas abiertas. Crea una con «Nueva liga».'
-                : 'No hay ligas abiertas por ahora. Cuando el organizador cree una te llega un aviso.',
+                : 'No hay ligas abiertas por ahora.',
           )
         else
           _rejilla([for (final l in abiertas) _tarjetaLiga(c, l)]),
@@ -1962,8 +1970,9 @@ class _DatosLiga {
 /// Crear o editar una liga: nombre, lugar, dia y hora de juego, y hasta cuando hay inscripcion.
 class _LigaDialog extends StatefulWidget {
   final Liga? liga;
+  final bool avisaATodos;
 
-  const _LigaDialog({this.liga});
+  const _LigaDialog({this.liga, this.avisaATodos = false});
 
   @override
   State<_LigaDialog> createState() => _LigaDialogState();
@@ -2098,7 +2107,12 @@ class _LigaDialogState extends State<_LigaDialog> {
               ],
               if (widget.liga == null) ...[
                 const SizedBox(height: 12),
-                _Nota(texto: 'Al crearla se avisa a todos para que se inscriban los que puedan a ese horario.'),
+                _Nota(
+                  texto: widget.avisaATodos
+                      ? 'Al crearla se avisa a todos para que se inscriban los que puedan a ese horario.'
+                      : 'El aviso a todos está apagado por ahora: la liga aparece en Torneos, pero nadie '
+                          'recibe notificación de que se creó.',
+                ),
               ],
               if (_problema != null && _nombre.text.isNotEmpty) ...[
                 const SizedBox(height: 8),
