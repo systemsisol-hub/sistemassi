@@ -262,11 +262,11 @@ Map<String, List<FilaTabla>> tablasDeGrupos(List<FilaTabla> filas) {
 String nombreCarrera(Carrera c, {int carrerasEnRonda = 1}) {
   switch (c.tipo) {
     case 'grupo':
-      return 'Carrera ${c.numero ?? '?'} · Grupo ${c.grupo ?? '?'}';
+      return 'Carrera ${c.numero ?? '?'} · Clasificación';
     case 'final':
       if (carrerasEnRonda == 1) return 'Gran Final';
       final j = (c.grupo ?? '').split('-').last;
-      return 'Ronda ${c.ronda} · Carrera $j';
+      return 'Ronda ${c.ronda} · Nivel $j';
     default:
       return 'Kart Garage';
   }
@@ -274,8 +274,8 @@ String nombreCarrera(Carrera c, {int carrerasEnRonda = 1}) {
 
 String etiquetaFase(String fase) => switch (fase) {
       'inscripcion' => 'Inscripción',
-      'grupos' => 'Fase de grupos',
-      'finales' => 'Finales',
+      'grupos' => 'Clasificación',
+      'finales' => 'Eliminatorias',
       'terminado' => 'Terminada',
       'cancelado' => 'Cancelada',
       _ => fase,
@@ -322,4 +322,12 @@ List<({String userId, int puntos, int carreras, int victorias})> rankingGarage(
     return a.userId.compareTo(b.userId);
   });
   return l;
+}
+
+/// A que nivel va cada lugar de la clasificacion (0 = el de arriba). Los mismos tramos que
+/// `torneo_crear_ronda` en la base: carreras de hasta 4, lo mas parejas posible (10 → 4, 3, 3).
+List<int> nivelesDeClasificacion(int n) {
+  if (n == 0) return const [];
+  final k = (n + 3) ~/ 4;
+  return [for (var i = 0; i < n; i++) (i * k) ~/ n];
 }
