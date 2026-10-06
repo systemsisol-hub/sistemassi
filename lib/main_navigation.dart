@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -89,9 +90,25 @@ class _MainNavigationState extends State<MainNavigation> {
     // Después del primer frame y no en initState a secas: mostrar un diálogo necesita un Navigator
     // ya montado. Aquí y no en main.dart para que no dispare sobre la pantalla de login.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      _abrirEquipoDelEnlace();
       await AvisosStore.instancia.cargar();
       if (!mounted) return;
       await mostrarAvisosEmergentes(context, AvisosStore.instancia);
+    });
+  }
+
+  /// El QR de la etiqueta de un equipo abre `sistemassi.com/?inv=INV-0001`: lleva a Inventario con
+  /// la ficha de ese equipo (si quien entra tiene permiso de ver inventario).
+  void _abrirEquipoDelEnlace() {
+    if (!kIsWeb) return;
+    final inv = Uri.base.queryParameters['inv'];
+    if (inv == null || inv.isEmpty) return;
+    final pages = _availablePages;
+    final idx = pages.indexWhere((p) => p['title'] == 'Inventario');
+    if (idx == -1) return;
+    setState(() {
+      _selectedIndex = idx;
+      _pendingInventarioQuery = inv.toUpperCase();
     });
   }
 

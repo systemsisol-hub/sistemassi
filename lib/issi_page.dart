@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'theme/si_theme.dart';
 import 'widgets/boton_flotante.dart';
+import 'widgets/ficha_equipo.dart';
 import 'widgets/fotos_equipo.dart';
 import 'services/issi_pdf_service.dart';
 import 'services/trash_service.dart';
@@ -28,6 +29,7 @@ class _IssiPageState extends State<IssiPage> {
   int _currentPage = 0;
   static const int _itemsPerPage = 10;
   bool _isAdmin = false;
+  bool _fichaAbiertaPorQr = false;
 
   static const List<String> _tipos = [
     'LAPTOP',
@@ -38,6 +40,8 @@ class _IssiPageState extends State<IssiPage> {
     'DISCO DURO',
     'MONITOR',
     'MOUSE',
+    'MODEM',
+    'NO-BREAK',
     'USB',
     'ADAPTADOR',
     'OTRO',
@@ -61,8 +65,8 @@ class _IssiPageState extends State<IssiPage> {
     'EDI SECURE',
     'HP',
     'HUAWEI',
-    'KINGGSTON',
-    'KIOCERA',
+    'KINGSTON',
+    'KYOCERA',
     'LENOVO',
     'MAC',
     'OTROS',
@@ -272,6 +276,17 @@ class _IssiPageState extends State<IssiPage> {
           _items = allData;
           _isLoading = false;
         });
+        // Llegó por el QR de la etiqueta (?inv=INV-0001): abre su ficha directo.
+        final q = widget.pendingSearchQuery?.toUpperCase();
+        if (q != null && q.startsWith('INV-') && !_fichaAbiertaPorQr) {
+          final equipo = allData.where((e) => e['numero_inventario'] == q).firstOrNull;
+          if (equipo != null) {
+            _fichaAbiertaPorQr = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _showFicha(equipo);
+            });
+          }
+        }
       }
     } catch (e) {
       debugPrint('Error fetching items: $e');
@@ -494,6 +509,22 @@ class _IssiPageState extends State<IssiPage> {
         TextEditingController(text: item?['valor']?.toString() ?? '');
     final observacionesController =
         TextEditingController(text: item?['observaciones']);
+    TextEditingController campo(String col) =>
+        TextEditingController(text: item?[col]?.toString());
+    final soController = campo('sistema_operativo');
+    final licenciasController = campo('licencias');
+    final antivirusController = campo('antivirus');
+    final nombreEquipoController = campo('nombre_equipo');
+    final macController = campo('mac');
+    final lineaController = campo('linea');
+    final companiaController = campo('compania');
+    final fechaCompraController = campo('fecha_compra');
+    final proveedorController = campo('proveedor');
+    final facturaController = campo('factura');
+    final garantiaController = campo('garantia_hasta');
+    final accesoriosController = campo('accesorios');
+    final fechaBajaController = campo('fecha_baja');
+    final motivoBajaController = campo('motivo_baja');
 
     String tipo = item?['tipo']?.toString().toUpperCase() ?? _tipos.first;
     String condicion =
@@ -523,8 +554,15 @@ class _IssiPageState extends State<IssiPage> {
             content: Text('Completa los campos obligatorios (*)')));
         return false;
       }
+      if (condicion == 'DESECHADO' &&
+          (fechaBajaController.text.isEmpty || motivoBajaController.text.trim().isEmpty)) {
+        ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
+            content: Text('Para desecharlo indica la fecha y el motivo de la baja')));
+        return false;
+      }
       String? texto(TextEditingController t) =>
           t.text.trim().isEmpty ? null : t.text.trim().toUpperCase();
+      String? fechaDe(TextEditingController t) => t.text.isEmpty ? null : t.text;
       try {
         final data = {
           'ubicacion': ubicacionController.text.trim().toUpperCase(),
@@ -546,6 +584,20 @@ class _IssiPageState extends State<IssiPage> {
           'observaciones': texto(observacionesController),
           'usuario_id': selectedUsuarioId,
           'usuario_nombre': selectedUsuarioNombre,
+          'sistema_operativo': texto(soController),
+          'licencias': texto(licenciasController),
+          'antivirus': texto(antivirusController),
+          'nombre_equipo': texto(nombreEquipoController),
+          'mac': texto(macController),
+          'linea': lineaController.text.trim().isEmpty ? null : lineaController.text.trim(),
+          'compania': texto(companiaController),
+          'fecha_compra': fechaDe(fechaCompraController),
+          'proveedor': texto(proveedorController),
+          'factura': texto(facturaController),
+          'garantia_hasta': fechaDe(garantiaController),
+          'accesorios': texto(accesoriosController),
+          'fecha_baja': condicion == 'DESECHADO' ? fechaDe(fechaBajaController) : null,
+          'motivo_baja': condicion == 'DESECHADO' ? texto(motivoBajaController) : null,
         };
         final String id;
         if (isEditing) {
@@ -581,15 +633,59 @@ class _IssiPageState extends State<IssiPage> {
     }
 
     Widget buildContent(StateSetter setDialogState) {
-      Widget fieldColumn(Widget child) => Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [child, const SizedBox(height: 16)],
+      Widget texto(TextEditingController ctrl, String etiqueta, IconData icono,
+              {int lineas = 1, TextInputType? teclado}) =>
+          TextField(
+            controller: ctrl,
+            keyboardType: teclado,
+            minLines: lineas,
+            maxLines: lineas,
+            decoration: InputDecoration(
+                labelText: etiqueta,
+                alignLabelWithHint: lineas > 1,
+                prefixIcon: Icon(icono)),
           );
 
-      final fields = [
-        fieldColumn(
-          Autocomplete<Map<String, dynamic>>(
+      // Fecha con calendario al tocar y varita para poner la de hoy, como el correo en Usuarios.
+      Widget fecha(TextEditingController ctrl, String etiqueta, IconData icono) =>
+          TextField(
+            controller: ctrl,
+            readOnly: true,
+            decoration: InputDecoration(
+              labelText: etiqueta,
+              prefixIcon: Icon(icono),
+              suffixIcon: IconButton(
+                tooltip: 'Poner la fecha de hoy',
+                icon: const Icon(Icons.auto_fix_high_outlined, size: 18),
+                onPressed: () => setDialogState(() =>
+                    ctrl.text = DateTime.now().toString().split(' ').first),
+              ),
+            ),
+            onTap: () async {
+              final d = await showDatePicker(
+                  context: context,
+                  initialDate: DateTime.tryParse(ctrl.text) ?? DateTime.now(),
+                  firstDate: DateTime(2000),
+                  lastDate: DateTime(2101));
+              if (d != null) {
+                setDialogState(() => ctrl.text = d.toString().split(' ').first);
+              }
+            },
+          );
+
+      Widget desplegable(String etiqueta, IconData icono, String valor,
+              List<String> opciones, ValueChanged<String> alCambiar) =>
+          DropdownButtonFormField<String>(
+            value: valor,
+            isExpanded: true,
+            decoration: InputDecoration(labelText: etiqueta, prefixIcon: Icon(icono)),
+            items: opciones
+                .map((o) => DropdownMenuItem(value: o, child: Text(o)))
+                .toList(),
+            onChanged: (v) => setDialogState(() => alCambiar(v!)),
+          );
+
+      final usuario = Autocomplete<Map<String, dynamic>>(
             displayStringForOption: (u) => u['full_name'] as String? ?? '',
             initialValue: selectedUsuarioNombre != null
                 ? TextEditingValue(text: selectedUsuarioNombre!)
@@ -638,169 +734,120 @@ class _IssiPageState extends State<IssiPage> {
                 ),
               ),
             ),
-          ),
-        ),
-        fieldColumn(
-          TextField(
-              controller: ubicacionController,
-              decoration: const InputDecoration(
-                  labelText: 'Ubicación *',
-                  prefixIcon: Icon(Icons.location_on_outlined))),
-        ),
-        fieldColumn(
-          DropdownButtonFormField<String>(
-            value: tipo,
-            decoration: const InputDecoration(
-                labelText: 'Tipo *', prefixIcon: Icon(Icons.devices_outlined)),
-            isExpanded: true,
-            items: tiposDelEquipo
-                .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                .toList(),
-            onChanged: (val) => setDialogState(() => tipo = val!),
-          ),
-        ),
-        fieldColumn(
-          DropdownButtonFormField<String>(
-            value: marca,
-            decoration: const InputDecoration(
-                labelText: 'Marca *',
-                prefixIcon: Icon(Icons.business_outlined)),
-            isExpanded: true,
-            items: _marcas
-                .map((m) => DropdownMenuItem(value: m, child: Text(m)))
-                .toList(),
-            onChanged: (val) => setDialogState(() => marca = val!),
-          ),
-        ),
-        fieldColumn(
-          TextField(
-              controller: modeloController,
-              decoration: const InputDecoration(
-                  labelText: 'Modelo *',
-                  prefixIcon: Icon(Icons.label_outlined))),
-        ),
-        fieldColumn(
-          TextField(
-              controller: nsController,
-              decoration: const InputDecoration(
-                  labelText: 'N/S', prefixIcon: Icon(Icons.numbers))),
-        ),
-        fieldColumn(
-          TextField(
-              controller: imeiController,
-              decoration: const InputDecoration(
-                  labelText: 'IMEI',
-                  prefixIcon: Icon(Icons.sim_card_outlined))),
-        ),
-        fieldColumn(
-          TextField(
-              controller: cpuController,
-              decoration: const InputDecoration(
-                  labelText: 'CPU', prefixIcon: Icon(Icons.memory))),
-        ),
-        fieldColumn(
-          TextField(
-              controller: ssdController,
-              decoration: const InputDecoration(
-                  labelText: 'SSD', prefixIcon: Icon(Icons.storage))),
-        ),
-        fieldColumn(
-          TextField(
-              controller: ramController,
-              decoration: const InputDecoration(
-                  labelText: 'RAM', prefixIcon: Icon(Icons.sd_card))),
-        ),
-        fieldColumn(
-          TextField(
-              controller: gpuController,
-              decoration: const InputDecoration(
-                  labelText: 'GPU',
-                  prefixIcon: Icon(Icons.videogame_asset_outlined))),
-        ),
-        fieldColumn(
-          TextField(
-              controller: valorController,
-              decoration: const InputDecoration(
-                  labelText: 'Valor', prefixIcon: Icon(Icons.attach_money)),
-              keyboardType: TextInputType.number),
-        ),
-        fieldColumn(
-          TextField(
-            controller: fechaActController,
-            decoration: InputDecoration(
-                labelText: 'Fecha Actualización',
-                prefixIcon: const Icon(Icons.calendar_today_outlined),
-                // Como la varita del correo en Usuarios: pone la fecha de hoy de un toque.
-                suffixIcon: IconButton(
-                  tooltip: 'Poner la fecha de hoy',
-                  icon: const Icon(Icons.auto_fix_high_outlined, size: 18),
-                  onPressed: () => setDialogState(() => fechaActController.text =
-                      DateTime.now().toString().split(' ').first),
-                )),
-            readOnly: true,
-            onTap: () async {
-              final d = await showDatePicker(
-                  context: context,
-                  initialDate: DateTime.now(),
-                  firstDate: DateTime(2020),
-                  lastDate: DateTime(2101));
-              if (d != null)
-                setDialogState(() =>
-                    fechaActController.text = d.toString().split(' ').first);
-            },
-          ),
-        ),
-        fieldColumn(
-          DropdownButtonFormField<String>(
-            value: condicion,
-            decoration: const InputDecoration(
-                labelText: 'Condición *',
-                prefixIcon: Icon(Icons.health_and_safety_outlined)),
-            isExpanded: true,
-            items: condicionesDelEquipo
-                .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                .toList(),
-            onChanged: (val) => setDialogState(() => condicion = val!),
-          ),
-        ),
-        fieldColumn(
-          TextField(
-              controller: observacionesController,
-              decoration: const InputDecoration(
-                  labelText: 'Observaciones',
-                  alignLabelWithHint: true,
-                  prefixIcon: Icon(Icons.notes_outlined)),
-              minLines: 4,
-              maxLines: 4),
-        ),
-      ];
-      // Las fotos van a todo el ancho, debajo de los campos.
-      final seccionFotos = Padding(
-        padding: const EdgeInsets.only(top: 8),
-        child: FotosEquipoEditor(
-            itemId: item?['id'] as String?, pendientes: fotos),
-      );
+          );
 
-      if (isDesktop) {
-        final rows = <Widget>[];
-        for (var i = 0; i < fields.length; i += 4) {
-          final rowFields = fields.skip(i).take(4).toList();
-          while (rowFields.length < 4) rowFields.add(const SizedBox());
-          final rowChildren = <Widget>[];
-          for (var j = 0; j < rowFields.length; j++) {
-            if (j > 0) rowChildren.add(const SizedBox(width: 16));
-            rowChildren.add(Expanded(child: rowFields[j]));
+      final secciones = <(String, List<Widget>)>[
+        ('Asignación', [
+          usuario,
+          texto(ubicacionController, 'Ubicación *', Icons.location_on_outlined),
+        ]),
+        ('Equipo', [
+          TextField(
+            controller: TextEditingController(
+                text: item?['numero_inventario']?.toString() ?? 'Se asigna al guardar'),
+            readOnly: true,
+            enabled: false,
+            decoration: const InputDecoration(
+                labelText: 'N° de inventario', prefixIcon: Icon(Icons.qr_code_2)),
+          ),
+          desplegable('Tipo *', Icons.devices_outlined, tipo, tiposDelEquipo,
+              (v) => tipo = v),
+          desplegable('Marca *', Icons.business_outlined, marca, _marcas,
+              (v) => marca = v),
+          texto(modeloController, 'Modelo *', Icons.label_outlined),
+          texto(nsController, 'N/S', Icons.numbers),
+          texto(imeiController, 'IMEI', Icons.sim_card_outlined),
+          desplegable('Condición *', Icons.health_and_safety_outlined, condicion,
+              condicionesDelEquipo, (v) {
+            condicion = v;
+            // Al desecharlo, la baja queda con fecha de hoy si no tenía.
+            if (v == 'DESECHADO' && fechaBajaController.text.isEmpty) {
+              fechaBajaController.text = DateTime.now().toString().split(' ').first;
+            }
+          }),
+        ]),
+        ('Especificaciones', [
+          texto(cpuController, 'CPU', Icons.memory),
+          texto(ssdController, 'SSD', Icons.storage),
+          texto(ramController, 'RAM', Icons.sd_card),
+          texto(gpuController, 'GPU', Icons.videogame_asset_outlined),
+        ]),
+        ('Software y red', [
+          texto(soController, 'Sistema operativo', Icons.window_outlined),
+          texto(licenciasController, 'Licencias (Windows, Office…)', Icons.key_outlined),
+          texto(antivirusController, 'Antivirus', Icons.shield_outlined),
+          texto(nombreEquipoController, 'Nombre del equipo', Icons.computer_outlined),
+          texto(macController, 'MAC', Icons.lan_outlined),
+          texto(lineaController, 'Línea (celular)', Icons.phone_iphone,
+              teclado: TextInputType.phone),
+          texto(companiaController, 'Compañía', Icons.cell_tower),
+        ]),
+        ('Compra y garantía', [
+          fecha(fechaCompraController, 'Fecha de compra', Icons.shopping_bag_outlined),
+          texto(proveedorController, 'Proveedor', Icons.storefront_outlined),
+          texto(facturaController, 'N° de factura', Icons.receipt_long_outlined),
+          fecha(garantiaController, 'Garantía hasta', Icons.verified_user_outlined),
+          texto(valorController, 'Valor', Icons.attach_money,
+              teclado: TextInputType.number),
+          fecha(fechaActController, 'Fecha actualización', Icons.calendar_today_outlined),
+        ]),
+        ('Accesorios y observaciones', [
+          texto(accesoriosController, 'Accesorios entregados (cargador, mouse…)',
+              Icons.cable_outlined,
+              lineas: 4),
+          texto(observacionesController, 'Observaciones', Icons.notes_outlined,
+              lineas: 4),
+        ]),
+        if (condicion == 'DESECHADO')
+          ('Baja', [
+            fecha(fechaBajaController, 'Fecha de baja *', Icons.event_busy_outlined),
+            texto(motivoBajaController, 'Motivo de baja *', Icons.report_outlined,
+                lineas: 2),
+          ]),
+      ];
+
+      final c = SiColors.of(context);
+      Widget titulo(String t) => Padding(
+            padding: const EdgeInsets.only(top: 4, bottom: 12),
+            child: Text(t.toUpperCase(),
+                style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.2,
+                    color: c.ink3)),
+          );
+
+      final hijos = <Widget>[];
+      for (final (nombre, campos) in secciones) {
+        hijos.add(titulo(nombre));
+        if (isDesktop) {
+          for (var i = 0; i < campos.length; i += 4) {
+            final fila = campos.skip(i).take(4).toList();
+            hijos.add(Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (var j = 0; j < 4; j++) ...[
+                    if (j > 0) const SizedBox(width: 16),
+                    Expanded(child: j < fila.length ? fila[j] : const SizedBox()),
+                  ],
+                ],
+              ),
+            ));
           }
-          rows.add(Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: rowChildren));
+        } else {
+          for (final campo in campos) {
+            hijos.add(Padding(padding: const EdgeInsets.only(bottom: 16), child: campo));
+          }
         }
-        return Column(
-            mainAxisSize: MainAxisSize.min, children: [...rows, seccionFotos]);
-      } else {
-        return Column(
-            mainAxisSize: MainAxisSize.min, children: [...fields, seccionFotos]);
+        hijos.add(const SizedBox(height: 8));
       }
+      hijos.add(FotosEquipoEditor(itemId: item?['id'] as String?, pendientes: fotos));
+      return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: hijos);
     }
 
     if (isDesktop) {
@@ -979,7 +1026,8 @@ class _IssiPageState extends State<IssiPage> {
             ubicacion.contains(query) ||
             usuario.contains(query) ||
             ns.contains(query) ||
-            imei.contains(query);
+            imei.contains(query) ||
+            (item['numero_inventario'] ?? '').toString().toLowerCase().contains(query);
       }).toList();
     }
     if (_filterTipo != null) {
@@ -1285,7 +1333,7 @@ class _IssiPageState extends State<IssiPage> {
                     DataColumn(label: SizedBox(width: screenWidth * 0.2, child: Text('USUARIO / UBICACIÓN', style: TextStyle(color: c.ink3, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
                     DataColumn(label: SizedBox(width: screenWidth * 0.15, child: Text('EQUIPO', style: TextStyle(color: c.ink3, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
                     DataColumn(label: SizedBox(width: screenWidth * 0.1, child: Text('MARCA', style: TextStyle(color: c.ink3, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
-                    DataColumn(label: SizedBox(width: screenWidth * 0.1, child: Text('SERIE', style: TextStyle(color: c.ink3, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
+                    DataColumn(label: SizedBox(width: screenWidth * 0.1, child: Text('N° INV. / SERIE', style: TextStyle(color: c.ink3, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
                     DataColumn(label: SizedBox(width: screenWidth * 0.1, child: Text('CONDICIÓN', style: TextStyle(color: c.ink3, fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1)))),
                     const DataColumn(label: SizedBox()), // Acciones
                   ],
@@ -1744,158 +1792,15 @@ class _IssiPageState extends State<IssiPage> {
     }
   }
 
-  /// Ficha del equipo: todas sus características y sus fotos, en una hoja que sube desde abajo.
+  /// Ficha del equipo (datos, garantía, etiqueta QR, fotos, historial y mantenimientos).
   void _showFicha(Map<String, dynamic> item) {
-    final campos = <(String, String?)>[
-      ('Usuario', item['usuario_nombre']?.toString()),
-      ('Ubicación', item['ubicacion']?.toString()),
-      ('Tipo', item['tipo']?.toString()),
-      ('Marca', item['marca']?.toString()),
-      ('Modelo', item['modelo']?.toString()),
-      ('N/S', item['n_s']?.toString()),
-      ('IMEI', item['imei']?.toString()),
-      ('CPU', item['cpu']?.toString()),
-      ('SSD', item['ssd']?.toString()),
-      ('RAM', item['ram']?.toString()),
-      ('GPU', item['gpu']?.toString()),
-      ('Valor', item['valor'] == null ? null : '\$${item['valor']}'),
-      ('Fecha actualización', item['fecha_actualizacion']?.toString()),
-      ('Resguardo firmado', item['documento_pdf'] == null ? 'No cargado' : 'Cargado'),
-    ];
-    final condicion = (item['condicion'] ?? '').toString();
-    final observaciones = item['observaciones']?.toString();
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) {
-        final c = SiColors.of(sheetContext);
-        return Container(
-          decoration: BoxDecoration(
-              color: c.panel,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(20))),
-          constraints: BoxConstraints(
-              maxHeight: MediaQuery.of(sheetContext).size.height * 0.9,
-              maxWidth: 760),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(sheetContext),
-                    child: Text('Cerrar', style: TextStyle(fontSize: 16, color: c.ink3)),
-                  ),
-                  Text('Ficha del equipo',
-                      style: TextStyle(
-                          fontSize: 18, fontWeight: FontWeight.bold, color: c.ink)),
-                  _isAdmin
-                      ? TextButton(
-                          onPressed: () {
-                            Navigator.pop(sheetContext);
-                            _showItemForm(item: item);
-                          },
-                          child: Text('Editar',
-                              style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: c.brand)),
-                        )
-                      : const SizedBox(width: 64),
-                ],
-              ),
-            ),
-            Divider(height: 1, color: c.line),
-            Flexible(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                              color: c.brand.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(12)),
-                          child: Icon(_getIconForType(item['tipo']?.toString() ?? ''),
-                              color: c.brand, size: 28),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                  '${item['marca'] ?? ''} ${item['modelo'] ?? ''}'.trim(),
-                                  style: TextStyle(
-                                      fontSize: 17,
-                                      fontWeight: FontWeight.bold,
-                                      color: c.ink)),
-                              Text(item['tipo']?.toString() ?? '',
-                                  style: TextStyle(color: c.ink3, fontSize: 13)),
-                            ],
-                          ),
-                        ),
-                        Container(
-                          padding:
-                              const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: _getColorForCondition(condicion).withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(condicion.toUpperCase(),
-                              style: TextStyle(
-                                  color: _getColorForCondition(condicion),
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 11)),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    for (final (etiqueta, valor) in campos)
-                      if (valor != null && valor.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 6),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              SizedBox(
-                                width: 150,
-                                child: Text(etiqueta,
-                                    style: TextStyle(color: c.ink3, fontSize: 13)),
-                              ),
-                              Expanded(
-                                child: SelectableText(valor,
-                                    style: TextStyle(color: c.ink, fontSize: 13)),
-                              ),
-                            ],
-                          ),
-                        ),
-                    if (observaciones != null && observaciones.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      Text('Observaciones',
-                          style: TextStyle(color: c.ink3, fontSize: 13)),
-                      const SizedBox(height: 4),
-                      SelectableText(observaciones,
-                          style: TextStyle(color: c.ink, fontSize: 13)),
-                    ],
-                    const SizedBox(height: 20),
-                    Text('Fotos',
-                        style: TextStyle(
-                            color: c.ink2, fontWeight: FontWeight.w600, fontSize: 14)),
-                    const SizedBox(height: 8),
-                    FotosEquipoGaleria(itemId: item['id'] as String),
-                  ],
-                ),
-              ),
-            ),
-          ]),
-        );
-      },
+    mostrarFichaEquipo(
+      context,
+      item: item,
+      puedeEditar: _isAdmin,
+      onEditar: () => _showItemForm(item: item),
+      icono: _getIconForType(item['tipo']?.toString() ?? ''),
+      colorCondicion: _getColorForCondition((item['condicion'] ?? '').toString()),
     );
   }
 
@@ -2017,7 +1922,17 @@ class _IssiDataSource extends DataTableSource {
           ),
         ),
         DataCell(Text(item['marca']?.toString() ?? '---')),
-        DataCell(Text(item['n_s']?.toString() ?? '---')),
+        DataCell(Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(item['numero_inventario']?.toString() ?? '---',
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+            Text(item['n_s']?.toString() ?? '---',
+                style: TextStyle(color: siColors.ink3, fontSize: 11),
+                overflow: TextOverflow.ellipsis),
+          ],
+        )),
         DataCell(buildConditionChip(item['condicion']?.toString() ?? '')),
         DataCell(
           Align(
