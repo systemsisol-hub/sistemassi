@@ -471,7 +471,10 @@ class _MainNavigationState extends State<MainNavigation> {
       debugPrint('No se pudo marcar la notificación como leída: $e');
     }
     if (!mounted) return;
-    if (tipo == 'event_invitation') {
+    if (tipo == 'event_cancelled' ||
+        (tipo == 'event_invitation' && meta['cancelado'] == true)) {
+      // El evento ya no existe: con marcarla leída basta.
+    } else if (tipo == 'event_invitation' || tipo == 'event_updated') {
       _onNavigateToCalendar(meta['event_id'] as String?, pages);
     } else if (tipo == 'status_sys_alert') {
       _onNavigateToEditUser(meta['user_id'] as String?, pages);
