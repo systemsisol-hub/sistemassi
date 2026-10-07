@@ -7,6 +7,7 @@ import 'usuarios_page.dart';
 import 'system_logs_page.dart';
 import 'issi_page.dart';
 import 'utils/enlace_inicial.dart';
+import 'widgets/aviso_eventos_proximos.dart';
 import 'colaborador_page.dart';
 import 'incidencias_page.dart';
 import 'social_page.dart';
@@ -442,6 +443,15 @@ class _MainNavigationState extends State<MainNavigation> {
     final pages = _availablePages;
     if (_selectedIndex >= pages.length) _selectedIndex = 0;
 
+    // El globo de «te faltan 10 minutos para tu evento» va encima de toda la app.
+    return Stack(children: [
+      Positioned.fill(child: _shell(pages)),
+      AvisoEventosProximos(
+          onAbrir: (id) => _onNavigateToCalendar(id, pages)),
+    ]);
+  }
+
+  Widget _shell(List<Map<String, dynamic>> pages) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isDesktop = constraints.maxWidth >= 800;

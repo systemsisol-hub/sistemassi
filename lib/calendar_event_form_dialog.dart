@@ -404,6 +404,7 @@ class _EventFormDialogState extends State<EventFormDialog> {
       final errores = (d['errores'] as List?) ?? const [];
       final partes = [
         if (enviados > 0) 'invitación enviada a $enviados',
+        if (d['copia'] == true) 'copia a tu correo',
         if (cancelados > 0) 'cancelación enviada a $cancelados',
         if (errores.isNotEmpty) 'no se pudo enviar a ${errores.length}',
       ];

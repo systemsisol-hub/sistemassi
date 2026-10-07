@@ -177,10 +177,17 @@ Deno.serve(async (req: Request) => {
     for (const x of externos ?? []) destinatarios.set(x.email, { nombre: x.nombre, email: x.email });
     destinatarios.delete(organizador.email);
   }
-  // Cancelación a quien la tenía y ya no está (o a todos, si se cancela el evento).
-  const quitados = [...conInvitacion].filter((e) => !destinatarios.has(e));
+  // Copia para quien la manda, para que también la agende en su Outlook / Gmail (pedido el
+  // 07/10/2026). Su calendario no acepta una invitación en la que él es el ORGANIZADOR, así que en
+  // su copia organiza «Calendario SI SOL» y él va de invitado.
+  const copiaCreador = accion === "enviar";
 
-  const total = destinatarios.size + quitados.length;
+  // Cancelación a quien la tenía y ya no está (o a todos, si se cancela el evento).
+  const quitados = [...conInvitacion].filter((e) =>
+    !destinatarios.has(e) && !(copiaCreador && e === organizador.email)
+  );
+
+  const total = destinatarios.size + quitados.length + (copiaCreador ? 1 : 0);
   if (total === 0) return responde({ enviados: 0, cancelados: 0, errores: [] });
   if (destinatarios.size > MAX_POR_EVENTO) {
     return responde({ error: `Máximo ${MAX_POR_EVENTO} invitados por evento.` }, 400);
@@ -255,11 +262,19 @@ Deno.serve(async (req: Request) => {
   const errores: { email: string; error: string }[] = [];
   let enviados = 0;
   let cancelados = 0;
+  let copia = false;
   const registro: Record<string, unknown>[] = [];
 
+  const sistema: Persona = { nombre: "Calendario SI SOL", email: REMITENTE };
   const mandar = async (para: Persona, metodo: "REQUEST" | "CANCEL", asunto: string, encabezado: string,
     lista: Persona[]) => {
-    const ics = construirIcs({ ...base, metodo, asistentes: lista });
+    const esCreador = para.email === organizador.email;
+    const ics = construirIcs({
+      ...base,
+      metodo,
+      asistentes: esCreador ? [...lista.filter((a) => a.email !== para.email), para] : lista,
+      organizador: esCreador ? sistema : organizador,
+    });
     let error: string | null = null;
     try {
       await transporte.sendMail({
@@ -299,6 +314,19 @@ Deno.serve(async (req: Request) => {
     );
     if (ok) enviados++;
   }
+  if (copiaCreador) {
+    const yaLaTenia = conInvitacion.has(organizador.email);
+    const ok = await mandar(
+      organizador,
+      "REQUEST",
+      `${yaLaTenia ? "Actualización" : "Tu evento"}: ${base.titulo} (${fechaCorta})`,
+      asistentes.length
+        ? `Tu copia: enviaste la invitación a ${asistentes.length} persona${asistentes.length === 1 ? "" : "s"}`
+        : "Tu copia del evento, para agregarlo a tu calendario",
+      asistentes,
+    );
+    copia = ok;
+  }
   for (const email of quitados) {
     const ok = await mandar(
       { email },
@@ -311,5 +339,5 @@ Deno.serve(async (req: Request) => {
   }
 
   if (registro.length) await svc.from("calendario_envios").insert(registro);
-  return responde({ enviados, cancelados, errores });
+  return responde({ enviados, cancelados, copia, errores });
 });
