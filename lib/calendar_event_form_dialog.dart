@@ -56,6 +56,9 @@ class _EventFormDialogState extends State<EventFormDialog> {
 
   // Invitados de fuera del sistema (solo correo) y si se manda la invitación de calendario.
   final List<Map<String, String?>> _externos = [];
+  // Selector de invitados: buscador y, sin buscar, los 5 que más invita quien crea el evento.
+  final _buscarInvitado = TextEditingController();
+  List<String> _frecuentes = [];
   final _externoController = TextEditingController();
   bool _enviarCorreo = true;
   String? _serieId;
@@ -79,6 +82,7 @@ class _EventFormDialogState extends State<EventFormDialog> {
         _isPublic = widget.isPublic!;
       }
     }
+    _cargarFrecuentes();
     _fetchUsers().then((_) {
       if (_isEditMode) {
         _fetchEventData();
@@ -92,6 +96,7 @@ class _EventFormDialogState extends State<EventFormDialog> {
     _locationController.dispose();
     _descriptionController.dispose();
     _externoController.dispose();
+    _buscarInvitado.dispose();
     super.dispose();
   }
 
@@ -374,6 +379,54 @@ class _EventFormDialogState extends State<EventFormDialog> {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  /// Las 5 personas que más ha invitado quien usa el formulario, contando sus eventos anteriores.
+  Future<void> _cargarFrecuentes() async {
+    final yo = _supabase.auth.currentUser?.id;
+    if (yo == null) return;
+    try {
+      final filas = await _supabase
+          .from('event_invitations')
+          .select('user_id, events!inner(creator_id)')
+          .eq('events.creator_id', yo);
+      final cuenta = <String, int>{};
+      for (final f in filas) {
+        final id = f['user_id'] as String?;
+        if (id != null && id != yo) cuenta[id] = (cuenta[id] ?? 0) + 1;
+      }
+      final orden = cuenta.keys.toList()
+        ..sort((a, b) => cuenta[b]!.compareTo(cuenta[a]!));
+      if (mounted) setState(() => _frecuentes = orden.take(5).toList());
+    } catch (e) {
+      debugPrint('Error al leer los invitados frecuentes: $e');
+    }
+  }
+
+  /// Lo que muestra el selector: con búsqueda, quien coincida (nombre o correo); sin búsqueda, los
+  /// ya elegidos y los 5 más invitados (o los 5 primeros, si aún no ha invitado a nadie).
+  List<Map<String, dynamic>> get _perfilesVisibles {
+    final q = _buscarInvitado.text.trim().toLowerCase();
+    if (q.isNotEmpty) {
+      final palabras = q.split(RegExp(r'\s+'));
+      return _profiles.where((p) {
+        final texto = '${p['full_name'] ?? ''} ${p['email'] ?? ''}'.toLowerCase();
+        return palabras.every(texto.contains);
+      }).take(30).toList();
+    }
+    final porId = {for (final p in _profiles) p['id'] as String: p};
+    final ids = <String>[
+      ..._selectedUserIds,
+      ..._frecuentes.where((id) => !_selectedUserIds.contains(id)),
+    ];
+    final lista = [for (final id in ids) if (porId[id] != null) porId[id]!];
+    if (lista.length < 5) {
+      for (final p in _profiles) {
+        if (lista.length >= 5) break;
+        if (!lista.contains(p)) lista.add(p);
+      }
+    }
+    return lista;
   }
 
   /// Deja en la base los correos externos de este evento tal como están en el formulario.
@@ -1314,21 +1367,55 @@ class _EventFormDialogState extends State<EventFormDialog> {
             // Invitados (solo si es Personal)
             if (!_isPublic) ...[
               const SizedBox(height: 20),
-              const Text('Invitados',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              Text(
+                  _selectedUserIds.isEmpty
+                      ? 'Invitados'
+                      : 'Invitados (${_selectedUserIds.length})',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
               const SizedBox(height: 8),
+              TextField(
+                controller: _buscarInvitado,
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  hintText: 'Buscar por nombre o correo',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _buscarInvitado.text.isEmpty
+                      ? null
+                      : IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => setState(() => _buscarInvitado.clear()),
+                        ),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              if (_buscarInvitado.text.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                      _frecuentes.isEmpty
+                          ? 'Busca a quien quieras invitar.'
+                          : 'Elegidos y los que más invitas. Busca para ver a los demás.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                ),
+              const SizedBox(height: 4),
               if (_profiles.isEmpty)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 20),
                   child: Center(child: CircularProgressIndicator()),
                 )
+              else if (_perfilesVisibles.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Text('Nadie coincide con «${_buscarInvitado.text.trim()}»',
+                      style: TextStyle(color: Colors.grey.shade600)),
+                )
               else
                 ListView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _profiles.length,
+                  itemCount: _perfilesVisibles.length,
                   itemBuilder: (context, index) {
-                    final p = _profiles[index];
+                    final p = _perfilesVisibles[index];
                     final id = p['id'] as String;
                     final name = p['full_name'] ?? p['email'] ?? 'Usuario';
                     final isSelected = _selectedUserIds.contains(id);

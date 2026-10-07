@@ -127,27 +127,8 @@ class _NotificationListModalState extends State<NotificationListModal>
     await NotificationService.deleteNotification(n['id']);
   }
 
-  ({IconData icon, Color color}) _typeStyle(String type, String priority) {
-    if (type == 'event_invitation') {
-      return (
-        icon: Icons.event,
-        color: priority == 'Alta' ? Colors.red.shade600 : Colors.blue.shade600,
-      );
-    }
-    if (type == 'collaborator_alert' || type == 'status_sys_alert') {
-      return (icon: Icons.person_pin, color: Colors.orange.shade600);
-    }
-    if (type == 'incidencia_status') {
-      return (icon: Icons.description, color: Colors.purple.shade600);
-    }
-    if (type == 'new_incidencia') {
-      return (icon: Icons.add_circle_outline, color: Colors.teal.shade600);
-    }
-    if (type == 'torneo') {
-      return (icon: Icons.flag, color: const Color(0xFF344092));
-    }
-    return (icon: Icons.notifications, color: Colors.grey.shade600);
-  }
+  ({IconData icon, Color color}) _typeStyle(String type, String priority) =>
+      estiloNotificacion(type, priority);
 
   Widget _buildSubtitle(Map<String, dynamic> n) {
     final type = n['type'] as String? ?? '';
@@ -471,4 +452,27 @@ class _NotificationListModalState extends State<NotificationListModal>
       ),
     );
   }
+}
+
+/// Ícono y color de cada tipo de notificación. Lo usan la lista de la campana y los globos.
+({IconData icon, Color color}) estiloNotificacion(String type, String priority) {
+  if (type == 'event_invitation') {
+    return (
+      icon: Icons.event,
+      color: priority == 'Alta' ? Colors.red.shade600 : Colors.blue.shade600,
+    );
+  }
+  if (type == 'collaborator_alert' || type == 'status_sys_alert') {
+    return (icon: Icons.person_pin, color: Colors.orange.shade600);
+  }
+  if (type == 'incidencia_status') {
+    return (icon: Icons.description, color: Colors.purple.shade600);
+  }
+  if (type == 'new_incidencia') {
+    return (icon: Icons.add_circle_outline, color: Colors.teal.shade600);
+  }
+  if (type == 'torneo') {
+    return (icon: Icons.flag, color: const Color(0xFF344092));
+  }
+  return (icon: Icons.notifications, color: Colors.grey.shade600);
 }

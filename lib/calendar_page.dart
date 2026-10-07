@@ -27,9 +27,12 @@ class _CalendarPageState extends State<CalendarPage> {
   CalendarView _currentView = CalendarView.month;
   DateTime _currentDisplayDate = DateTime.now();
   DateTime _selectedDate = DateTime.now();
-  // Alto de una celda del mes, medido al dibujarla: decide cuántas barras caben (ver
-  // `_renglonesPorDia`).
+  // Alto de una celda del mes: decide cuántas barras caben (ver `_renglonesPorDia`). Se calcula
+  // con el espacio que tiene el calendario ANTES de dibujarlo. Medirlo dentro de la celda y volver
+  // a dibujar con setState rompía el calendario («_elements.contains(element)», pantalla roja al
+  // volver del formulario de evento, 07/10/2026).
   double _altoCelda = 0;
+  static const double _altoEncabezadoDias = 30;
 
   // ── Index helpers ──────────────────────────────────────────────────────────
 
@@ -958,7 +961,12 @@ class _CalendarPageState extends State<CalendarPage> {
                   child: Row(
                     children: [
                       Expanded(
-                        child: Stack(
+                        child: LayoutBuilder(builder: (context, caja) {
+                          // El mes son 6 semanas; en el teléfono la lista del día ocupa el 30% de abajo.
+                          final agenda = isDesktop ? 0.0 : caja.maxHeight * 0.3;
+                          _altoCelda =
+                              (caja.maxHeight - _altoEncabezadoDias - agenda) / 6;
+                          return Stack(
                           children: [
                             SfCalendarTheme(
                               data: SfCalendarThemeData(
@@ -1019,6 +1027,7 @@ class _CalendarPageState extends State<CalendarPage> {
                               dataSource: _dataSource,
                               onTap: _onAppointmentTap,
                               headerHeight: 0,
+                              viewHeaderHeight: _altoEncabezadoDias,
                               cellBorderColor: Colors.transparent,
                               backgroundColor: c.bg,
                               todayHighlightColor: c.brand,
@@ -1033,6 +1042,7 @@ class _CalendarPageState extends State<CalendarPage> {
                                 appointmentDisplayMode:
                                     MonthAppointmentDisplayMode.appointment,
                                 appointmentDisplayCount: _renglonesPorDia,
+                                agendaViewHeight: isDesktop ? -1 : agenda,
                                 agendaStyle: AgendaStyle(
                                   backgroundColor: c.panel,
                                   // Blanco como en las etiquetas del mes: el fondo es el color del
@@ -1098,14 +1108,6 @@ class _CalendarPageState extends State<CalendarPage> {
                                 );
                               },
                               monthCellBuilder: (context, details) {
-                                final alto = details.bounds.height;
-                                if ((alto - _altoCelda).abs() > 1) {
-                                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                                    if (mounted && (alto - _altoCelda).abs() > 1) {
-                                      setState(() => _altoCelda = alto);
-                                    }
-                                  });
-                                }
                                 final isSelected =
                                     details.date.year == _selectedDate.year &&
                                         details.date.month ==
@@ -1187,7 +1189,8 @@ class _CalendarPageState extends State<CalendarPage> {
                                 ),
                               ),
                           ],
-                        ),
+                        );
+                        }),
                       ),
                       if (isDesktop) _buildSideAgenda(c, 320),
                     ],
