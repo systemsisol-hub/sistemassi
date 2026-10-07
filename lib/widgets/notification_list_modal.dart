@@ -111,7 +111,7 @@ class _NotificationListModalState extends State<NotificationListModal>
             .where((n) => (n['type'] as String? ?? '').contains('incidencia'))
             .toList();
       case 2:
-        return _all.where((n) => n['type'] == 'event_invitation').toList();
+        return _all.where((n) => (n['type'] as String? ?? '').startsWith('event_')).toList();
       default:
         return _all;
     }
@@ -120,7 +120,7 @@ class _NotificationListModalState extends State<NotificationListModal>
   int get _incidenciasCount =>
       _all.where((n) => (n['type'] as String? ?? '').contains('incidencia')).length;
   int get _eventosCount =>
-      _all.where((n) => n['type'] == 'event_invitation').length;
+      _all.where((n) => (n['type'] as String? ?? '').startsWith('event_')).length;
 
   Future<void> _delete(Map<String, dynamic> n) async {
     setState(() => _all.removeWhere((x) => x['id'] == n['id']));
@@ -148,8 +148,19 @@ class _NotificationListModalState extends State<NotificationListModal>
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (meta['cancelado'] == true)
+            Text('CANCELADO',
+                style: TextStyle(
+                    color: Colors.red.shade600,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5)),
           if (title.isNotEmpty)
-            Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+            Text(title,
+                style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    decoration:
+                        meta['cancelado'] == true ? TextDecoration.lineThrough : null)),
           if (date != null)
             Padding(
               padding: const EdgeInsets.only(top: 2),
@@ -243,8 +254,11 @@ class _NotificationListModalState extends State<NotificationListModal>
       }
     }
 
-    if (type == 'event_invitation' && mounted) {
-      final meta = (n['metadata'] as Map<String, dynamic>?) ?? {};
+    if (type == 'event_invitation' && meta['cancelado'] == true && mounted) {
+      // El evento ya no existe: se avisa en lugar de abrir un calendario vacío.
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ese evento se canceló.')));
+    } else if ((type == 'event_invitation' || type == 'event_updated') && mounted) {
       Navigator.pop(context);
       widget.onNavigateToCalendar?.call(meta['event_id'] as String?);
     } else if (type == 'status_sys_alert' && mounted) {
@@ -461,6 +475,12 @@ class _NotificationListModalState extends State<NotificationListModal>
       icon: Icons.event,
       color: priority == 'Alta' ? Colors.red.shade600 : Colors.blue.shade600,
     );
+  }
+  if (type == 'event_cancelled') {
+    return (icon: Icons.event_busy, color: Colors.red.shade600);
+  }
+  if (type == 'event_updated') {
+    return (icon: Icons.update, color: Colors.blue.shade600);
   }
   if (type == 'collaborator_alert' || type == 'status_sys_alert') {
     return (icon: Icons.person_pin, color: Colors.orange.shade600);
