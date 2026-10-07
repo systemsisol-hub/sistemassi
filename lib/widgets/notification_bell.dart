@@ -68,7 +68,10 @@ class NotificationBell extends StatelessWidget {
               Positioned(
                 right: 8,
                 top: 8,
-                child: Container(
+                // IgnorePointer: el contador queda encima del botón y se comía el clic; había que
+                // apuntar a un lado de la campana para abrir los avisos.
+                child: IgnorePointer(
+                  child: Container(
                   padding: const EdgeInsets.all(4),
                   decoration: const BoxDecoration(
                     color: Colors.red,
@@ -87,6 +90,7 @@ class NotificationBell extends StatelessWidget {
                     ),
                     textAlign: TextAlign.center,
                   ),
+                ),
                 ),
               ),
           ],
