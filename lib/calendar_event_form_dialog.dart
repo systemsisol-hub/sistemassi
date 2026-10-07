@@ -54,6 +54,12 @@ class _EventFormDialogState extends State<EventFormDialog> {
   final Map<String, Map<String, dynamic>> _invitationDetails =
       {}; // userId -> {status, rejection_reason}
 
+  // Invitados de fuera del sistema (solo correo) y si se manda la invitación de calendario.
+  final List<Map<String, String?>> _externos = [];
+  final _externoController = TextEditingController();
+  bool _enviarCorreo = true;
+  String? _serieId;
+
   bool get _isEditMode => widget.eventId != null;
   bool get _canEdit =>
       !_isEditMode || _creatorId == _supabase.auth.currentUser?.id;
@@ -85,6 +91,7 @@ class _EventFormDialogState extends State<EventFormDialog> {
     _titleController.dispose();
     _locationController.dispose();
     _descriptionController.dispose();
+    _externoController.dispose();
     super.dispose();
   }
 
@@ -100,6 +107,15 @@ class _EventFormDialogState extends State<EventFormDialog> {
           .from('event_invitations')
           .select('user_id, status, rejection_reason')
           .eq('event_id', widget.eventId!);
+      List<dynamic> externos = [];
+      try {
+        externos = await _supabase
+            .from('event_external_invitees')
+            .select('email, nombre')
+            .eq('event_id', widget.eventId!);
+      } catch (e) {
+        debugPrint('Error al leer invitados externos: $e');
+      }
 
       if (mounted) {
         setState(() {
@@ -110,6 +126,13 @@ class _EventFormDialogState extends State<EventFormDialog> {
           _priority = eventResponse['priority'] ?? 'Normal';
           _recurrence = eventResponse['recurrence'] ?? 'No repetir';
           _creatorId = eventResponse['creator_id'];
+          _serieId = eventResponse['serie_id'] as String?;
+          _externos
+            ..clear()
+            ..addAll(externos.map((x) => {
+                  'email': x['email'] as String?,
+                  'nombre': x['nombre'] as String?,
+                }));
 
           final st = DateTime.parse(eventResponse['start_time']).toLocal();
           final et = DateTime.parse(eventResponse['end_time']).toLocal();
@@ -204,6 +227,7 @@ class _EventFormDialogState extends State<EventFormDialog> {
     try {
       final currentUserId = _supabase.auth.currentUser?.id;
       if (currentUserId == null) throw Exception('Usuario no autenticado');
+      String? aviso;
 
       final startDateTime = DateTime(
         _startDate.year,
@@ -238,19 +262,32 @@ class _EventFormDialogState extends State<EventFormDialog> {
         }).eq('id', widget.eventId!);
 
         final eventId = widget.eventId!;
-        await _supabase
-            .from('event_invitations')
-            .delete()
-            .eq('event_id', eventId);
-        if (!_isPublic && _selectedUserIds.isNotEmpty) {
-          final invitations = _selectedUserIds
+        // Solo se quitan y agregan los que cambiaron: borrar y volver a insertar a todos regresaba
+        // a «pendiente» a quien ya había aceptado o rechazado.
+        final antes = _invitationDetails.keys.toSet();
+        final ahora = _isPublic ? <String>{} : _selectedUserIds.toSet();
+        final quitados = antes.difference(ahora).toList();
+        final nuevos = ahora.difference(antes).toList();
+        if (quitados.isNotEmpty) {
+          await _supabase
+              .from('event_invitations')
+              .delete()
+              .eq('event_id', eventId)
+              .inFilter('user_id', quitados);
+        }
+        if (nuevos.isNotEmpty) {
+          await _supabase.from('event_invitations').insert(nuevos
               .map((userId) => {
                     'event_id': eventId,
                     'user_id': userId,
                     'status': 'pending',
                   })
-              .toList();
-          await _supabase.from('event_invitations').insert(invitations);
+              .toList());
+        }
+        await _guardarExternos(eventId);
+        if (_enviarCorreo) {
+          aviso = await _mandarInvitaciones(eventId,
+              accion: 'enviar', serie: false);
         }
       } else {
         final duration = endDateTime.difference(startDateTime);
@@ -263,11 +300,17 @@ class _EventFormDialogState extends State<EventFormDialog> {
           starts = [startDateTime];
         }
 
+        // Una serie que se repite comparte `serie_id` (el id de la primera fecha): así la invitación
+        // por correo va UNA vez, como evento que se repite, y no un correo por fecha.
+        String? serieId;
+        String? primerId;
         for (final occStart in starts) {
           final occEnd = occStart.add(duration);
           final eventResponse = await _supabase
               .from('events')
               .insert({
+                if (starts.length > 1) 'serie_inicio': occStart.toUtc().toIso8601String(),
+                if (serieId != null) 'serie_id': serieId,
                 'title': _titleController.text.trim(),
                 'description': _descriptionController.text.trim(),
                 'location': _locationController.text.trim(),
@@ -281,7 +324,17 @@ class _EventFormDialogState extends State<EventFormDialog> {
               .select()
               .single();
 
-          final eventId = eventResponse['id'];
+          final eventId = eventResponse['id'] as String;
+          if (primerId == null) {
+            primerId = eventId;
+            if (starts.length > 1) {
+              serieId = eventId;
+              await _supabase
+                  .from('events')
+                  .update({'serie_id': serieId}).eq('id', eventId);
+            }
+          }
+          await _guardarExternos(eventId);
           if (!_isPublic && _selectedUserIds.isNotEmpty) {
             final invitations = _selectedUserIds
                 .map((userId) => {
@@ -293,15 +346,22 @@ class _EventFormDialogState extends State<EventFormDialog> {
             await _supabase.from('event_invitations').insert(invitations);
           }
         }
+        if (_enviarCorreo && primerId != null) {
+          aviso = await _mandarInvitaciones(primerId,
+              accion: 'enviar', serie: serieId != null);
+        }
       }
 
       if (mounted) {
         Navigator.pop(context, true);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text(_isEditMode
-                  ? 'Evento actualizado exitosamente'
-                  : 'Evento creado exitosamente')),
+              content: Text([
+            _isEditMode
+                ? 'Evento actualizado exitosamente'
+                : 'Evento creado exitosamente',
+            if (aviso != null) aviso,
+          ].join('. '))),
         );
       }
     } catch (e) {
@@ -314,6 +374,66 @@ class _EventFormDialogState extends State<EventFormDialog> {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  /// Deja en la base los correos externos de este evento tal como están en el formulario.
+  Future<void> _guardarExternos(String eventId) async {
+    await _supabase
+        .from('event_external_invitees')
+        .delete()
+        .eq('event_id', eventId);
+    if (_externos.isEmpty) return;
+    await _supabase.from('event_external_invitees').insert(_externos
+        .map((x) => {'event_id': eventId, 'email': x['email'], 'nombre': x['nombre']})
+        .toList());
+  }
+
+  /// Llama a la función que manda (o cancela) la invitación de calendario por correo. Devuelve un
+  /// texto para el aviso, o null si no hubo a quién mandar.
+  Future<String?> _mandarInvitaciones(String eventId,
+      {required String accion, required bool serie}) async {
+    try {
+      final r = await _supabase.functions.invoke('calendario-invitar', body: {
+        'event_id': eventId,
+        'accion': accion,
+        'alcance': serie ? 'serie' : 'evento',
+      });
+      final d = Map<String, dynamic>.from(r.data as Map);
+      final enviados = d['enviados'] as int? ?? 0;
+      final cancelados = d['cancelados'] as int? ?? 0;
+      final errores = (d['errores'] as List?) ?? const [];
+      final partes = [
+        if (enviados > 0) 'invitación enviada a $enviados',
+        if (cancelados > 0) 'cancelación enviada a $cancelados',
+        if (errores.isNotEmpty) 'no se pudo enviar a ${errores.length}',
+      ];
+      return partes.isEmpty ? null : partes.join(', ');
+    } on FunctionException catch (e) {
+      final detalle = e.details;
+      final msg = detalle is Map ? detalle['error'] : null;
+      return 'No se mandaron las invitaciones por correo: ${msg ?? e.reasonPhrase ?? e.status}';
+    } catch (e) {
+      return 'No se mandaron las invitaciones por correo: $e';
+    }
+  }
+
+  void _agregarExterno() {
+    final texto = _externoController.text.trim().toLowerCase();
+    if (texto.isEmpty) return;
+    final valido = RegExp(r'^[^@\s<>",;]+@[^@\s<>",;]+\.[^@\s<>",;]+$').hasMatch(texto);
+    if (!valido) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Escribe un correo válido, como nombre@empresa.com')));
+      return;
+    }
+    if (_externos.any((x) => x['email'] == texto)) {
+      _externoController.clear();
+      return;
+    }
+    setState(() {
+      _externos.add({'email': texto, 'nombre': null});
+      _externoController.clear();
+    });
   }
 
   List<DateTime> _generateOccurrences(
@@ -420,8 +540,14 @@ class _EventFormDialogState extends State<EventFormDialog> {
 
     try {
       if (widget.eventId != null) {
-        if (choice == 'all') {
-          // Delete all events in the series (same title + creator + recurrence)
+        // Primero la cancelación por correo: después del borrado ya no hay evento que cancelar.
+        // Si nunca se mandó invitación, la función no manda nada.
+        await _mandarInvitaciones(widget.eventId!,
+            accion: 'cancelar', serie: choice == 'all');
+        if (choice == 'all' && _serieId != null) {
+          await _supabase.from('events').delete().eq('serie_id', _serieId!);
+        } else if (choice == 'all') {
+          // Series creadas antes del 07/10/2026, sin `serie_id`: mismo título, creador y repetición.
           await _supabase
               .from('events')
               .delete()
@@ -961,6 +1087,18 @@ class _EventFormDialogState extends State<EventFormDialog> {
                   );
                 },
               ),
+            for (final x in _externos)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: CircleAvatar(
+                  backgroundColor: Colors.grey.shade300,
+                  child: const Icon(Icons.mail_outline, size: 18, color: Colors.black54),
+                ),
+                title: Text(x['nombre'] ?? x['email'] ?? '',
+                    style: const TextStyle(fontWeight: FontWeight.w500)),
+                subtitle: const Text('Invitado externo (por correo)',
+                    style: TextStyle(color: Colors.grey, fontSize: 12)),
+              ),
           ],
         ],
       ),
@@ -1235,6 +1373,60 @@ class _EventFormDialogState extends State<EventFormDialog> {
                     );
                   },
                 ),
+            ],
+
+            // Invitados de fuera (solo correo) e invitación de calendario por correo.
+            if (_canEdit) ...[
+              const SizedBox(height: 20),
+              const Text('Invitados externos',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const SizedBox(height: 4),
+              Text('Personas de fuera del sistema; reciben la invitación por correo.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _externoController,
+                keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _agregarExterno(),
+                decoration: InputDecoration(
+                  hintText: 'correo@empresa.com',
+                  prefixIcon: const Icon(Icons.alternate_email),
+                  suffixIcon: IconButton(
+                    tooltip: 'Agregar',
+                    icon: const Icon(Icons.add_circle_outline),
+                    onPressed: _agregarExterno,
+                  ),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+              if (_externos.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final x in _externos)
+                      InputChip(
+                        avatar: const Icon(Icons.mail_outline, size: 16),
+                        label: Text(x['email'] ?? ''),
+                        onDeleted: () => setState(() => _externos.remove(x)),
+                      ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 12),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _enviarCorreo,
+                onChanged: (v) => setState(() => _enviarCorreo = v),
+                title: const Text('Enviar invitación por correo'),
+                subtitle: const Text(
+                    'A los invitados y a los correos externos, para que lo agreguen a su '
+                    'calendario (Outlook, Gmail, iPhone). Si cambias el evento, les llega la '
+                    'actualización.',
+                    style: TextStyle(fontSize: 12)),
+              ),
             ],
 
             if (_isEditMode && _canEdit) ...[
