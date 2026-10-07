@@ -8,6 +8,7 @@ import 'system_logs_page.dart';
 import 'issi_page.dart';
 import 'utils/enlace_inicial.dart';
 import 'widgets/aviso_eventos_proximos.dart';
+import 'services/notification_service.dart';
 import 'colaborador_page.dart';
 import 'incidencias_page.dart';
 import 'social_page.dart';
@@ -447,8 +448,39 @@ class _MainNavigationState extends State<MainNavigation> {
     return Stack(children: [
       Positioned.fill(child: _shell(pages)),
       AvisoEventosProximos(
-          onAbrir: (id) => _onNavigateToCalendar(id, pages)),
+        onAbrir: (id) => _onNavigateToCalendar(id, pages),
+        role: widget.role,
+        permissions: widget.permissions,
+        onAbrirNotificacion: (n) => _abrirNotificacion(n, pages),
+      ),
     ]);
+  }
+
+  /// Lo mismo que tocar la notificación en la campana: la marca leída y lleva a donde corresponde.
+  Future<void> _abrirNotificacion(
+      Map<String, dynamic> n, List<Map<String, dynamic>> pages) async {
+    final tipo = n['type'] as String? ?? '';
+    final meta = (n['metadata'] as Map<String, dynamic>?) ?? {};
+    try {
+      if (tipo == 'status_sys_alert' && meta['user_id'] != null) {
+        await NotificationService.markStatusSysAlertGroupAsRead(meta['user_id'] as String);
+      } else {
+        await NotificationService.markAsRead(n['id']);
+      }
+    } catch (e) {
+      debugPrint('No se pudo marcar la notificación como leída: $e');
+    }
+    if (!mounted) return;
+    if (tipo == 'event_invitation') {
+      _onNavigateToCalendar(meta['event_id'] as String?, pages);
+    } else if (tipo == 'status_sys_alert') {
+      _onNavigateToEditUser(meta['user_id'] as String?, pages);
+    } else if (tipo == 'torneo') {
+      _onOpenRecord('torneo', '', pages);
+    } else if (tipo.contains('incidencia')) {
+      final idx = pages.indexWhere((p) => p['title'] == 'Incidencias');
+      if (idx != -1) setState(() => _selectedIndex = idx);
+    }
   }
 
   Widget _shell(List<Map<String, dynamic>> pages) {
