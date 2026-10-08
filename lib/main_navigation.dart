@@ -6,7 +6,6 @@ import 'user_dashboard.dart';
 import 'usuarios_page.dart';
 import 'system_logs_page.dart';
 import 'issi_page.dart';
-import 'citas_page.dart';
 import 'utils/enlace_inicial.dart';
 import 'widgets/aviso_eventos_proximos.dart';
 import 'services/notification_service.dart';
@@ -53,7 +52,7 @@ class _OpenSearchIntent extends Intent {
 final _navGroups = <(String, List<String>)>[
   // Los dos asistentes van en GENERAL y JUNTOS, arriba: son de uso diario y se preguntan entre
   // ellos. Estaban en ADMINISTRACIÓN, que es donde se configura el sistema, no donde se trabaja.
-  ('GENERAL',        ['Mi Perfil', 'IA', 'SOL', 'Social', 'Torneos', 'Avisos', 'Correspondencia', 'Directorio', 'Conocimientos', 'Contraseñas', 'Contactos Ext.', 'Firmas', 'Convertidor', 'Herramientas', 'Calendario', 'Citas']),
+  ('GENERAL',        ['Mi Perfil', 'IA', 'SOL', 'Social', 'Torneos', 'Avisos', 'Correspondencia', 'Directorio', 'Conocimientos', 'Contraseñas', 'Contactos Ext.', 'Firmas', 'Convertidor', 'Herramientas', 'Calendario']),
   ('OPERACIÓN',      ['Incidencias', 'Inventario', 'Colaborador', 'Asistencia']),
   // Sisol, el agente de ventas PÚBLICO de sisol.com.mx (chat.sisol.red). Su propia sección y no una
   // pestaña de SOL: le habla a clientes, no a asesores, y tiene su propio catálogo de desarrollos.
@@ -258,15 +257,6 @@ class _MainNavigationState extends State<MainNavigation> {
         'widget': CalendarPage(initialEventId: _selectedEventId),
       });
     }
-    // Citas: todos pueden apartar; publicar horarios es con el permiso `publicar_citas`.
-    pages.add({
-      'title': 'Citas',
-      'icon': Icons.event_available_outlined,
-      'activeIcon': Icons.event_available,
-      'widget': CitasPage(
-          puedePublicar: widget.role == 'admin' ||
-              widget.permissions['publicar_citas'] == true),
-    });
     if (widget.permissions['show_incidencias'] == true) {
       pages.add({
         'title': 'Incidencias',
@@ -484,10 +474,8 @@ class _MainNavigationState extends State<MainNavigation> {
     if (tipo == 'event_cancelled' ||
         (tipo == 'event_invitation' && meta['cancelado'] == true)) {
       // El evento ya no existe: con marcarla leída basta.
-    } else if (tipo == 'cita_apartada' || tipo == 'cita_cancelada') {
-      final idx = pages.indexWhere((p) => p['title'] == 'Citas');
-      if (idx != -1) setState(() => _selectedIndex = idx);
-    } else if (tipo == 'event_invitation' || tipo == 'event_updated') {
+    } else if (tipo == 'event_invitation' || tipo == 'event_updated' ||
+        tipo == 'cita_apartada' || tipo == 'cita_cancelada') {
       _onNavigateToCalendar(meta['event_id'] as String?, pages);
     } else if (tipo == 'status_sys_alert') {
       _onNavigateToEditUser(meta['user_id'] as String?, pages);

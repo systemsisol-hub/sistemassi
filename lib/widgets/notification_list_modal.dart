@@ -259,7 +259,7 @@ class _NotificationListModalState extends State<NotificationListModal>
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Ese evento se canceló.')));
     } else if ((type == 'event_invitation' || type == 'event_updated' ||
-            type == 'cita_apartada') && mounted) {
+            type == 'cita_apartada' || type == 'cita_cancelada') && mounted) {
       Navigator.pop(context);
       widget.onNavigateToCalendar?.call(meta['event_id'] as String?);
     } else if (type == 'status_sys_alert' && mounted) {

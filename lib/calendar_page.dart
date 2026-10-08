@@ -140,6 +140,26 @@ class _CalendarPageState extends State<CalendarPage> {
             .order('start_time', ascending: true);
         response = [...myEvents];
 
+        // Las citas que publiqué o que aparté también van en Personal (son públicas, por eso no
+        // salen en la consulta de arriba).
+        final misCitas = await _supabase
+            .from('events')
+            .select('*, profiles(full_name, id)')
+            .eq('es_cita', true)
+            .eq('creator_id', userId);
+        final reservas = await _supabase
+            .from('citas_reservas')
+            .select('event_id')
+            .eq('apartado_por', userId);
+        final apartadas = [for (final r in reservas) r['event_id'] as String];
+        final citasApartadas = apartadas.isEmpty
+            ? <dynamic>[]
+            : await _supabase
+                .from('events')
+                .select('*, profiles(full_name, id)')
+                .inFilter('id', apartadas);
+        response = [...response, ...misCitas, ...citasApartadas];
+
         if (followedUserIds.isNotEmpty) {
           for (var followedId in followedUserIds) {
             final followedEvents = await _supabase
@@ -152,6 +172,8 @@ class _CalendarPageState extends State<CalendarPage> {
         }
       }
 
+      final vistos = <String>{};
+      response = [for (final ev in response) if (vistos.add(ev['id'] as String)) ev];
       final List<Appointment> loadedEvents = [];
       for (var ev in response) {
         final startTime = DateTime.parse(ev['start_time']).toLocal();
@@ -163,8 +185,13 @@ class _CalendarPageState extends State<CalendarPage> {
             creatorId != null && followedUserIds.contains(creatorId);
 
         final priority = ev['priority'] ?? 'Normal';
+        final esCita = ev['es_cita'] == true;
+        final apartada = ev['cita_estado'] == 'apartada';
         Color eventColor;
-        if (priority == 'Alta') {
+        if (esCita) {
+          // Citas: disponibles en verde azulado; apartadas en gris para todos.
+          eventColor = apartada ? Colors.grey.shade500 : Colors.teal.shade500;
+        } else if (priority == 'Alta') {
           eventColor = Colors.red.shade700;
         } else if (isFollowedUser) {
           eventColor = _getUserColor(creatorId!);
@@ -177,7 +204,9 @@ class _CalendarPageState extends State<CalendarPage> {
           id: ev['id'],
           startTime: startTime,
           endTime: endTime,
-          subject: ev['title'],
+          subject: esCita
+              ? '${apartada ? 'Apartada' : 'Disponible'} · ${ev['title']}'
+              : ev['title'],
           notes: '${ev['description'] ?? ''}\nCreado por: $creatorName',
           color: eventColor,
           isAllDay: isAllDay,
@@ -439,6 +468,8 @@ class _CalendarPageState extends State<CalendarPage> {
     final items = _calendarMode == 1
         ? [
             _LegendItem('Grupal', Colors.green.shade600),
+            _LegendItem('Cita disponible', Colors.teal.shade500),
+            _LegendItem('Cita apartada', Colors.grey.shade500),
             _LegendItem('Alta prio.', Colors.red.shade700),
           ]
         : [

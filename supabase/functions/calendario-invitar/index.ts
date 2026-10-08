@@ -106,12 +106,12 @@ Deno.serve(async (req: Request) => {
 
   const { data: evento } = await svc.from("events").select("*").eq("id", eventoId).maybeSingle();
   if (!evento) return responde({ error: "No se encontró el evento." }, 404);
-  // Quien creó el evento, o quien apartó la cita de ese evento (Citas, 08/10/2026): el evento es del
-  // profesional, pero lo dispara la persona al apartar o cancelar.
+  // Quien creó el evento, o quien apartó esa cita (citas del Calendario, 08/10/2026): el evento es de
+  // quien publicó la cita, pero lo dispara la persona al apartar o cancelar.
   let esCita = false;
   if (evento.creator_id !== user.id) {
-    const { data: cita } = await svc.from("citas_espacios").select("id")
-      .eq("evento_id", evento.id).eq("apartado_por", user.id).maybeSingle();
+    const { data: cita } = await svc.from("citas_reservas").select("event_id")
+      .eq("event_id", evento.id).eq("apartado_por", user.id).maybeSingle();
     if (!cita) {
       return responde({ error: "Solo quien creó el evento puede mandar sus invitaciones." }, 403);
     }
