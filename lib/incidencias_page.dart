@@ -527,7 +527,8 @@ class _IncidenciasPageState extends State<_VistaIncidencias>
   /// La antigüedad y la tabla de ley, en UNA tarjeta con el estilo del Historial de Vacaciones.
   ///
   /// Pedido del 28/09/2026: antes eran una tarjeta con la antigüedad y «Desde: <fecha>» y, debajo,
-  /// la tabla aparte. Ahora la antigüedad va en el título y la fecha ya no se muestra.
+  /// la tabla aparte. Ahora la antigüedad va en el título; desde el 08/10/2026, precedida de la
+  /// fecha de ingreso.
   ///
   /// [plegable] es para el teléfono: el título abre y cierra la tabla, como hacía la tarjeta.
   Widget _buildLeyesVacacionesTable({bool plegable = false}) {
@@ -561,11 +562,25 @@ class _IncidenciasPageState extends State<_VistaIncidencias>
           const SizedBox(width: 8),
           Expanded(
             child: Text.rich(
+              // Pedido del 08/10/2026: primero la fecha de ingreso (o de reingreso, que es la que
+              // cuenta) y después la antigüedad.
               TextSpan(children: [
+                if ((_fechaReingreso ?? _fechaIngreso) != null) ...[
+                  TextSpan(
+                      text: _fechaReingreso != null ? 'Reingreso: ' : 'Ingreso: ',
+                      style: TextStyle(color: theme.colorScheme.secondary)),
+                  TextSpan(
+                      text: _formatDate(
+                          (_fechaReingreso ?? _fechaIngreso)!.toIso8601String()),
+                      style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          color: theme.colorScheme.secondary)),
+                  TextSpan(
+                      text: '  ·  ',
+                      style: TextStyle(color: theme.colorScheme.secondary)),
+                ],
                 TextSpan(
-                    text: _fechaReingreso != null
-                        ? 'Antigüedad (reingreso): '
-                        : 'Antigüedad: ',
+                    text: 'Antigüedad: ',
                     style: TextStyle(color: theme.colorScheme.secondary)),
                 TextSpan(
                     text: _calcAntiguedad(),
