@@ -27,8 +27,8 @@ la categoría, la clasificación por edad y los datos de contacto se cargaron co
 | URL de marketing | https://sistemassi.com |
 | Copyright | 2026 SI SOL Inmobiliarias, S.A. de C.V. |
 | Compilación | 2.4.5 (7) |
-| Capturas iPhone 6.9" (1320 × 2868) | `capturas/iphone/`: menú, calendario, incidencias, avisos |
-| Capturas iPad 13" (2064 × 2752) | `capturas/ipad/`: calendario, incidencias, avisos |
+| Capturas iPhone 6.9" (1320 × 2868) | `capturas/iphone/`: menú, calendario, incidencias |
+| Capturas iPad 13" (2064 × 2752) | `capturas/ipad/`: calendario, incidencias |
 
 Las capturas se tomaron en el simulador con la cuenta de prueba, sin nombres de otros colaboradores
 ni números de serie (por eso no van «Mi Perfil» ni el panel del día con organizador). El checador no
@@ -92,3 +92,9 @@ Apple suele rechazar en la tienda pública las apps que solo sirven a los emplea
 (guía 3.2). Si la rechaza por eso, las salidas son: **distribución no listada** (la app no sale en
 búsquedas y se instala con un enlace; se pide con un formulario a Apple) o **apps personalizadas**
 por Apple Business Manager.
+
+## Cuenta de prueba
+
+El 08/10/2026 se le quitaron a `system.sisol@gmail.com` los permisos `show_avisos` y
+`show_passwords` (podía crear y borrar avisos reales y entrar a la bóveda). Por eso las capturas ya no
+muestran Avisos ni Contraseñas.
