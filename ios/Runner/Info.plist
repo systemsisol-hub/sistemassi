@@ -36,6 +36,10 @@
 	<string>La cámara se usa para tomar la foto al registrar tu entrada y salida en el checador.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>La ubicación se usa para registrar dónde checas tu entrada y salida.</string>
+	<!-- La app solo pide la ubicación mientras se usa; geolocator trae el código de «siempre» y Apple
+	     exige el texto aunque no se llame (aviso ITMS-90683, 08/10/2026). -->
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>La ubicación se usa solo mientras usas la app, para registrar dónde checas tu entrada y salida.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Las fotos se usan para elegir tu foto de perfil o adjuntar imágenes.</string>
 	<key>UIApplicationSceneManifest</key>
