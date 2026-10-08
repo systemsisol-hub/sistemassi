@@ -2080,6 +2080,8 @@ class _UserFormSheetState extends State<_UserFormSheet> {
   /// Saliendo de una lista, el corte se calcula.
   static const _accesos = <(String, String, IconData)>[
     ('Calendario', 'show_calendar', Icons.calendar_month_outlined),
+    // Publicar horarios en Citas (p. ej. la nutrióloga). Apartar no necesita permiso: todos pueden.
+    ('Citas: publicar horarios', 'publicar_citas', Icons.event_available_outlined),
     ('Gestión de usuarios', 'show_users', Icons.group_outlined),
     ('Inventario ISSI', 'show_issi', Icons.inventory_2_outlined),
     ('Colaboradores CSSI', 'show_cssi', Icons.badge_outlined),

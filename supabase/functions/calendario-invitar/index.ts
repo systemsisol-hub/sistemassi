@@ -106,8 +106,16 @@ Deno.serve(async (req: Request) => {
 
   const { data: evento } = await svc.from("events").select("*").eq("id", eventoId).maybeSingle();
   if (!evento) return responde({ error: "No se encontró el evento." }, 404);
+  // Quien creó el evento, o quien apartó la cita de ese evento (Citas, 08/10/2026): el evento es del
+  // profesional, pero lo dispara la persona al apartar o cancelar.
+  let esCita = false;
   if (evento.creator_id !== user.id) {
-    return responde({ error: "Solo quien creó el evento puede mandar sus invitaciones." }, 403);
+    const { data: cita } = await svc.from("citas_espacios").select("id")
+      .eq("evento_id", evento.id).eq("apartado_por", user.id).maybeSingle();
+    if (!cita) {
+      return responde({ error: "Solo quien creó el evento puede mandar sus invitaciones." }, 403);
+    }
+    esCita = true;
   }
 
   if (!SMTP_HOST || !REMITENTE || !esCorreo(REMITENTE)) {
@@ -118,14 +126,15 @@ Deno.serve(async (req: Request) => {
     return responde({ error: `CALENDARIO_SMTP_PORT ${SMTP_PORT} no sirve desde Supabase: usa 465.` }, 500);
   }
 
+  // El organizador es quien creó el evento (en una cita, el profesional).
   const { data: creador } = await svc.from("profiles")
-    .select("full_name, nombre, paterno, email").eq("id", user.id).maybeSingle();
+    .select("full_name, nombre, paterno, email").eq("id", evento.creator_id).maybeSingle();
   const organizador: Persona = {
     nombre: creador?.full_name ?? [creador?.nombre, creador?.paterno].filter(Boolean).join(" "),
     email: String(creador?.email ?? user.email ?? "").toLowerCase(),
   };
   if (!esCorreo(organizador.email)) {
-    return responde({ error: "Tu perfil no tiene un correo válido para organizar el evento." }, 400);
+    return responde({ error: "El perfil de quien organiza no tiene un correo válido." }, 400);
   }
 
   // ── La serie, el identificador y la versión ──────────────────────────────────
@@ -308,8 +317,10 @@ Deno.serve(async (req: Request) => {
     const ok = await mandar(
       p,
       "REQUEST",
-      `${yaLaTenia ? "Actualización" : "Invitación"}: ${base.titulo} (${fechaCorta})`,
-      yaLaTenia ? "Se actualizó este evento" : "Te invitaron a este evento",
+      esCita
+        ? `Cita confirmada: ${base.titulo} (${fechaCorta})`
+        : `${yaLaTenia ? "Actualización" : "Invitación"}: ${base.titulo} (${fechaCorta})`,
+      esCita ? "Tu cita quedó confirmada" : yaLaTenia ? "Se actualizó este evento" : "Te invitaron a este evento",
       asistentes,
     );
     if (ok) enviados++;
@@ -319,8 +330,12 @@ Deno.serve(async (req: Request) => {
     const ok = await mandar(
       organizador,
       "REQUEST",
-      `${yaLaTenia ? "Actualización" : "Tu evento"}: ${base.titulo} (${fechaCorta})`,
-      asistentes.length
+      esCita
+        ? `Nueva cita: ${base.titulo} (${fechaCorta})`
+        : `${yaLaTenia ? "Actualización" : "Tu evento"}: ${base.titulo} (${fechaCorta})`,
+      esCita
+        ? "Te apartaron una cita"
+        : asistentes.length
         ? `Tu copia: enviaste la invitación a ${asistentes.length} persona${asistentes.length === 1 ? "" : "s"}`
         : "Tu copia del evento, para agregarlo a tu calendario",
       asistentes,
