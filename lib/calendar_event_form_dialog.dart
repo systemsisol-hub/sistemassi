@@ -874,16 +874,22 @@ class _EventFormDialogState extends State<EventFormDialog> {
 
     setState(() {
       if (isStart) {
+        // El fin se mueve con el inicio y conserva la duración (una hora en un evento nuevo, o si
+        // la que había no tenía sentido): así no hay que corregir el fin cada vez.
+        final oldStart = DateTime(_startDate.year, _startDate.month, _startDate.day,
+            _startTime.hour, _startTime.minute);
+        final oldEnd = DateTime(_endDate.year, _endDate.month, _endDate.day,
+            _endTime.hour, _endTime.minute);
+        var duracion = oldEnd.difference(oldStart);
+        if (duracion <= Duration.zero) duracion = const Duration(hours: 1);
+
         _startDate = date;
         _startTime = time;
         final newStart =
             DateTime(date.year, date.month, date.day, time.hour, time.minute);
-        final currentEnd = DateTime(_endDate.year, _endDate.month, _endDate.day,
-            _endTime.hour, _endTime.minute);
-        if (currentEnd.isBefore(newStart)) {
-          _endDate = newStart.add(const Duration(hours: 1));
-          _endTime = TimeOfDay.fromDateTime(_endDate);
-        }
+        final newEnd = newStart.add(duracion);
+        _endDate = DateTime(newEnd.year, newEnd.month, newEnd.day);
+        _endTime = TimeOfDay.fromDateTime(newEnd);
       } else {
         _endDate = date;
         _endTime = time;
