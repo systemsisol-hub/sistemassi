@@ -311,7 +311,7 @@ class _LoginPageState extends State<LoginPage>
           Text('Acceso seguro',
               style: SiType.mono(size: 10, color: c.success)),
         ]),
-        Text('v2.4.5', style: SiType.mono(size: 10, color: c.ink4)),
+        Text('v2.4.6', style: SiType.mono(size: 10, color: c.ink4)),
       ],
     );
   }

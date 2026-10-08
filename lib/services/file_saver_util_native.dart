@@ -15,10 +15,12 @@ class FileSaverUtil {
       final tempDir = await getTemporaryDirectory();
       final file = await File('${tempDir.path}/$fileName').create();
       await file.writeAsBytes(bytes);
-      await Share.shareXFiles(
-        [XFile(file.path)],
-        text: text,
-        sharePositionOrigin: _origenDelMenu(),
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(file.path)],
+          text: text,
+          sharePositionOrigin: _origenDelMenu(),
+        ),
       );
     } catch (e) {
       debugPrint('Error saving/sharing on native: $e');
