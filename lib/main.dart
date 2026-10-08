@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
@@ -35,6 +36,18 @@ Future<void> _init() async {
   }
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('es_MX', null);
+
+  // En TELÉFONOS la app va solo en vertical: en horizontal un teléfono mide más de 800 de ancho y la
+  // app lo tomaba por computadora (menú lateral sin lugar, calendario aplastado con errores), y son
+  // decenas de pantallas que eligen su diseño por el ancho. Tablets y computadora siguen girando.
+  // En el iPhone lo fija también el Info.plist; esto cubre los teléfonos Android.
+  if (!kIsWeb) {
+    final vista = WidgetsBinding.instance.platformDispatcher.views.first;
+    final ladoCorto = (vista.physicalSize / vista.devicePixelRatio).shortestSide;
+    if (ladoCorto < 600) {
+      await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    }
+  }
 
   // dart-define values (CI/CD), overridden by .env in local dev
   var supabaseUrl = const String.fromEnvironment('SB_URL');
