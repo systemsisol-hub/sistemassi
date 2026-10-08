@@ -474,7 +474,8 @@ class _MainNavigationState extends State<MainNavigation> {
     if (tipo == 'event_cancelled' ||
         (tipo == 'event_invitation' && meta['cancelado'] == true)) {
       // El evento ya no existe: con marcarla leída basta.
-    } else if (tipo == 'event_invitation' || tipo == 'event_updated') {
+    } else if (tipo == 'event_invitation' || tipo == 'event_updated' ||
+        tipo == 'cita_apartada' || tipo == 'cita_cancelada') {
       _onNavigateToCalendar(meta['event_id'] as String?, pages);
     } else if (tipo == 'status_sys_alert') {
       _onNavigateToEditUser(meta['user_id'] as String?, pages);

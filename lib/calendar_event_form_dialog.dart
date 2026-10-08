@@ -63,6 +63,17 @@ class _EventFormDialogState extends State<EventFormDialog> {
   bool _enviarCorreo = true;
   String? _serieId;
 
+  // Cita (08/10/2026): tercer tipo junto a Público y Personal. Se publica en Grupal; alguien la
+  // aparta con `cita_apartar`. Quién y su nota viven en `citas_reservas` (solo los ven el
+  // organizador y esa persona).
+  bool _esCita = false;
+  String _citaEstado = 'disponible';
+  String? _apartadoPor;
+  String? _notaCita;
+  final _notaApartar = TextEditingController();
+  bool get _soyQuienAparto =>
+      _apartadoPor != null && _apartadoPor == _supabase.auth.currentUser?.id;
+
   bool get _isEditMode => widget.eventId != null;
   bool get _canEdit =>
       !_isEditMode || _creatorId == _supabase.auth.currentUser?.id;
@@ -97,6 +108,7 @@ class _EventFormDialogState extends State<EventFormDialog> {
     _descriptionController.dispose();
     _externoController.dispose();
     _buscarInvitado.dispose();
+    _notaApartar.dispose();
     super.dispose();
   }
 
@@ -112,6 +124,18 @@ class _EventFormDialogState extends State<EventFormDialog> {
           .from('event_invitations')
           .select('user_id, status, rejection_reason')
           .eq('event_id', widget.eventId!);
+      Map<String, dynamic>? reserva;
+      try {
+        reserva = await _supabase
+            .from('citas_reservas')
+            .select('apartado_por, nota')
+            .eq('event_id', widget.eventId!)
+            .maybeSingle();
+      } catch (e) {
+        debugPrint('Error al leer la reserva de la cita: $e');
+      }
+      _apartadoPor = reserva?['apartado_por'] as String?;
+      _notaCita = reserva?['nota'] as String?;
       List<dynamic> externos = [];
       try {
         externos = await _supabase
@@ -132,6 +156,8 @@ class _EventFormDialogState extends State<EventFormDialog> {
           _recurrence = eventResponse['recurrence'] ?? 'No repetir';
           _creatorId = eventResponse['creator_id'];
           _serieId = eventResponse['serie_id'] as String?;
+          _esCita = eventResponse['es_cita'] == true;
+          _citaEstado = eventResponse['cita_estado'] as String? ?? 'disponible';
           _externos
             ..clear()
             ..addAll(externos.map((x) => {
@@ -259,14 +285,29 @@ class _EventFormDialogState extends State<EventFormDialog> {
           'title': _titleController.text.trim(),
           'description': _descriptionController.text.trim(),
           'location': _locationController.text.trim(),
-          'recurrence': _recurrence,
           'start_time': startDateTime.toUtc().toIso8601String(),
           'end_time': endDateTime.toUtc().toIso8601String(),
-          'priority': _priority,
-          'is_public': _isPublic,
+          // Una cita no cambia de tipo, prioridad ni repetición, y su invitado lo pone quien la aparta.
+          if (!_esCita) ...{
+            'recurrence': _recurrence,
+            'priority': _priority,
+            'is_public': _isPublic,
+          },
         }).eq('id', widget.eventId!);
 
         final eventId = widget.eventId!;
+        if (_esCita) {
+          // Si ya la apartaron, a esa persona le llega la actualización (correo y aviso).
+          if (_citaEstado == 'apartada') {
+            aviso = await _mandarInvitaciones(eventId, accion: 'enviar', serie: false);
+          }
+          if (mounted) {
+            Navigator.pop(context, true);
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text(['Cita actualizada', if (aviso != null) aviso].join('. '))));
+          }
+          return;
+        }
         // Solo se quitan y agregan los que cambiaron: borrar y volver a insertar a todos regresaba
         // a «pendiente» a quien ya había aceptado o rechazado.
         final antes = _invitationDetails.keys.toSet();
@@ -298,6 +339,28 @@ class _EventFormDialogState extends State<EventFormDialog> {
         final duration = endDateTime.difference(startDateTime);
         final List<DateTime> starts;
 
+        if (_esCita) {
+          // Una cita a la vez: sin repetición, sin invitados ni correo hasta que alguien la aparte.
+          await _supabase.from('events').insert({
+            'title': _titleController.text.trim(),
+            'description': _descriptionController.text.trim(),
+            'location': _locationController.text.trim(),
+            'recurrence': 'No repetir',
+            'priority': 'Normal',
+            'start_time': startDateTime.toUtc().toIso8601String(),
+            'end_time': endDateTime.toUtc().toIso8601String(),
+            'creator_id': currentUserId,
+            'is_public': true,
+            'es_cita': true,
+            'cita_estado': 'disponible',
+          });
+          if (mounted) {
+            Navigator.pop(context, true);
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                content: Text('Cita publicada. Ya la pueden apartar desde el calendario Grupal.')));
+          }
+          return;
+        }
         if (_recurrence != 'No repetir' && _recurrenceEndDate != null) {
           starts = _generateOccurrences(
               startDateTime, _recurrence, _recurrenceEndDate!);
@@ -427,6 +490,161 @@ class _EventFormDialogState extends State<EventFormDialog> {
       }
     }
     return lista;
+  }
+
+  Future<void> _apartarCita() async {
+    setState(() => _isLoading = true);
+    try {
+      await _supabase.rpc('cita_apartar',
+          params: {'p_event': widget.eventId, 'p_nota': _notaApartar.text.trim()});
+      final aviso = await _mandarInvitaciones(widget.eventId!, accion: 'enviar', serie: false);
+      if (mounted) {
+        Navigator.pop(context, true);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(['Cita apartada', if (aviso != null) aviso].join('. '))));
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(e is PostgrestException ? e.message : '$e'),
+            backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  Future<void> _cancelarMiCita() async {
+    final inicio = DateTime(_startDate.year, _startDate.month, _startDate.day,
+        _startTime.hour, _startTime.minute);
+    if (inicio.difference(DateTime.now()) < const Duration(hours: 2)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'Ya no se puede cancelar desde aquí: faltan menos de 2 horas. Avisa directamente.')));
+      return;
+    }
+    final si = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cancelar mi cita'),
+        content: const Text('La cita quedará disponible para alguien más.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('No')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Sí, cancelar', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+    if (si != true) return;
+    setState(() => _isLoading = true);
+    try {
+      // Primero el correo de cancelación: después ya no estás en la cita.
+      await _mandarInvitaciones(widget.eventId!, accion: 'cancelar', serie: false);
+      await _supabase.rpc('cita_cancelar', params: {'p_event': widget.eventId});
+      if (mounted) {
+        Navigator.pop(context, true);
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Cita cancelada')));
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(e is PostgrestException ? e.message : '$e'),
+            backgroundColor: Colors.red));
+      }
+    }
+  }
+
+  /// La sección de la cita en el detalle: estado, apartar, o la cita propia con su nota.
+  Widget _seccionCita() {
+    final yo = _supabase.auth.currentUser?.id;
+    final soyOrganizador = _creatorId == yo;
+    final inicio = DateTime(_startDate.year, _startDate.month, _startDate.day,
+        _startTime.hour, _startTime.minute);
+    final apartada = _citaEstado == 'apartada';
+    final nombre = _apartadoPor == null
+        ? null
+        : (_userLookup[_apartadoPor]?['full_name'] ?? 'Usuario').toString();
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const SizedBox(height: 24),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: apartada ? Colors.grey.shade200 : Colors.teal.shade50,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(apartada ? Icons.event_busy : Icons.event_available,
+              size: 16, color: apartada ? Colors.grey.shade700 : Colors.teal.shade700),
+          const SizedBox(width: 6),
+          Text(apartada ? 'Cita apartada' : 'Cita disponible',
+              style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: apartada ? Colors.grey.shade700 : Colors.teal.shade700)),
+        ]),
+      ),
+      if (apartada && (soyOrganizador || _soyQuienAparto)) ...[
+        const SizedBox(height: 12),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: CircleAvatar(
+            backgroundColor: Colors.green.shade400,
+            child: Text((nombre ?? '?')[0].toUpperCase(),
+                style: const TextStyle(color: Colors.white)),
+          ),
+          title: Text(_soyQuienAparto ? 'Tú' : (nombre ?? 'Usuario'),
+              style: const TextStyle(fontWeight: FontWeight.w600)),
+          subtitle: Text(
+              (_notaCita?.isNotEmpty == true) ? 'Nota: $_notaCita' : 'Apartó esta cita',
+              style: const TextStyle(fontSize: 12)),
+        ),
+      ],
+      if (!apartada && !soyOrganizador && inicio.isAfter(DateTime.now())) ...[
+        const SizedBox(height: 16),
+        TextField(
+          controller: _notaApartar,
+          minLines: 2,
+          maxLines: 3,
+          decoration: InputDecoration(
+            labelText: 'Nota (opcional)',
+            hintText: 'Por ejemplo: primera consulta',
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: _isLoading ? null : _apartarCita,
+            icon: const Icon(Icons.event_available, color: Colors.white),
+            label: const Text('Apartar esta cita',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.teal.shade600,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text('Podrás cancelarla hasta 2 horas antes.',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+      ],
+      if (_soyQuienAparto && inicio.isAfter(DateTime.now())) ...[
+        const SizedBox(height: 8),
+        if (inicio.difference(DateTime.now()) >= const Duration(hours: 2))
+          OutlinedButton.icon(
+            onPressed: _isLoading ? null : _cancelarMiCita,
+            icon: const Icon(Icons.event_busy, color: Colors.red),
+            label: const Text('Cancelar mi cita', style: TextStyle(color: Colors.red)),
+            style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.red)),
+          )
+        else
+          Text('Ya no se puede cancelar desde aquí (faltan menos de 2 horas).',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+      ],
+    ]);
   }
 
   /// Deja en la base los correos externos de este evento tal como están en el formulario.
@@ -975,8 +1193,12 @@ class _EventFormDialogState extends State<EventFormDialog> {
             ),
           ],
 
+          if (_esCita) _seccionCita(),
+
           // --- SECCIÓN DE ASISTENCIA PARA INVITADOS ---
-          if (_myAttendanceStatus != null &&
+          // (En una cita no: quien la apartó la cancela con su propio botón.)
+          if (!_esCita &&
+              _myAttendanceStatus != null &&
               _creatorId != _supabase.auth.currentUser?.id) ...[
             const SizedBox(height: 24),
             const Text('Tu Asistencia',
@@ -1172,7 +1394,7 @@ class _EventFormDialogState extends State<EventFormDialog> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // 1. Tipo: Publico / Personal
+            // 1. Tipo: Público / Personal / Cita. Una cita no cambia de tipo después de creada.
             Container(
               decoration: BoxDecoration(
                 color: Colors.grey.shade100,
@@ -1180,61 +1402,54 @@ class _EventFormDialogState extends State<EventFormDialog> {
               ),
               child: Row(
                 children: [
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: _canEdit
-                          ? () => setState(() => _isPublic = true)
-                          : null,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        decoration: BoxDecoration(
-                          color: _isPublic ? Colors.white : Colors.transparent,
-                          borderRadius: BorderRadius.circular(10),
-                          boxShadow: _isPublic
-                              ? [
-                                  BoxShadow(
-                                      color: Colors.black.withOpacity(0.1),
-                                      blurRadius: 4,
-                                      offset: const Offset(0, 2))
-                                ]
-                              : null,
-                        ),
-                        child: const Center(
-                          child: Text('Público',
-                              style: TextStyle(fontWeight: FontWeight.bold)),
-                        ),
+                  for (final (etiqueta, publico, cita) in const [
+                    ('Público', true, false),
+                    ('Personal', false, false),
+                    ('Cita', true, true),
+                  ])
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: _canEdit && !(_isEditMode && (_esCita || cita))
+                            ? () => setState(() {
+                                  _isPublic = publico;
+                                  _esCita = cita;
+                                })
+                            : null,
+                        child: Builder(builder: (context) {
+                          final elegido = _esCita == cita && (cita || _isPublic == publico);
+                          return Container(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            decoration: BoxDecoration(
+                              color: elegido ? Colors.white : Colors.transparent,
+                              borderRadius: BorderRadius.circular(10),
+                              boxShadow: elegido
+                                  ? [
+                                      BoxShadow(
+                                          color: Colors.black.withValues(alpha: 0.1),
+                                          blurRadius: 4,
+                                          offset: const Offset(0, 2))
+                                    ]
+                                  : null,
+                            ),
+                            child: Center(
+                              child: Text(etiqueta,
+                                  style: const TextStyle(fontWeight: FontWeight.bold)),
+                            ),
+                          );
+                        }),
                       ),
                     ),
-                  ),
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: _canEdit
-                          ? () => setState(() => _isPublic = false)
-                          : null,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        decoration: BoxDecoration(
-                          color: !_isPublic ? Colors.white : Colors.transparent,
-                          borderRadius: BorderRadius.circular(10),
-                          boxShadow: !_isPublic
-                              ? [
-                                  BoxShadow(
-                                      color: Colors.black.withOpacity(0.1),
-                                      blurRadius: 4,
-                                      offset: const Offset(0, 2))
-                                ]
-                              : null,
-                        ),
-                        child: const Center(
-                          child: Text('Personal',
-                              style: TextStyle(fontWeight: FontWeight.bold)),
-                        ),
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),
+            if (_esCita)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                    'Se publica en el calendario Grupal. Cualquiera la puede apartar; '
+                    'los invitados quedan vacíos hasta entonces.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+              ),
             const SizedBox(height: 20),
 
             // 2. Título
@@ -1306,6 +1521,50 @@ class _EventFormDialogState extends State<EventFormDialog> {
             ),
             const SizedBox(height: 16),
 
+            // Una cita lleva estado (Disponible / Apartada) en lugar de prioridad, y no se repite.
+            if (_esCita) ...[
+              Row(
+                children: [
+                  const Icon(Icons.event_available, color: Colors.grey),
+                  const SizedBox(width: 12),
+                  const Text('Estado', style: TextStyle(fontWeight: FontWeight.w500)),
+                  const Spacer(),
+                  for (final (estado, etiqueta, color) in [
+                    ('disponible', 'Disponible', Colors.teal),
+                    ('apartada', 'Apartada', Colors.grey),
+                  ]) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: _citaEstado == estado ? color : Colors.transparent,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: color),
+                      ),
+                      child: Text(etiqueta,
+                          style: TextStyle(
+                              color: _citaEstado == estado ? Colors.white : color,
+                              fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text('Cambia sola cuando alguien la aparta o la cancela.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+              const SizedBox(height: 16),
+              const Text('Invitados',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const SizedBox(height: 6),
+              Text(
+                  _citaEstado == 'apartada'
+                      ? 'Apartada por ${_userLookup[_apartadoPor]?['full_name'] ?? 'alguien'}'
+                          '${_notaCita?.isNotEmpty == true ? ' · Nota: $_notaCita' : ''}'
+                      : 'Vacío hasta que alguien aparte la cita.',
+                  style: TextStyle(color: Colors.grey.shade700)),
+            ],
+
+            if (!_esCita) ...[
             // Priority selector
             Row(
               children: [
@@ -1364,8 +1623,10 @@ class _EventFormDialogState extends State<EventFormDialog> {
               ),
             ],
 
+            ],
+
             // Invitados (solo si es Personal)
-            if (!_isPublic) ...[
+            if (!_isPublic && !_esCita) ...[
               const SizedBox(height: 20),
               Text(
                   _selectedUserIds.isEmpty
@@ -1464,7 +1725,7 @@ class _EventFormDialogState extends State<EventFormDialog> {
             ],
 
             // Invitados de fuera (solo correo) e invitación de calendario por correo.
-            if (_canEdit) ...[
+            if (_canEdit && !_esCita) ...[
               const SizedBox(height: 20),
               const Text('Invitados externos',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
