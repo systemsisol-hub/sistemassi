@@ -2120,6 +2120,19 @@ class _UserFormSheetState extends State<_UserFormSheet> {
     ('Organizar torneos', 'show_torneos_admin', Icons.flag),
   ];
 
+  /// Lo que normalmente lleva un colaborador nuevo (pedido del 09/10/2026). El botón solo ENCIENDE
+  /// estos: no apaga lo que ya estuviera dado, para no quitarle nada a alguien con más accesos.
+  static const _accesosDefault = <String>[
+    'show_calendar',
+    'show_incidencias',
+    'show_convertidor',
+    'show_herramientas',
+    'show_directorio',
+    'show_powerbi',
+    'show_passwords',
+    'show_sol',
+  ];
+
   /// `dosColumnas` sólo en escritorio: en un teléfono la columna quedaría tan angosta que las
   /// etiquetas largas —«Contactos externos»— se partirían en dos renglones cada una.
   Widget _buildPermissionsSection(SiColors c, {bool dosColumnas = false}) {
@@ -2137,7 +2150,28 @@ class _UserFormSheetState extends State<_UserFormSheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _buildSectionTitle(c, 'ACCESOS (VISIBILIDAD)'),
+        Row(
+          children: [
+            Expanded(child: _buildSectionTitle(c, 'ACCESOS (VISIBILIDAD)')),
+            Padding(
+              padding: const EdgeInsets.only(bottom: SiSpace.x4),
+              child: TextButton.icon(
+                onPressed: () => setState(() {
+                  for (final k in _accesosDefault) {
+                    _permissions[k] = true;
+                  }
+                }),
+                icon: const Icon(Icons.done_all, size: 16),
+                label: const Text('Accesos default'),
+                style: TextButton.styleFrom(
+                  foregroundColor: c.brand,
+                  visualDensity: VisualDensity.compact,
+                  textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+          ],
+        ),
         if (dosColumnas)
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
